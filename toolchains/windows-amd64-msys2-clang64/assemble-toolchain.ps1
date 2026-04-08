@@ -7,6 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 
 New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
 New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null
@@ -28,7 +29,9 @@ $env:CHERE_INVOKING = '1'
 if ($LASTEXITCODE -ne 0) { throw 'MSYS2 shell bootstrap command failed.' }
 & $bash -lc "pacman -Syuu --noconfirm || true"
 if ($LASTEXITCODE -ne 0) { throw 'MSYS2 package database refresh failed.' }
-& $bash -lc "pacman -S --overwrite /clang64/include/Block.h --noconfirm --needed mingw-w64-clang-x86_64-libobjc2 mingw-w64-clang-x86_64-libdispatch mingw-w64-clang-x86_64-gnustep-make mingw-w64-clang-x86_64-gnustep-base mingw-w64-clang-x86_64-gnustep-gui mingw-w64-clang-x86_64-gnustep-back"
+& $bash -lc "pacman -S --noconfirm --needed make"
+if ($LASTEXITCODE -ne 0) { throw 'MSYS2 host-package installation failed.' }
+& $bash -lc "pacman -S --overwrite /clang64/include/Block.h --noconfirm --needed mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-libobjc2 mingw-w64-clang-x86_64-libdispatch mingw-w64-clang-x86_64-gnustep-make mingw-w64-clang-x86_64-gnustep-base mingw-w64-clang-x86_64-gnustep-gui mingw-w64-clang-x86_64-gnustep-back"
 if ($LASTEXITCODE -ne 0) { throw 'MSYS2 GNUstep package installation failed.' }
 
 $clangRoot = Join-Path $MsysRoot 'clang64'
@@ -45,4 +48,3 @@ foreach ($entry in $toolDirs) {
 }
 
 Write-Host "MSYS2 managed toolchain assembly completed at $Prefix"
-

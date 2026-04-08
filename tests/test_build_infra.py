@@ -11,6 +11,7 @@ if str(SRC) not in sys.path:
 
 from gnustep_cli_shared.build_infra import (
     build_matrix,
+    bundle_full_cli,
     component_inventory,
     github_release_plan,
     linux_build_script,
@@ -54,8 +55,11 @@ class BuildInfraTests(unittest.TestCase):
 
     def test_msys2_input_manifest_template(self):
         payload = msys2_input_manifest_template()
+        host_package_names = [package["name"] for package in payload["host_packages"]]
         package_names = [package["name"] for package in payload["packages"]]
         self.assertEqual(payload["strategy"], "msys2-assembly")
+        self.assertIn("make", host_package_names)
+        self.assertIn("mingw-w64-clang-x86_64-clang", package_names)
         self.assertIn("mingw-w64-clang-x86_64-libdispatch", package_names)
         conflict_paths = [rule["path"] for rule in payload["conflict_rules"]]
         self.assertIn("clang64/include/Block.h", conflict_paths)
@@ -105,7 +109,10 @@ class BuildInfraTests(unittest.TestCase):
         script = msys2_assembly_script("C:\\managed", "C:\\cache")
         self.assertIn("msys2-installer/releases/latest/download/msys2-x86_64-latest.exe", script)
         self.assertIn("Invoke-WebRequest", script)
+        self.assertIn("$ProgressPreference = 'SilentlyContinue'", script)
         self.assertIn("pacman -Syuu", script)
+        self.assertIn("pacman -S --noconfirm --needed make", script)
+        self.assertIn("mingw-w64-clang-x86_64-clang", script)
         self.assertIn("--overwrite /clang64/include/Block.h", script)
         self.assertIn("mingw-w64-clang-x86_64-libdispatch", script)
         self.assertIn("MSYS2 managed toolchain assembly completed", script)
@@ -113,7 +120,7 @@ class BuildInfraTests(unittest.TestCase):
     def test_msvc_status_is_explicitly_not_ready(self):
         payload = msvc_status()
         self.assertFalse(payload["publish"])
-        self.assertEqual(payload["status"], "not_ready")
+        self.assertEqual(payload["status"], "deferred_for_v1")
         self.assertTrue(payload["blocking_areas"])
 
     def test_write_release_manifest(self):
@@ -127,6 +134,8 @@ class BuildInfraTests(unittest.TestCase):
             temp = Path(tempdir)
             cli_binary = temp / "gnustep"
             cli_binary.write_text("binary")
+            cli_bundle = temp / "cli-bundle"
+            bundle_full_cli(cli_binary, cli_bundle, repo_root=ROOT)
             toolchain_dir = temp / "toolchain"
             toolchain_dir.mkdir()
             (toolchain_dir / "README.txt").write_text("toolchain")
@@ -134,7 +143,7 @@ class BuildInfraTests(unittest.TestCase):
                 "0.1.0",
                 temp / "dist",
                 "https://github.com/danjboyd/gnustep-cli/releases",
-                cli_inputs={"linux-amd64-clang": cli_binary},
+                cli_inputs={"linux-amd64-clang": cli_bundle},
                 toolchain_inputs={"linux-amd64-clang": toolchain_dir},
             )
             self.assertTrue(payload["ok"])
@@ -162,6 +171,8 @@ class BuildInfraTests(unittest.TestCase):
             temp = Path(tempdir)
             cli_binary = temp / "gnustep"
             cli_binary.write_text("binary")
+            cli_bundle = temp / "cli-bundle"
+            bundle_full_cli(cli_binary, cli_bundle, repo_root=ROOT)
             toolchain_dir = temp / "toolchain"
             toolchain_dir.mkdir()
             (toolchain_dir / "README.txt").write_text("toolchain")
@@ -169,7 +180,7 @@ class BuildInfraTests(unittest.TestCase):
                 "0.1.0",
                 temp / "dist",
                 "https://github.com/danjboyd/gnustep-cli/releases",
-                cli_inputs={"linux-amd64-clang": cli_binary},
+                cli_inputs={"linux-amd64-clang": cli_bundle},
                 toolchain_inputs={"linux-amd64-clang": toolchain_dir},
             )
             verification = verify_release_directory(staged["release_dir"])
@@ -180,6 +191,17 @@ class BuildInfraTests(unittest.TestCase):
             self.assertEqual(len(install_paths), 2)
             for path in install_paths:
                 self.assertTrue(path.exists())
+
+    def test_bundle_full_cli(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            binary = temp / "gnustep"
+            binary.write_text("binary")
+            payload = bundle_full_cli(binary, temp / "bundle", repo_root=ROOT)
+            self.assertTrue(payload["ok"])
+            self.assertTrue((temp / "bundle" / "bin" / "gnustep").exists())
+            self.assertTrue((temp / "bundle" / "libexec" / "gnustep-cli" / "scripts" / "internal" / "doctor.py").exists())
+            self.assertTrue((temp / "bundle" / "libexec" / "gnustep-cli" / "src" / "gnustep_cli_shared" / "__init__.py").exists())
 
 
 if __name__ == "__main__":

@@ -101,15 +101,14 @@ def _copy_tree_contents(source: Path, destination: Path) -> None:
 
 def _install_cli_artifact(extracted_root: Path, install_root: Path) -> list[str]:
     source_root = _flatten_single_root(extracted_root)
-    candidates = list(source_root.rglob("gnustep"))
+    _copy_tree_contents(source_root, install_root)
+    candidates = list((install_root / "bin").glob("gnustep*"))
     if not candidates:
         raise FileNotFoundError("gnustep binary not found in CLI artifact")
-    cli_bin_dir = install_root / "bin"
-    cli_bin_dir.mkdir(parents=True, exist_ok=True)
-    destination = cli_bin_dir / "gnustep"
-    shutil.copy2(candidates[0], destination)
-    os.chmod(destination, 0o755)
-    return [str(destination)]
+    for candidate in candidates:
+        if candidate.is_file():
+            os.chmod(candidate, 0o755)
+    return [str(candidate) for candidate in candidates]
 
 
 def _install_toolchain_artifact(extracted_root: Path, install_root: Path) -> list[str]:

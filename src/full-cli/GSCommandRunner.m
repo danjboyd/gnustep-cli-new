@@ -129,9 +129,17 @@
 {
   NSString *binaryPath = [[[NSProcessInfo processInfo] arguments] objectAtIndex: 0];
   NSString *resolvedPath = [binaryPath stringByResolvingSymlinksInPath];
+  NSString *binaryDir = [resolvedPath stringByDeletingLastPathComponent];
+  NSString *installRoot = [binaryDir stringByDeletingLastPathComponent];
   NSString *candidate = [resolvedPath stringByDeletingLastPathComponent];
   NSFileManager *manager = [NSFileManager defaultManager];
   NSString *scriptsPath = nil;
+
+  scriptsPath = [[installRoot stringByAppendingPathComponent: @"libexec/gnustep-cli"] stringByAppendingPathComponent: @"scripts/internal"];
+  if ([manager fileExistsAtPath: scriptsPath])
+    {
+      return [installRoot stringByAppendingPathComponent: @"libexec/gnustep-cli"];
+    }
 
   while ([candidate length] > 1)
     {

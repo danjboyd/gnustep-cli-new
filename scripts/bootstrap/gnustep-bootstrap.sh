@@ -102,6 +102,18 @@ copy_tree_contents() {
   (cd "$source_dir" && tar -cf - .) | (cd "$dest_dir" && tar -xf -)
 }
 
+install_cli_bundle() {
+  source_dir="$1"
+  dest_dir="$2"
+  copy_tree_contents "$source_dir" "$dest_dir"
+  if [ ! -x "$dest_dir/bin/gnustep" ]; then
+    printf '%s\n' "setup: CLI bundle did not install a runnable gnustep binary" >&2
+    return 1
+  fi
+  chmod 755 "$dest_dir/bin/gnustep"
+  return 0
+}
+
 path_hint() {
   root="$1"
   printf 'export PATH="%s/bin:%s/System/Tools:$PATH"\n' "$root" "$root"
@@ -227,12 +239,9 @@ EOF
   cli_root=$(first_child_dir "$cli_extract")
   toolchain_root=$(first_child_dir "$toolchain_extract")
 
-  mkdir -p "$selected_root/bin"
-  if ! find "$cli_root" -type f -name gnustep -exec cp {} "$selected_root/bin/gnustep" \; -quit; then
-    printf '%s\n' "setup: failed to install CLI artifact" >&2
+  if ! install_cli_bundle "$cli_root" "$selected_root"; then
     return 1
   fi
-  chmod 755 "$selected_root/bin/gnustep"
   copy_tree_contents "$toolchain_root" "$selected_root"
   mkdir -p "$selected_root/state"
   cat >"$selected_root/state/cli-state.json" <<EOF

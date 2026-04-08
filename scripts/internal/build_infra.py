@@ -15,6 +15,7 @@ if str(ROOT / "src") not in sys.path:
 from gnustep_cli_shared.build_infra import build_matrix, release_manifest_from_matrix, write_release_manifest
 from gnustep_cli_shared.build_infra import (
     component_inventory,
+    bundle_full_cli,
     github_release_plan,
     linux_build_script,
     msys2_assembly_script,
@@ -50,6 +51,11 @@ def main() -> int:
     stage_release.add_argument("--channel", default="stable")
     stage_release.add_argument("--cli-input", action="append", default=[])
     stage_release.add_argument("--toolchain-input", action="append", default=[])
+
+    bundle_cli = subparsers.add_parser("bundle-cli", add_help=False)
+    bundle_cli.add_argument("--binary", required=True)
+    bundle_cli.add_argument("--output-dir", required=True)
+    bundle_cli.add_argument("--repo-root")
 
     github_plan = subparsers.add_parser("github-release-plan", add_help=False)
     github_plan.add_argument("--repo", required=True)
@@ -131,6 +137,8 @@ def main() -> int:
             toolchain_inputs=mapping(args.toolchain_input),
             channel=args.channel,
         )
+    elif args.subcommand == "bundle-cli":
+        payload = bundle_full_cli(args.binary, args.output_dir, repo_root=args.repo_root)
     elif args.subcommand == "github-release-plan":
         payload = github_release_plan(
             args.repo,
@@ -186,7 +194,7 @@ def main() -> int:
         payload = msvc_status()
     else:
         print(
-            "build-infra: expected 'matrix', 'manifest', 'source-lock', "
+            "build-infra: expected 'matrix', 'manifest', 'bundle-cli', 'source-lock', "
             "'stage-release', 'github-release-plan', 'github-release-publish', "
             "'verify-release', 'qualify-release', "
             "'msys2-input-manifest', 'component-inventory', 'toolchain-manifest', "

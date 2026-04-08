@@ -30,31 +30,40 @@ Implemented subcommands include:
 
 ## Current Verified State
 
-- A real local Linux release payload has been staged under `dist/stable/`.
+- A real staged prerelease payload now exists under `dist/stable/0.1.0-dev`.
 - The first private GitHub prerelease has been published at
   `v0.1.0-dev`.
 - The staged payload includes:
-  - the built full GNUstep CLI archive
-  - the managed Linux toolchain archive
+  - the built full GNUstep CLI archives for Linux and Windows MSYS2 `clang64`
+  - the managed toolchain archives for Linux and Windows MSYS2 `clang64`
   - a manifest with real file checksums
   - `SHA256SUMS`
 - Release qualification can verify checksums and extract staged artifacts into a
   disposable install root for validation.
 - The shared `setup` backend can now install from a staged release manifest into
   a managed root with checksum verification and PATH guidance.
+- The shell bootstrap has been live-qualified from the private GitHub Release
+  assets on Linux outside the repository tree.
+- A live Windows `otvm` lease successfully assembled the MSYS2 managed toolchain,
+  built the full GNUstep CLI with an explicit `HAVE_MODE_T` define, and
+  produced publishable Windows prerelease artifacts.
 
 ## Current Blockers
 
-- Publication is currently Linux-only.
-- `setup` is implemented in the shared helper path, but bootstrap-native
-  `setup` remains a thinner path and is not yet using the same full install
-  execution flow.
-- Fresh-host qualification against the live GitHub Release assets still needs to
-  be run end to end.
+- OpenBSD remains blocked on external `otvm` image hygiene rather than on this
+  repository's build scripts.
+- Debian GCC interoperability validation is currently blocked in this
+  environment because `OracleTestVMs` does not yet have
+  `debian13_wayland_image_ocid` configured.
+- Windows fresh-host installation from the published prerelease assets still
+  needs an end-to-end bootstrap qualification run against the updated release.
+- MSVC remains explicitly deferred and unpublished for the v0.1.x line.
 
 ## Immediate Follow-Up
 
-- run fresh-host qualification against the live private GitHub Release assets
+- run fresh-host qualification against the live private GitHub Release assets on
+  Windows using the updated prerelease
+- restore Debian otvm image availability, then run the GCC interoperability
+  validation there
 - decide when to make releases public versus keeping them private during bring-up
-- extend staged release generation and qualification beyond Linux once the
-  remaining Tier 1 artifacts are publishable
+- complete OpenBSD once the external image blocker is resolved

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import tarfile
@@ -99,12 +100,17 @@ PINNED_SOURCE_REVISIONS = {
 }
 
 MSYS2_PACKAGE_INPUTS = [
+    "mingw-w64-clang-x86_64-clang",
     "mingw-w64-clang-x86_64-libobjc2",
     "mingw-w64-clang-x86_64-libdispatch",
     "mingw-w64-clang-x86_64-gnustep-make",
     "mingw-w64-clang-x86_64-gnustep-base",
     "mingw-w64-clang-x86_64-gnustep-gui",
     "mingw-w64-clang-x86_64-gnustep-back",
+]
+
+MSYS2_HOST_PACKAGES = [
+    "make",
 ]
 
 
@@ -225,6 +231,14 @@ def msys2_input_manifest_template() -> dict[str, Any]:
         },
         "strategy": "msys2-assembly",
         "repository_snapshot": "TBD",
+        "host_packages": [
+            {
+                "name": name,
+                "version": "TBD",
+                "sha256": "TBD",
+            }
+            for name in MSYS2_HOST_PACKAGES
+        ],
         "packages": [
             {
                 "name": name,
@@ -430,6 +444,7 @@ def openbsd_build_script(target_id: str, prefix: str, sources_dir: str, build_ro
 
 def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
     packages = " ".join(MSYS2_PACKAGE_INPUTS)
+    host_packages = " ".join(MSYS2_HOST_PACKAGES)
     lines = [
         "[CmdletBinding()]",
         "param(",
@@ -440,6 +455,7 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         ")",
         "",
         "$ErrorActionPreference = 'Stop'",
+        "$ProgressPreference = 'SilentlyContinue'",
         "",
         "New-Item -ItemType Directory -Force -Path $Prefix | Out-Null",
         "New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null",
@@ -461,6 +477,8 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 shell bootstrap command failed.' }",
         "& $bash -lc \"pacman -Syuu --noconfirm || true\"",
         "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 package database refresh failed.' }",
+        f"& $bash -lc \"pacman -S --noconfirm --needed {host_packages}\"",
+        "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 host-package installation failed.' }",
         f"& $bash -lc \"pacman -S --overwrite /clang64/include/Block.h --noconfirm --needed {packages}\"",
         "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 GNUstep package installation failed.' }",
         "",
@@ -493,15 +511,15 @@ def msvc_status() -> dict[str, Any]:
             "toolchain_flavor": "msvc",
         },
         "publish": False,
-        "status": "not_ready",
-        "summary": "The MSVC managed toolchain remains tracked but is not validated or published.",
+        "status": "deferred_for_v1",
+        "summary": "The MSVC managed toolchain remains tracked, but it is explicitly deferred for the v0.1.x line and is not validated or published.",
         "blocking_areas": [
             "libdispatch viability under the MSVC stack is not yet proven",
             "the GNUstep runtime and library build pipeline for MSVC is not implemented in this repository",
             "no validated managed artifact or live-validation evidence exists yet",
         ],
         "next_steps": [
-            "decide whether the v1 bar requires a published MSVC artifact or an explicit deferred target",
+            "keep MSVC documented as a deferred target until a dedicated build pipeline exists",
             "prototype libobjc2/tools-make/libs-base/libs-gui/libs-back builds under an MSVC-oriented environment",
             "add live-validation evidence before changing publish status",
         ],
@@ -590,6 +608,39 @@ def _archive_file(source_file: Path, archive_path: Path, root_name: str) -> None
 
     with tarfile.open(archive_path, "w:gz", dereference=True) as archive:
         archive.add(source_file, arcname=str(Path(root_name) / source_file.name))
+
+
+def bundle_full_cli(
+    binary_path: str | Path,
+    output_dir: str | Path,
+    *,
+    repo_root: str | Path | None = None,
+) -> dict[str, Any]:
+    binary = Path(binary_path).resolve()
+    if not binary.exists():
+        raise FileNotFoundError(binary)
+    root = Path(repo_root).resolve() if repo_root else Path(__file__).resolve().parents[2]
+    bundle_root = Path(output_dir).resolve()
+    if bundle_root.exists():
+        shutil.rmtree(bundle_root)
+    (bundle_root / "bin").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(binary, bundle_root / "bin" / binary.name)
+    os.chmod(bundle_root / "bin" / binary.name, 0o755)
+
+    runtime_root = bundle_root / "libexec" / "gnustep-cli"
+    (runtime_root / "scripts").mkdir(parents=True, exist_ok=True)
+    (runtime_root / "src").mkdir(parents=True, exist_ok=True)
+    shutil.copytree(root / "scripts" / "internal", runtime_root / "scripts" / "internal", dirs_exist_ok=True)
+    shutil.copytree(root / "src" / "gnustep_cli_shared", runtime_root / "src" / "gnustep_cli_shared", dirs_exist_ok=True)
+    shutil.copytree(root / "examples", runtime_root / "examples", dirs_exist_ok=True)
+    return {
+        "schema_version": 1,
+        "command": "bundle-cli",
+        "ok": True,
+        "status": "ok",
+        "summary": "Full CLI runtime bundle created.",
+        "bundle_root": str(bundle_root),
+    }
 
 
 def stage_release_assets(

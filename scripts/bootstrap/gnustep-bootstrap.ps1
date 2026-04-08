@@ -79,6 +79,18 @@ function Copy-TreeContents {
     Copy-Item -Recurse -Force (Join-Path $Source '*') $Destination
 }
 
+function Install-CliBundle {
+    param([string]$Source, [string]$Destination)
+    Copy-TreeContents -Source $Source -Destination $Destination
+    $cli = Join-Path $Destination "bin\gnustep.exe"
+    if (-not (Test-Path $cli)) {
+        $cli = Join-Path $Destination "bin\gnustep"
+    }
+    if (-not (Test-Path $cli)) {
+        throw "CLI bundle did not install a runnable gnustep binary."
+    }
+}
+
 function Show-Help {
     @"
 GNUstep CLI bootstrap interface
@@ -363,9 +375,7 @@ switch ($command) {
                 $cliRoot = Get-SingleChildDirectory -Path $cliExtract
                 $toolchainRoot = Get-SingleChildDirectory -Path $toolchainExtract
                 New-Item -ItemType Directory -Force -Path (Join-Path $selectedRoot "bin") | Out-Null
-                $cliBinary = Get-ChildItem -Recurse -File $cliRoot | Where-Object { $_.Name -eq "gnustep" -or $_.Name -eq "gnustep.exe" } | Select-Object -First 1
-                if (-not $cliBinary) { throw "CLI binary not found in archive." }
-                Copy-Item -Force $cliBinary.FullName (Join-Path $selectedRoot "bin" $cliBinary.Name)
+                Install-CliBundle -Source $cliRoot -Destination $selectedRoot
                 Copy-TreeContents -Source $toolchainRoot -Destination $selectedRoot
                 New-Item -ItemType Directory -Force -Path (Join-Path $selectedRoot "state") | Out-Null
                 @{

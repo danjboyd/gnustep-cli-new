@@ -55,6 +55,8 @@ The PowerShell assembly script:
 
 - expects an MSYS2 installation rooted at `C:\msys64`
 - updates the package database
+- installs required MSYS2 host tooling such as `make`
+- installs the Clang compiler package itself in addition to the GNUstep runtime packages
 - installs the pinned GNUstep-related `clang64` package set
 - copies the `clang64` runtime directories into the managed prefix
 
@@ -76,6 +78,15 @@ Current validation status:
   script via `--overwrite /clang64/include/Block.h`
 - the updated script completed successfully on a fresh Windows lease and
   assembled the managed toolchain under `C:\gnustep-cli\toolchain`
+- follow-up full-CLI validation on the same lease exposed a real Windows source/toolchain
+  integration blocker rather than a packaging gap:
+  Foundation plus the current MSYS2 `libdispatch` stack fails to compile the
+  full CLI due to a `mode_t` typedef conflict between
+  `os/generic_win_base.h` and `sys/types.h`
+- that means the Windows `msys2-clang64` managed toolchain assembly path is now
+  materially working, but the full GNUstep CLI is not yet confirmed buildable
+  there without either an upstream fix or a project-local workaround for that
+  header conflict
 - the validation lease was explicitly destroyed afterward and followed by
   `otvm reap`
 

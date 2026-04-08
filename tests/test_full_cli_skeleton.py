@@ -35,6 +35,7 @@ class FullCliSkeletonTests(unittest.TestCase):
         self.assertIn("defaultManagedRoot", content)
         self.assertIn("setCurrentDirectoryPath: userDirectory", content)
         self.assertIn('[command isEqualToString: @"setup"]', content)
+        self.assertIn('libexec/gnustep-cli', content)
 
     def test_context_tracks_global_options(self):
         content = (FULL_CLI / "GSCommandContext.m").read_text()

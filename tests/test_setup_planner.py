@@ -11,7 +11,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from gnustep_cli_shared.build_infra import stage_release_assets
+from gnustep_cli_shared.build_infra import bundle_full_cli, stage_release_assets
 from gnustep_cli_shared.setup_planner import build_setup_payload, execute_setup
 
 
@@ -41,6 +41,8 @@ class SetupPlannerTests(unittest.TestCase):
             temp = Path(tempdir)
             cli_binary = temp / "gnustep"
             cli_binary.write_text("binary")
+            cli_bundle = temp / "cli-bundle"
+            bundle_full_cli(cli_binary, cli_bundle, repo_root=ROOT)
             toolchain_dir = temp / "toolchain"
             toolchain_dir.mkdir()
             (toolchain_dir / "System" / "Tools").mkdir(parents=True)
@@ -49,7 +51,7 @@ class SetupPlannerTests(unittest.TestCase):
                 "0.1.0-test",
                 temp / "dist",
                 "https://example.invalid/releases",
-                cli_inputs={"linux-amd64-clang": cli_binary},
+                cli_inputs={"linux-amd64-clang": cli_bundle},
                 toolchain_inputs={"linux-amd64-clang": toolchain_dir},
             )
             install_root = temp / "install-root"
