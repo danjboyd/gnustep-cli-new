@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "channel": "stable",
+  "generated_at": "2026-04-08T00:00:00Z",
+  "packages": [
+    {
+      "id": "org.example.myapp",
+      "name": "MyApp",
+      "version": "1.2.3",
+      "kind": "gui-app",
+      "requirements": {
+        "supported_os": [
+          "linux"
+        ],
+        "supported_arch": [
+          "amd64"
+        ],
+        "supported_compiler_families": [
+          "clang"
+        ],
+        "supported_objc_runtimes": [
+          "libobjc2"
+        ],
+        "supported_objc_abi": [
+          "modern"
+        ],
+        "required_features": [],
+        "forbidden_features": []
+      },
+      "dependencies": [],
+      "artifacts": [
+        {
+          "id": "myapp-linux-amd64-clang"
+        }
+      ]
+    }
+  ]
+}
+

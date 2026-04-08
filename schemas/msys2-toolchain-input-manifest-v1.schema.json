@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnustep.example/schemas/msys2-toolchain-input-manifest-v1.schema.json",
+  "title": "GNUstep Managed Toolchain MSYS2 Input Manifest v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "target",
+    "strategy",
+    "repository_snapshot",
+    "packages"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "id",
+        "os",
+        "arch",
+        "compiler_family",
+        "toolchain_flavor"
+      ],
+      "additionalProperties": true
+    },
+    "strategy": {
+      "const": "msys2-assembly"
+    },
+    "repository_snapshot": {
+      "type": "string"
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "version",
+          "sha256"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "conflict_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "policy",
+          "reason"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

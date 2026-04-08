@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "channel": "stable",
+  "generated_at": "2026-04-08T00:00:00Z",
+  "releases": [
+    {
+      "version": "0.1.0",
+      "status": "active",
+      "artifacts": [
+        {
+          "id": "cli-linux-amd64-clang",
+          "kind": "cli",
+          "version": "0.1.0",
+          "os": "linux",
+          "arch": "amd64",
+          "compiler_family": "clang",
+          "toolchain_flavor": "clang",
+          "objc_runtime": "libobjc2",
+          "objc_abi": "modern",
+          "required_features": [
+            "objc2_syntax",
+            "blocks"
+          ],
+          "format": "tar.gz",
+          "url": "https://example.invalid/gnustep-cli/0.1.0/cli-linux-amd64-clang.tar.gz",
+          "sha256": "deadbeef"
+        }
+      ]
+    }
+  ]
+}
+

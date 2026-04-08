@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "id": "org.example.myapp",
+  "name": "MyApp",
+  "version": "1.2.3",
+  "kind": "gui-app",
+  "summary": "Short summary",
+  "license": "GPL-3.0-or-later",
+  "maintainers": [
+    {
+      "name": "Example Maintainer",
+      "email": "maintainer@example.org"
+    }
+  ],
+  "source": {
+    "type": "archive",
+    "url": "https://example.invalid/myapp-1.2.3.tar.gz",
+    "sha256": "deadbeef"
+  },
+  "requirements": {
+    "supported_os": [
+      "linux",
+      "openbsd",
+      "windows"
+    ],
+    "supported_arch": [
+      "amd64"
+    ],
+    "supported_compiler_families": [
+      "clang",
+      "gcc"
+    ],
+    "supported_objc_runtimes": [
+      "libobjc2",
+      "gcc_libobjc"
+    ],
+    "supported_objc_abi": [
+      "modern",
+      "legacy"
+    ],
+    "required_features": [],
+    "forbidden_features": []
+  },
+  "artifacts": [
+    {
+      "id": "myapp-linux-amd64-clang",
+      "os": "linux",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "url": "https://example.invalid/myapp-linux-amd64-clang.tar.gz",
+      "sha256": "deadbeef"
+    }
+  ],
+  "integration": {
+    "display_name": "MyApp",
+    "icon": {
+      "source": "Resources/MyApp.png"
+    },
+    "categories": [
+      "Development"
+    ],
+    "launcher": true
+  },
+  "install": {
+    "strategy": "archive",
+    "prefix_layout": "gnustep",
+    "primary_executable": "MyApp"
+  }
+}
+

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "command": "doctor",
+  "cli_version": "0.1.0",
+  "ok": false,
+  "status": "error",
+  "environment_classification": "toolchain_incompatible",
+  "summary": "A GNUstep toolchain was detected, but it is incompatible with the selected managed artifacts.",
+  "environment": {
+    "os": "linux",
+    "arch": "amd64",
+    "detected_layouts": [
+      "debian"
+    ],
+    "install_prefixes": [
+      "/usr"
+    ],
+    "toolchain": {
+      "present": true,
+      "compiler_family": "gcc",
+      "toolchain_flavor": "gcc",
+      "objc_runtime": "gcc_libobjc",
+      "objc_abi": "legacy",
+      "gnustep_make": true,
+      "can_compile": true,
+      "can_link": true,
+      "can_run": true,
+      "feature_flags": {
+        "objc2_syntax": false,
+        "blocks": false,
+        "arc": false,
+        "nonfragile_abi": false,
+        "associated_objects": false,
+        "exceptions": true
+      }
+    }
+  },
+  "compatibility": {
+    "compatible": false,
+    "target_kind": "toolchain",
+    "target_id": "linux-amd64-clang",
+    "reasons": [
+      {
+        "code": "compiler_family_mismatch",
+        "message": "Detected compiler family is gcc, but the selected managed artifact requires clang."
+      }
+    ],
+    "warnings": [
+      {
+        "code": "gcc_toolchain_detected",
+        "message": "A GCC-based GNUstep environment is installed. Some modern Objective-C features require a Clang-based toolchain."
+      }
+    ]
+  },
+  "checks": [
+    {
+      "id": "toolchain.detect",
+      "title": "Detect GNUstep toolchain",
+      "status": "ok",
+      "severity": "error",
+      "message": "Detected a GCC-based GNUstep toolchain."
+    },
+    {
+      "id": "toolchain.compatibility",
+      "title": "Evaluate managed artifact compatibility",
+      "status": "error",
+      "severity": "error",
+      "message": "The detected toolchain is not compatible with the selected managed Clang artifact."
+    }
+  ],
+  "actions": [
+    {
+      "kind": "install_managed_toolchain",
+      "priority": 1,
+      "message": "Install the supported Clang-based managed toolchain."
+    }
+  ]
+}
+

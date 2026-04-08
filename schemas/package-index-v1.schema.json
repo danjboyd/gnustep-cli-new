@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnustep.example/schemas/package-index-v1.schema.json",
+  "title": "GNUstep Package Index v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "channel",
+    "generated_at",
+    "packages"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "channel": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "version",
+          "kind",
+          "requirements",
+          "artifacts"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "requirements": {
+            "type": "object"
+          },
+          "dependencies": {
+            "type": "array"
+          },
+          "artifacts": {
+            "type": "array"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
+

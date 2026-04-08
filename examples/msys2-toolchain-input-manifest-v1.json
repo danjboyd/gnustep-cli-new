@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "target": {
+    "id": "windows-amd64-msys2-clang64",
+    "os": "windows",
+    "arch": "amd64",
+    "compiler_family": "clang",
+    "toolchain_flavor": "msys2-clang64"
+  },
+  "strategy": "msys2-assembly",
+  "repository_snapshot": "TBD",
+  "packages": [
+    {
+      "name": "mingw-w64-clang-x86_64-libobjc2",
+      "version": "TBD",
+      "sha256": "TBD"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libdispatch",
+      "version": "TBD",
+      "sha256": "TBD"
+    }
+  ],
+  "conflict_rules": [
+    {
+      "path": "clang64/include/objc/blocks_runtime.h",
+      "policy": "allow-managed-overwrite",
+      "reason": "Known overlap between libobjc2 and blocks runtime packaging."
+    }
+  ]
+}

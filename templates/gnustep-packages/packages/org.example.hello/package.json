@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "id": "org.example.hello",
+  "name": "Hello",
+  "version": "0.1.0",
+  "kind": "cli-tool",
+  "summary": "Example package for the gnustep-packages repository template.",
+  "license": "MIT",
+  "maintainers": [
+    {
+      "name": "Example Maintainer"
+    }
+  ],
+  "source": {
+    "type": "archive",
+    "url": "https://example.invalid/hello-0.1.0.tar.gz",
+    "sha256": "TBD"
+  },
+  "requirements": {
+    "supported_os": [
+      "linux"
+    ],
+    "supported_arch": [
+      "amd64"
+    ],
+    "supported_compiler_families": [
+      "clang"
+    ],
+    "supported_objc_runtimes": [
+      "libobjc2"
+    ],
+    "supported_objc_abi": [
+      "modern"
+    ],
+    "required_features": [],
+    "forbidden_features": []
+  },
+  "artifacts": [
+    {
+      "id": "hello-linux-amd64-clang",
+      "os": "linux",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "url": "https://example.invalid/hello-linux-amd64-clang.tar.gz",
+      "sha256": "TBD"
+    }
+  ],
+  "install": {
+    "strategy": "archive",
+    "prefix_layout": "gnustep",
+    "executables": [
+      "hello"
+    ]
+  }
+}
+

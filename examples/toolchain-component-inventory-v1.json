@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "target": {
+    "id": "linux-amd64-clang",
+    "os": "linux",
+    "arch": "amd64",
+    "compiler_family": "clang",
+    "toolchain_flavor": "clang"
+  },
+  "toolchain_version": "2026.04.0",
+  "components": [
+    {
+      "name": "libobjc2",
+      "version": "TBD",
+      "source": "upstream-source"
+    },
+    {
+      "name": "libdispatch",
+      "version": "TBD",
+      "source": "upstream-source"
+    }
+  ]
+}

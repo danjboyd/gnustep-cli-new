@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnustep.example/schemas/doctor-output-v1.schema.json",
+  "title": "GNUstep CLI Doctor Output v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "command",
+    "ok",
+    "status",
+    "environment_classification",
+    "summary",
+    "environment",
+    "compatibility",
+    "checks",
+    "actions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "command": {
+      "const": "doctor"
+    },
+    "cli_version": {
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "string"
+    },
+    "environment_classification": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "object"
+    },
+    "compatibility": {
+      "type": "object"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "severity",
+          "message"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "kind",
+          "message"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
+

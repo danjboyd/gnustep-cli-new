@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "os_values": [
+    "linux",
+    "openbsd",
+    "windows",
+    "macos"
+  ],
+  "arch_values": [
+    "amd64",
+    "arm64"
+  ],
+  "compiler_family_values": [
+    "clang",
+    "gcc",
+    "msvc"
+  ],
+  "toolchain_flavor_values": [
+    "clang",
+    "gcc",
+    "msys2-clang64",
+    "msvc"
+  ],
+  "objc_runtime_values": [
+    "libobjc2",
+    "gcc_libobjc",
+    "unknown"
+  ],
+  "objc_abi_values": [
+    "modern",
+    "legacy",
+    "unknown"
+  ],
+  "doctor_status_values": [
+    "ok",
+    "warning",
+    "error"
+  ],
+  "environment_classification_values": [
+    "no_toolchain",
+    "toolchain_compatible",
+    "toolchain_incompatible",
+    "toolchain_broken"
+  ],
+  "check_status_values": [
+    "ok",
+    "warning",
+    "error",
+    "skipped"
+  ],
+  "check_severity_values": [
+    "info",
+    "warning",
+    "error"
+  ],
+  "feature_flag_values": [
+    "objc2_syntax",
+    "blocks",
+    "arc",
+    "nonfragile_abi",
+    "associated_objects",
+    "exceptions"
+  ],
+  "compatibility_reason_codes": [
+    "compiler_family_mismatch",
+    "toolchain_flavor_mismatch",
+    "objc_runtime_mismatch",
+    "objc_abi_mismatch",
+    "missing_required_feature",
+    "forbidden_feature_present",
+    "unsupported_os",
+    "unsupported_arch",
+    "toolchain_not_present",
+    "toolchain_broken"
+  ]
+}
+

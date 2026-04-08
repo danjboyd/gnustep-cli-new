@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnustep.example/schemas/toolchain-source-lock-v1.schema.json",
+  "title": "GNUstep Managed Toolchain Source Lock v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "target",
+    "strategy",
+    "runtime",
+    "components"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "id",
+        "os",
+        "arch",
+        "compiler_family",
+        "toolchain_flavor"
+      ],
+      "additionalProperties": true
+    },
+    "strategy": {
+      "const": "source-build"
+    },
+    "runtime": {
+      "type": "object"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "url",
+          "revision",
+          "patches"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "patches": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

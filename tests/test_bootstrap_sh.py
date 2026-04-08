@@ -1,0 +1,65 @@
+import json
+import subprocess
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+BOOTSTRAP = ROOT / "scripts" / "bootstrap" / "gnustep-bootstrap.sh"
+
+
+class BootstrapShTests(unittest.TestCase):
+    def run_script(self, *args):
+        proc = subprocess.run(
+            ["sh", str(BOOTSTRAP), *args],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        return proc
+
+    def test_help_shows_full_command_surface(self):
+        proc = self.run_script("--help")
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("setup", proc.stdout)
+        self.assertIn("doctor", proc.stdout)
+        self.assertIn("build", proc.stdout)
+        self.assertIn("remove", proc.stdout)
+
+    def test_unknown_option_fails_with_usage_code(self):
+        proc = self.run_script("--bogus")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("Unknown option", proc.stderr)
+
+    def test_no_command_returns_usage_code(self):
+        proc = self.run_script()
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("Usage:", proc.stdout)
+
+    def test_unsupported_command_returns_bootstrap_unavailable(self):
+        proc = self.run_script("build")
+        self.assertEqual(proc.returncode, 3)
+        self.assertIn("unavailable in bootstrap", proc.stdout)
+
+    def test_doctor_json_shape(self):
+        proc = self.run_script("--json", "doctor")
+        self.assertIn(proc.returncode, (0, 3))
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["command"], "doctor")
+        self.assertIn("checks", payload)
+        self.assertIn("actions", payload)
+
+    def test_setup_json_shape(self):
+        proc = self.run_script("--json", "setup")
+        self.assertIn(proc.returncode, (0, 3))
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["command"], "setup")
+        self.assertIn("summary", payload)
+
+
+if __name__ == "__main__":
+    unittest.main()
+

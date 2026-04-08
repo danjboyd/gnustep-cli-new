@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "kind": "managed-toolchain",
+  "toolchain_version": "2026.04.0",
+  "target": {
+    "id": "linux-amd64-clang",
+    "os": "linux",
+    "arch": "amd64",
+    "compiler_family": "clang",
+    "toolchain_flavor": "clang"
+  },
+  "runtime": {
+    "objc_runtime": "libobjc2",
+    "objc_abi": "modern",
+    "required_features": [
+      "blocks"
+    ]
+  },
+  "components": [
+    "libobjc2",
+    "libdispatch",
+    "tools-make",
+    "libs-base",
+    "libs-corebase",
+    "libs-gui",
+    "libs-back"
+  ],
+  "published": true
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnustep.example/schemas/toolchain-manifest-v1.schema.json",
+  "title": "GNUstep Managed Toolchain Manifest v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "toolchain_version",
+    "target",
+    "runtime",
+    "components",
+    "published"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "managed-toolchain"
+    },
+    "toolchain_version": {
+      "type": "string"
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "id",
+        "os",
+        "arch",
+        "compiler_family",
+        "toolchain_flavor"
+      ],
+      "additionalProperties": true
+    },
+    "runtime": {
+      "type": "object"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "published": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": true
+}

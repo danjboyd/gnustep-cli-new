@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gnustep.example/schemas/release-manifest-v1.schema.json",
+  "title": "GNUstep CLI Release Manifest v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "channel",
+    "generated_at",
+    "releases"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "channel": {
+      "type": "string"
+    },
+    "generated_at": {
+      "type": "string"
+    },
+    "releases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "version",
+          "artifacts"
+        ],
+        "properties": {
+          "version": {
+            "type": "string"
+          },
+          "notes_url": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "kind",
+                "version",
+                "os",
+                "arch",
+                "compiler_family",
+                "toolchain_flavor",
+                "objc_runtime",
+                "objc_abi",
+                "format",
+                "url",
+                "sha256"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "os": {
+                  "type": "string"
+                },
+                "arch": {
+                  "type": "string"
+                },
+                "compiler_family": {
+                  "type": "string"
+                },
+                "toolchain_flavor": {
+                  "type": "string"
+                },
+                "objc_runtime": {
+                  "type": "string"
+                },
+                "objc_abi": {
+                  "type": "string"
+                },
+                "required_features": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "format": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                },
+                "sha256": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}
+
