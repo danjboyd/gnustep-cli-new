@@ -8,6 +8,76 @@ $Script:JsonMode = $false
 $Script:RootDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
 $Script:SetupScope = "user"
 $Script:SetupRoot = $null
+$Script:SetupManifest = $env:SETUP_MANIFEST
+
+function Get-ManifestObject {
+    param([string]$ManifestSource)
+    if (-not $ManifestSource) {
+        $localManifest = Join-Path $Script:RootDir "dist\stable\$($Script:CliVersion)\release-manifest.json"
+        if (Test-Path $localManifest) {
+            $ManifestSource = $localManifest
+        }
+        else {
+            $ManifestSource = "https://github.com/danjboyd/gnustep-cli-new/releases/download/v$($Script:CliVersion)/release-manifest.json"
+        }
+    }
+    if ($ManifestSource -match '^https?://') {
+        $manifestPath = Join-Path ([System.IO.Path]::GetTempPath()) ("gnustep-manifest-" + [guid]::NewGuid().ToString() + ".json")
+        Invoke-WebRequest -UseBasicParsing -Uri $ManifestSource -OutFile $manifestPath
+    }
+    else {
+        $manifestPath = (Resolve-Path $ManifestSource).Path
+    }
+    return @{
+        path = $manifestPath
+        dir = Split-Path -Parent $manifestPath
+        json = Get-Content -Raw $manifestPath | ConvertFrom-Json
+    }
+}
+
+function Get-HostTarget {
+    $arch = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { "unknown" }
+    return @{
+        os = "windows"
+        arch = $arch
+        cliId = "cli-windows-$arch-msys2-clang64"
+        toolchainId = "toolchain-windows-$arch-msys2-clang64"
+    }
+}
+
+function Get-Sha256 {
+    param([string]$Path)
+    return (Get-FileHash -Algorithm SHA256 -Path $Path).Hash.ToLowerInvariant()
+}
+
+function Expand-Artifact {
+    param([string]$ArchivePath, [string]$Destination)
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    if ($ArchivePath.ToLowerInvariant().EndsWith(".zip")) {
+        Expand-Archive -Path $ArchivePath -DestinationPath $Destination -Force
+    }
+    else {
+        tar -xzf $ArchivePath -C $Destination
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to extract $ArchivePath"
+        }
+    }
+}
+
+function Get-SingleChildDirectory {
+    param([string]$Path)
+    $children = Get-ChildItem -Force $Path
+    if ($children.Count -eq 1 -and $children[0].PSIsContainer) {
+        return $children[0].FullName
+    }
+    return $Path
+}
+
+function Copy-TreeContents {
+    param([string]$Source, [string]$Destination)
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    Copy-Item -Recurse -Force (Join-Path $Source '*') $Destination
+}
 
 function Show-Help {
     @"
@@ -89,9 +159,10 @@ foreach ($arg in $ArgsList) {
         "--yes" { }
         "--system" { $Script:SetupScope = "system" }
         "--user" { $Script:SetupScope = "user" }
+        "--manifest" { }
         default {
             if ($arg.StartsWith("--")) {
-                if ($arg -eq "--root") {
+                if ($arg -eq "--root" -or $arg -eq "--manifest") {
                     continue
                 }
                 Write-Error "Unknown option: $arg"
@@ -110,6 +181,13 @@ for ($i = 0; $i -lt $ArgsList.Count; $i++) {
         }
         $Script:SetupRoot = $ArgsList[$i + 1]
     }
+    if ($ArgsList[$i] -eq "--manifest") {
+        if ($i + 1 -ge $ArgsList.Count) {
+            Write-Error "--manifest requires a value"
+            exit 2
+        }
+        $Script:SetupManifest = $ArgsList[$i + 1]
+    }
 }
 
 if ($remaining.Count -eq 0) {
@@ -118,6 +196,36 @@ if ($remaining.Count -eq 0) {
 }
 
 $command = $remaining[0]
+$commandArgs = @()
+if ($remaining.Count -gt 1) {
+    $commandArgs = $remaining.GetRange(1, $remaining.Count - 1)
+}
+
+foreach ($arg in $commandArgs) {
+    switch ($arg) {
+        "--system" { $Script:SetupScope = "system" }
+        "--user" { $Script:SetupScope = "user" }
+        default { }
+    }
+}
+
+for ($i = 0; $i -lt $commandArgs.Count; $i++) {
+    if ($commandArgs[$i] -eq "--root") {
+        if ($i + 1 -ge $commandArgs.Count) {
+            Write-Error "--root requires a value"
+            exit 2
+        }
+        $Script:SetupRoot = $commandArgs[$i + 1]
+    }
+    if ($commandArgs[$i] -eq "--manifest") {
+        if ($i + 1 -ge $commandArgs.Count) {
+            Write-Error "--manifest requires a value"
+            exit 2
+        }
+        $Script:SetupManifest = $commandArgs[$i + 1]
+    }
+}
+
 switch ($command) {
     "doctor" {
         if ($Script:JsonMode) {
@@ -177,6 +285,12 @@ switch ($command) {
                 $selectedRoot = "%LOCALAPPDATA%\gnustep-cli"
             }
         }
+        if ($selectedRoot -like "%LOCALAPPDATA%*") {
+            $selectedRoot = $selectedRoot -replace "%LOCALAPPDATA%", $env:LOCALAPPDATA
+        }
+        if ($selectedRoot -like "%ProgramFiles%*") {
+            $selectedRoot = $selectedRoot -replace "%ProgramFiles%", $env:ProgramFiles
+        }
         $isAdmin = $false
         try {
             $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -222,42 +336,132 @@ switch ($command) {
             }
             exit 3
         }
-        if ($Script:JsonMode) {
-            Write-JsonObject @{
-                schema_version = 1
-                command = "setup"
-                cli_version = $Script:CliVersion
-                ok = $true
-                status = "ok"
-                summary = "Managed installation plan created."
-                doctor = @{
-                    status = "warning"
-                    environment_classification = "no_toolchain"
-                    summary = "No preexisting GNUstep toolchain was detected."
-                }
-                plan = @{
-                    scope = $Script:SetupScope
-                    install_root = $selectedRoot
-                    channel = "stable"
-                    selected_release = $null
-                    selected_artifacts = @()
-                    system_privileges_ok = $true
-                }
-                actions = @(
-                    @{
-                        kind = "apply_install_plan"
-                        priority = 1
-                        message = "Proceed with artifact download and managed installation once implementation is complete."
-                    }
-                )
+        try {
+            $manifest = Get-ManifestObject -ManifestSource $Script:SetupManifest
+            $target = Get-HostTarget
+            $release = $manifest.json.releases[0]
+            $cliArtifact = $release.artifacts | Where-Object { $_.id -eq $target.cliId } | Select-Object -First 1
+            $toolchainArtifact = $release.artifacts | Where-Object { $_.id -eq $target.toolchainId } | Select-Object -First 1
+            if (-not $cliArtifact -or -not $toolchainArtifact) {
+                throw "No matching release artifacts were found for this host."
             }
+            $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("gnustep-bootstrap-" + [guid]::NewGuid().ToString())
+            New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
+            try {
+                $cliFile = Join-Path $tempRoot ([System.IO.Path]::GetFileName($cliArtifact.url))
+                $toolchainFile = Join-Path $tempRoot ([System.IO.Path]::GetFileName($toolchainArtifact.url))
+                $localCli = Join-Path $manifest.dir ([System.IO.Path]::GetFileName($cliArtifact.url))
+                $localToolchain = Join-Path $manifest.dir ([System.IO.Path]::GetFileName($toolchainArtifact.url))
+                if (Test-Path $localCli) { Copy-Item -Force $localCli $cliFile } else { Invoke-WebRequest -UseBasicParsing -Uri $cliArtifact.url -OutFile $cliFile }
+                if (Test-Path $localToolchain) { Copy-Item -Force $localToolchain $toolchainFile } else { Invoke-WebRequest -UseBasicParsing -Uri $toolchainArtifact.url -OutFile $toolchainFile }
+                if ((Get-Sha256 $cliFile) -ne $cliArtifact.sha256.ToLowerInvariant()) { throw "CLI checksum verification failed." }
+                if ((Get-Sha256 $toolchainFile) -ne $toolchainArtifact.sha256.ToLowerInvariant()) { throw "Toolchain checksum verification failed." }
+                $cliExtract = Join-Path $tempRoot "cli"
+                $toolchainExtract = Join-Path $tempRoot "toolchain"
+                Expand-Artifact -ArchivePath $cliFile -Destination $cliExtract
+                Expand-Artifact -ArchivePath $toolchainFile -Destination $toolchainExtract
+                $cliRoot = Get-SingleChildDirectory -Path $cliExtract
+                $toolchainRoot = Get-SingleChildDirectory -Path $toolchainExtract
+                New-Item -ItemType Directory -Force -Path (Join-Path $selectedRoot "bin") | Out-Null
+                $cliBinary = Get-ChildItem -Recurse -File $cliRoot | Where-Object { $_.Name -eq "gnustep" -or $_.Name -eq "gnustep.exe" } | Select-Object -First 1
+                if (-not $cliBinary) { throw "CLI binary not found in archive." }
+                Copy-Item -Force $cliBinary.FullName (Join-Path $selectedRoot "bin" $cliBinary.Name)
+                Copy-TreeContents -Source $toolchainRoot -Destination $selectedRoot
+                New-Item -ItemType Directory -Force -Path (Join-Path $selectedRoot "state") | Out-Null
+                @{
+                    schema_version = 1
+                    cli_version = $release.version
+                    toolchain_version = $release.version
+                    packages_version = 1
+                    last_action = "setup"
+                    status = "healthy"
+                } | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $selectedRoot "state\\cli-state.json")
+                $pathHint = '$env:Path = "' + (Join-Path $selectedRoot 'bin') + ';' + (Join-Path $selectedRoot 'System\\Tools') + ';$env:Path"'
+                if ($Script:JsonMode) {
+                    Write-JsonObject @{
+                        schema_version = 1
+                        command = "setup"
+                        cli_version = $Script:CliVersion
+                        ok = $true
+                        status = "ok"
+                        summary = "Managed installation completed."
+                        doctor = @{
+                            status = "warning"
+                            environment_classification = "no_toolchain"
+                            summary = "No preexisting GNUstep toolchain was detected."
+                            os = "windows"
+                        }
+                        plan = @{
+                            scope = $Script:SetupScope
+                            install_root = $selectedRoot
+                            channel = "stable"
+                            selected_release = $release.version
+                            selected_artifacts = @($cliArtifact.id, $toolchainArtifact.id)
+                            system_privileges_ok = $true
+                        }
+                        actions = @(
+                            @{ kind = "add_path"; priority = 1; message = "Add $selectedRoot\\bin and $selectedRoot\\System\\Tools to PATH for future shells." },
+                            @{ kind = "delete_bootstrap"; priority = 2; message = "The bootstrap script is no longer required and may be deleted." }
+                        )
+                        install = @{
+                            install_root = $selectedRoot
+                            path_hint = $pathHint
+                        }
+                    }
+                }
+                else {
+                    Write-Output "setup: managed installation completed"
+                    Write-Output "setup: scope=$($Script:SetupScope) root=$selectedRoot"
+                    Write-Output "next: Run this in the current shell:"
+                    Write-Output "  $pathHint"
+                    Write-Output "next: The bootstrap script is no longer required and may be deleted."
+                }
+            }
+            finally {
+                if (Test-Path $tempRoot) {
+                    Remove-Item -Recurse -Force $tempRoot
+                }
+            }
+            exit 0
         }
-        else {
-            Write-Output "setup: managed installation plan created"
-            Write-Output "setup: scope=$($Script:SetupScope) root=$selectedRoot"
-            Write-Output "next: Artifact download and managed installation are not implemented yet."
+        catch {
+            if ($Script:JsonMode) {
+                Write-JsonObject @{
+                    schema_version = 1
+                    command = "setup"
+                    cli_version = $Script:CliVersion
+                    ok = $false
+                    status = "error"
+                    summary = $_.Exception.Message
+                    doctor = @{
+                        status = "warning"
+                        environment_classification = "no_toolchain"
+                        summary = "No preexisting GNUstep toolchain was detected."
+                        os = "windows"
+                    }
+                    plan = @{
+                        scope = $Script:SetupScope
+                        install_root = $selectedRoot
+                        channel = "stable"
+                        selected_release = $null
+                        selected_artifacts = @()
+                        system_privileges_ok = $true
+                    }
+                    actions = @(
+                        @{
+                            kind = "report_bug"
+                            priority = 1
+                            message = "Check the manifest and artifact availability, then rerun setup."
+                        }
+                    )
+                }
+            }
+            else {
+                Write-Output "setup: $($_.Exception.Message)"
+                Write-Output "next: Check the manifest and artifact availability, then rerun setup."
+            }
+            exit 1
         }
-        exit 0
     }
     "build" { Invoke-UnsupportedCommand "build" }
     "run" { Invoke-UnsupportedCommand "run" }
