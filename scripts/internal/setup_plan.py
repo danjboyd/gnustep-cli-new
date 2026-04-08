@@ -12,18 +12,23 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from gnustep_cli_shared.setup_planner import build_setup_payload, render_setup_human
+from gnustep_cli_shared.setup_planner import build_setup_payload, execute_setup, render_setup_human
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--execute", action="store_true")
     parser.add_argument("--scope", choices=["user", "system"], default="user")
     parser.add_argument("--manifest")
     parser.add_argument("--root")
     args = parser.parse_args()
 
-    payload, exit_code = build_setup_payload(scope=args.scope, manifest_path=args.manifest, install_root=args.root)
+    payload, exit_code = (
+        execute_setup(scope=args.scope, manifest_path=args.manifest, install_root=args.root)
+        if args.execute
+        else build_setup_payload(scope=args.scope, manifest_path=args.manifest, install_root=args.root)
+    )
     if args.json:
         print(json.dumps(payload, separators=(",", ":")))
     else:
@@ -33,4 +38,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -10,7 +11,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from gnustep_cli_shared.setup_planner import build_setup_payload
+from gnustep_cli_shared.build_infra import stage_release_assets
+from gnustep_cli_shared.setup_planner import build_setup_payload, execute_setup
 
 
 class SetupPlannerTests(unittest.TestCase):
@@ -34,7 +36,34 @@ class SetupPlannerTests(unittest.TestCase):
         decoded = json.loads(encoded)
         self.assertEqual(decoded["command"], "setup")
 
+    def test_execute_setup_from_local_staged_release(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_binary = temp / "gnustep"
+            cli_binary.write_text("binary")
+            toolchain_dir = temp / "toolchain"
+            toolchain_dir.mkdir()
+            (toolchain_dir / "System" / "Tools").mkdir(parents=True)
+            (toolchain_dir / "System" / "Tools" / "make").write_text("tool")
+            staged = stage_release_assets(
+                "0.1.0-test",
+                temp / "dist",
+                "https://example.invalid/releases",
+                cli_inputs={"linux-amd64-clang": cli_binary},
+                toolchain_inputs={"linux-amd64-clang": toolchain_dir},
+            )
+            install_root = temp / "install-root"
+            payload, exit_code = execute_setup(
+                scope="user",
+                manifest_path=Path(staged["manifest_path"]),
+                install_root=install_root,
+            )
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(payload["ok"])
+            self.assertTrue((install_root / "bin" / "gnustep").exists())
+            self.assertTrue((install_root / "System" / "Tools" / "make").exists())
+            self.assertIn("path_hint", payload["install"])
+
 
 if __name__ == "__main__":
     unittest.main()
-

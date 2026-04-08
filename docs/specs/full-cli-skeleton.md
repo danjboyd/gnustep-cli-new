@@ -60,6 +60,8 @@ the managed Linux Clang toolchain to:
 - print top-level help and version output
 - emit structured JSON envelopes
 - delegate `doctor` successfully through the Objective-C front end
+- execute `setup` successfully through the Objective-C front end against a
+  staged release manifest
 - create new projects with `new`
 - build a generated CLI-tool project with `build`
 - run that generated project with `run`

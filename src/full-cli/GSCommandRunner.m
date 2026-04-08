@@ -192,7 +192,9 @@
 
 - (BOOL)commandRunsByDefault:(NSString *)command
 {
-  return [command isEqualToString: @"build"] || [command isEqualToString: @"run"];
+  return [command isEqualToString: @"setup"] ||
+         [command isEqualToString: @"build"] ||
+         [command isEqualToString: @"run"];
 }
 
 - (BOOL)commandNeedsManagedRoot:(NSString *)command

@@ -31,6 +31,8 @@ Implemented subcommands include:
 ## Current Verified State
 
 - A real local Linux release payload has been staged under `dist/stable/`.
+- The first private GitHub prerelease has been published at
+  `v0.1.0-dev`.
 - The staged payload includes:
   - the built full GNUstep CLI archive
   - the managed Linux toolchain archive
@@ -38,18 +40,21 @@ Implemented subcommands include:
   - `SHA256SUMS`
 - Release qualification can verify checksums and extract staged artifacts into a
   disposable install root for validation.
+- The shared `setup` backend can now install from a staged release manifest into
+  a managed root with checksum verification and PATH guidance.
 
 ## Current Blockers
 
-- No Git remote is configured for this repository yet.
-- No GitHub repository currently exists at `danjboyd/gnustep-cli-new`.
-- Because of that, the GitHub publication tooling can currently produce an
-  exact `gh release create` plan but cannot complete live publication.
+- Publication is currently Linux-only.
+- `setup` is implemented in the shared helper path, but bootstrap-native
+  `setup` remains a thinner path and is not yet using the same full install
+  execution flow.
+- Fresh-host qualification against the live GitHub Release assets still needs to
+  be run end to end.
 
 ## Immediate Follow-Up
 
-- create or connect the canonical GitHub repository
-- push this repository to that remote
-- run the staged GitHub publication command against the real repo
+- run fresh-host qualification against the live private GitHub Release assets
+- decide when to make releases public versus keeping them private during bring-up
 - extend staged release generation and qualification beyond Linux once the
   remaining Tier 1 artifacts are publishable
