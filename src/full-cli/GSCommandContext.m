@@ -12,38 +12,38 @@
 
   while ((argument = [enumerator nextObject]) != nil)
     {
+      if ([argument isEqualToString: @"--json"])
+        {
+          context->_jsonOutput = YES;
+          continue;
+        }
+      if ([argument isEqualToString: @"--verbose"])
+        {
+          context->_verbose = YES;
+          continue;
+        }
+      if ([argument isEqualToString: @"--quiet"])
+        {
+          context->_quiet = YES;
+          continue;
+        }
+      if ([argument isEqualToString: @"--yes"])
+        {
+          context->_yes = YES;
+          continue;
+        }
+      if ([argument isEqualToString: @"--help"])
+        {
+          context->_showHelp = YES;
+          continue;
+        }
+      if ([argument isEqualToString: @"--version"])
+        {
+          context->_showVersion = YES;
+          continue;
+        }
       if (commandSeen == NO && [argument hasPrefix: @"--"])
         {
-          if ([argument isEqualToString: @"--json"])
-            {
-              context->_jsonOutput = YES;
-              continue;
-            }
-          if ([argument isEqualToString: @"--verbose"])
-            {
-              context->_verbose = YES;
-              continue;
-            }
-          if ([argument isEqualToString: @"--quiet"])
-            {
-              context->_quiet = YES;
-              continue;
-            }
-          if ([argument isEqualToString: @"--yes"])
-            {
-              context->_yes = YES;
-              continue;
-            }
-          if ([argument isEqualToString: @"--help"])
-            {
-              context->_showHelp = YES;
-              continue;
-            }
-          if ([argument isEqualToString: @"--version"])
-            {
-              context->_showVersion = YES;
-              continue;
-            }
           context->_usageError = [NSString stringWithFormat: @"Unknown global option: %@", argument];
           return context;
         }

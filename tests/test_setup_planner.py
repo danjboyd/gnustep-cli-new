@@ -35,6 +35,17 @@ class SetupPlannerTests(unittest.TestCase):
         encoded = json.dumps(payload)
         decoded = json.loads(encoded)
         self.assertEqual(decoded["command"], "setup")
+        self.assertIn("manifest_validation_errors", decoded["plan"])
+
+    def test_invalid_manifest_fails_validation(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            manifest = Path(tempdir) / "release-manifest.json"
+            manifest.write_text('{"schema_version": 99, "releases": []}\n')
+            payload, exit_code = build_setup_payload(scope="user", manifest_path=manifest)
+            self.assertFalse(payload["ok"])
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(payload["summary"], "Release manifest validation failed.")
+            self.assertTrue(payload["plan"]["manifest_validation_errors"])
 
     def test_execute_setup_from_local_staged_release(self):
         with tempfile.TemporaryDirectory() as tempdir:

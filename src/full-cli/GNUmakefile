@@ -3,9 +3,17 @@ include $(GNUSTEP_MAKEFILES)/common.make
 TOOL_NAME = gnustep
 gnustep_OBJC_FILES = main.m GSCommandContext.m GSCommandRunner.m
 gnustep_RESOURCE_FILES =
+GNUSTEP_PREFIX := $(GNUSTEP_MAKEFILES)/../../..
+GNUSTEP_LOCAL_LIB_DIR := $(GNUSTEP_PREFIX)/Local/Library/Libraries
+GNUSTEP_SYSTEM_LIB_DIR := $(GNUSTEP_PREFIX)/System/Library/Libraries
+GNUSTEP_RUNTIME_LIB_DIR := $(GNUSTEP_PREFIX)/lib
 ADDITIONAL_OBJCFLAGS += -I$(GNUSTEP_MAKEFILES)/../../../include
 ADDITIONAL_CPPFLAGS += -I$(GNUSTEP_MAKEFILES)/../../../include
 ADDITIONAL_LDFLAGS += -L$(GNUSTEP_MAKEFILES)/../../../lib -L$(GNUSTEP_MAKEFILES)/../../../lib64
+ADDITIONAL_LDFLAGS += -Wl,-rpath,$(GNUSTEP_LOCAL_LIB_DIR)
+ADDITIONAL_LDFLAGS += -Wl,-rpath,$(GNUSTEP_SYSTEM_LIB_DIR)
+ADDITIONAL_LDFLAGS += -Wl,-rpath,$(GNUSTEP_RUNTIME_LIB_DIR)
+ADDITIONAL_TOOL_LIBS += -ldispatch -lBlocksRuntime
 # MSYS2 libdispatch on Windows expects mode_t to be treated as already available.
 ADDITIONAL_OBJCFLAGS += -DHAVE_MODE_T
 ADDITIONAL_CPPFLAGS += -DHAVE_MODE_T

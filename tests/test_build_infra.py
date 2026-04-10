@@ -13,12 +13,14 @@ from gnustep_cli_shared.build_infra import (
     build_matrix,
     bundle_full_cli,
     component_inventory,
+    debian_gcc_interop_plan,
     github_release_plan,
     linux_build_script,
     msys2_assembly_script,
     msys2_input_manifest_template,
     msvc_status,
     openbsd_build_script,
+    qualify_full_cli_handoff,
     toolchain_manifest,
     release_manifest_from_matrix,
     qualify_release_install,
@@ -191,6 +193,47 @@ class BuildInfraTests(unittest.TestCase):
             self.assertEqual(len(install_paths), 2)
             for path in install_paths:
                 self.assertTrue(path.exists())
+
+    def test_qualify_full_cli_handoff(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_binary = temp / "gnustep"
+            cli_binary.write_text(
+                "#!/bin/sh\n"
+                "case \"$1\" in\n"
+                "  --version) printf '0.1.0-dev\\n' ;;\n"
+                "  --help) printf 'gnustep <command> [options] [args]\\n' ;;\n"
+                "  *) printf 'gnustep\\n' ;;\n"
+                "esac\n"
+            )
+            cli_binary.chmod(0o755)
+            cli_bundle = temp / "cli-bundle"
+            bundle_full_cli(cli_binary, cli_bundle, repo_root=ROOT)
+            toolchain_dir = temp / "toolchain"
+            (toolchain_dir / "System" / "Tools").mkdir(parents=True)
+            (toolchain_dir / "System" / "Tools" / "make").write_text("tool")
+            staged = stage_release_assets(
+                "0.1.0",
+                temp / "dist",
+                "https://github.com/danjboyd/gnustep-cli/releases",
+                cli_inputs={"linux-amd64-clang": cli_bundle},
+                toolchain_inputs={"linux-amd64-clang": toolchain_dir},
+            )
+            payload = qualify_full_cli_handoff(staged["release_dir"], temp / "handoff-root")
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["command"], "qualify-full-cli-handoff")
+            self.assertTrue(payload["checks"])
+            self.assertTrue(payload["command_results"])
+            self.assertTrue(all(result["ok"] for result in payload["command_results"]))
+
+    def test_debian_gcc_interop_plan(self):
+        payload = debian_gcc_interop_plan()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["command"], "debian-gcc-interop-plan")
+        self.assertEqual(payload["host_requirements"]["distribution"], "debian")
+        step_ids = [step["id"] for step in payload["steps"]]
+        self.assertIn("build-full-cli", step_ids)
+        self.assertIn("record-evidence", step_ids)
 
     def test_bundle_full_cli(self):
         with tempfile.TemporaryDirectory() as tempdir:

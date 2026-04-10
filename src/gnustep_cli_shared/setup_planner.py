@@ -39,11 +39,41 @@ def _artifact_matches_host(artifact: dict[str, Any], doctor: dict[str, Any]) -> 
     return artifact.get("os") == environment["os"] and artifact.get("arch") == environment["arch"]
 
 
-def _select_release(manifest_file: Path, doctor: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def _validate_manifest_payload(manifest: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    if manifest.get("schema_version") != 1:
+        errors.append("Unsupported release manifest schema version.")
+    releases = manifest.get("releases")
+    if not isinstance(releases, list) or not releases:
+        errors.append("Release manifest does not define any releases.")
+        return errors
+    for release in releases:
+        if "version" not in release:
+            errors.append("A release entry is missing its version.")
+        artifacts = release.get("artifacts")
+        if not isinstance(artifacts, list):
+            errors.append(f"Release {release.get('version', 'unknown')} does not define an artifacts list.")
+            continue
+        for artifact in artifacts:
+            for field in ("id", "kind", "os", "arch", "url", "sha256"):
+                if field not in artifact:
+                    errors.append(f"Artifact {artifact.get('id', 'unknown')} is missing required field '{field}'.")
+    return errors
+
+
+def _select_release(manifest_file: Path, doctor: dict[str, Any]) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str]]:
     manifest = json.loads(manifest_file.read_text())
-    active_release = manifest["releases"][0]
+    errors = _validate_manifest_payload(manifest)
+    if errors:
+        return None, [], errors
+    releases = manifest["releases"]
+    active_release = next((release for release in releases if release.get("status") == "active"), releases[0])
     selected = [artifact for artifact in active_release.get("artifacts", []) if _artifact_matches_host(artifact, doctor)]
-    return active_release, selected
+    selected_by_kind: dict[str, dict[str, Any]] = {}
+    for artifact in selected:
+        selected_by_kind.setdefault(artifact["kind"], artifact)
+    ordered = [selected_by_kind[kind] for kind in ("cli", "toolchain") if kind in selected_by_kind]
+    return active_release, ordered, errors
 
 
 def _path_export_hint(root: Path, os_name: str) -> str:
@@ -58,6 +88,13 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _is_writable_install_root(install_root: Path) -> bool:
+    candidate = install_root if install_root.exists() else install_root.parent
+    while not candidate.exists() and candidate.parent != candidate:
+        candidate = candidate.parent
+    return os.access(candidate, os.W_OK)
 
 
 def _resolve_artifact_source(manifest_file: Path, artifact: dict[str, Any], download_dir: Path) -> Path:
@@ -129,8 +166,27 @@ def execute_setup(
 
     manifest_file = Path(manifest_path) if manifest_path else DEFAULT_MANIFEST
     install_path = Path(payload["plan"]["install_root"]).expanduser().resolve()
-    doctor = build_doctor_payload(manifest_file)
-    _, selected_artifacts = _select_release(manifest_file, doctor)
+    doctor = build_doctor_payload(manifest_file, interface="bootstrap")
+    _, selected_artifacts, validation_errors = _select_release(manifest_file, doctor)
+    if validation_errors:
+        payload["ok"] = False
+        payload["status"] = "error"
+        payload["summary"] = "Release manifest validation failed."
+        payload["actions"] = [{"kind": "report_bug", "priority": 1, "message": validation_errors[0]}]
+        payload["plan"]["manifest_validation_errors"] = validation_errors
+        return payload, 2
+    if len(selected_artifacts) < 2:
+        payload["ok"] = False
+        payload["status"] = "error"
+        payload["summary"] = "No complete managed artifact set was found for this host."
+        payload["actions"] = [
+            {
+                "kind": "report_bug",
+                "priority": 1,
+                "message": "No compatible CLI/toolchain artifact pair is available for this host yet.",
+            }
+        ]
+        return payload, 4
     install_path.mkdir(parents=True, exist_ok=True)
     staged = install_path / ".staging" / "setup"
     if staged.exists():
@@ -200,12 +256,13 @@ def build_setup_payload(
     install_root: str | None = None,
 ) -> tuple[dict[str, Any], int]:
     manifest_file = Path(manifest_path) if manifest_path else DEFAULT_MANIFEST
-    doctor = build_doctor_payload(manifest_file)
+    doctor = build_doctor_payload(manifest_file, interface="bootstrap")
     os_name = doctor["environment"]["os"]
     selected_scope = scope
     selected_root = install_root or (_default_system_root(os_name) if selected_scope == "system" else _default_user_root(os_name))
-    active_release, selected_artifacts = _select_release(manifest_file, doctor)
+    active_release, selected_artifacts, validation_errors = _select_release(manifest_file, doctor)
     system_priv_ok = selected_scope != "system" or _has_system_privileges(os_name)
+    install_path = Path(selected_root).expanduser()
 
     status = "ok"
     ok = True
@@ -213,7 +270,13 @@ def build_setup_payload(
     actions: list[dict[str, Any]] = []
     exit_code = 0
 
-    if not system_priv_ok:
+    if validation_errors:
+        status = "error"
+        ok = False
+        summary = "Release manifest validation failed."
+        actions.append({"kind": "report_bug", "priority": 1, "message": validation_errors[0]})
+        exit_code = 2
+    elif not system_priv_ok:
         status = "error"
         ok = False
         summary = "System-wide installation requires elevated privileges."
@@ -229,6 +292,18 @@ def build_setup_payload(
             }
         )
         exit_code = 3
+    elif install_root is not None and not _is_writable_install_root(install_path):
+        status = "error"
+        ok = False
+        summary = "The selected install root is not writable."
+        actions.append(
+            {
+                "kind": "rerun_with_elevated_privileges",
+                "priority": 1,
+                "message": "Choose a writable install root or rerun with sufficient privileges.",
+            }
+        )
+        exit_code = 3
     elif not doctor["environment"]["bootstrap_prerequisites"]["curl"] and not doctor["environment"]["bootstrap_prerequisites"]["wget"]:
         status = "error"
         ok = False
@@ -241,6 +316,28 @@ def build_setup_payload(
             }
         )
         exit_code = 3
+    elif len(selected_artifacts) == 0:
+        status = "error"
+        ok = False
+        summary = "No managed artifacts were found for this host."
+        actions.append(
+            {
+                "kind": "report_bug",
+                "priority": 1,
+                "message": "No compatible managed artifacts are available for this host yet.",
+            }
+        )
+        exit_code = 4
+    elif len(selected_artifacts) < 2:
+        status = "warning"
+        summary = "Managed installation plan created, but the manifest does not yet contain a complete artifact set."
+        actions.append(
+            {
+                "kind": "report_bug",
+                "priority": 2,
+                "message": "The current manifest is missing either the CLI or toolchain artifact for this host.",
+            }
+        )
     else:
         actions.append(
             {
@@ -268,9 +365,10 @@ def build_setup_payload(
             "install_root": selected_root,
             "channel": "stable",
             "manifest_path": str(manifest_file),
-            "selected_release": active_release["version"],
+            "selected_release": active_release["version"] if active_release else None,
             "selected_artifacts": [artifact["id"] for artifact in selected_artifacts],
             "system_privileges_ok": system_priv_ok,
+            "manifest_validation_errors": validation_errors,
         },
         "actions": actions,
     }

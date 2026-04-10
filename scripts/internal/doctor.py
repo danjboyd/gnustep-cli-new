@@ -19,9 +19,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--manifest")
+    parser.add_argument("--interface", choices=["bootstrap", "full"], default="full")
     args = parser.parse_args()
 
-    payload = build_doctor_payload(Path(args.manifest) if args.manifest else None)
+    payload = build_doctor_payload(Path(args.manifest) if args.manifest else None, interface=args.interface)
     if args.json:
         print(json.dumps(payload, separators=(",", ":")))
     else:
@@ -31,4 +32,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

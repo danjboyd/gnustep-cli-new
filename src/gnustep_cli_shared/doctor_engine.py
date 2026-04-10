@@ -16,6 +16,7 @@ from .models import Action, CheckResult
 CLI_VERSION = "0.1.0-dev"
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / "examples" / "release-manifest-v1.json"
+DOCTOR_INTERFACES = {"bootstrap", "full"}
 
 
 def _run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -165,17 +166,39 @@ def _detect_toolchain(environment: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _select_artifact(environment: dict[str, Any], manifest_path: Path | None = None) -> dict[str, Any] | None:
+def _select_artifact(
+    environment: dict[str, Any], manifest_path: Path | None = None, *, kind: str | None = None
+) -> dict[str, Any] | None:
     manifest_file = manifest_path or DEFAULT_MANIFEST
     payload = json.loads(manifest_file.read_text())
     for release in payload.get("releases", []):
         for artifact in release.get("artifacts", []):
-            if artifact.get("os") == environment["os"] and artifact.get("arch") == environment["arch"]:
+            if (
+                artifact.get("os") == environment["os"]
+                and artifact.get("arch") == environment["arch"]
+                and (kind is None or artifact.get("kind") == kind)
+            ):
                 return artifact
     return None
 
 
-def build_doctor_payload(manifest_path: Path | None = None) -> dict[str, Any]:
+def _full_only_check(check_id: str, title: str, severity: str) -> CheckResult:
+    return CheckResult(
+        id=check_id,
+        title=title,
+        status="not_run",
+        severity=severity,
+        message="This check is available in the full CLI only.",
+        interface="full",
+        execution_tier="full_only",
+        details={"unavailable_in_bootstrap": True},
+    )
+
+
+def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = "full") -> dict[str, Any]:
+    if interface not in DOCTOR_INTERFACES:
+        raise ValueError(f"unsupported doctor interface: {interface}")
+
     environment: dict[str, Any] = {
         "os": _detect_os(),
         "os_version": _read_os_release(),
@@ -194,7 +217,7 @@ def build_doctor_payload(manifest_path: Path | None = None) -> dict[str, Any]:
     if environment["toolchain"].get("gnustep_makefiles"):
         environment["install_prefixes"].append(environment["toolchain"]["gnustep_makefiles"])
 
-    artifact = _select_artifact(environment, manifest_path)
+    artifact = _select_artifact(environment, manifest_path, kind="toolchain")
     compatibility = evaluate_environment_against_artifact(environment, artifact)
     environment["compatibility"] = compatibility
     classification = classify_environment(environment)
@@ -211,6 +234,8 @@ def build_doctor_payload(manifest_path: Path | None = None) -> dict[str, Any]:
             status="ok",
             severity="info",
             message=f"Detected {environment['os']} on {environment['arch']}.",
+            interface="bootstrap" if interface == "bootstrap" else "both",
+            execution_tier="bootstrap_required",
         ),
         CheckResult(
             id="bootstrap.downloader",
@@ -222,6 +247,8 @@ def build_doctor_payload(manifest_path: Path | None = None) -> dict[str, Any]:
                 if environment["bootstrap_prerequisites"]["curl"] or environment["bootstrap_prerequisites"]["wget"]
                 else "Neither curl nor wget is available."
             ),
+            interface="bootstrap" if interface == "bootstrap" else "both",
+            execution_tier="bootstrap_required",
         ),
         CheckResult(
             id="toolchain.detect",
@@ -233,19 +260,28 @@ def build_doctor_payload(manifest_path: Path | None = None) -> dict[str, Any]:
                 if environment["toolchain"]["present"]
                 else "No GNUstep toolchain detected."
             ),
-        ),
-        CheckResult(
-            id="toolchain.probe",
-            title="Compile/link/run probe",
-            status="ok" if environment["toolchain"]["can_compile"] and environment["toolchain"]["can_link"] and environment["toolchain"]["can_run"] else "warning",
-            severity="error",
-            message=(
-                "The compiler can compile, link, and run a minimal Objective-C probe."
-                if environment["toolchain"]["can_compile"] and environment["toolchain"]["can_link"] and environment["toolchain"]["can_run"]
-                else "A compiler probe did not fully succeed."
-            ),
+            interface="bootstrap" if interface == "bootstrap" else "both",
+            execution_tier="bootstrap_optional",
         ),
     ]
+    if interface == "full":
+        checks.append(
+            CheckResult(
+                id="toolchain.probe",
+                title="Compile/link/run probe",
+                status="ok" if environment["toolchain"]["can_compile"] and environment["toolchain"]["can_link"] and environment["toolchain"]["can_run"] else "warning",
+                severity="error",
+                message=(
+                    "The compiler can compile, link, and run a minimal Objective-C probe."
+                    if environment["toolchain"]["can_compile"] and environment["toolchain"]["can_link"] and environment["toolchain"]["can_run"]
+                    else "A compiler probe did not fully succeed."
+                ),
+                interface="full",
+                execution_tier="full_only",
+            )
+        )
+    else:
+        checks.append(_full_only_check("toolchain.probe", "Compile/link/run probe", "error"))
     if artifact is not None:
         checks.append(
             CheckResult(
@@ -258,6 +294,20 @@ def build_doctor_payload(manifest_path: Path | None = None) -> dict[str, Any]:
                     if compatibility["compatible"]
                     else f"The environment is not compatible with artifact {artifact['id']}."
                 ),
+                interface="bootstrap" if interface == "bootstrap" else "both",
+                execution_tier="bootstrap_optional",
+            )
+        )
+    else:
+        checks.append(
+            CheckResult(
+                id="toolchain.compatibility",
+                title="Evaluate managed artifact compatibility",
+                status="warning",
+                severity="error",
+                message="No matching managed artifact was found for this host.",
+                interface="bootstrap" if interface == "bootstrap" else "both",
+                execution_tier="bootstrap_optional",
             )
         )
 
@@ -284,6 +334,8 @@ def build_doctor_payload(manifest_path: Path | None = None) -> dict[str, Any]:
         "schema_version": 1,
         "command": "doctor",
         "cli_version": CLI_VERSION,
+        "interface": interface,
+        "diagnostic_depth": "installer" if interface == "bootstrap" else "full",
         "ok": status != "error",
         "status": status,
         "environment_classification": classification,
@@ -303,6 +355,7 @@ def render_human(payload: dict[str, Any]) -> str:
     lines = [
         f"doctor: {payload['summary']}",
         f"doctor: status={payload['status']} classification={payload['environment_classification']}",
+        f"doctor: interface={payload.get('interface', 'full')} depth={payload.get('diagnostic_depth', 'full')}",
     ]
     environment = payload["environment"]
     lines.append(f"doctor: host={environment['os']}/{environment['arch']}")
@@ -318,4 +371,3 @@ def render_human(payload: dict[str, Any]) -> str:
     for action in payload["actions"]:
         lines.append(f"next: {action['message']}")
     return "\n".join(lines)
-

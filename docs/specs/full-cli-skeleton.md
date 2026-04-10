@@ -2,14 +2,14 @@
 
 The full CLI is scaffolded as a GNUstep Objective-C tool under `src/full-cli/`.
 
-Current skeleton goals:
+Current implementation goals:
 
 - establish a GNUstep Make entry point
 - centralize command dispatch in Objective-C
 - keep command names and global help aligned with the bootstrap interface
-- leave `doctor` and `setup` as explicit stubs until deeper integration is implemented
+- execute the shipped command set natively in Objective-C/GNUstep
 
-This scaffold is intentionally conservative so it can remain compatible with the broader GCC/Clang policy discussed for the project.
+This implementation is intentionally conservative so it can remain compatible with the broader GCC/Clang policy discussed for the project.
 
 ## Current Runtime Shape
 
@@ -27,45 +27,43 @@ Current responsibilities are split this way:
 - `GSCommandRunner` owns help/version behavior, JSON envelope handling, command
   validation, repository-root discovery, and command dispatch
 
-## Transitional Backend
+## Native Command Runtime
 
-For now, the Objective-C full CLI dispatches command execution into the tracked
-helper scripts under `scripts/internal/`:
+The full CLI now implements its shipped command set directly in Objective-C.
 
-- `doctor.py`
-- `setup_plan.py`
-- `build.py`
-- `run.py`
-- `new_project.py`
-- `install_package.py`
-- `remove_package.py`
+Current native command coverage:
 
-This is an interim Phase 18 step so the full GNUstep-based command can act as
-the real top-level interface while deeper GNUstep-native command bodies are
-implemented.
+- `doctor`
+- `setup`
+- `build`
+- `run`
+- `new`
+- `install`
+- `remove`
 
-Current full-CLI behavior differences from the raw helper scripts:
+The Objective-C runtime now owns:
 
-- `build` and `run` execute by default from the Objective-C CLI
-- `install` and `remove` inject the default managed root automatically when the
-  caller does not pass `--root`
-- delegated backend commands run from the caller's current working directory
-  rather than the repository root
+- command dispatch
+- JSON envelope generation
+- release-manifest loading for `doctor` and `setup`
+- GNUstep Make project detection for `build` and `run`
+- template generation for `new`
+- managed package state handling for `install` and `remove`
 
 ## Current Verified State
 
-The current full GNUstep CLI is no longer compile-only. It has been verified on
-the managed Linux Clang toolchain to:
+The current full GNUstep CLI is no longer compile-only. Repository verification currently covers:
 
 - print top-level help and version output
 - emit structured JSON envelopes
-- delegate `doctor` successfully through the Objective-C front end
-- execute `setup` successfully through the Objective-C front end against a
-  staged release manifest
-- create new projects with `new`
-- build a generated CLI-tool project with `build`
-- run that generated project with `run`
+- native command dispatch for the shipped command set
+- native `doctor` and `setup` payload generation
+- native template generation and package-state operations
 
-The current implementation still uses the tracked Python helpers as a
-transitional backend, but the installed Objective-C/GNUstep binary is now the
-real command entry point for those flows.
+Live validation now also covers a real Linux managed-toolchain build of the
+native Objective-C CLI plus smoke execution of `doctor`, `setup`, `new`,
+`build`, `run`, `install`, and `remove`.
+
+The repository test suite no longer treats the full CLI as a Python-backed
+dispatcher. Remaining validation work is now cross-target host coverage rather
+than removal of a transitional Python runtime path.

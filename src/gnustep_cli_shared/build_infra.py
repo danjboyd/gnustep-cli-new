@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from .setup_planner import execute_setup
+
 
 UNIX_CORE_COMPONENTS = [
     "libobjc2",
@@ -561,6 +563,73 @@ def toolchain_plan(target_id: str) -> dict[str, Any]:
     return plan
 
 
+def debian_gcc_interop_plan() -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "command": "debian-gcc-interop-plan",
+        "ok": True,
+        "status": "ok",
+        "summary": "Debian GCC interoperability validation plan generated.",
+        "host_requirements": {
+            "provider": "otvm-or-equivalent",
+            "os": "linux",
+            "distribution": "debian",
+            "toolchain_profile": "stock-gnu-gcc-gnustep",
+            "lifetime": "disposable",
+        },
+        "goal": (
+            "Verify that the Objective-C full CLI can still be built in a stock Debian GCC-based "
+            "GNUstep environment as an interoperability check."
+        ),
+        "constraints": [
+            "Treat this as GCC interoperability evidence, not as a managed Tier 1 artifact target.",
+            "Use Debian-provided GNUstep packages rather than the managed Clang toolchain.",
+            "Destroy the leased or disposable host after validation completes.",
+        ],
+        "steps": [
+            {
+                "id": "prepare-host",
+                "title": "Provision disposable Debian host",
+                "details": "Create a short-lived Debian lease or equivalent disposable VM with shell access.",
+            },
+            {
+                "id": "install-packages",
+                "title": "Install Debian GNUstep and build prerequisites",
+                "details": (
+                    "Install clang-free Debian packages needed to build the full CLI, such as gcc, gobjc, "
+                    "gnustep-make, libgnustep-base-dev, libgnustep-gui-dev, libgnustep-back-dev, and make."
+                ),
+            },
+            {
+                "id": "source-gnu-environment",
+                "title": "Load the GNUstep Make environment",
+                "details": "Source the GNUstep environment script so GNUSTEP_MAKEFILES and related variables are available.",
+            },
+            {
+                "id": "build-full-cli",
+                "title": "Build the Objective-C full CLI",
+                "details": "Run make in src/full-cli and capture stdout/stderr plus the compiler identity.",
+            },
+            {
+                "id": "smoke-cli",
+                "title": "Smoke-test the built CLI",
+                "details": "Run the built gnustep binary with --help, --version, and doctor --json.",
+            },
+            {
+                "id": "record-evidence",
+                "title": "Record interoperability evidence",
+                "details": "Persist package versions, compiler version, command output, and any known GCC-specific limitations.",
+            },
+        ],
+        "evidence": [
+            "dpkg package list for GNUstep-related packages",
+            "gcc --version output",
+            "make output from src/full-cli",
+            "CLI smoke-test output",
+        ],
+    }
+
+
 def _artifact_basename(kind: str, target_id: str, version: str) -> str:
     return f"gnustep-{kind}-{target_id}-{version}"
 
@@ -624,15 +693,49 @@ def bundle_full_cli(
     if bundle_root.exists():
         shutil.rmtree(bundle_root)
     (bundle_root / "bin").mkdir(parents=True, exist_ok=True)
-    shutil.copy2(binary, bundle_root / "bin" / binary.name)
-    os.chmod(bundle_root / "bin" / binary.name, 0o755)
-
     runtime_root = bundle_root / "libexec" / "gnustep-cli"
     (runtime_root / "scripts").mkdir(parents=True, exist_ok=True)
     (runtime_root / "src").mkdir(parents=True, exist_ok=True)
     shutil.copytree(root / "scripts" / "internal", runtime_root / "scripts" / "internal", dirs_exist_ok=True)
     shutil.copytree(root / "src" / "gnustep_cli_shared", runtime_root / "src" / "gnustep_cli_shared", dirs_exist_ok=True)
     shutil.copytree(root / "examples", runtime_root / "examples", dirs_exist_ok=True)
+    runtime_binary_dir = runtime_root / "bin"
+    runtime_binary_dir.mkdir(parents=True, exist_ok=True)
+    runtime_binary = runtime_binary_dir / binary.name
+    shutil.copy2(binary, runtime_binary)
+    os.chmod(runtime_binary, 0o755)
+
+    if binary.suffix.lower() == ".exe":
+        shutil.copy2(runtime_binary, bundle_root / "bin" / binary.name)
+        os.chmod(bundle_root / "bin" / binary.name, 0o755)
+    else:
+        launcher = bundle_root / "bin" / binary.name
+        launcher.write_text(
+            "#!/usr/bin/env sh\n"
+            "set -eu\n"
+            'PROGRAM_PATH="$0"\n'
+            'while [ -L "$PROGRAM_PATH" ]; do\n'
+            '  PROGRAM_PATH="$(readlink "$PROGRAM_PATH")"\n'
+            "done\n"
+            'BIN_DIR=$(CDPATH= cd -- "$(dirname "$PROGRAM_PATH")" && pwd)\n'
+            'INSTALL_ROOT=$(CDPATH= cd -- "$BIN_DIR/.." && pwd)\n'
+            'RUNTIME_ROOT="$INSTALL_ROOT/libexec/gnustep-cli"\n'
+            'RUNTIME_BIN="$RUNTIME_ROOT/bin/gnustep"\n'
+            'export GNUSTEP_SYSTEM_ROOT="$INSTALL_ROOT/System"\n'
+            'export GNUSTEP_LOCAL_ROOT="$INSTALL_ROOT/Local"\n'
+            'export GNUSTEP_NETWORK_ROOT="$INSTALL_ROOT/Network"\n'
+            'export GNUSTEP_MAKEFILES="$INSTALL_ROOT/System/Library/Makefiles"\n'
+            'export PATH="$INSTALL_ROOT/bin:$INSTALL_ROOT/System/Tools:$INSTALL_ROOT/Local/Tools:$PATH"\n'
+            'export LD_LIBRARY_PATH="$INSTALL_ROOT/Local/Library/Libraries:$INSTALL_ROOT/System/Library/Libraries:$INSTALL_ROOT/lib:$INSTALL_ROOT/lib64:${LD_LIBRARY_PATH:-}"\n'
+            'if [ -f "$GNUSTEP_MAKEFILES/GNUstep.sh" ]; then\n'
+            '  set +u\n'
+            '  . "$GNUSTEP_MAKEFILES/GNUstep.sh"\n'
+            '  set -u\n'
+            "fi\n"
+            'exec "$RUNTIME_BIN" "$@"\n',
+            encoding="utf-8",
+        )
+        os.chmod(launcher, 0o755)
     return {
         "schema_version": 1,
         "command": "bundle-cli",
@@ -837,6 +940,109 @@ def qualify_release_install(release_dir: str | Path, install_root: str | Path) -
         "release_dir": str(root),
         "install_root": str(destination),
         "installs": installs,
+    }
+
+
+def qualify_full_cli_handoff(release_dir: str | Path, install_root: str | Path) -> dict[str, Any]:
+    release_root = Path(release_dir).resolve()
+    manifest_path = release_root / "release-manifest.json"
+    install_path = Path(install_root).resolve()
+    payload, exit_code = execute_setup(
+        scope="user",
+        manifest_path=str(manifest_path),
+        install_root=str(install_path),
+    )
+    if exit_code != 0 or not payload.get("ok", False):
+        return {
+            "schema_version": 1,
+            "command": "qualify-full-cli-handoff",
+            "ok": False,
+            "status": "error",
+            "summary": "Bootstrap-to-full handoff qualification failed during setup.",
+            "release_dir": str(release_root),
+            "install_root": str(install_path),
+            "setup_exit_code": exit_code,
+            "setup_payload": payload,
+        }
+
+    binary_path = install_path / "bin" / "gnustep"
+    runtime_root = install_path / "libexec" / "gnustep-cli"
+    checks: list[dict[str, Any]] = []
+
+    def add_check(check_id: str, ok: bool, message: str) -> None:
+        checks.append(
+            {
+                "id": check_id,
+                "ok": ok,
+                "message": message,
+            }
+        )
+
+    add_check("install.binary", binary_path.exists(), "Installed CLI binary is present.")
+    add_check("install.binary_executable", os.access(binary_path, os.X_OK), "Installed CLI binary is executable.")
+    add_check(
+        "install.runtime_bundle",
+        runtime_root.exists(),
+        "Installed CLI runtime bundle is present under libexec/gnustep-cli.",
+    )
+    add_check(
+        "install.runtime_examples",
+        (runtime_root / "examples").exists(),
+        "Installed CLI runtime bundle includes bundled example manifests.",
+    )
+
+    command_results: list[dict[str, Any]] = []
+    for args, expected in (
+        (["--version"], "0.1.0-dev"),
+        (["--help"], "gnustep"),
+    ):
+        if not os.access(binary_path, os.X_OK):
+            command_results.append(
+                {
+                    "args": args,
+                    "ran": False,
+                    "ok": False,
+                    "stdout": "",
+                    "stderr": "Installed CLI binary is not executable.",
+                    "exit_status": None,
+                }
+            )
+            continue
+        proc = subprocess.run(
+            [str(binary_path), *args],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+            cwd=str(install_path),
+        )
+        command_results.append(
+            {
+                "args": args,
+                "ran": True,
+                "ok": proc.returncode == 0 and expected in proc.stdout,
+                "stdout": proc.stdout,
+                "stderr": proc.stderr,
+                "exit_status": proc.returncode,
+            }
+        )
+
+    ok = all(check["ok"] for check in checks) and all(result["ok"] for result in command_results)
+    return {
+        "schema_version": 1,
+        "command": "qualify-full-cli-handoff",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": (
+            "Bootstrap-to-full handoff qualification succeeded."
+            if ok
+            else "Bootstrap-to-full handoff qualification failed."
+        ),
+        "release_dir": str(release_root),
+        "install_root": str(install_path),
+        "setup_payload": payload,
+        "checks": checks,
+        "command_results": command_results,
     }
 
 

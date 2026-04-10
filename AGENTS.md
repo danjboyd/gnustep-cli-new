@@ -122,6 +122,9 @@
 - `doctor` must be fully supported in both bootstrap and full interfaces.
 - `doctor` is not a secondary diagnostic command; it is core product functionality.
 - `doctor` should be defined before much of the rest of the CLI architecture, because it drives setup behavior and toolchain decisions.
+- "Fully supported" does not mean both interfaces run every possible diagnostic probe.
+- Bootstrap `doctor` is an installer-oriented environment classifier.
+- Full `doctor` is the deep diagnostic interface and may execute richer validation that would not make sense in bootstrap.
 
 ## Shared Doctor Architecture
 - Bootstrap and full must not have independent interpretations of system health.
@@ -129,7 +132,27 @@
 - Instead, share `doctor` through a common specification, data model, and policy definition.
 - Implement separate runners/executors for bootstrap and full against the same underlying `doctor` specification.
 - The shared source of truth for `doctor` should describe checks declaratively whenever practical.
-- Each check definition should be rich enough that both bootstrap and full can execute it and present equivalent results.
+- Each check definition should describe applicability and execution capability explicitly rather than assuming both interfaces can run it.
+- Keep one stable `doctor` vocabulary, one JSON envelope shape, and one set of check identifiers across interfaces.
+
+## Doctor Scope Split
+- Bootstrap `doctor` should answer the questions needed before or during installation.
+- Full `doctor` should answer the deeper questions needed after installation and during ongoing CLI use.
+- Bootstrap `doctor` should focus on:
+- host identity
+- downloader and bootstrap prerequisites
+- privilege and install-target suitability
+- PATH and shell-context issues relevant to setup
+- coarse existing-toolchain detection
+- coarse compatibility classification for managed artifact selection
+- immediate next-step guidance for setup
+- Full `doctor` should additionally handle:
+- deep toolchain/runtime/ABI/feature detection
+- compile/link/run probes when appropriate
+- managed-install integrity and repair-oriented diagnostics
+- package and workflow compatibility checks
+- project or workspace diagnostics where applicable
+- Do not force bootstrap to become a permanent all-purpose diagnostics wrapper after installation.
 
 ## Doctor Responsibilities
 - `doctor` should inspect the local machine and answer:
@@ -143,6 +166,8 @@
 - `doctor` should detect and classify existing toolchains rather than just reporting pass/fail.
 - `doctor` should be treated as the canonical environment classifier for the CLI, not merely a lightweight preflight check.
 - `doctor` should tell the user not only what is wrong, but also what the next sensible action is.
+- In bootstrap, these responsibilities should be interpreted in terms of setup and managed-install readiness first.
+- In the full CLI, these responsibilities extend to deep validation of the selected environment and installed toolchain.
 
 ## Doctor Execution Model
 - `doctor` should run as a sequence of ordered phases.
@@ -160,12 +185,16 @@
 - Functional validation should distinguish between "installed" and "actually usable".
 - Compatibility evaluation should compare the detected environment against the project's supported artifact/runtime matrix.
 - Remediation should produce concrete next-step guidance for the user.
+- Bootstrap may stop after coarse classification when that is sufficient to drive setup safely.
+- Full `doctor` should be able to continue into richer validation phases.
 
 ## Doctor Behavior Rules
 - `doctor` should be mostly read-only.
 - `doctor` may perform narrowly scoped active validation when necessary, such as compiling and linking a minimal Objective-C probe program.
 - `doctor` should not become a general-purpose repair or mutation command.
 - Active validation should exist to confirm that a detected toolchain is actually functional, not merely present on disk.
+- Active validation such as compile/link/run probes is primarily a full-CLI responsibility.
+- Bootstrap should only run active validation when the check is narrowly scoped, cheap, and directly relevant to setup decisions.
 - `doctor` output should separate:
 - Overall health status.
 - Environment classification.
@@ -248,6 +277,8 @@
 - Always emit the major sections of the JSON envelope even when some sections are empty.
 - Machine-readable consumers must never need to parse English prose to understand results.
 - Human-readable messages are useful, but the underlying state, reasons, warnings, and next actions must be represented structurally.
+- Bootstrap and full should emit the same top-level JSON shape even when they do not execute the same subset of checks.
+- Checks that are defined by the shared spec but not executable in bootstrap should be represented structurally as not run or unavailable in bootstrap rather than silently omitted when their absence would be misleading.
 
 ## Doctor Check Model
 - Doctor checks should be represented in a common structured form rather than being scattered as ad hoc imperative logic.
@@ -256,6 +287,7 @@
 - A human-readable title.
 - Applicability by platform.
 - Applicability by interface: `bootstrap`, `full`, or both.
+- Execution tier such as `bootstrap_required`, `bootstrap_optional`, or `full_only`.
 - Severity: info, warning, error.
 - Probe method or command.
 - Expected condition.

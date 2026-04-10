@@ -119,6 +119,19 @@ path_hint() {
   printf 'export PATH="%s/bin:%s/System/Tools:$PATH"\n' "$root" "$root"
 }
 
+install_root_writable() {
+  root="$1"
+  candidate="$root"
+  while [ ! -e "$candidate" ]; do
+    parent=$(dirname "$candidate")
+    if [ "$parent" = "$candidate" ]; then
+      break
+    fi
+    candidate="$parent"
+  done
+  [ -w "$candidate" ]
+}
+
 perform_setup() {
   selected_scope=${SETUP_SCOPE:-user}
   host_os=$(detect_os)
@@ -156,6 +169,18 @@ EOF
     else
       selected_root="$HOME/.local/share/gnustep-cli"
     fi
+  fi
+
+  if ! install_root_writable "$selected_root"; then
+    if [ "${JSON_MODE:-0}" = "1" ]; then
+      cat <<EOF
+{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":false,"status":"error","summary":"The selected install root is not writable.","doctor":{"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","selected_release":null,"selected_artifacts":[],"system_privileges_ok":true},"actions":[{"kind":"rerun_with_elevated_privileges","priority":1,"message":"Choose a writable install root or rerun with sufficient privileges."}]}
+EOF
+    else
+      printf '%s\n' "setup: the selected install root is not writable"
+      printf '%s\n' "next: Choose a writable install root or rerun with sufficient privileges."
+    fi
+    return 3
   fi
 
   temp_dir=$(mktemp -d "${TMPDIR:-/tmp}/gnustep-bootstrap-XXXXXX")

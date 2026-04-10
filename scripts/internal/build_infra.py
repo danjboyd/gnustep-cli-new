@@ -15,6 +15,7 @@ if str(ROOT / "src") not in sys.path:
 from gnustep_cli_shared.build_infra import build_matrix, release_manifest_from_matrix, write_release_manifest
 from gnustep_cli_shared.build_infra import (
     component_inventory,
+    debian_gcc_interop_plan,
     bundle_full_cli,
     github_release_plan,
     linux_build_script,
@@ -22,6 +23,7 @@ from gnustep_cli_shared.build_infra import (
     msys2_input_manifest_template,
     msvc_status,
     openbsd_build_script,
+    qualify_full_cli_handoff,
     publish_github_release,
     qualify_release_install,
     stage_release_assets,
@@ -78,10 +80,16 @@ def main() -> int:
     qualify_release.add_argument("--release-dir", required=True)
     qualify_release.add_argument("--install-root", required=True)
 
+    qualify_handoff = subparsers.add_parser("qualify-full-cli-handoff", add_help=False)
+    qualify_handoff.add_argument("--release-dir", required=True)
+    qualify_handoff.add_argument("--install-root", required=True)
+
     source_lock = subparsers.add_parser("source-lock", add_help=False)
     source_lock.add_argument("--target", required=True)
 
     msys2_manifest = subparsers.add_parser("msys2-input-manifest", add_help=False)
+
+    subparsers.add_parser("debian-gcc-interop-plan", add_help=False)
 
     inventory = subparsers.add_parser("component-inventory", add_help=False)
     inventory.add_argument("--target", required=True)
@@ -159,10 +167,14 @@ def main() -> int:
         payload = verify_release_directory(args.release_dir)
     elif args.subcommand == "qualify-release":
         payload = qualify_release_install(args.release_dir, args.install_root)
+    elif args.subcommand == "qualify-full-cli-handoff":
+        payload = qualify_full_cli_handoff(args.release_dir, args.install_root)
     elif args.subcommand == "source-lock":
         payload = source_lock_template(args.target)
     elif args.subcommand == "msys2-input-manifest":
         payload = msys2_input_manifest_template()
+    elif args.subcommand == "debian-gcc-interop-plan":
+        payload = debian_gcc_interop_plan()
     elif args.subcommand == "component-inventory":
         payload = component_inventory(args.target, args.toolchain_version)
     elif args.subcommand == "toolchain-manifest":
@@ -196,10 +208,10 @@ def main() -> int:
         print(
             "build-infra: expected 'matrix', 'manifest', 'bundle-cli', 'source-lock', "
             "'stage-release', 'github-release-plan', 'github-release-publish', "
-            "'verify-release', 'qualify-release', "
+            "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', "
             "'msys2-input-manifest', 'component-inventory', 'toolchain-manifest', "
             "'toolchain-plan', 'linux-build-script', 'openbsd-build-script', "
-            "'msys2-assembly-script', or 'msvc-status'",
+            "'msys2-assembly-script', 'debian-gcc-interop-plan', or 'msvc-status'",
             file=sys.stderr,
         )
         return 2

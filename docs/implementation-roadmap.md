@@ -162,6 +162,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 ### G. Remediation Generation
 - Produce prioritized next actions based on environment state.
 - Include special guidance for common cases such as Debian GCC-only toolchains lacking modern Objective-C features.
+- Include explicit guidance for OpenBSD when the packaged GNUstep environment is already compatible so users can reuse platform-native packages instead of defaulting immediately to a managed install.
 
 ### H. Testing
 - Exhaustive fixture-driven unit tests for every detection classification state.
@@ -173,6 +174,8 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 ### I. Exit Criteria
 - `doctor` can classify and explain the primary environment states accurately.
 - Bootstrap and future full CLI can consume the same doctor result model.
+- Bootstrap `doctor` is explicitly limited to the installer-oriented subset of checks.
+- Full `doctor` owns deep validation such as richer feature detection and compile/link/run probing.
 
 ## Phase 5. Setup And Managed Installation
 
@@ -180,6 +183,8 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Implement `setup` planning logic driven by `doctor`.
 - Select install scope, managed root, and artifact targets.
 - Enforce privilege rules for system-wide installs.
+- Allow `setup` to prefer a compatible existing toolchain when policy says that is the better path than a managed install.
+- On OpenBSD, explicitly evaluate whether the packaged GNUstep environment should be the preferred supported installation method before selecting a managed toolchain plan.
 
 ### B. Manifest Fetch And Verification
 - Fetch the release manifest.
@@ -214,6 +219,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Re-run/repair tests.
 - PATH integration tests for supported shells and Windows behavior.
 - When validating Windows install behavior live, prefer `otvm create windows-2022 --ttl-hours <small>` plus explicit `destroy` in cleanup logic over any long-lived shared VM.
+- Add OpenBSD tests that prove `setup` can choose a compatible packaged GNUstep environment without forcing a managed toolchain path.
 
 ### H. Exit Criteria
 - A user can run bootstrap `setup`, receive a managed install, and hand off cleanly to the full CLI.
@@ -233,7 +239,9 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Match bootstrap exit codes and output semantics.
 
 ### D. Doctor And Setup Parity
-- Implement `doctor` and `setup` in the full CLI with behavior parity relative to bootstrap where applicable.
+- Implement `doctor` and `setup` in the full CLI with contract parity relative to bootstrap where applicable.
+- Preserve the same command shape, terminology, JSON envelope, and status meanings across interfaces.
+- Do not require bootstrap and full to execute the same diagnostic depth.
 
 ### E. Testing
 - Exhaustive unit tests for command dispatch, option parsing, JSON output, and exit-code behavior.
@@ -494,6 +502,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Implement the OpenBSD managed toolchain pipeline using the same pinned GNUstep component set.
 - Record and apply OpenBSD-specific patches explicitly.
 - Validate the resulting artifact with compile, link, run, and `doctor` coverage.
+- Keep the managed OpenBSD toolchain path optional in product policy if the packaged OpenBSD GNUstep environment proves sufficient for the CLI's supported workflows.
 
 ### B. Windows `amd64/msys2-clang64` Managed Toolchain Assembly
 - Define the pinned MSYS2 package input set for the Windows `clang64` target.
@@ -531,6 +540,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 ### B. Full `doctor` And `setup`
 - Implement production-grade `doctor` and `setup` behavior in the Objective-C CLI.
 - Consume the shared schemas, release manifests, compatibility policy, and managed-install state directly from the full CLI.
+- Move deep validation responsibilities into the full Objective-C `doctor` implementation rather than trying to force them into bootstrap.
 
 ### C. Full `build`, `run`, `new`, `install`, And `remove`
 - Replace current planning helpers and scaffolds with real full-CLI implementations built on the managed GNUstep stack.
@@ -548,6 +558,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Windows live smoke tests of the built full CLI on `otvm` leases where native runners are unavailable.
 - Add a Debian live-validation path that provisions an `otvm` Linux lease or equivalent disposable Debian VM with stock distro GNUstep packages installed and verifies that the full Objective-C CLI can still be built in the GCC-based environment.
 - Treat that Debian GCC build as an interoperability test, not as evidence that Debian's stock toolchain is a managed Tier 1 artifact target.
+- Add an OpenBSD live-validation path that uses the packaged OpenBSD Clang/GNUstep environment and determines whether it is sufficient to support the CLI as a preferred packaged-toolchain path.
 
 ### F. Exit Criteria
 - The full GNUstep-based CLI is built, tested, and usable as the primary installed command on the supported published targets.
@@ -555,11 +566,52 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 ### Phase 18 Execution Status
 - Linux `amd64/clang`: completed through real execution.
 - The full Objective-C GNUstep CLI now builds against the managed Linux
-  toolchain and has been smoke-tested for `--help`, `--json --version`,
-  `doctor`, `new`, `build`, and `run`.
+  toolchain and has been smoke-tested for `--help`, `--version`,
+  `doctor --json`, `setup --json`, `new`, `build`, `run`, `install --json`,
+  and `remove --json`.
+- The CLI release bundling path now installs a runtime-aware launcher so the
+  installed `gnustep` command can resolve the managed GNUstep runtime after
+  bootstrap handoff rather than depending on an ambient host library path.
+- Local bootstrap-to-full handoff qualification is now automated against staged
+  release artifacts and verifies that `setup` installs a runnable native
+  Objective-C CLI with working `--help` and `--version` behavior.
+- A structured Debian GCC interoperability validation plan now exists in the
+  build infrastructure so the remaining GCC live-validation work is executable
+  once disposable Debian host capacity is available.
 - A generated CLI-tool project was created, built, and run successfully through
   the Objective-C front end.
-- OpenBSD remains externally blocked on `OracleTestVMs` image hygiene.
+- Package installation and removal were validated against a local manifest and
+  archive fixture using the built native CLI.
+- On April 10, 2026, the libvirt-backed `OracleTestVMs` farm was exercised
+  directly for the remaining OpenBSD and Debian live-validation paths using a
+  corrected host inventory (`iep-vm2` and `iep-ocr01`, `default` storage pool,
+  `br0` network, and the current `debian13-wayland.qcow2` /
+  `openbsd78-fvwm.qcow2` image references).
+- Phase 18E preflight is now proven on the real farm for both
+  `openbsd-7.8-fvwm` and `debian-13-gnome-wayland`. The libvirt dependency,
+  host connectivity, storage pool visibility, bridge visibility, and pinned
+  image presence checks all passed against the corrected farm subset.
+- The corresponding live acceptance paths currently regress in the guest
+  readiness stage rather than in provisioning:
+  - OpenBSD lease `lease-20260410212940-vu2p3e` launched on `iep-vm2`,
+    obtained `172.17.2.115`, and passed TCP port 22 readiness before stalling
+    in the `oracleadmin` SSH readiness probe.
+  - Debian lease `lease-20260410213335-0zitc1` launched on `iep-vm2`,
+    obtained `172.17.2.171`, and passed TCP port 22 plus port 3389 readiness
+    before stalling in the `debian` SSH readiness probe.
+- Direct SSH validation against both guests confirmed that the current images
+  reject both available operator keys (`~/.ssh/id_rsa` and
+  `~/.ssh/oracletestvms_ed25519`). That makes the remaining blocker guest-image
+  SSH key alignment or guest bootstrap hygiene, not libvirt farm reachability.
+- The stalled OpenBSD and Debian leases were destroyed cleanly after evidence
+  capture, so destroy-path hygiene on the libvirt backend was exercised even
+  though ready-state acceptance did not complete.
+- Phase 18E is therefore partially executed but not complete: the farm route is
+  validated, while the OpenBSD packaged-path decision and the Debian GCC
+  interoperability acceptance remain blocked on image repair and rerun.
+- Phase 18F remains open because the supported non-Linux live-validation set
+  still lacks a clean ready/destroy evidence pass on the current farm-backed
+  OpenBSD and Debian images.
 - Windows full-CLI live build validation should continue as follow-up work, but
   Windows managed toolchain assembly and bootstrap validation were already
   proven earlier in the roadmap.
@@ -601,6 +653,135 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Live GitHub publication is still blocked because this repository has no Git
   remote configured and no GitHub repository currently exists at
   `danjboyd/gnustep-cli-new`.
+
+## Phase 20. Tiered `doctor` Convergence And Shared Execution Policy
+
+### A. Shared Check Catalog And Execution Tiers
+- Refine the shared `doctor` specification so each check declares:
+- stable check identifier
+- platform applicability
+- interface applicability
+- execution tier such as `bootstrap_required`, `bootstrap_optional`, or `full_only`
+- Represent bootstrap limitations intentionally rather than as missing behavior.
+
+### B. Bootstrap `doctor` Reduction And Hardening
+- Narrow bootstrap `doctor` to the installer-oriented subset of checks.
+- Ensure bootstrap focuses on:
+- host identity
+- downloader/bootstrap prerequisites
+- install-target suitability
+- privilege and PATH/shell-context issues relevant to setup
+- coarse toolchain detection and coarse compatibility classification
+- Remove or avoid deep validation behavior that is not necessary to make setup decisions safely.
+
+### C. Full `doctor` Deep Validation
+- Move deep diagnostics into the full CLI `doctor` implementation.
+- Implement richer runtime, ABI, feature-flag, and GNUstep-component detection.
+- Implement compile/link/run probes and other narrowly scoped active validation in the full CLI where appropriate.
+- Add managed-install integrity checks and repair-oriented diagnostics for the installed environment.
+- Make full `doctor` authoritative for deciding when a packaged OpenBSD GNUstep environment is supported and should be preferred over managed installation.
+
+### D. Shared Output Semantics
+- Keep one JSON envelope, one vocabulary, and one set of check identifiers across bootstrap and full interfaces.
+- Define how bootstrap reports checks that are shared by spec but unavailable in bootstrap, such as structured `not_run` or `unavailable_in_bootstrap` states.
+- Ensure `setup` can consume the shared `doctor` result model without depending on deep-only checks.
+- Keep one normalization policy for host facts and compatibility vocabulary across interfaces, including `os`, `arch`, compiler/runtime identifiers, and canonical `arm64` normalization.
+
+### E. Testing
+- Add contract tests proving bootstrap and full share the same envelope and status vocabulary.
+- Add regression tests for unavailable-check reporting semantics.
+- Add fixture and live tests for full-CLI deep validation paths.
+
+### F. Exit Criteria
+- Bootstrap and full `doctor` share one policy model while differing intentionally in diagnostic depth.
+- Bootstrap `doctor` is clearly installer-oriented, and full `doctor` is the authoritative deep diagnostic interface.
+
+## Phase 21. Setup, Repair, And Managed Lifecycle Hardening
+
+### A. Manifest And Artifact Validation
+- Validate manifest schema versions explicitly during setup.
+- Harden artifact selection against malformed manifests, unsupported hosts, and ambiguous matches.
+- Separate manifest parsing failures from compatibility failures in user-visible results.
+- Require release artifact selection to match on compiler family, `toolchain_flavor`, Objective-C runtime, ABI, and required feature flags rather than selecting on `os` and `arch` alone.
+- Reject ambiguous same-host matches explicitly instead of silently taking the first artifact of a given kind.
+- When a compatible external toolchain is already available, make the managed-install decision explicit and policy-driven rather than assuming a managed artifact should win by default.
+
+### B. Transaction And Rollback Semantics
+- Strengthen staged-install behavior so interrupted setup is recoverable.
+- Record enough state to support rollback, repair, and clean reruns.
+- Ensure partial downloads, partial extractions, and failed handoffs do not leave the managed root in an ambiguous state.
+
+### C. PATH And Configuration Integration
+- Implement durable shell startup integration where appropriate.
+- Emit exact current-shell activation commands and persist future-shell guidance consistently.
+- Finalize config, cache, and state placement separately from the managed toolchain tree.
+
+### D. Upgrade And Repair Flows
+- Implement managed CLI upgrade detection and application.
+- Implement managed toolchain repair and upgrade behavior.
+- Ensure repeated `setup` behaves as repair-or-upgrade rather than as a fragile reinstall.
+
+### E. Testing
+- Add failure-injection tests for interrupted setup, corrupted state, and broken manifests.
+- Add rollback and repair tests.
+- Add shell-integration tests for supported Unix shells and Windows PowerShell behavior.
+
+### F. Exit Criteria
+- `setup` is not just an installer prototype; it is a recoverable lifecycle operation for install, repair, and upgrade.
+
+## Phase 22. Package Manager Delivery And Safety Completion
+
+### A. Package Index Consumption
+- Replace direct-manifest package installation assumptions with official package-index consumption.
+- Resolve package selection through compatibility-aware artifact matching rather than the first listed artifact.
+- Retire the current direct end-user package-manifest install path as the primary package workflow once package-index consumption is in place.
+
+### B. Dependency And Compatibility Enforcement
+- Implement dependency resolution and dependency rejection behavior.
+- Enforce environment, artifact, and package requirement compatibility before installation.
+- Keep package compatibility evaluation separate from CLI and toolchain compatibility conclusions.
+- Remove the current `first artifact wins` package-install behavior so package selection is always compatibility-driven and policy-checked.
+
+### C. Ownership And Removal Safety
+- Track owned files, selected artifacts, and dependency relationships in installed state.
+- Make `remove` consult installed-files manifests and dependency safeguards before deleting anything.
+- Clean up generated integration artifacts such as launchers and shortcuts reliably.
+
+### D. End-User Package UX
+- Improve install/remove messaging, structured output, and failure explanations.
+- Ensure package flows feel integrated with the managed environment rather than like standalone archive extraction helpers.
+
+### E. Testing
+- Add end-to-end install/remove tests using a generated package index.
+- Add dependency, conflict, compatibility, and ownership regression tests.
+- Add upgrade and reinstall tests for reviewed packages.
+
+### F. Exit Criteria
+- Users can install and remove reviewed packages safely through the official package workflow.
+
+## Phase 23. Release Candidate Consolidation
+
+### A. Repository Health And Release Gates
+- Restore a fully green automated test suite and keep it green as a release gate.
+- Promote the regression suite into a required release-readiness signal rather than a best-effort helper.
+
+### B. Documentation Freshness
+- Bring the README and status docs into alignment with the actual implementation state.
+- Distinguish clearly among shipped behavior, validated behavior, prototype behavior, and externally blocked targets.
+- Reconcile status-report claims with the live repository state, including release publication configuration, remote/repository availability, and which validations are still pending versus completed.
+
+### C. Support Matrix Review
+- Reconcile claimed support with validated release artifacts and qualification evidence.
+- Record known limitations explicitly for GCC interoperability, OpenBSD, Windows MSYS2, and deferred MSVC work.
+
+### D. Structured Beta And Qualification Runs
+- Run fresh-host qualification on every supported published target.
+- Run explicit bootstrap-to-full handoff validation and package-flow smoke tests on release-candidate artifacts.
+- Capture release evidence in a form that is auditable by maintainers later.
+- Run explicit OpenBSD qualification against the packaged GNUstep path and record whether that path is supported and preferred versus managed installation.
+
+### E. Exit Criteria
+- The project has a defensible v1 release candidate with accurate docs, passing release gates, and validated support claims.
 
 ## Testing Principles For All Phases
 

@@ -50,7 +50,15 @@ class DoctorEngineTests(unittest.TestCase):
         payload = build_doctor_payload()
         self.assertEqual(payload["environment"]["os"], "linux")
 
+    def test_bootstrap_doctor_uses_same_contract_with_limited_depth(self):
+        payload = build_doctor_payload(interface="bootstrap")
+        self.assertEqual(payload["command"], "doctor")
+        self.assertEqual(payload["interface"], "bootstrap")
+        self.assertEqual(payload["diagnostic_depth"], "installer")
+        checks = {check["id"]: check for check in payload["checks"]}
+        self.assertEqual(checks["toolchain.probe"]["status"], "not_run")
+        self.assertEqual(checks["toolchain.probe"]["execution_tier"], "full_only")
+
 
 if __name__ == "__main__":
     unittest.main()
-

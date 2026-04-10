@@ -29,19 +29,29 @@ class FullCliSkeletonTests(unittest.TestCase):
         self.assertIn("NSJSONSerialization", content)
         self.assertIn("--version", content)
         self.assertIn("schema_version", content)
-        self.assertIn("runScriptForContext", content)
+        self.assertIn("runNativeCommandForContext", content)
         self.assertIn("repositoryRoot", content)
-        self.assertIn("commandRunsByDefault", content)
         self.assertIn("defaultManagedRoot", content)
-        self.assertIn("setCurrentDirectoryPath: userDirectory", content)
+        self.assertIn("runCommand:", content)
+        self.assertIn("executeDoctorForContext", content)
+        self.assertIn("executeSetupForContext", content)
+        self.assertIn("executeBuildForContext", content)
+        self.assertIn("executeRunForContext", content)
+        self.assertIn("executeNewForContext", content)
+        self.assertIn("executeInstallForContext", content)
+        self.assertIn("executeRemoveForContext", content)
         self.assertIn('[command isEqualToString: @"setup"]', content)
         self.assertIn('libexec/gnustep-cli', content)
+        self.assertIn('ADDITIONAL_TOOL_LIBS += -ldispatch -lBlocksRuntime', content)
+        self.assertNotIn('@"python3"', content)
 
     def test_context_tracks_global_options(self):
         content = (FULL_CLI / "GSCommandContext.m").read_text()
         for token in ("--json", "--verbose", "--quiet", "--yes", "--help", "--version"):
             with self.subTest(token=token):
                 self.assertIn(token, content)
+        self.assertIn('if (commandSeen == NO && [argument hasPrefix: @"--"])', content)
+        self.assertIn('context->_jsonOutput = YES;', content)
 
 
 if __name__ == "__main__":
