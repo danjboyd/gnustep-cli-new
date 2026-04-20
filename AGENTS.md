@@ -39,7 +39,9 @@
 - `new`
 - `install`
 - `remove`
+- `update`
 - Do not expand command scope aggressively before these commands work well.
+- `update` is included because ongoing lifecycle updates are a core day-2 operation, not an optional package-manager extension.
 - `install` and `remove` will become a GNUstep package manager, but the package-manager design should be scoped in a later session.
 
 ## Bootstrap Language Strategy
@@ -79,6 +81,7 @@
 - `new`
 - `install`
 - `remove`
+- `update`
 - The initial global options should be:
 - `--help`
 - `--version`
@@ -113,10 +116,12 @@
 ## Tooling Philosophy
 - The CLI should be a thin orchestration layer over existing GNUstep tools whenever possible.
 - Do not reinvent existing GNUstep tooling just to centralize behavior inside this project.
-- For the initial release:
-- `build` and `run` should support GNUstep Make only.
-- The CLI should wrap existing tools such as GNUstep Make and `openapp` rather than replacing them.
-- Future versions may add support for other build systems such as CMake if those prove important in real GNUstep projects.
+- `build` and `run` should be modeled as GNUstep project commands, not as GNUstep-Make-only commands.
+- GNUstep Make is the first implemented build backend, but it is not the only product concept.
+- CMake and libs-xcode/buildtool are core planned GNUstep project build backends, not speculative bolt-ons.
+- User-facing help, summaries, diagnostics, and JSON fields should say "GNUstep project" unless the message is specifically about a selected backend.
+- The CLI should wrap existing tools such as GNUstep Make, CMake, libs-xcode `buildtool`, and `openapp` where appropriate rather than replacing them.
+- Backend-specific behavior should be represented through explicit backend records and stable backend IDs.
 
 ## Doctor Is a First-Class Feature
 - `doctor` must be fully supported in both bootstrap and full interfaces.
@@ -461,6 +466,20 @@
 - These targets should be treated as Tier 1 managed-install targets for the initial release.
 - Anything outside this set may still be detected and classified by `doctor`, but should not be implied to be fully supported for managed installation in v1.
 
+## Managed Artifact Source Policy
+- Official managed artifacts must be built from explicit, reviewable inputs rather than from whatever happens to be installed on a developer or CI host.
+- When this project compiles a managed component, the canonical input must be pinned upstream source built by project-controlled automation.
+- Distro-packaged GNUstep libraries, distro-generated GNUstep Make installations, and ad hoc host toolchain trees must not be treated as the source of truth for official managed runtime artifacts.
+- Distro packages may still be used for native packaged execution paths, interoperability validation, bootstrap/build prerequisites, and temporary provisional artifacts, but those uses must be documented as non-canonical when they feed managed-release work.
+- Every source-built managed component must record its canonical upstream URL, exact tag/commit/archive digest, checksums, applied patches, configure/build flags, target applicability, and build identity in project metadata.
+- GNUstep components should be sourced from the authoritative upstream project repositories, including `gnustep/tools-make`, GNUstep Base, GNUstep GUI, GNUstep Back, `gnustep/libobjc2`, and `gnustep/tools-xctest` where those components are part of the managed artifact or project test toolchain.
+- Other compiled dependencies such as `libdispatch` and BlocksRuntime must likewise come from authoritative upstream source or from an explicitly pinned curated binary-input channel for targets where source-building is intentionally deferred.
+- LLVM/Clang is a pragmatic exception for v1: the project does not need to compile LLVM itself unless required, but any trusted binary compiler used as a bootstrap input must have its version, source channel, package identity, and provenance recorded.
+- Windows `msys2-clang64` may use curated pinned MSYS2 binary package inputs as an explicit target-specific assembly strategy, but those inputs must be locked, verified, and documented rather than discovered opportunistically.
+- Official package binaries should be produced by project-controlled builds from reviewed source provenance and package metadata.
+- Maintainer-provided prebuilt binaries must not become canonical official package artifacts unless the project adds a stronger provenance, signing, and review model for that case.
+- Any exception to this policy must be explicit in the roadmap, release qualification notes, and relevant artifact metadata.
+
 ## GCC Support Policy
 - GCC-based GNUstep environments should not be rejected as a matter of ideology.
 - However, support claims must remain artifact-backed and capability-based.
@@ -471,7 +490,7 @@
 - Do not claim blanket GCC support unless validated GCC-targeted artifacts are actually published and tested.
 
 ## Release Manifest and Artifact Index
-- Bootstrap, `setup`, and future upgrade logic should consume a machine-readable release manifest rather than scraping release pages or inferring meaning from filenames.
+- Bootstrap, `setup`, `update`, and lifecycle logic should consume a machine-readable release manifest rather than scraping release pages or inferring meaning from filenames.
 - The release manifest should be authoritative for artifact discovery, compatibility matching, and verification.
 - The initial official artifact store for v1 should be GitHub Releases.
 - GitHub Releases should host the published full CLI artifacts, managed toolchain artifacts, checksums, and related release assets unless and until a different official artifact store is adopted explicitly.
@@ -512,7 +531,7 @@
 - Additional kinds such as `package-index` or `package` can be added later.
 - The manifest may also include an explicit `requirements` object per artifact so that artifact selection can be driven by the same compatibility model used elsewhere in the project.
 - Keep the initial manifest explicit and easy to debug even if that means some redundancy.
-- Bootstrap and setup selection flow should conceptually be:
+- Bootstrap/setup installation selection flow should conceptually be:
 - fetch manifest
 - validate schema version
 - choose release/channel
@@ -690,6 +709,7 @@
 - `setup` should be the primary onboarding command in both bootstrap and full interfaces.
 - In bootstrap, `setup` should perform the full installation handoff into the managed environment.
 - In the full CLI, `setup` should primarily re-evaluate environment state, install or switch managed components when needed, and repair incomplete managed installations.
+- Bootstrap `setup` is for initial onboarding and emergency recovery; after the full CLI is installed, normal updates must be handled by `gnustep update` in the full CLI rather than by rerunning bootstrap or overloading `setup` as a permanent updater.
 - The recommended high-level `setup` flow is:
 - run `doctor`
 - classify existing toolchain and compatibility state
@@ -698,27 +718,49 @@
 - fetch the release manifest
 - select the appropriate CLI and toolchain artifacts
 - verify integrity metadata
-- install into the managed GNUstep layout
+- install or stage into the managed GNUstep layout
+- for lifecycle updates, `gnustep update` should stage into a versioned candidate location and activate only after verification
 - offer PATH integration
 - print next steps
 - `setup` should not duplicate environment-detection logic outside the shared `doctor` model.
-- `setup --json` should report the selected plan, selected artifacts, final outcome, and next actions in machine-readable form.
+- `setup --json` should report the selected setup plan, selected artifacts, final outcome, and next actions in machine-readable form.
+- `setup` must not grow a user-facing `--update` mode; update behavior belongs to `gnustep update`.
+- Compatibility/internal lifecycle hooks such as `setup --check-updates` or `setup --upgrade` may remain for recovery and regression coverage, but product documentation and user help should point users at `gnustep update`.
+- Managed install layouts should prefer versioned release directories plus a stable active pointer, such as `releases/<version>` and `current`, rather than overwriting the active runtime in place.
+
+## Update Command Responsibilities
+- `update` is the canonical day-2 lifecycle command for keeping the installed GNUstep-managed environment current.
+- `gnustep update` with no scope should behave as `gnustep update all`, showing a plan and requiring confirmation unless `--yes` is supplied.
+- `gnustep update --check` should be read-only and should report CLI/toolchain update availability, package-index freshness, installed package update availability, compatibility blockers, and revoked or unsafe installed artifacts.
+- `gnustep update cli` should update the full CLI app and managed toolchain/runtime as one lifecycle unit using the same signed-manifest, staged extraction, smoke-validation, active-pointer, and rollback machinery already required for setup lifecycle operations.
+- Public JSON may expose this as `scope: "cli"` with an internal affected area such as `cli_and_toolchain` so users are not forced to reason about implementation packaging.
+- `gnustep update packages` should refresh and verify the package index, select compatible newer artifacts for installed packages, verify artifact integrity, and upgrade packages transactionally.
+- `gnustep update all` should plan and apply updates in dependency-safe order: release manifest, package index, CLI/toolchain plan, package plan against the post-update environment, CLI/toolchain activation first when needed, then package upgrades.
+- If package updates require a newer CLI/toolchain, `update packages` should fail with a structured next action such as `gnustep update cli`; `update all` may perform the CLI/toolchain update first.
+- `update` should share the same stable JSON envelope policy as other commands, including `scope`, `mode`, `plan`, selected artifacts, package actions, compatibility blockers, and next actions.
+- Rollback remains a managed lifecycle capability; it may continue to be implemented under setup internally until a separate rollback UX is designed, but update planning must preserve rollback state and recovery instructions.
 
 ## Build Command Policy
-- `build` should be a thin wrapper around GNUstep Make in the initial implementation.
-- Do not attempt to replace GNUstep Make with custom build orchestration in v1.
 - `build` should operate on the current project directory by default.
-- Project discovery should be conservative and convention-based.
-- If the current directory does not look like a supported GNUstep Make project, `build` should fail clearly rather than guessing aggressively.
-- `build` may later gain explicit project-file or project-root arguments, but v1 should prioritize predictable behavior over flexible inference.
-- `build --json` should report the detected project type, invoked backend, exit status, and key produced outputs when practical.
+- Project discovery should be conservative, marker-based, and backend-oriented.
+- `build` should support a stable backend-selection option such as `--build-system <id>`.
+- The initial backend implementation is GNUstep Make, using backend ID `gnustep-make` and invocation `make`.
+- CMake and libs-xcode/buildtool are core planned backends with stable IDs `cmake` and `xcode-buildtool`.
+- A user-facing selector alias `xcode` may map to the precise backend ID `xcode-buildtool`.
+- Do not attempt to replace GNUstep Make, CMake, or buildtool with custom project-language interpreters.
+- For GNUstep Make, `GNUmakefile` is sufficient to mark the project as buildable by the `gnustep-make` backend.
+- GNUstep Make parsing may classify hints such as `TOOL_NAME`, `APP_NAME`, `LIBRARY_NAME`, `SUBPROJECTS`, and `aggregate.make`, but classification must not block `gnustep build`.
+- Aggregate GNUstep Make projects must be accepted by `build` and delegated to `make`.
+- If multiple supported build markers are present, `build` should fail clearly unless the user supplies `--build-system`.
+- `build --json` should report detected backend candidates, selected backend, project type/classification, invocation, exit status, and backend stdout/stderr without forcing consumers to parse human-readable text.
 
 ## Run Command Policy
-- `run` should be a thin wrapper over the existing GNUstep execution model such as `openapp` where appropriate.
-- `run` should default to running the primary build product of the current project.
-- If the target to run is ambiguous, `run` should fail clearly and explain how to disambiguate.
+- `run` should be a thin wrapper over the selected backend's existing execution model and GNUstep conventions such as `openapp` where appropriate.
+- `run` should default to running the primary build product of the current project only when that target can be identified unambiguously.
+- Aggregate or unknown GNUstep Make projects should remain buildable, but `run` should fail with a targeted message unless a runnable target is specified or inferred safely.
+- If the target or backend is ambiguous, `run` should fail clearly and explain how to disambiguate.
 - `run` should not attempt to invent a parallel process model beyond what existing GNUstep tools and conventions already support.
-- `run --json` should report what target was selected, what execution backend was used, and the resulting exit status.
+- `run --json` should report detected backend candidates, selected backend, selected target, execution invocation, and resulting exit status.
 
 ## New Command Policy
 - `new` should create only a very small set of high-quality templates in v1.
@@ -781,8 +823,10 @@
 
 ## Update and Upgrade Policy
 - The full CLI and managed toolchains should be independently versioned even if `setup` commonly installs them together.
-- Upgrades should consult the release manifest and package index rather than relying on implicit latest-version behavior alone.
+- Upgrades should consult the signed release manifest and package index rather than relying on implicit latest-version behavior alone.
 - Upgrade operations should preserve the managed environment or fail in a recoverable way.
+- CLI/toolchain upgrades and package upgrades are separate lifecycle domains under one user-facing command: `gnustep update cli` updates the CLI and managed toolchain, `gnustep update packages` updates installed packages, and `gnustep update all` coordinates both using the same trust model.
+- Update checks must reject downgrade, rollback, freeze, expired metadata, revoked metadata, key-mismatch, unsigned-metadata, and incompatible-artifact scenarios explicitly.
 - Do not perform silent major behavior changes during upgrade without explicit user action.
 - Keep downgrade support out of scope for v1 unless a concrete need forces it.
 
@@ -809,14 +853,25 @@
 - Internal diagnostic logs may be written to project-controlled state or log locations later, but the initial focus should be on high-quality command output and reproducible failure messages.
 
 ## Test Strategy
+- Comprehensive automated testing is a core project requirement, not a cleanup task.
+- Every feature, bug fix, and roadmap subphase should add or update tests in the same change set as the implementation.
+- No subphase should be marked complete until the relevant tests are committed and passing.
 - The project should maintain automated tests for both bootstrap and full CLI behavior.
 - Shared policy and schema logic should be tested independently from command runners where practical.
+- Objective-C/full-CLI unit and regression tests must use `tools-xctest`; do not replace native behavior coverage with Python source-text assertions when executable Objective-C coverage is practical.
+- Python tests remain appropriate for bootstrap scripts, shared Python tooling, schemas, repository generation, release tooling, and cross-language contract checks.
 - The test strategy should include:
-- unit tests for parsing, selection, and compatibility logic
-- integration tests for `doctor`, `setup`, `build`, `run`, and package operations
-- staging/install/remove tests against managed prefixes
+- unit tests for parsing, selection, compatibility, lifecycle planning, transaction handling, and package-state logic
+- JSON contract tests for every stable `--json` envelope and every versioned schema
+- command help and usage tests for bootstrap and full CLI command surfaces
+- integration tests for `doctor`, `setup`, `update`, `build`, `run`, `new`, `install`, and `remove`
+- staging/install/update/remove tests against isolated managed prefixes
+- failure-injection tests for rollback, repair, checksum mismatch, stale metadata, missing artifacts, interrupted transactions, and unsupported environments
 - matrix validation across the supported Tier 1 targets
-- Test coverage should focus first on environment detection, artifact selection, install/remove safety, and package validation rules.
+- Test coverage should focus first on environment detection, artifact selection, lifecycle/update safety, install/remove safety, package validation rules, and stable JSON behavior.
+- For every new CLI command or command mode, required coverage includes help text, argument validation, success JSON, failure JSON, human-output smoke behavior, and any side-effect state transitions.
+- For every lifecycle or package transaction path, required coverage includes read-only planning, successful application, idempotent/no-op behavior, rollback on failure, and state-file consistency.
+- Every discovered bug or externally reported regression must be logged with an associated regression test or an explicit documented reason why automated coverage is not currently possible.
 
 ## Windows Integration Policy
 - Windows is a first-class target with distinct managed environments for MSYS2 `clang64` and MSVC.

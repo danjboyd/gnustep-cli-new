@@ -1,0 +1,32 @@
+{
+  "contract_version": "v1",
+  "duration_seconds": 5,
+  "finished_at": "2026-04-17T21:40:02Z",
+  "keep_on_failure": false,
+  "requested_profiles": [
+    "fedora-gnome-wayland"
+  ],
+  "results": [
+    {
+      "checks": [],
+      "destroyed": false,
+      "error": {
+        "code": "image_not_configured",
+        "details": {},
+        "message": "Profile fedora-gnome-wayland requires config.infra.fedora_gnome_wayland_image_ocid to be populated",
+        "retryable": false
+      },
+      "finished_at": "2026-04-17T21:40:02Z",
+      "lease_id": null,
+      "preflight": null,
+      "profile": "fedora-gnome-wayland",
+      "started_at": "2026-04-17T21:39:56Z",
+      "status": "failed"
+    }
+  ],
+  "started_at": "2026-04-17T21:39:56Z",
+  "summary": {
+    "failed": 1,
+    "passed": 0
+  }
+}

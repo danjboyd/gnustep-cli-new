@@ -14,6 +14,10 @@ from gnustep_cli_shared.package_tooling import init_package_manifest, validate_p
 
 
 class PackageToolingTests(unittest.TestCase):
+    def test_repo_tools_xctest_manifest_validates(self):
+        payload = validate_package_manifest(ROOT / "packages" / "org.gnustep.tools-xctest" / "package.json")
+        self.assertTrue(payload["ok"])
+
     def test_init_and_validate_gui_package(self):
         with tempfile.TemporaryDirectory() as tempdir:
             result = init_package_manifest(tempdir, "HelloApp", "gui-app")
@@ -65,4 +69,3 @@ class PackageToolingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

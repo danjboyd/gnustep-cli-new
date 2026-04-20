@@ -1,0 +1,65 @@
+{
+  "evidence_dir": "/home/danboyd/gnustep-cli-new/docs/validation/overnight-20260417T214229Z",
+  "passed": [
+    "acceptance-debian-13-gnome-wayland",
+    "acceptance-openbsd-7-8-fvwm",
+    "acceptance-windows-2022",
+    "git-status-after",
+    "git-status-before",
+    "local-release-host-validation-plan",
+    "local-release-qualification-bundle",
+    "native-unit-tests",
+    "otvm-catalog-list",
+    "otvm-config-show-after-image-build",
+    "otvm-config-show",
+    "otvm-head",
+    "otvm-list-after-arch-gnome-wayland",
+    "otvm-list-after-debian-13-gnome-wayland",
+    "otvm-list-after-fedora-gnome-wayland",
+    "otvm-list-after-openbsd-7-8-fvwm",
+    "otvm-list-after-windows-2022",
+    "otvm-list-before",
+    "otvm-list-final",
+    "otvm-reap-after-arch-gnome-wayland",
+    "otvm-reap-after-debian-13-gnome-wayland",
+    "otvm-reap-after-fedora-gnome-wayland",
+    "otvm-reap-after-openbsd-7-8-fvwm",
+    "otvm-reap-after-windows-2022",
+    "preflight-debian-13-gnome-wayland",
+    "preflight-openbsd-7-8-fvwm",
+    "preflight-windows-2022",
+    "python-unit-tests",
+    "release-plan"
+  ],
+  "failed": [
+    {
+      "name": "acceptance-arch-gnome-wayland",
+      "rc": "1"
+    },
+    {
+      "name": "acceptance-fedora-gnome-wayland",
+      "rc": "1"
+    },
+    {
+      "name": "otvm-build-arch",
+      "rc": "1"
+    },
+    {
+      "name": "otvm-build-fedora",
+      "rc": "1"
+    },
+    {
+      "name": "preflight-arch-gnome-wayland",
+      "rc": "1"
+    },
+    {
+      "name": "preflight-fedora-gnome-wayland",
+      "rc": "1"
+    }
+  ],
+  "active_or_incomplete_leases": {
+    "ok": true,
+    "active_or_incomplete_count": 0,
+    "leases": []
+  }
+}

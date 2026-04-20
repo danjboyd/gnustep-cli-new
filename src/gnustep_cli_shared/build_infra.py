@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tarfile
+import tempfile
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,6 +15,7 @@ from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from .setup_planner import execute_setup
+from .package_repository import package_index_trust_gate
 
 
 UNIX_CORE_COMPONENTS = [
@@ -35,6 +38,9 @@ TIER1_TARGETS = [
         "strategy": "source-build",
         "publish": True,
         "core_components": UNIX_CORE_COMPONENTS,
+        "supported_distributions": ["debian"],
+        "portability_policy": "distribution-scoped",
+        "portability_notes": "Current source-built Linux artifact is validated on Debian only; Fedora and Arch require dependency closure or per-distro artifacts before managed artifact support is claimed.",
     },
     {
         "id": "openbsd-amd64-clang",
@@ -115,6 +121,29 @@ MSYS2_HOST_PACKAGES = [
     "make",
 ]
 
+MSYS2_DEVELOPER_BINARIES = [
+    "bash.exe",
+    "sh.exe",
+    "make.exe",
+    "sha256sum.exe",
+]
+
+MSYS2_DEVELOPER_RUNTIME_DLLS = [
+    "msys-2.0.dll",
+]
+
+MANAGED_PREFIX_PLACEHOLDER = "__GNUSTEP_CLI_INSTALL_ROOT__"
+
+LINUX_SYSTEM_TOOL_NAMES = [
+    "gnustep-config",
+    "gdomap",
+    "gdnc",
+    "make_services",
+    "openapp",
+    "plmerge",
+    "defaults",
+]
+
 
 def tier1_targets() -> list[dict[str, Any]]:
     return deepcopy(TIER1_TARGETS)
@@ -136,6 +165,7 @@ def build_matrix() -> dict[str, Any]:
 
 def release_manifest_from_matrix(version: str, base_url: str) -> dict[str, Any]:
     artifacts: list[dict[str, Any]] = []
+    generated_at = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     for target in TIER1_TARGETS:
         cli_id = f"cli-{target['id']}"
         artifacts.append(
@@ -151,8 +181,17 @@ def release_manifest_from_matrix(version: str, base_url: str) -> dict[str, Any]:
                 "objc_abi": "modern" if target["compiler_family"] != "msvc" else "unknown",
                 "required_features": [],
                 "format": "tar.gz" if target["os"] != "windows" else "zip",
+                "supported_distributions": target.get("supported_distributions", []),
+                "portability_policy": target.get("portability_policy", "platform-wide"),
                 "url": f"{base_url.rstrip('/')}/{version}/{cli_id}",
                 "sha256": "TBD",
+                "integrity": {"sha256": "TBD"},
+                "provenance": {
+                    "build_system": "project-controlled",
+                    "source_revision": "TBD",
+                    "builder_identity": "TBD",
+                    "attestation_url": None,
+                },
             }
         )
         artifacts.append(
@@ -168,15 +207,31 @@ def release_manifest_from_matrix(version: str, base_url: str) -> dict[str, Any]:
                 "objc_abi": "modern" if target["compiler_family"] != "msvc" else "unknown",
                 "required_features": ["blocks"] if target["compiler_family"] != "msvc" else [],
                 "format": "tar.gz" if target["os"] != "windows" else "zip",
+                "supported_distributions": target.get("supported_distributions", []),
+                "portability_policy": target.get("portability_policy", "platform-wide"),
                 "url": f"{base_url.rstrip('/')}/{version}/toolchain-{target['id']}",
                 "sha256": "TBD",
+                "integrity": {"sha256": "TBD"},
                 "published": target["publish"],
+                "provenance": {
+                    "build_system": "project-controlled",
+                    "source_revision": "TBD",
+                    "builder_identity": "TBD",
+                    "attestation_url": None,
+                },
             }
         )
     return {
         "schema_version": 1,
         "channel": "stable",
-        "generated_at": "TBD",
+        "generated_at": generated_at,
+        "metadata_version": 1,
+        "expires_at": "TBD",
+        "trust": {
+            "root_version": 1,
+            "signature_policy": "single-role-v1",
+            "signatures": [],
+        },
         "releases": [
             {
                 "version": version,
@@ -198,8 +253,12 @@ def source_lock_template(target_id: str) -> dict[str, Any]:
         sources.append(
             {
                 "name": component,
+                "source_type": "git",
                 "url": SOURCE_COMPONENT_URLS[component],
                 "revision": PINNED_SOURCE_REVISIONS.get(component, "TBD"),
+                "revision_type": "commit",
+                "archive_sha256": None,
+                "configure_args": [],
                 "patches": [],
             }
         )
@@ -238,6 +297,7 @@ def msys2_input_manifest_template() -> dict[str, Any]:
                 "name": name,
                 "version": "TBD",
                 "sha256": "TBD",
+                "source_channel": "msys2",
             }
             for name in MSYS2_HOST_PACKAGES
         ],
@@ -246,6 +306,7 @@ def msys2_input_manifest_template() -> dict[str, Any]:
                 "name": name,
                 "version": "TBD",
                 "sha256": "TBD",
+                "source_channel": "msys2-mingw-clang64",
             }
             for name in MSYS2_PACKAGE_INPUTS
         ],
@@ -266,7 +327,7 @@ def msys2_input_manifest_template() -> dict[str, Any]:
 
 def toolchain_manifest(target_id: str, toolchain_version: str) -> dict[str, Any]:
     target = target_by_id(target_id)
-    return {
+    payload = {
         "schema_version": 1,
         "kind": "managed-toolchain",
         "toolchain_version": toolchain_version,
@@ -284,20 +345,55 @@ def toolchain_manifest(target_id: str, toolchain_version: str) -> dict[str, Any]
         },
         "components": target["core_components"],
         "published": target["publish"],
+        "platform_policy": {
+            "supported_distributions": target.get("supported_distributions", []),
+            "portability_policy": target.get("portability_policy", "platform-wide"),
+            "notes": target.get("portability_notes"),
+        },
+        "source_policy": {
+            "strategy": target["strategy"],
+            "production_eligible": target["strategy"] == "source-build" or target["strategy"] == "msys2-assembly",
+            "lock_file": "source-lock.json" if target["strategy"] == "source-build" else "input-manifest.json",
+            "component_inventory": "component-inventory.json",
+            "host_origin_paths_allowed": False,
+        },
     }
+    if target["id"] == "windows-amd64-msys2-clang64":
+        payload["developer_entrypoints"] = {
+            "compiler": ["bin/clang.exe"],
+            "build_shell": ["usr/bin/bash.exe", "usr/bin/sh.exe"],
+            "build_driver": ["usr/bin/make.exe"],
+            "checksum_tool": ["usr/bin/sha256sum.exe"],
+            "gnustep_makefiles": ["share/GNUstep/Makefiles/common.make", "share/GNUstep/Makefiles/tool.make"],
+        }
+    return payload
 
 
 def component_inventory(target_id: str, toolchain_version: str) -> dict[str, Any]:
     target = target_by_id(target_id)
     components = []
     for name in target["core_components"]:
-        components.append(
-            {
-                "name": name,
-                "version": "TBD",
-                "source": "upstream-source" if target["strategy"] == "source-build" else "curated-binary-input",
-            }
-        )
+        entry = {
+            "name": name,
+            "version": "TBD",
+            "source": "upstream-source" if target["strategy"] == "source-build" else "curated-binary-input",
+        }
+        if target["strategy"] == "source-build":
+            entry.update(
+                {
+                    "source_url": SOURCE_COMPONENT_URLS.get(name),
+                    "source_revision": PINNED_SOURCE_REVISIONS.get(name, "TBD"),
+                    "source_lock": "source-lock.json",
+                }
+            )
+        elif target["id"] == "windows-amd64-msys2-clang64":
+            entry.update(
+                {
+                    "input_manifest": "input-manifest.json",
+                    "source_channel": "msys2-mingw-clang64",
+                }
+            )
+        components.append(entry)
     return {
         "schema_version": 1,
         "target": {
@@ -308,7 +404,263 @@ def component_inventory(target_id: str, toolchain_version: str) -> dict[str, Any
             "toolchain_flavor": target["toolchain_flavor"],
         },
         "toolchain_version": toolchain_version,
+        "platform_policy": {
+            "supported_distributions": target.get("supported_distributions", []),
+            "portability_policy": target.get("portability_policy", "platform-wide"),
+            "notes": target.get("portability_notes"),
+        },
         "components": components,
+    }
+
+
+_REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
+HOST_ORIGIN_PATH_PATTERNS = [
+    "/usr/share/GNUstep",
+    "/usr/include/x86_64-linux-gnu/GNUstep",
+    "/usr/lib/x86_64-linux-gnu/GNUstep",
+    "/usr/local/include/GNUstep",
+    "/usr/local/lib/GNUstep",
+    str(Path.home() / "GNUstep"),
+]
+
+
+def validate_source_lock(payload: dict[str, Any], *, target_id: str | None = None) -> dict[str, Any]:
+    errors: list[dict[str, str]] = []
+    target = target_by_id(target_id or payload.get("target", {}).get("id", ""))
+
+    def add_error(path: str, message: str) -> None:
+        errors.append({"path": path, "message": message})
+
+    if payload.get("schema_version") != 1:
+        add_error("schema_version", "source lock schema_version must be 1")
+    if payload.get("strategy") != "source-build":
+        add_error("strategy", "source lock strategy must be source-build")
+    if payload.get("target", {}).get("id") != target["id"]:
+        add_error("target.id", f"source lock target must be {target['id']}")
+    components = payload.get("components")
+    if not isinstance(components, list) or not components:
+        add_error("components", "source lock must contain components")
+        components = []
+    expected = [name for name in target["core_components"] if name in SOURCE_COMPONENT_URLS]
+    actual = [component.get("name") for component in components if isinstance(component, dict)]
+    if actual != expected:
+        add_error("components", f"source lock components must match pinned order: {', '.join(expected)}")
+    for index, component in enumerate(components):
+        if not isinstance(component, dict):
+            add_error(f"components[{index}]", "component entry must be an object")
+            continue
+        name = component.get("name")
+        if name not in expected:
+            add_error(f"components[{index}].name", "component is not part of the target core component set")
+            continue
+        if component.get("url") != SOURCE_COMPONENT_URLS[name]:
+            add_error(f"components[{index}].url", "component URL must match the authoritative upstream URL")
+        revision = component.get("revision")
+        if not isinstance(revision, str) or not _REVISION_RE.match(revision):
+            add_error(f"components[{index}].revision", "component revision must be a pinned 40-character git commit")
+        if component.get("source_type") not in {"git", None}:
+            add_error(f"components[{index}].source_type", "source_type must be git when present")
+        if not isinstance(component.get("patches", []), list):
+            add_error(f"components[{index}].patches", "patches must be a list")
+        if not isinstance(component.get("configure_args", []), list):
+            add_error(f"components[{index}].configure_args", "configure_args must be a list")
+    return {
+        "schema_version": 1,
+        "command": "validate-source-lock",
+        "ok": not errors,
+        "status": "ok" if not errors else "error",
+        "target_id": target["id"],
+        "errors": errors,
+    }
+
+
+def validate_input_manifest(payload: dict[str, Any], *, target_id: str | None = None) -> dict[str, Any]:
+    errors: list[dict[str, str]] = []
+    expected_target = target_by_id(target_id or payload.get("target", {}).get("id", ""))
+
+    def add_error(path: str, message: str) -> None:
+        errors.append({"path": path, "message": message})
+
+    if payload.get("schema_version") != 1:
+        add_error("schema_version", "input manifest schema_version must be 1")
+    if payload.get("strategy") != expected_target["strategy"]:
+        add_error("strategy", f"input manifest strategy must be {expected_target['strategy']}")
+    if payload.get("target", {}).get("id") != expected_target["id"]:
+        add_error("target.id", f"input manifest target must be {expected_target['id']}")
+    if expected_target["id"] == "windows-amd64-msys2-clang64":
+        package_names = [item.get("name") for item in payload.get("packages", []) if isinstance(item, dict)]
+        host_names = [item.get("name") for item in payload.get("host_packages", []) if isinstance(item, dict)]
+        if package_names != MSYS2_PACKAGE_INPUTS:
+            add_error("packages", "MSYS2 package list must match the curated clang64 input set")
+        if host_names != MSYS2_HOST_PACKAGES:
+            add_error("host_packages", "MSYS2 host package list must match the curated input set")
+        for collection_name in ("packages", "host_packages"):
+            for index, item in enumerate(payload.get(collection_name, [])):
+                if not isinstance(item, dict):
+                    add_error(f"{collection_name}[{index}]", "package entry must be an object")
+                    continue
+                for key in ("name", "version", "sha256", "source_channel"):
+                    if key not in item:
+                        add_error(f"{collection_name}[{index}].{key}", f"{key} is required")
+    return {
+        "schema_version": 1,
+        "command": "validate-input-manifest",
+        "ok": not errors,
+        "status": "ok" if not errors else "error",
+        "target_id": expected_target["id"],
+        "errors": errors,
+    }
+
+
+
+def _rewrite_text_files(root: Path, replacements: dict[str, str]) -> list[str]:
+    rewritten: list[str] = []
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        updated = content
+        for old, new in replacements.items():
+            if old:
+                updated = updated.replace(old, new)
+        if updated != content:
+            path.write_text(updated, encoding="utf-8")
+            rewritten.append(str(path.relative_to(root)))
+    return rewritten
+
+
+def normalize_source_built_toolchain_paths(toolchain_root: str | Path, build_prefix: str | Path) -> dict[str, Any]:
+    root = Path(toolchain_root).resolve()
+    prefix = Path(build_prefix).resolve()
+    user_gnustep = Path.home() / "GNUstep"
+    replacements = {
+        str(prefix): MANAGED_PREFIX_PLACEHOLDER,
+        str(user_gnustep / "Library" / "Headers"): f"{MANAGED_PREFIX_PLACEHOLDER}/Library/Headers",
+        str(user_gnustep / "Library" / "Libraries"): f"{MANAGED_PREFIX_PLACEHOLDER}/Library/Libraries",
+        str(user_gnustep / "Tools"): f"{MANAGED_PREFIX_PLACEHOLDER}/Tools",
+        str(user_gnustep / "Applications"): f"{MANAGED_PREFIX_PLACEHOLDER}/Applications",
+    }
+    rewritten = _rewrite_text_files(root, replacements)
+    patched_files: list[str] = []
+    base_make = root / "System" / "Library" / "Makefiles" / "Additional" / "base.make"
+    if base_make.exists():
+        content = base_make.read_text(encoding="utf-8")
+        updated = content.replace("FND_LIBS = -lgnustep-base", "FND_LIBS = -lgnustep-base -ldispatch -lBlocksRuntime")
+        if updated != content:
+            base_make.write_text(updated, encoding="utf-8")
+            patched_files.append(str(base_make.relative_to(root)))
+    for pc in (
+        root / "Local" / "Library" / "Libraries" / "pkgconfig" / "gnustep-base.pc",
+        root / "Local" / "Library" / "Libraries" / "pkgconfig" / "gnustep-gui.pc",
+    ):
+        if pc.exists():
+            content = pc.read_text(encoding="utf-8")
+            lines = []
+            changed = False
+            for line in content.splitlines():
+                if line.startswith("Libs:") and "-ldispatch" not in line:
+                    line = line + " -ldispatch -lBlocksRuntime"
+                    changed = True
+                lines.append(line)
+            if changed:
+                pc.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                patched_files.append(str(pc.relative_to(root)))
+    return {
+        "schema_version": 1,
+        "command": "normalize-source-built-toolchain-paths",
+        "ok": True,
+        "status": "ok",
+        "toolchain_root": str(root),
+        "build_prefix": str(prefix),
+        "placeholder": MANAGED_PREFIX_PLACEHOLDER,
+        "rewritten_files": rewritten,
+        "patched_files": patched_files,
+    }
+
+
+def toolchain_tree_host_origin_audit(toolchain_root: str | Path) -> dict[str, Any]:
+    root = Path(toolchain_root).resolve()
+    findings: list[dict[str, str]] = []
+    if not root.exists():
+        return {
+            "schema_version": 1,
+            "command": "toolchain-host-origin-audit",
+            "ok": False,
+            "status": "error",
+            "summary": "Toolchain root is missing.",
+            "toolchain_root": str(root),
+            "findings": [{"path": str(root), "pattern": "missing"}],
+        }
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.is_symlink():
+            continue
+        if "System/Sysroot" in path.as_posix():
+            continue
+        try:
+            content = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            continue
+        for pattern in HOST_ORIGIN_PATH_PATTERNS:
+            if pattern and pattern in content:
+                findings.append(
+                    {
+                        "path": str(path.relative_to(root)),
+                        "pattern": pattern,
+                    }
+                )
+    return {
+        "schema_version": 1,
+        "command": "toolchain-host-origin-audit",
+        "ok": not findings,
+        "status": "ok" if not findings else "error",
+        "summary": "No host-origin GNUstep paths found." if not findings else "Host-origin GNUstep paths found.",
+        "toolchain_root": str(root),
+        "patterns": HOST_ORIGIN_PATH_PATTERNS,
+        "findings": findings,
+    }
+
+
+def write_toolchain_metadata(output_root: str | Path, target_id: str, toolchain_version: str, *, production_eligible: bool) -> dict[str, Any]:
+    root = Path(output_root).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    target = target_by_id(target_id)
+    written: dict[str, str] = {}
+    if target["strategy"] == "source-build":
+        source_lock = source_lock_template(target_id)
+        validation = validate_source_lock(source_lock, target_id=target_id)
+        if not validation["ok"]:
+            raise ValueError(f"invalid source lock for {target_id}: {validation['errors']}")
+        path = root / "source-lock.json"
+        path.write_text(json.dumps(source_lock, indent=2) + "\n", encoding="utf-8")
+        written["source_lock"] = str(path)
+    elif target["id"] == "windows-amd64-msys2-clang64":
+        input_manifest = msys2_input_manifest_template()
+        validation = validate_input_manifest(input_manifest, target_id=target_id)
+        if not validation["ok"]:
+            raise ValueError(f"invalid input manifest for {target_id}: {validation['errors']}")
+        path = root / "input-manifest.json"
+        path.write_text(json.dumps(input_manifest, indent=2) + "\n", encoding="utf-8")
+        written["input_manifest"] = str(path)
+    inventory_path = root / "component-inventory.json"
+    inventory_path.write_text(json.dumps(component_inventory(target_id, toolchain_version), indent=2) + "\n", encoding="utf-8")
+    written["component_inventory"] = str(inventory_path)
+    manifest = toolchain_manifest(target_id, toolchain_version)
+    manifest["source_policy"]["production_eligible"] = production_eligible
+    manifest_path = root / "toolchain-manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    written["toolchain_manifest"] = str(manifest_path)
+    return {
+        "schema_version": 1,
+        "command": "write-toolchain-metadata",
+        "ok": True,
+        "status": "ok",
+        "target_id": target_id,
+        "toolchain_version": toolchain_version,
+        "production_eligible": production_eligible,
+        "written": written,
     }
 
 
@@ -346,7 +698,8 @@ def _unix_source_build_script(target_id: str, prefix: str, sources_dir: str, bui
         [
             'case "$HOST_OS" in',
             '  linux)',
-            '    export MAKE=gmake',
+            '    : "${MAKE:=make}"',
+            '    export MAKE',
             '    ;;',
             '  openbsd)',
             '    export MAKE=gmake',
@@ -411,6 +764,7 @@ def _unix_source_build_script(target_id: str, prefix: str, sources_dir: str, bui
             'unset GNUSTEP_SYSTEM_ROOT GNUSTEP_LOCAL_ROOT GNUSTEP_NETWORK_ROOT',
             "",
             '# Expose the managed Objective-C runtime headers through the GNUstep header domain.',
+            'mkdir -p "$PREFIX/Local/Library/Headers"',
             'ln -sfn "$PREFIX/include/objc" "$PREFIX/Local/Library/Headers/objc"',
             'cp -f "$PREFIX/include/Block.h" "$PREFIX/Local/Library/Headers/Block.h"',
             'cp -f "$PREFIX/include/Block_private.h" "$PREFIX/Local/Library/Headers/Block_private.h"',
@@ -447,6 +801,7 @@ def openbsd_build_script(target_id: str, prefix: str, sources_dir: str, build_ro
 def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
     packages = " ".join(MSYS2_PACKAGE_INPUTS)
     host_packages = " ".join(MSYS2_HOST_PACKAGES)
+    developer_binaries = "', '".join(MSYS2_DEVELOPER_BINARIES)
     lines = [
         "[CmdletBinding()]",
         "param(",
@@ -475,13 +830,18 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "}",
         "",
         "$env:CHERE_INVOKING = '1'",
-        "& $bash -lc \"true\"",
+        "$pacmanLock = Join-Path $MsysRoot 'var\\lib\\pacman\\db.lck'",
+        "if (Test-Path $pacmanLock) {",
+        "  Remove-Item -Force $pacmanLock -ErrorAction SilentlyContinue",
+        "}",
+        "",
+        '& $bash -lc "true"',
         "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 shell bootstrap command failed.' }",
-        "& $bash -lc \"pacman -Syuu --noconfirm || true\"",
+        '& $bash -lc "pacman -Syuu --noconfirm || true"',
         "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 package database refresh failed.' }",
-        f"& $bash -lc \"pacman -S --noconfirm --needed {host_packages}\"",
+        f'& $bash -lc "pacman -S --noconfirm --needed {host_packages}"',
         "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 host-package installation failed.' }",
-        f"& $bash -lc \"pacman -S --overwrite /clang64/include/Block.h --noconfirm --needed {packages}\"",
+        f'& $bash -lc "pacman -S --overwrite /clang64/include/Block.h --noconfirm --needed {packages}"',
         "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 GNUstep package installation failed.' }",
         "",
         "$clangRoot = Join-Path $MsysRoot 'clang64'",
@@ -496,8 +856,50 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "    Copy-Item -Recurse -Force $source (Join-Path $Prefix $entry)",
         "  }",
         "}",
+        "$clangPrefix = Join-Path $Prefix 'clang64'",
+        "New-Item -ItemType Directory -Force -Path $clangPrefix | Out-Null",
+        "foreach ($entry in $toolDirs) {",
+        "  $source = Join-Path $clangRoot $entry",
+        "  if (Test-Path $source) {",
+        "    Copy-Item -Recurse -Force $source (Join-Path $clangPrefix $entry)",
+        "  }",
+        "}",
         "",
-        "Write-Host \"MSYS2 managed toolchain assembly completed at $Prefix\"",
+        "$developerBin = Join-Path $Prefix 'usr\\bin'",
+        "New-Item -ItemType Directory -Force -Path $developerBin | Out-Null",
+        f"$developerTools = @('{developer_binaries}')",
+        "foreach ($tool in $developerTools) {",
+        "  $source = Join-Path $MsysRoot ('usr\\\\bin\\\\' + $tool)",
+        "  if (-not (Test-Path $source)) {",
+        "    throw ('Required MSYS2 developer tool is missing: ' + $source)",
+        "  }",
+        "  Copy-Item -Force $source (Join-Path $developerBin $tool)",
+        "}",
+        "$developerRuntimeFiles = Get-ChildItem -Path (Join-Path $MsysRoot 'usr\\bin') -Include '*.exe','*.dll' -File",
+        "if ($developerRuntimeFiles.Count -eq 0) {",
+        "  throw 'No MSYS2 usr\\bin executable/DLL runtime files were found for developer tools.'",
+        "}",
+        "foreach ($runtimeFile in $developerRuntimeFiles) {",
+        "  Copy-Item -Force $runtimeFile.FullName (Join-Path $developerBin $runtimeFile.Name)",
+        "}",
+        "",
+        "$activateBat = @(",
+        "  '@echo off',",
+        "  'set GNUSTEP_MAKEFILES=%~dp0share\\GNUstep\\Makefiles',",
+        "  'set GNUSTEP_CONFIG_FILE=%~dp0etc\\GNUstep\\GNUstep.conf',",
+        "  'set PATH=%~dp0clang64\\bin;%~dp0bin;%~dp0usr\\bin;%PATH%'",
+        ")",
+        "Set-Content -Path (Join-Path $Prefix 'GNUstep.bat') -Value $activateBat -Encoding ASCII",
+        "",
+        "$activatePs1 = @(",
+        "  '$prefix = Split-Path -Parent $MyInvocation.MyCommand.Path',",
+        "  '$env:GNUSTEP_MAKEFILES = Join-Path $prefix ''share\\GNUstep\\Makefiles''',",
+        "  '$env:GNUSTEP_CONFIG_FILE = Join-Path $prefix ''etc\\GNUstep\\GNUstep.conf''',",
+        "  '$env:PATH = (Join-Path $prefix ''clang64\\bin'') + '';'' + (Join-Path $prefix ''bin'') + '';'' + (Join-Path $prefix ''usr\\bin'') + '';'' + $env:PATH'",
+        ")",
+        "Set-Content -Path (Join-Path $Prefix 'GNUstep.ps1') -Value $activatePs1 -Encoding ASCII",
+        "",
+        'Write-Host "MSYS2 managed toolchain assembly completed at $Prefix"',
     ]
     return "\n".join(lines) + "\n"
 
@@ -630,6 +1032,303 @@ def debian_gcc_interop_plan() -> dict[str, Any]:
     }
 
 
+def native_linux_validation_plan(distribution: str) -> dict[str, Any]:
+    if distribution not in {"fedora", "arch"}:
+        raise ValueError(f"unsupported linux native validation target: {distribution}")
+
+    package_hint = (
+        "dnf install clang gnustep-make gnustep-base-devel gnustep-gui-devel gnustep-back"
+        if distribution == "fedora"
+        else "pacman -S --needed clang gnustep-make gnustep-base gnustep-gui gnustep-back"
+    )
+    host_hint = "Fedora disposable VM or container host" if distribution == "fedora" else "Arch disposable VM or container host"
+    return {
+        "schema_version": 1,
+        "command": "linux-native-validation-plan",
+        "ok": True,
+        "status": "ok",
+        "distribution": distribution,
+        "summary": f"{distribution.capitalize()} native GNUstep validation plan generated.",
+        "host_requirements": {
+            "provider": "disposable-vm-or-equivalent",
+            "os": "linux",
+            "distribution": distribution,
+            "toolchain_profile": "packaged-clang-gnustep",
+            "lifetime": "disposable",
+        },
+        "goal": (
+            f"Validate that the packaged {distribution.capitalize()} Clang/libobjc2 GNUstep environment is sufficient "
+            "for the supported native doctor/setup/install/remove workflows."
+        ),
+        "constraints": [
+            "Use the distro-packaged GNUstep environment rather than the managed toolchain.",
+            "Capture exact package versions and compiler identity as evidence.",
+            "Destroy the disposable validation host after evidence is recorded.",
+        ],
+        "steps": [
+            {
+                "id": "prepare-host",
+                "title": "Provision disposable validation host",
+                "details": f"Create a short-lived {host_hint} with shell access and outbound network access.",
+            },
+            {
+                "id": "install-packages",
+                "title": "Install packaged GNUstep prerequisites",
+                "details": package_hint,
+            },
+            {
+                "id": "run-doctor",
+                "title": "Run doctor and capture classification",
+                "details": "Run gnustep doctor --json and record the native_toolchain_assessment plus compatibility details.",
+            },
+            {
+                "id": "run-setup",
+                "title": "Run setup and confirm native path selection",
+                "details": "Run gnustep setup --json and confirm install_mode=native with use_existing_toolchain disposition.",
+            },
+            {
+                "id": "package-flow",
+                "title": "Validate package install/remove flow",
+                "details": "Install a reviewed package from a generated index, verify its selected artifact, then remove it cleanly.",
+            },
+            {
+                "id": "record-evidence",
+                "title": "Record validation evidence",
+                "details": "Persist package versions, compiler version, doctor/setup JSON, and package install/remove output.",
+            },
+        ],
+        "evidence": [
+            f"{distribution} package list for GNUstep-related packages",
+            "clang --version output",
+            "doctor --json payload",
+            "setup --json payload",
+            "package install/remove JSON output",
+        ],
+    }
+
+
+def current_support_matrix() -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "command": "support-matrix",
+        "ok": True,
+        "status": "ok",
+        "summary": "Current release support matrix snapshot generated.",
+        "targets": [
+            {
+                "id": "openbsd-amd64-clang",
+                "os": "openbsd",
+                "arch": "amd64",
+                "toolchain_model": "packaged-clang-libobjc2",
+                "status": "validated_native_preferred",
+                "evidence_status": "validated",
+                "notes": "Packaged OpenBSD GNUstep is currently treated as the preferred native path when compatibility checks pass, fresh libvirt host evidence was rerun on April 14, 2026 with the ~/.ssh/otvm operator keypair, and an April 17, 2026 fresh lease built the current full CLI and passed native package install/remove smoke after OpenBSD OS detection was fixed.",
+            },
+            {
+                "id": "fedora-amd64-clang",
+                "os": "linux",
+                "distribution": "fedora",
+                "arch": "amd64",
+                "toolchain_model": "packaged-clang-libobjc2",
+                "status": "interoperability_only",
+                "evidence_status": "validated",
+                "notes": "Fresh libvirt evidence from April 16, 2026 shows Fedora packaged GNUstep builds and runs the CLI through GCC/libobjc interoperability, not the preferred Clang/libobjc2 stack. Managed Clang support is blocked until a distro-scoped artifact or dependency closure exists.",
+            },
+            {
+                "id": "debian-amd64-gcc",
+                "os": "linux",
+                "distribution": "debian",
+                "arch": "amd64",
+                "toolchain_model": "packaged-gcc-gnustep",
+                "status": "interoperability_only",
+                "evidence_status": "validated",
+                "notes": "Debian remains primarily a GCC interoperability target unless a validated packaged Clang/libobjc2 path is proven, and fresh libvirt host evidence was rerun on April 14, 2026 with the ~/.ssh/otvm operator keypair.",
+            },
+            {
+                "id": "arch-amd64-clang",
+                "os": "linux",
+                "distribution": "arch",
+                "arch": "amd64",
+                "toolchain_model": "packaged-clang-libobjc2",
+                "status": "interoperability_only",
+                "evidence_status": "validated",
+                "notes": "Fresh libvirt evidence from April 16, 2026 shows Arch packaged GNUstep builds and runs the CLI through GCC/libobjc interoperability, not the preferred Clang/libobjc2 stack. Managed Clang support is blocked until a distro-scoped artifact or dependency closure exists.",
+            },
+            {
+                "id": "windows-amd64-msys2-clang64",
+                "os": "windows",
+                "arch": "amd64",
+                "toolchain_model": "managed-msys2-clang64",
+                "status": "managed_target_staged_artifacts_validated",
+                "evidence_status": "validated_staged_release_artifacts",
+                "notes": "April 17, 2026 Windows libvirt evidence shows the checked-in MSYS2 assembly path can stage clang64 GNUstep tooling, rebuild the full Objective-C CLI, pass --version/--help, and complete native package install/remove with SHA-256 verification. A later clean Windows lease qualified the refreshed staged release ZIPs directly with version/help plus package install/remove smoke. The GitHub prerelease assets have been published, digest-verified, made public, and now include signed provenance metadata. Follow-up public-manifest bootstrap setup passed in direct-process diagnostic mode with retained JSONL trace evidence; the extracted toolchain rebuilt the Objective-C CLI and doctor --json passed against an explicit local Windows manifest. Remaining work is automated published-URL release qualification and production trust-root handling.",
+            },
+            {
+                "id": "windows-amd64-msvc",
+                "os": "windows",
+                "arch": "amd64",
+                "toolchain_model": "managed-msvc",
+                "status": "deferred",
+                "evidence_status": "not_started",
+                "notes": "MSVC remains explicitly deferred for v0.1.x.",
+            },
+        ],
+        "deferred_discovery_targets": ["openSUSE", "RHEL-family", "Alpine"],
+    }
+
+
+def release_candidate_qualification_status() -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "command": "release-candidate-qualification",
+        "ok": True,
+        "status": "ok",
+        "summary": "Release-candidate qualification status snapshot generated.",
+        "artifact_checks": [
+            {
+                "id": "regression-gate",
+                "status": "completed",
+                "notes": "Python/shared and native Objective-C tools-xctest suites are green.",
+            },
+            {
+                "id": "bootstrap-to-full-handoff",
+                "status": "completed",
+                "notes": "Qualification checks installed binary, runtime bundle, no-bundled-Python state, and CLI state health.",
+            },
+            {
+                "id": "release-package-index-sync",
+                "status": "completed",
+                "notes": "Committed package index is checked against generated output in CI.",
+            },
+            {
+                "id": "artifact-package-flow-smoke",
+                "status": "completed_for_staged_artifacts",
+                "notes": "Package-flow smoke behavior is covered in Python and native tests. Debian libvirt host validation passed against staged release artifacts, Debian dogfood covers managed compile/run plus new/build/run and package install/remove, April 17, 2026 Debian published-URL bootstrap/full-CLI/package qualification passed from the public GitHub manifest, and Windows validation completed native package install/remove, refreshed staged release-artifact package-flow smoke, public-manifest setup with trace evidence, and extracted-toolchain rebuild/doctor qualification.",
+            },
+            {
+                "id": "package-index-trust-gate",
+                "status": "completed",
+                "notes": "Generated package indexes carry trust metadata; tooling emits provenance, supports OpenSSL signatures, and can verify against an explicit trusted public key for production gates.",
+            },
+            {
+                "id": "release-trust-root-gate",
+                "status": "completed_for_tooling",
+                "notes": "Release metadata trust-gate verification supports an externally pinned public key; production remains blocked on CI-owned key material and rotation policy.",
+            },
+        ],
+        "live_host_checks": [
+            {
+                "id": "openbsd-native-qualification",
+                "status": "completed",
+                "blocked": False,
+                "notes": "OpenBSD libvirt preflight and live acceptance were rerun successfully on April 14, 2026 using the ~/.ssh/otvm operator keypair, a fresh lease passed pkg_add plus Foundation compile-link-run validation, and an April 17, 2026 fresh lease built the current full CLI and passed native package install/remove smoke.",
+            },
+            {
+                "id": "fedora-native-qualification",
+                "status": "completed",
+                "blocked": False,
+                "blocked_by": None,
+                "notes": "Fedora libvirt preflight, acceptance, native CLI build, and package install/remove smoke passed on April 16, 2026; the packaged stack is classified as GCC/libobjc interoperability-only.",
+            },
+            {
+                "id": "debian-native-qualification",
+                "status": "completed",
+                "blocked": False,
+                "notes": "Debian libvirt preflight and live acceptance were rerun successfully on April 14, 2026 using the ~/.ssh/otvm operator keypair.",
+            },
+            {
+                "id": "arch-native-qualification",
+                "status": "completed",
+                "blocked": False,
+                "blocked_by": None,
+                "notes": "Arch libvirt preflight, acceptance, native CLI build, and package install/remove smoke passed on April 16, 2026; the packaged stack is classified as GCC/libobjc interoperability-only.",
+            },
+            {
+                "id": "windows-libvirt-readiness",
+                "status": "completed",
+                "blocked": False,
+                "notes": "Windows libvirt readiness reached full ready state and April 17, 2026 validation completed MSYS2 assembly, native full-CLI build, --version/--help, and package install/remove smoke on a fresh lease.",
+            },
+            {
+                "id": "windows-public-bootstrap-stability",
+                "status": "completed_with_trace_evidence",
+                "blocked": False,
+                "blocked_by": None,
+                "notes": "A fresh April 17, 2026 Windows libvirt lease passed public GitHub prerelease setup in direct-process diagnostic mode with retained JSONL trace evidence. Installed CLI version/help passed; the follow-up doctor hang was isolated to native path handling rather than bootstrap setup.",
+            },
+            {
+                "id": "windows-extracted-toolchain-rebuild",
+                "status": "completed_with_manual_live_evidence",
+                "blocked": False,
+                "blocked_by": None,
+                "notes": "The checked-in Windows MSYS2 assembly now preserves clang64/bin and copies the MSYS usr/bin executable/DLL runtime closure. A fresh April 17, 2026 Windows libvirt lease rebuilt the Objective-C CLI from the extracted toolchain and ran doctor --json successfully against an explicit local Windows manifest.",
+            },
+        ],
+    }
+
+
+def windows_extracted_toolchain_rebuild_plan() -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "command": "windows-extracted-toolchain-rebuild-plan",
+        "ok": True,
+        "status": "validated_manual_live_evidence",
+        "target": "windows-amd64-msys2-clang64",
+        "blocked_by": None,
+        "summary": "Windows extracted-toolchain developer rebuild is validated manually for the current MSYS2 clang64 layout; remaining work is automation in the release qualification lane.",
+        "required_environment": {
+            "path_entries": [
+                "<toolchain>/bin",
+                "<toolchain>/usr/bin",
+                "<toolchain>/clang64/bin",
+            ],
+            "variables": [
+                "GNUSTEP_MAKEFILES",
+                "GNUSTEP_SYSTEM_ROOT",
+                "GNUSTEP_LOCAL_ROOT",
+            ],
+            "shells": [
+                "PowerShell",
+                "cmd.exe",
+            ],
+        },
+        "validation_steps": [
+            {
+                "id": "extract-published-toolchain",
+                "description": "Extract the published Windows MSYS2 clang64 toolchain ZIP into a clean directory outside the repository.",
+            },
+            {
+                "id": "activate-toolchain-environment",
+                "description": "Populate PATH and GNUstep environment variables using only files from the extracted toolchain.",
+            },
+            {
+                "id": "verify-compiler",
+                "description": "Run clang --version from the activated environment.",
+            },
+            {
+                "id": "verify-gnustep-make",
+                "description": "Run gnustep-config and GNUstep Make from the activated environment.",
+            },
+            {
+                "id": "rebuild-full-cli",
+                "description": "Build src/full-cli using the extracted toolchain as the only GNUstep runtime.",
+            },
+            {
+                "id": "run-rebuilt-cli",
+                "description": "Run the rebuilt gnustep.exe --version, --help, doctor --json, and package install/remove smoke.",
+            },
+        ],
+        "evidence_required": [
+            "toolchain archive filename and SHA256",
+            "activation environment dump with sensitive values redacted",
+            "clang --version output",
+            "gnustep-config output",
+            "full CLI build log",
+            "rebuilt gnustep.exe smoke output",
+        ],
+    }
+
+
 def _artifact_basename(kind: str, target_id: str, version: str) -> str:
     return f"gnustep-{kind}-{target_id}-{version}"
 
@@ -662,21 +1361,589 @@ def _archive_directory(source_dir: Path, archive_path: Path, root_name: str) -> 
                 if path.is_dir():
                     continue
                 relative = path.relative_to(source_dir)
-                archive.write(path, arcname=str(Path(root_name) / relative))
+                archive.write(path, arcname=(Path(root_name) / relative).as_posix())
         return
 
     with tarfile.open(archive_path, "w:gz", dereference=True) as archive:
         archive.add(source_dir, arcname=root_name)
 
 
+def _is_supported_archive(path: Path) -> bool:
+    name = path.name.lower()
+    return name.endswith(".tar.gz") or name.endswith(".zip")
+
+
 def _archive_file(source_file: Path, archive_path: Path, root_name: str) -> None:
+    if _is_supported_archive(source_file):
+        shutil.copy2(source_file, archive_path)
+        return
+
     if archive_path.suffix == ".zip":
         with ZipFile(archive_path, "w", compression=ZIP_DEFLATED) as archive:
-            archive.write(source_file, arcname=str(Path(root_name) / source_file.name))
+            archive.write(source_file, arcname=(Path(root_name) / source_file.name).as_posix())
         return
 
     with tarfile.open(archive_path, "w:gz", dereference=True) as archive:
         archive.add(source_file, arcname=str(Path(root_name) / source_file.name))
+
+
+def _copy_tree_if_exists(source: Path | None, destination: Path) -> bool:
+    if source is None or not source.exists():
+        return False
+    shutil.copytree(source, destination, dirs_exist_ok=True)
+    return True
+
+
+def _gnustep_config_value(name: str) -> Path | None:
+    proc = subprocess.run(
+        ["gnustep-config", "--variable", name],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    value = proc.stdout.strip()
+    if not value:
+        return None
+    return Path(value)
+
+
+def _linux_shared_library_dependencies(binary_path: Path) -> list[Path]:
+    proc = subprocess.run(
+        ["ldd", str(binary_path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or f"ldd failed for {binary_path}")
+
+    dependencies: list[Path] = []
+    for line in proc.stdout.splitlines():
+        line = line.strip()
+        if not line or "linux-vdso" in line:
+            continue
+        if "=>" in line:
+            _, remainder = line.split("=>", 1)
+            candidate = remainder.strip().split(" ", 1)[0]
+        else:
+            candidate = line.split(" ", 1)[0]
+        if not candidate.startswith("/"):
+            continue
+        path = Path(candidate)
+        if path.name.startswith("ld-linux"):
+            continue
+        if path.exists() and path not in dependencies:
+            dependencies.append(path)
+    return dependencies
+
+
+def _write_linux_dpkg_architecture_shim(destination: Path) -> None:
+    destination.write_text(
+        "#!/usr/bin/env sh\n"
+        "set -eu\n"
+        "if [ \"$#\" -ne 2 ] || [ \"$1\" != \"--query\" ] || [ \"$2\" != \"DEB_HOST_MULTIARCH\" ]; then\n"
+        "  printf '%s\\n' 'unsupported dpkg-architecture invocation' >&2\n"
+        "  exit 2\n"
+        "fi\n"
+        "if [ -x /usr/bin/dpkg-architecture ]; then\n"
+        "  exec /usr/bin/dpkg-architecture --query DEB_HOST_MULTIARCH\n"
+        "fi\n"
+        "if command -v gcc >/dev/null 2>&1; then\n"
+        "  multiarch=$(gcc -print-multiarch 2>/dev/null || true)\n"
+        "  if [ -n \"$multiarch\" ]; then\n"
+        "    printf '%s\\n' \"$multiarch\"\n"
+        "    exit 0\n"
+        "  fi\n"
+        "fi\n"
+        "cpu=$(uname -m)\n"
+        "case \"$cpu\" in\n"
+        "  x86_64|amd64) cpu=x86_64 ;;\n"
+        "  aarch64|arm64) cpu=aarch64 ;;\n"
+        "  armv7l|armv7*) cpu=arm-linux-gnueabihf ;;\n"
+        "  *) ;;\n"
+        "esac\n"
+        "if [ \"$cpu\" = \"arm-linux-gnueabihf\" ]; then\n"
+        "  printf '%s\\n' \"$cpu\"\n"
+        "else\n"
+        "  printf '%s\\n' \"${cpu}-linux-gnu\"\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    destination.chmod(0o755)
+
+
+def _linux_clang_binary() -> Path | None:
+    compiler = shutil.which("clang")
+    if compiler is None:
+        return None
+    return Path(compiler).resolve()
+
+
+def _linux_clang_resource_dir(compiler_path: Path) -> Path | None:
+    proc = subprocess.run(
+        [str(compiler_path), "-print-resource-dir"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    resource_dir = proc.stdout.strip()
+    if not resource_dir:
+        return None
+    path = Path(resource_dir)
+    if not path.exists():
+        return None
+    return path
+
+
+def _linux_linker_binary() -> Path | None:
+    linker = shutil.which("ld")
+    if linker is None:
+        return None
+    return Path(linker).resolve()
+
+
+def _linux_gcc_runtime_dir() -> Path | None:
+    gcc = shutil.which("x86_64-linux-gnu-gcc-14") or shutil.which("gcc")
+    if gcc is None:
+        return None
+    proc = subprocess.run(
+        [gcc, "-print-libgcc-file-name"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None
+    libgcc = proc.stdout.strip()
+    if not libgcc:
+        return None
+    path = Path(libgcc)
+    if not path.exists():
+        return None
+    return path.parent
+
+
+def _write_linux_tool_wrapper(
+    destination: Path, target_relative_path: str, extra_args: list[str] | None = None
+) -> None:
+    extra_args = extra_args or []
+    extra = "".join(f' "{arg}"' for arg in extra_args)
+    destination.write_text(
+        "#!/usr/bin/env sh\n"
+        "set -eu\n"
+        'PROGRAM_PATH="$0"\n'
+        'while [ -L "$PROGRAM_PATH" ]; do\n'
+        '  PROGRAM_PATH="$(readlink "$PROGRAM_PATH")"\n'
+        "done\n"
+        'TOOLS_DIR=$(CDPATH= cd -- "$(dirname "$PROGRAM_PATH")" && pwd)\n'
+        'exec "$TOOLS_DIR/%s"%s "$@"\n' % (target_relative_path, extra),
+        encoding="utf-8",
+    )
+    destination.chmod(0o755)
+
+
+def _write_linux_compiler_wrapper(destination: Path, target_relative_path: str) -> None:
+    destination.write_text(
+        "#!/usr/bin/env sh\n"
+        "set -eu\n"
+        'PROGRAM_PATH="$0"\n'
+        'while [ -L "$PROGRAM_PATH" ]; do\n'
+        '  PROGRAM_PATH="$(readlink "$PROGRAM_PATH")"\n'
+        "done\n"
+        'TOOLS_DIR=$(CDPATH= cd -- "$(dirname "$PROGRAM_PATH")" && pwd)\n'
+        'SYSROOT=$(CDPATH= cd -- "$TOOLS_DIR/../Sysroot" && pwd)\n'
+        'GCC_RUNTIME_DIR=$(CDPATH= cd -- "$SYSROOT/usr/lib/gcc/x86_64-linux-gnu/14" && pwd)\n'
+        'exec "$TOOLS_DIR/%s" --sysroot="$SYSROOT" -B"$GCC_RUNTIME_DIR" -L"$GCC_RUNTIME_DIR" "$@"\n'
+        % target_relative_path,
+        encoding="utf-8",
+    )
+    destination.chmod(0o755)
+
+def _rewrite_managed_gnustep_make_for_relocation(output_root: Path) -> None:
+    """Rewrite copied GNUstep Make config to an install-root placeholder."""
+    placeholder = MANAGED_PREFIX_PLACEHOLDER
+    replacements = {
+        "/usr/share/GNUstep/Makefiles": f"{placeholder}/System/Library/Makefiles",
+        "/usr/include/x86_64-linux-gnu/GNUstep": f"{placeholder}/System/Library/Headers",
+        "/usr/local/include/GNUstep": f"{placeholder}/Local/Library/Headers",
+        "/usr/include/libxml2": f"{placeholder}/System/Sysroot/usr/include/libxml2",
+        "/usr/include/p11-kit-1": f"{placeholder}/System/Sysroot/usr/include/p11-kit-1",
+        "/usr/lib/x86_64-linux-gnu/GNUstep": f"{placeholder}/System/Library",
+        "/usr/lib/x86_64-linux-gnu": f"{placeholder}/System/Library/Libraries",
+        "/usr/local/lib/GNUstep": f"{placeholder}/Local/Library",
+        "/usr/local/lib": f"{placeholder}/Local/Library/Libraries",
+        "/usr/local/bin": f"{placeholder}/Local/Tools",
+        "/usr/local/sbin": f"{placeholder}/Local/Tools",
+        "/usr/sbin": f"{placeholder}/System/Tools",
+        "/usr/bin": f"{placeholder}/System/Tools",
+        "/usr/share/GNUstep/Documentation": f"{placeholder}/System/Library/Documentation",
+        "/usr/share/man": f"{placeholder}/System/Library/Documentation/man",
+        "/usr/share/info": f"{placeholder}/System/Library/Documentation/info",
+    }
+    roots = [output_root / "System" / "Library" / "Makefiles", output_root / "System" / "Tools"]
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or path.is_symlink():
+                continue
+            try:
+                content = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            original = content
+            for old, new in replacements.items():
+                content = content.replace(old, new)
+            if path.name == "gnustep-config":
+                content = content.replace('echo "gcc"', 'echo "clang"')
+                content = content.replace('echo "gcc -E"', 'echo "clang -E"')
+                content = content.replace('echo "g++"', 'echo "clang++"')
+                content = content.replace('echo "make"', 'echo "make"')
+            if content != original:
+                path.write_text(content, encoding="utf-8")
+
+
+def assemble_linux_toolchain_artifact(
+    output_dir: str | Path,
+    *,
+    runtime_binary: str | Path,
+    makefiles_dir: str | Path | None = None,
+    system_headers_dir: str | Path | None = None,
+    user_headers_dir: str | Path | None = None,
+    system_tools_dir: str | Path | None = None,
+    user_tools_dir: str | Path | None = None,
+    objc_headers_dir: str | Path | None = None,
+    runtime_dependencies: list[str | Path] | None = None,
+) -> dict[str, Any]:
+    output_root = Path(output_dir).resolve()
+    binary = Path(runtime_binary).resolve()
+    if not binary.exists():
+        raise FileNotFoundError(binary)
+    if output_root.exists():
+        shutil.rmtree(output_root)
+    output_root.mkdir(parents=True, exist_ok=True)
+
+    resolved_makefiles = Path(makefiles_dir).resolve() if makefiles_dir else (
+        _gnustep_config_value("GNUSTEP_MAKEFILES") or Path("/usr/share/GNUstep/Makefiles")
+    )
+    resolved_system_headers = Path(system_headers_dir).resolve() if system_headers_dir else (
+        _gnustep_config_value("GNUSTEP_SYSTEM_HEADERS") or Path("/usr/include/x86_64-linux-gnu/GNUstep")
+    )
+    resolved_user_headers = Path(user_headers_dir).resolve() if user_headers_dir else (
+        _gnustep_config_value("GNUSTEP_USER_HEADERS") or (Path.home() / "GNUstep" / "Library" / "Headers")
+    )
+    resolved_system_tools = Path(system_tools_dir).resolve() if system_tools_dir else (
+        _gnustep_config_value("GNUSTEP_SYSTEM_TOOLS") or Path("/usr/bin")
+    )
+    resolved_user_tools = Path(user_tools_dir).resolve() if user_tools_dir else (
+        _gnustep_config_value("GNUSTEP_USER_TOOLS") or (Path.home() / "GNUstep" / "Tools")
+    )
+    resolved_objc_headers = Path(objc_headers_dir).resolve() if objc_headers_dir else Path("/usr/lib/gcc/x86_64-linux-gnu/14/include/objc")
+    resolved_clang_binary = _linux_clang_binary()
+    resolved_clang_resource_dir = (
+        _linux_clang_resource_dir(resolved_clang_binary) if resolved_clang_binary is not None else None
+    )
+    resolved_linker_binary = _linux_linker_binary()
+    resolved_gcc_runtime_dir = _linux_gcc_runtime_dir()
+
+    copied_sections: list[str] = []
+    copied_files: list[str] = []
+
+    if _copy_tree_if_exists(resolved_makefiles, output_root / "System" / "Library" / "Makefiles"):
+        copied_sections.append("System/Library/Makefiles")
+    if _copy_tree_if_exists(resolved_system_headers, output_root / "System" / "Library" / "Headers"):
+        copied_sections.append("System/Library/Headers")
+    if _copy_tree_if_exists(resolved_user_headers, output_root / "Library" / "Headers"):
+        copied_sections.append("Library/Headers")
+    if _copy_tree_if_exists(resolved_objc_headers, output_root / "include" / "objc"):
+        copied_sections.append("include/objc")
+
+    system_tools_target = output_root / "System" / "Tools"
+    system_tools_target.mkdir(parents=True, exist_ok=True)
+    if resolved_system_tools and resolved_system_tools.exists():
+        for name in LINUX_SYSTEM_TOOL_NAMES:
+            candidate = resolved_system_tools / name
+            if candidate.exists():
+                shutil.copy2(candidate, system_tools_target / name)
+                copied_files.append(str(system_tools_target / name))
+    dpkg_architecture_shim = system_tools_target / "dpkg-architecture"
+    _write_linux_dpkg_architecture_shim(dpkg_architecture_shim)
+    copied_files.append(str(dpkg_architecture_shim))
+    if resolved_clang_binary is not None and resolved_clang_binary.exists():
+        compiler_root = output_root / "System" / "LLVM"
+        compiler_bin_target = compiler_root / "bin"
+        compiler_bin_target.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(resolved_clang_binary, compiler_bin_target / "clang")
+        copied_files.append(str(compiler_bin_target / "clang"))
+        clangpp_target = compiler_bin_target / "clang++"
+        if clangpp_target.exists() or clangpp_target.is_symlink():
+            clangpp_target.unlink()
+        os.symlink("clang", clangpp_target)
+        copied_files.append(str(clangpp_target))
+        for name, relative in (
+            ("clang", "../LLVM/bin/clang"),
+            ("clang++", "../LLVM/bin/clang++"),
+            ("cc", "../LLVM/bin/clang"),
+            ("c++", "../LLVM/bin/clang++"),
+        ):
+            wrapper = system_tools_target / name
+            _write_linux_compiler_wrapper(wrapper, relative)
+            copied_files.append(str(wrapper))
+        if resolved_clang_resource_dir is not None and resolved_clang_resource_dir.exists():
+            resource_target = compiler_root / "lib" / "clang" / resolved_clang_resource_dir.name
+            shutil.copytree(resolved_clang_resource_dir, resource_target, dirs_exist_ok=True)
+            copied_sections.append(f"System/LLVM/lib/clang/{resolved_clang_resource_dir.name}")
+    if resolved_linker_binary is not None and resolved_linker_binary.exists():
+        linker_target = system_tools_target / "ld"
+        shutil.copy2(resolved_linker_binary, linker_target)
+        copied_files.append(str(linker_target))
+        for name in ("x86_64-linux-gnu-ld", "x86_64-linux-gnu-ld.bfd"):
+            wrapper = system_tools_target / name
+            _write_linux_tool_wrapper(wrapper, "ld")
+            copied_files.append(str(wrapper))
+
+    if resolved_user_tools and resolved_user_tools.exists():
+        user_tools_target = output_root / "Tools"
+        user_tools_target.mkdir(parents=True, exist_ok=True)
+        for candidate in sorted(resolved_user_tools.iterdir()):
+            if candidate.is_file():
+                shutil.copy2(candidate, user_tools_target / candidate.name)
+                copied_files.append(str(user_tools_target / candidate.name))
+
+    if runtime_dependencies is None:
+        dependencies = _linux_shared_library_dependencies(binary)
+    else:
+        dependencies = [Path(item).resolve() for item in runtime_dependencies]
+    if resolved_clang_binary is not None and resolved_clang_binary.exists():
+        for dependency in _linux_shared_library_dependencies(resolved_clang_binary):
+            if dependency not in dependencies:
+                dependencies.append(dependency)
+    if resolved_linker_binary is not None and resolved_linker_binary.exists():
+        for dependency in _linux_shared_library_dependencies(resolved_linker_binary):
+            if dependency not in dependencies:
+                dependencies.append(dependency)
+    system_library_target = output_root / "System" / "Library" / "Libraries"
+    system_library_target.mkdir(parents=True, exist_ok=True)
+    for dependency in dependencies:
+        if dependency.exists():
+            target = system_library_target / dependency.name
+            shutil.copy2(dependency, target)
+            copied_files.append(str(target))
+
+    linker_names = {
+        "libgnustep-base.so": ("libgnustep-base.so.1.31", "libgnustep-base.so.1.30"),
+        "libobjc.so": ("libobjc.so.4", "libobjc.so.4.6"),
+    }
+    for link_name, candidates in linker_names.items():
+        link_path = system_library_target / link_name
+        if link_path.exists():
+            continue
+        for candidate in candidates:
+            if (system_library_target / candidate).exists():
+                link_path.symlink_to(candidate)
+                copied_files.append(str(link_path))
+                break
+
+    if resolved_gcc_runtime_dir is not None and resolved_gcc_runtime_dir.exists():
+        sysroot = output_root / "System" / "Sysroot"
+        usr_include_target = sysroot / "usr" / "include"
+        for header_source in (Path("/usr/include"), Path("/usr/include/x86_64-linux-gnu")):
+            if header_source.exists():
+                header_target = usr_include_target if header_source.name == "include" else usr_include_target / header_source.name
+                shutil.copytree(header_source, header_target, dirs_exist_ok=True)
+                copied_sections.append(str(header_target.relative_to(output_root)))
+
+        gcc_target = sysroot / "usr" / "lib" / "gcc" / "x86_64-linux-gnu" / resolved_gcc_runtime_dir.name
+        gcc_target.mkdir(parents=True, exist_ok=True)
+        for source in (
+            resolved_gcc_runtime_dir / "crtbeginS.o",
+            resolved_gcc_runtime_dir / "crtendS.o",
+            resolved_gcc_runtime_dir / "libgcc.a",
+            resolved_gcc_runtime_dir / "libgcc_s.so",
+        ):
+            if source.exists():
+                shutil.copy2(source, gcc_target / source.name)
+                copied_files.append(str(gcc_target / source.name))
+
+        lib_target = sysroot / "lib" / "x86_64-linux-gnu"
+        lib_target.mkdir(parents=True, exist_ok=True)
+        for source in (
+            Path("/lib/x86_64-linux-gnu/Scrt1.o"),
+            Path("/lib/x86_64-linux-gnu/crti.o"),
+            Path("/lib/x86_64-linux-gnu/crtn.o"),
+            Path("/lib/x86_64-linux-gnu/libc.so.6"),
+            Path("/lib/x86_64-linux-gnu/libgcc_s.so.1"),
+        ):
+            if source.exists():
+                shutil.copy2(source, lib_target / source.name)
+                copied_files.append(str(lib_target / source.name))
+
+        lib64_target = sysroot / "lib64"
+        lib64_target.mkdir(parents=True, exist_ok=True)
+        dynamic_linker = Path("/lib64/ld-linux-x86-64.so.2")
+        if dynamic_linker.exists():
+            shutil.copy2(dynamic_linker, lib64_target / dynamic_linker.name)
+            copied_files.append(str(lib64_target / dynamic_linker.name))
+
+        usr_lib_target = sysroot / "usr" / "lib" / "x86_64-linux-gnu"
+        usr_lib_target.mkdir(parents=True, exist_ok=True)
+        for source in (
+            Path("/usr/lib/x86_64-linux-gnu/libc.so"),
+            Path("/usr/lib/x86_64-linux-gnu/libc_nonshared.a"),
+            Path("/usr/lib/x86_64-linux-gnu/libpthread.so"),
+            Path("/usr/lib/x86_64-linux-gnu/libpthread_nonshared.a"),
+            Path("/usr/lib/x86_64-linux-gnu/libdl.so"),
+            Path("/usr/lib/x86_64-linux-gnu/libm.so"),
+            Path("/usr/lib/x86_64-linux-gnu/librt.so"),
+        ):
+            if source.exists():
+                shutil.copy2(source, usr_lib_target / source.name)
+                copied_files.append(str(usr_lib_target / source.name))
+
+    _rewrite_managed_gnustep_make_for_relocation(output_root)
+
+    source_policy = {
+        "strategy": "host-derived-transitional",
+        "production_eligible": False,
+        "reason": "This assembler copies portions of the current host GNUstep/runtime tree and is only a bring-up artifact path.",
+    }
+    metadata_result = write_toolchain_metadata(
+        output_root,
+        "linux-amd64-clang",
+        "2026.04.0",
+        production_eligible=False,
+    )
+    host_origin_audit = toolchain_tree_host_origin_audit(output_root)
+    metadata = {
+        "schema_version": 1,
+        "target": "linux-amd64-clang",
+        "runtime_binary": str(binary),
+        "source_policy": source_policy,
+        "host_origin_audit": host_origin_audit,
+        "toolchain_metadata": {
+            key: Path(value).name for key, value in metadata_result["written"].items()
+        },
+        "copied_sections": copied_sections,
+        "copied_files": copied_files,
+    }
+    metadata_path = output_root / "toolchain-assembly.json"
+    metadata_path.write_text(json.dumps(metadata, indent=2) + "\n")
+
+    return {
+        "schema_version": 1,
+        "command": "assemble-linux-toolchain",
+        "ok": True,
+        "status": "ok",
+        "summary": "Linux managed toolchain artifact assembled from the current host as a transitional non-production artifact.",
+        "output_root": str(output_root),
+        "metadata_path": str(metadata_path),
+        "source_policy": source_policy,
+        "host_origin_audit": host_origin_audit,
+        "copied_sections": copied_sections,
+        "copied_file_count": len(copied_files),
+    }
+
+
+def ensure_linux_runtime_soname_aliases(root: Path) -> list[str]:
+    """Create compatibility SONAME aliases expected by linked GNUstep binaries."""
+    aliases = {
+        "libBlocksRuntime.so.0": "libBlocksRuntime.so",
+        "libobjc.so.4": "libobjc.so.4.6",
+    }
+    written: list[str] = []
+    for library_dir in (root / "lib", root / "lib64", root / "System" / "Library" / "Libraries"):
+        if not library_dir.exists():
+            continue
+        for link_name, target_name in aliases.items():
+            link_path = library_dir / link_name
+            target_path = library_dir / target_name
+            if link_path.exists() or not target_path.exists():
+                continue
+            link_path.symlink_to(target_name)
+            written.append(str(link_path.relative_to(root)))
+    return written
+
+
+def package_source_built_linux_toolchain_artifact(
+    staging_prefix: str | Path,
+    output_dir: str | Path,
+    *,
+    toolchain_version: str = "2026.04.0",
+) -> dict[str, Any]:
+    source_root = Path(staging_prefix).resolve()
+    output_root = Path(output_dir).resolve()
+    if not source_root.exists():
+        raise FileNotFoundError(source_root)
+    if output_root.exists():
+        shutil.rmtree(output_root)
+    shutil.copytree(source_root, output_root)
+    (output_root / "toolchain-assembly.json").unlink(missing_ok=True)
+    runtime_aliases = ensure_linux_runtime_soname_aliases(output_root)
+    normalization = normalize_source_built_toolchain_paths(output_root, source_root)
+    metadata_result = write_toolchain_metadata(
+        output_root,
+        "linux-amd64-clang",
+        toolchain_version,
+        production_eligible=True,
+    )
+    host_origin_audit = toolchain_tree_host_origin_audit(output_root)
+    production_eligible = bool(host_origin_audit["ok"])
+    if not production_eligible:
+        manifest_path = output_root / "toolchain-manifest.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["source_policy"]["production_eligible"] = False
+        manifest["source_policy"]["production_blockers"] = ["host-origin-path-leakage"]
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    assembly_metadata = {
+        "schema_version": 1,
+        "target": "linux-amd64-clang",
+        "source_prefix": "<staging-prefix>",
+        "source_policy": {
+            "strategy": "source-build",
+            "production_eligible": production_eligible,
+            "lock_file": "source-lock.json",
+            "component_inventory": "component-inventory.json",
+            "host_origin_paths_allowed": False,
+        },
+        "toolchain_metadata": {
+            key: Path(value).name for key, value in metadata_result["written"].items()
+        },
+        "runtime_aliases": runtime_aliases,
+        "normalization": {
+            "ok": normalization["ok"],
+            "status": normalization["status"],
+            "placeholder": normalization["placeholder"],
+            "rewritten_files": normalization["rewritten_files"],
+            "patched_files": normalization["patched_files"],
+        },
+        "host_origin_audit": {
+            "ok": host_origin_audit["ok"],
+            "status": host_origin_audit["status"],
+            "summary": host_origin_audit["summary"],
+            "findings": host_origin_audit["findings"],
+        },
+    }
+    metadata_path = output_root / "toolchain-assembly.json"
+    metadata_path.write_text(json.dumps(assembly_metadata, indent=2) + "\n", encoding="utf-8")
+    return {
+        "schema_version": 1,
+        "command": "package-source-built-linux-toolchain",
+        "ok": production_eligible,
+        "status": "ok" if production_eligible else "error",
+        "summary": "Source-built Linux managed toolchain packaged." if production_eligible else "Source-built Linux managed toolchain has host-origin path leakage.",
+        "output_root": str(output_root),
+        "metadata_path": str(metadata_path),
+        "source_policy": assembly_metadata["source_policy"],
+        "host_origin_audit": host_origin_audit,
+    }
 
 
 def bundle_full_cli(
@@ -694,10 +1961,6 @@ def bundle_full_cli(
         shutil.rmtree(bundle_root)
     (bundle_root / "bin").mkdir(parents=True, exist_ok=True)
     runtime_root = bundle_root / "libexec" / "gnustep-cli"
-    (runtime_root / "scripts").mkdir(parents=True, exist_ok=True)
-    (runtime_root / "src").mkdir(parents=True, exist_ok=True)
-    shutil.copytree(root / "scripts" / "internal", runtime_root / "scripts" / "internal", dirs_exist_ok=True)
-    shutil.copytree(root / "src" / "gnustep_cli_shared", runtime_root / "src" / "gnustep_cli_shared", dirs_exist_ok=True)
     shutil.copytree(root / "examples", runtime_root / "examples", dirs_exist_ok=True)
     runtime_binary_dir = runtime_root / "bin"
     runtime_binary_dir.mkdir(parents=True, exist_ok=True)
@@ -725,8 +1988,8 @@ def bundle_full_cli(
             'export GNUSTEP_LOCAL_ROOT="$INSTALL_ROOT/Local"\n'
             'export GNUSTEP_NETWORK_ROOT="$INSTALL_ROOT/Network"\n'
             'export GNUSTEP_MAKEFILES="$INSTALL_ROOT/System/Library/Makefiles"\n'
-            'export PATH="$INSTALL_ROOT/bin:$INSTALL_ROOT/System/Tools:$INSTALL_ROOT/Local/Tools:$PATH"\n'
-            'export LD_LIBRARY_PATH="$INSTALL_ROOT/Local/Library/Libraries:$INSTALL_ROOT/System/Library/Libraries:$INSTALL_ROOT/lib:$INSTALL_ROOT/lib64:${LD_LIBRARY_PATH:-}"\n'
+            'export PATH="$INSTALL_ROOT/bin:$INSTALL_ROOT/Tools:$INSTALL_ROOT/System/Tools:$INSTALL_ROOT/Local/Tools:$PATH"\n'
+            'export LD_LIBRARY_PATH="$INSTALL_ROOT/Library/Libraries:$INSTALL_ROOT/Local/Library/Libraries:$INSTALL_ROOT/System/Library/Libraries:$INSTALL_ROOT/lib:$INSTALL_ROOT/lib64:${LD_LIBRARY_PATH:-}"\n'
             'if [ -f "$GNUSTEP_MAKEFILES/GNUstep.sh" ]; then\n'
             '  set +u\n'
             '  . "$GNUSTEP_MAKEFILES/GNUstep.sh"\n'
@@ -743,6 +2006,475 @@ def bundle_full_cli(
         "status": "ok",
         "summary": "Full CLI runtime bundle created.",
         "bundle_root": str(bundle_root),
+    }
+
+
+
+def _git_revision(repo_root: Path | None = None) -> str | None:
+    root = repo_root or Path(__file__).resolve().parents[2]
+    try:
+        proc = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    except OSError:
+        return None
+    if proc.returncode != 0:
+        return None
+    return proc.stdout.strip() or None
+
+
+def release_provenance_document(release_dir: str | Path, *, builder_identity: str = "local", source_revision: str | None = None) -> dict[str, Any]:
+    root = Path(release_dir).resolve()
+    manifest_path = root / "release-manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(manifest_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    artifacts = []
+    for artifact in manifest["releases"][0]["artifacts"]:
+        artifact_path = root / artifact["filename"]
+        artifacts.append({
+            "id": artifact["id"],
+            "kind": artifact["kind"],
+            "filename": artifact["filename"],
+            "sha256": artifact["sha256"],
+            "size": artifact_path.stat().st_size if artifact_path.exists() else artifact.get("size"),
+            "source_policy": artifact.get("metadata", {}).get("source_policy"),
+            "lock_file": artifact.get("metadata", {}).get("lock_file"),
+            "component_inventory": artifact.get("metadata", {}).get("component_inventory"),
+            "toolchain_manifest": artifact.get("metadata", {}).get("toolchain_manifest"),
+        })
+    return {
+        "schema_version": 1,
+        "release_version": manifest["releases"][0]["version"],
+        "channel": manifest.get("channel", "stable"),
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "source_revision": source_revision or _git_revision(),
+        "builder_identity": builder_identity,
+        "manifest": {"filename": "release-manifest.json", "sha256": _sha256(manifest_path)},
+        "artifacts": artifacts,
+        "qualification": {
+            "release_verification": "required",
+            "archive_audits": "required_for_toolchains",
+            "published_url_qualification": "target-scoped",
+        },
+    }
+
+
+def write_release_provenance(release_dir: str | Path, *, builder_identity: str = "local", source_revision: str | None = None) -> Path:
+    root = Path(release_dir).resolve()
+    provenance = release_provenance_document(root, builder_identity=builder_identity, source_revision=source_revision)
+    path = root / "release-provenance.json"
+    path.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+
+def _parse_metadata_time(value: Any) -> datetime | None:
+    if not isinstance(value, str) or value in {"", "TBD"}:
+        return None
+    normalized = value.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def _metadata_policy_checks(payload: dict[str, Any], *, artifact_ids: set[str] | None = None, package_ids: set[str] | None = None, now: datetime | None = None) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    current_time = now or datetime.now(UTC)
+
+    def add(check_id: str, ok: bool, message: str) -> None:
+        checks.append({"id": check_id, "ok": ok, "message": message})
+
+    metadata_version = payload.get("metadata_version")
+    add("metadata-version-supported", isinstance(metadata_version, int) and metadata_version >= 1, "metadata_version is supported")
+    generated_at = _parse_metadata_time(payload.get("generated_at"))
+    if generated_at is not None:
+        add("metadata-generated-not-in-future", generated_at <= current_time, "metadata generated_at is not in the future")
+    expires_at = _parse_metadata_time(payload.get("expires_at"))
+    if expires_at is not None:
+        add("metadata-not-expired", expires_at > current_time, "metadata expires_at is still valid")
+    trust = payload.get("trust") if isinstance(payload.get("trust"), dict) else {}
+    revoked_artifacts = set(trust.get("revoked_artifacts", []) or [])
+    revoked_packages = set(trust.get("revoked_packages", []) or [])
+    if artifact_ids is not None:
+        revoked = sorted(revoked_artifacts & artifact_ids)
+        add("revoked-artifacts-absent", not revoked, "release metadata does not reference revoked artifacts" if not revoked else f"revoked artifacts present: {', '.join(revoked)}")
+    if package_ids is not None:
+        revoked = sorted(revoked_packages & package_ids)
+        add("revoked-packages-absent", not revoked, "package index does not reference revoked packages" if not revoked else f"revoked packages present: {', '.join(revoked)}")
+    return checks
+
+def _openssl_sign_file(input_path: Path, signature_path: Path, private_key_path: Path) -> bool:
+    proc = subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(private_key_path), "-out", str(signature_path), str(input_path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    return proc.returncode == 0
+
+
+def _openssl_verify_file(input_path: Path, signature_path: Path, public_key_path: Path) -> bool:
+    proc = subprocess.run(["openssl", "dgst", "-sha256", "-verify", str(public_key_path), "-signature", str(signature_path), str(input_path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    return proc.returncode == 0
+
+
+def sign_release_metadata(release_dir: str | Path, private_key_path: str | Path, public_key_path: str | Path | None = None) -> dict[str, Any]:
+    root = Path(release_dir).resolve()
+    private_key = Path(private_key_path).resolve()
+    if not private_key.exists():
+        return {"schema_version": 1, "command": "sign-release-metadata", "ok": False, "status": "error", "summary": "Signing private key is missing.", "release_dir": str(root)}
+    provenance_path = write_release_provenance(root, builder_identity=os.environ.get("GNUSTEP_CLI_BUILDER_ID", "local"))
+    public_key = Path(public_key_path).resolve() if public_key_path else root / "release-signing-public.pem"
+    if public_key_path is None:
+        proc = subprocess.run(["openssl", "pkey", "-in", str(private_key), "-pubout", "-out", str(public_key)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        if proc.returncode != 0:
+            return {"schema_version": 1, "command": "sign-release-metadata", "ok": False, "status": "error", "summary": "Failed to derive release signing public key.", "release_dir": str(root), "stderr": proc.stderr}
+    signatures = []
+    ok = True
+    for filename in ("release-manifest.json", "release-provenance.json"):
+        input_path = root / filename
+        signature_path = root / f"{filename}.sig"
+        signed = input_path.exists() and _openssl_sign_file(input_path, signature_path, private_key)
+        signatures.append({"filename": filename, "signature": signature_path.name, "ok": signed})
+        ok = ok and signed
+    return {"schema_version": 1, "command": "sign-release-metadata", "ok": ok, "status": "ok" if ok else "error", "summary": "Release metadata signed." if ok else "Release metadata signing failed.", "release_dir": str(root), "public_key": str(public_key), "signatures": signatures}
+
+
+def release_trust_gate(release_dir: str | Path, *, require_signatures: bool = True, trusted_public_key_path: str | Path | None = None) -> dict[str, Any]:
+    root = Path(release_dir).resolve()
+    checks: list[dict[str, Any]] = []
+    def add(check_id: str, ok: bool, message: str) -> None:
+        checks.append({"id": check_id, "ok": ok, "message": message})
+
+    manifest_path = root / "release-manifest.json"
+    provenance_path = root / "release-provenance.json"
+    checksums_path = root / "SHA256SUMS"
+    bundled_public_key_path = root / "release-signing-public.pem"
+    public_key_path = Path(trusted_public_key_path).resolve() if trusted_public_key_path else bundled_public_key_path
+    add("manifest-present", manifest_path.exists(), "release-manifest.json is present")
+    add("provenance-present", provenance_path.exists(), "release-provenance.json is present")
+    add("checksums-present", checksums_path.exists(), "SHA256SUMS is present")
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            artifact_ids = {
+                artifact.get("id")
+                for release in manifest.get("releases", [])
+                for artifact in release.get("artifacts", [])
+                if artifact.get("id")
+            }
+            checks.extend(_metadata_policy_checks(manifest, artifact_ids=artifact_ids))
+        except Exception as exc:
+            add("manifest-json", False, f"release-manifest.json is invalid: {exc}")
+    if manifest_path.exists() and provenance_path.exists():
+        try:
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            add("provenance-manifest-digest", provenance.get("manifest", {}).get("sha256") == _sha256(manifest_path), "provenance records the release manifest digest")
+            for artifact in provenance.get("artifacts", []):
+                artifact_path = root / artifact.get("filename", "")
+                add(f"artifact-digest:{artifact.get('filename')}", artifact_path.exists() and artifact.get("sha256") == _sha256(artifact_path), f"artifact digest matches for {artifact.get('filename')}")
+        except Exception as exc:
+            add("provenance-json", False, f"release-provenance.json is invalid: {exc}")
+    if require_signatures:
+        if trusted_public_key_path:
+            add("trusted-public-key-present", public_key_path.exists(), "trusted release signing public key is present")
+            if public_key_path.exists() and bundled_public_key_path.exists():
+                add("bundled-public-key-matches-trust-root", _sha256(public_key_path) == _sha256(bundled_public_key_path), "bundled release public key matches the trusted root")
+        else:
+            add("public-key-present", public_key_path.exists(), "release signing public key is present")
+        for filename in ("release-manifest.json", "release-provenance.json"):
+            input_path = root / filename
+            signature_path = root / f"{filename}.sig"
+            add(f"signature-present:{filename}", signature_path.exists(), f"signature exists for {filename}")
+            if input_path.exists() and signature_path.exists() and public_key_path.exists():
+                add(f"signature-valid:{filename}", _openssl_verify_file(input_path, signature_path, public_key_path), f"signature verifies for {filename}")
+    ok = all(check["ok"] for check in checks)
+    return {"schema_version": 1, "command": "release-trust-gate", "ok": ok, "status": "ok" if ok else "error", "summary": "Release trust gate passed." if ok else "Release trust gate failed.", "release_dir": str(root), "require_signatures": require_signatures, "trusted_public_key": str(public_key_path) if trusted_public_key_path else None, "checks": checks}
+
+
+
+def _load_json_evidence(path: Path) -> tuple[bool, str, dict[str, Any] | None]:
+    if not path.exists():
+        return False, f"{path.name} evidence is missing", None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
+    except Exception as exc:
+        return False, f"{path.name} evidence is invalid: {exc}", None
+    return bool(payload.get("ok")), payload.get("summary", f"{path.name} evidence loaded"), payload
+
+
+def write_windows_current_source_marker(
+    release_dir: str | Path,
+    *,
+    artifact_id: str = "cli-windows-amd64-msys2-clang64",
+    source_revision: str | None = None,
+    builder_identity: str = "local",
+) -> dict[str, Any]:
+    root = Path(release_dir).resolve()
+    manifest_path = root / "release-manifest.json"
+    checks: list[dict[str, Any]] = []
+
+    def add(check_id: str, ok: bool, message: str, **extra: Any) -> None:
+        item = {"id": check_id, "ok": ok, "message": message}
+        item.update(extra)
+        checks.append(item)
+
+    artifact: dict[str, Any] | None = None
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            for release in manifest.get("releases", []):
+                for candidate in release.get("artifacts", []):
+                    if candidate.get("id") == artifact_id:
+                        artifact = candidate
+                        break
+                if artifact:
+                    break
+            add("artifact-present", artifact is not None, f"{artifact_id} is present in release manifest")
+        except Exception as exc:
+            add("release-manifest-json", False, f"release manifest is invalid: {exc}")
+    else:
+        add("release-manifest-present", False, "release manifest is missing")
+
+    revision = source_revision or _git_revision()
+    add("source-revision-present", bool(revision), "source revision is recorded")
+    ok = all(check["ok"] for check in checks)
+    marker = root / "windows-current-source-artifact.json"
+    payload = {
+        "schema_version": 1,
+        "command": "windows-current-source-marker",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": "Windows artifact is marked as rebuilt from current source." if ok else "Windows current-source marker could not be written as valid evidence.",
+        "release_dir": str(root),
+        "artifact_id": artifact_id,
+        "artifact_filename": artifact.get("filename") if artifact else None,
+        "source_revision": revision,
+        "builder_identity": builder_identity,
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "checks": checks,
+    }
+    marker.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    payload["marker_path"] = str(marker)
+    return payload
+
+
+def write_release_evidence_bundle(release_dir: str | Path, *, evidence_dir: str | Path | None = None) -> dict[str, Any]:
+    root = Path(release_dir).resolve()
+    evidence_root = Path(evidence_dir).resolve() if evidence_dir else root
+    evidence_files = {
+        "debian-otvm-smoke": evidence_root / "otvm-debian-13-gnome-wayland-smoke.json",
+        "openbsd-otvm-smoke": evidence_root / "otvm-openbsd-7.8-fvwm-smoke.json",
+        "windows-otvm-smoke": evidence_root / "otvm-windows-2022-smoke.json",
+        "windows-current-source-artifact": evidence_root / "windows-current-source-artifact.json",
+    }
+    entries: list[dict[str, Any]] = []
+    for evidence_id, path in evidence_files.items():
+        ok, summary, payload = _load_json_evidence(path)
+        entries.append({
+            "id": evidence_id,
+            "ok": ok,
+            "summary": summary,
+            "path": str(path),
+            "sha256": _sha256(path) if path.exists() else None,
+            "payload_command": payload.get("command") if isinstance(payload, dict) else None,
+        })
+    ok = all(entry["ok"] for entry in entries)
+    bundle = {
+        "schema_version": 1,
+        "command": "release-evidence-bundle",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": "Release evidence bundle is complete." if ok else "Release evidence bundle is missing required evidence.",
+        "release_dir": str(root),
+        "evidence_dir": str(evidence_root),
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "evidence": entries,
+    }
+    bundle_path = root / "release-evidence-bundle.json"
+    bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
+    bundle["bundle_path"] = str(bundle_path)
+    return bundle
+
+
+def release_key_rotation_drill(release_dir: str | Path, *, work_dir: str | Path | None = None) -> dict[str, Any]:
+    root = Path(release_dir).resolve()
+    temp_context = tempfile.TemporaryDirectory() if work_dir is None else None
+    drill_root = Path(work_dir).resolve() if work_dir else Path(temp_context.name)
+    drill_root.mkdir(parents=True, exist_ok=True)
+    release_copy = drill_root / "release-copy"
+    if release_copy.exists():
+        shutil.rmtree(release_copy)
+    shutil.copytree(root, release_copy)
+    old_key = drill_root / "old-release-key.pem"
+    new_key = drill_root / "new-release-key.pem"
+    checks: list[dict[str, Any]] = []
+
+    def add(check_id: str, ok: bool, message: str, **extra: Any) -> None:
+        item = {"id": check_id, "ok": ok, "message": message}
+        item.update(extra)
+        checks.append(item)
+
+    for key_path in (old_key, new_key):
+        proc = subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(key_path)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        add(f"generate:{key_path.stem}", proc.returncode == 0, f"generated {key_path.name}")
+    if all(check["ok"] for check in checks):
+        old_sign = sign_release_metadata(release_copy, old_key)
+        old_gate = release_trust_gate(release_copy, trusted_public_key_path=release_copy / "release-signing-public.pem")
+        new_rejects_old = release_trust_gate(release_copy, trusted_public_key_path=new_key.with_suffix(".pub.pem"))
+        # Derive the new public key before using it as the new trust root.
+        subprocess.run(["openssl", "pkey", "-in", str(new_key), "-pubout", "-out", str(new_key.with_suffix(".pub.pem"))], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        new_rejects_old = release_trust_gate(release_copy, trusted_public_key_path=new_key.with_suffix(".pub.pem"))
+        new_sign = sign_release_metadata(release_copy, new_key)
+        new_gate = release_trust_gate(release_copy, trusted_public_key_path=release_copy / "release-signing-public.pem")
+        old_rejects_new = release_trust_gate(release_copy, trusted_public_key_path=old_key.with_suffix(".pub.pem"))
+        subprocess.run(["openssl", "pkey", "-in", str(old_key), "-pubout", "-out", str(old_key.with_suffix(".pub.pem"))], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        old_rejects_new = release_trust_gate(release_copy, trusted_public_key_path=old_key.with_suffix(".pub.pem"))
+        add("old-signature-valid-with-old-root", bool(old_sign.get("ok")) and bool(old_gate.get("ok")), "old signing key verifies with old trust root")
+        add("new-root-rejects-old-signature", not bool(new_rejects_old.get("ok")), "new trust root rejects old signatures")
+        add("new-signature-valid-with-new-root", bool(new_sign.get("ok")) and bool(new_gate.get("ok")), "new signing key verifies with new trust root")
+        add("old-root-rejects-new-signature", not bool(old_rejects_new.get("ok")), "old trust root rejects new signatures")
+    ok = all(check["ok"] for check in checks)
+    payload = {
+        "schema_version": 1,
+        "command": "release-key-rotation-drill",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": "Release key rotation drill passed." if ok else "Release key rotation drill failed.",
+        "release_dir": str(root),
+        "work_dir": str(drill_root),
+        "checks": checks,
+    }
+    if temp_context is not None:
+        temp_context.cleanup()
+        payload["work_dir"] = None
+    return payload
+
+def release_claim_consistency_gate(
+    release_dir: str | Path,
+    *,
+    evidence_dir: str | Path | None = None,
+    require_windows_current_source: bool = True,
+) -> dict[str, Any]:
+    root = Path(release_dir).resolve()
+    evidence_root = Path(evidence_dir).resolve() if evidence_dir else root
+    checks: list[dict[str, Any]] = []
+
+    def add(check_id: str, ok: bool, message: str, **extra: Any) -> None:
+        item: dict[str, Any] = {"id": check_id, "ok": ok, "message": message}
+        item.update(extra)
+        checks.append(item)
+
+    manifest_path = root / "release-manifest.json"
+    manifest: dict[str, Any] = {}
+    artifact_ids: set[str] = set()
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            artifact_ids = {
+                artifact.get("id")
+                for release in manifest.get("releases", [])
+                for artifact in release.get("artifacts", [])
+                if artifact.get("id")
+            }
+            add("release-manifest-present", True, "release manifest is present")
+        except Exception as exc:
+            add("release-manifest-json", False, f"release manifest is invalid: {exc}")
+    else:
+        add("release-manifest-present", False, "release manifest is missing")
+
+    required_artifacts = {
+        "debian-managed-linux": ["cli-linux-amd64-clang", "toolchain-linux-amd64-clang"],
+        "windows-msys2-managed": ["cli-windows-amd64-msys2-clang64", "toolchain-windows-amd64-msys2-clang64"],
+    }
+    for claim, ids in required_artifacts.items():
+        missing = [artifact_id for artifact_id in ids if artifact_id not in artifact_ids]
+        add(f"artifacts:{claim}", not missing, f"{claim} has required artifacts", missing=missing)
+
+    bundle_path = evidence_root / "release-evidence-bundle.json"
+    if bundle_path.exists() and require_windows_current_source:
+        ok, summary, _payload = _load_json_evidence(bundle_path)
+        add("release-evidence-bundle", ok, summary, path=str(bundle_path))
+
+    smoke_files = {
+        "debian-otvm-smoke": evidence_root / "otvm-debian-13-gnome-wayland-smoke.json",
+        "openbsd-otvm-smoke": evidence_root / "otvm-openbsd-7.8-fvwm-smoke.json",
+        "windows-otvm-smoke": evidence_root / "otvm-windows-2022-smoke.json",
+    }
+    for check_id, path in smoke_files.items():
+        ok, summary, _payload = _load_json_evidence(path)
+        add(check_id, ok, summary, path=str(path))
+
+    if require_windows_current_source:
+        marker = evidence_root / "windows-current-source-artifact.json"
+        ok, summary, _payload = _load_json_evidence(marker)
+        add("windows-current-source-artifact", ok, summary, path=str(marker))
+
+    ok = all(check["ok"] for check in checks)
+    return {
+        "schema_version": 1,
+        "command": "release-claim-consistency-gate",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": "Release claims are consistent with artifacts and evidence." if ok else "Release claims are missing artifact or evidence support.",
+        "release_dir": str(root),
+        "evidence_dir": str(evidence_root),
+        "checks": checks,
+    }
+
+
+def controlled_release_gate(
+    release_dir: str | Path,
+    *,
+    package_index_path: str | Path | None = None,
+    release_trust_root: str | Path | None = None,
+    package_index_trust_root: str | Path | None = None,
+    allow_unsigned_package_index: bool = False,
+) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+    if release_trust_root is None:
+        release_gate = release_trust_gate(release_dir, require_signatures=True, trusted_public_key_path=None)
+        checks.append({
+            "id": "release-trust-root-present",
+            "ok": False,
+            "summary": "A production controlled release requires an explicit release trust root.",
+            "payload": {"trusted_public_key": None},
+        })
+    else:
+        release_gate = release_trust_gate(release_dir, trusted_public_key_path=release_trust_root)
+    checks.append({
+        "id": "release-trust-gate",
+        "ok": release_gate["ok"],
+        "summary": release_gate["summary"],
+        "payload": release_gate,
+    })
+    if package_index_path is not None:
+        if not allow_unsigned_package_index and package_index_trust_root is None:
+            checks.append({
+                "id": "package-index-trust-root-present",
+                "ok": False,
+                "summary": "A production controlled release requires an explicit package-index trust root.",
+                "payload": {"trusted_public_key": None},
+            })
+        package_gate = package_index_trust_gate(
+            package_index_path,
+            require_signatures=not allow_unsigned_package_index,
+            trusted_public_key_path=package_index_trust_root,
+        )
+        checks.append({
+            "id": "package-index-trust-gate",
+            "ok": package_gate["ok"],
+            "summary": package_gate["summary"],
+            "payload": package_gate,
+        })
+    ok = all(check["ok"] for check in checks)
+    return {
+        "schema_version": 1,
+        "command": "controlled-release-gate",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": "Controlled release gate passed." if ok else "Controlled release gate failed.",
+        "release_dir": str(Path(release_dir).resolve()),
+        "package_index_path": str(Path(package_index_path).resolve()) if package_index_path else None,
+        "checks": checks,
     }
 
 
@@ -797,9 +2529,21 @@ def stage_release_assets(
                 "format": "zip" if target["os"] == "windows" else "tar.gz",
                 "url": _artifact_url(base_url, version, filename),
                 "sha256": _sha256(archive_path),
+                "integrity": {"sha256": _sha256(archive_path)},
                 "size": archive_path.stat().st_size,
                 "filename": filename,
+                "supported_distributions": target.get("supported_distributions", []),
+                "portability_policy": target.get("portability_policy", "platform-wide"),
             }
+            if kind == "toolchain":
+                lock_file = "source-lock.json" if target["strategy"] == "source-build" else "input-manifest.json"
+                artifact["metadata"] = {
+                    "lock_file": lock_file if (source / lock_file).exists() else None,
+                    "component_inventory": "component-inventory.json" if (source / "component-inventory.json").exists() else None,
+                    "toolchain_manifest": "toolchain-manifest.json" if (source / "toolchain-manifest.json").exists() else None,
+                    "assembly_metadata": "toolchain-assembly.json" if (source / "toolchain-assembly.json").exists() else None,
+                    "source_policy": "source-build" if target["strategy"] == "source-build" else target["strategy"],
+                }
             artifacts.append(artifact)
             checksums.append({"filename": filename, "sha256": artifact["sha256"]})
 
@@ -807,6 +2551,14 @@ def stage_release_assets(
         "schema_version": 1,
         "channel": channel,
         "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "metadata_version": 1,
+        "expires_at": "TBD",
+        "trust": {
+            "root_version": 1,
+            "signature_policy": "single-role-v1",
+            "signatures": [],
+            "revoked_artifacts": [],
+        },
         "releases": [
             {
                 "version": version,
@@ -817,6 +2569,8 @@ def stage_release_assets(
     }
     manifest_path = release_dir / "release-manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    provenance_path = write_release_provenance(release_dir)
+    checksums.append({"filename": provenance_path.name, "sha256": _sha256(provenance_path)})
     checksums_path = release_dir / "SHA256SUMS"
     checksums_path.write_text(
         "".join(f"{entry['sha256']}  {entry['filename']}\n" for entry in checksums),
@@ -832,6 +2586,7 @@ def stage_release_assets(
         "release_dir": str(release_dir),
         "manifest_path": str(manifest_path),
         "checksums_path": str(checksums_path),
+        "provenance_path": str(provenance_path),
         "artifacts": artifacts,
     }
 
@@ -906,6 +2661,105 @@ def _extract_archive(archive_path: Path, destination: Path) -> None:
         archive.extractall(destination, filter="data")
 
 
+def _normalized_archive_names(archive_path: Path) -> list[str]:
+    if archive_path.suffix == ".zip":
+        with ZipFile(archive_path) as archive:
+            names = archive.namelist()
+    else:
+        with tarfile.open(archive_path, "r:gz") as archive:
+            names = archive.getnames()
+    return ["/" + name.replace("\\", "/").strip("/").lower() for name in names]
+
+
+def _archive_has_any(normalized_names: list[str], patterns: list[str]) -> bool:
+    for pattern in patterns:
+        regex = re.compile(pattern)
+        if any(regex.search(name) for name in normalized_names):
+            return True
+    return False
+
+
+def toolchain_archive_audit(archive_path: str | Path, *, target_id: str | None = None) -> dict[str, Any]:
+    root = Path(archive_path).resolve()
+    if not root.exists():
+        return {
+            "schema_version": 1,
+            "command": "toolchain-archive-audit",
+            "ok": False,
+            "status": "error",
+            "summary": "Toolchain archive is missing.",
+            "archive_path": str(root),
+        }
+
+    inferred_target = target_id
+    if inferred_target is None:
+        lowered = root.name.lower()
+        for target in tier1_targets():
+            token = target["id"].lower()
+            if token in lowered and "toolchain" in lowered:
+                inferred_target = target["id"]
+                break
+
+    normalized_names = _normalized_archive_names(root)
+    checks: list[dict[str, Any]] = []
+
+    def add_check(check_id: str, title: str, patterns: list[str], *, required: bool = True) -> None:
+        ok = _archive_has_any(normalized_names, patterns)
+        checks.append(
+            {
+                "id": check_id,
+                "title": title,
+                "required": required,
+                "ok": ok,
+                "patterns": patterns,
+            }
+        )
+
+    if inferred_target == "windows-amd64-msys2-clang64":
+        add_check("gnustep_config", "Managed gnustep-config entrypoint is present.", [r"/bin/gnustep-config$"])
+        add_check("clang", "Managed clang compiler entrypoint is present.", [r"/bin/clang(\.exe)?$", r"/clang64/bin/clang(\.exe)?$"])
+        add_check("clang64_prefix", "MSYS2 clang64 prefix is preserved for GNUstep Make shell builds.", [r"/clang64/bin/clang(\.exe)?$"])
+        add_check("bash", "Managed MSYS2 shell entrypoint is present.", [r"/usr/bin/bash(\.exe)?$", r"/usr/bin/sh(\.exe)?$"])
+        add_check("make", "Managed make entrypoint is present.", [r"/bin/(g?make)(\.exe)?$", r"/usr/bin/(g?make)(\.exe)?$"])
+        add_check("sha256sum", "Managed checksum utility is present.", [r"/usr/bin/sha256sum(\.exe)?$"])
+        add_check("msys_runtime", "MSYS2 runtime DLL for usr/bin developer tools is present.", [r"/usr/bin/msys-2\.0\.dll$"])
+        add_check("common_make", "GNUstep Make common.make is present.", [r"/common\.make$"])
+        add_check("tool_make", "GNUstep Make tool.make is present.", [r"/tool\.make$"])
+        add_check("gnustep_env", "GNUstep environment activation script is present.", [r"/gnustep\.(sh|bat|ps1)$"], required=False)
+    elif inferred_target in {"linux-amd64-clang", "openbsd-amd64-clang"}:
+        add_check("runtime_tools", "Managed tool directory is present.", [r"/system/tools/", r"/tools/"])
+        add_check("source_lock", "Source-built managed toolchain source lock is present.", [r"/source-lock\.json$"])
+        add_check("component_inventory", "Managed toolchain component inventory is present.", [r"/component-inventory\.json$"])
+        add_check("toolchain_manifest", "Managed toolchain manifest is present.", [r"/toolchain-manifest\.json$"])
+    else:
+        checks.append(
+            {
+                "id": "target-specific-audit",
+                "title": "No target-specific archive audit rules are defined for this artifact.",
+                "required": False,
+                "ok": True,
+                "patterns": [],
+            }
+        )
+
+    ok = all(check["ok"] for check in checks if check["required"])
+    if inferred_target == "windows-amd64-msys2-clang64" and not ok:
+        summary = "Windows MSYS2 toolchain archive is missing required build-capable components."
+    else:
+        summary = "Toolchain archive audit completed." if ok else "Toolchain archive audit failed."
+
+    return {
+        "schema_version": 1,
+        "command": "toolchain-archive-audit",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": summary,
+        "archive_path": str(root),
+        "target_id": inferred_target,
+        "checks": checks,
+    }
+
+
 def qualify_release_install(release_dir: str | Path, install_root: str | Path) -> dict[str, Any]:
     verification = verify_release_directory(release_dir)
     if not verification["ok"]:
@@ -966,7 +2820,9 @@ def qualify_full_cli_handoff(release_dir: str | Path, install_root: str | Path) 
         }
 
     binary_path = install_path / "bin" / "gnustep"
+    runtime_binary = install_path / "libexec" / "gnustep-cli" / "bin" / "gnustep"
     runtime_root = install_path / "libexec" / "gnustep-cli"
+    state_path = install_path / "state" / "cli-state.json"
     checks: list[dict[str, Any]] = []
 
     def add_check(check_id: str, ok: bool, message: str) -> None:
@@ -980,16 +2836,40 @@ def qualify_full_cli_handoff(release_dir: str | Path, install_root: str | Path) 
 
     add_check("install.binary", binary_path.exists(), "Installed CLI binary is present.")
     add_check("install.binary_executable", os.access(binary_path, os.X_OK), "Installed CLI binary is executable.")
+    add_check("install.runtime_binary", runtime_binary.exists(), "Installed runtime CLI binary is present under libexec/gnustep-cli/bin.")
     add_check(
         "install.runtime_bundle",
         runtime_root.exists(),
         "Installed CLI runtime bundle is present under libexec/gnustep-cli.",
+    )
+    add_check("install.state_file", state_path.exists(), "Installed CLI state file exists.")
+    add_check(
+        "install.no_python_runtime_scripts",
+        not (runtime_root / "scripts" / "internal").exists(),
+        "Installed CLI bundle does not contain the bundled Python scripts/internal runtime.",
+    )
+    add_check(
+        "install.no_python_runtime_modules",
+        not (runtime_root / "src" / "gnustep_cli_shared").exists(),
+        "Installed CLI bundle does not contain the bundled gnustep_cli_shared Python runtime.",
     )
     add_check(
         "install.runtime_examples",
         (runtime_root / "examples").exists(),
         "Installed CLI runtime bundle includes bundled example manifests.",
     )
+    if state_path.exists():
+        try:
+            state_payload = json.loads(state_path.read_text())
+        except json.JSONDecodeError:
+            state_payload = None
+        add_check(
+            "install.state_file_valid",
+            isinstance(state_payload, dict) and state_payload.get("schema_version") == 1 and state_payload.get("status") == "healthy",
+            "Installed CLI state file is valid JSON with healthy status.",
+        )
+    else:
+        add_check("install.state_file_valid", False, "Installed CLI state file could not be validated because it is missing.")
 
     command_results: list[dict[str, Any]] = []
     for args, expected in (
@@ -1084,14 +2964,455 @@ def publish_github_release(
     title: str | None = None,
 ) -> dict[str, Any]:
     plan = github_release_plan(repo, version, release_dir, channel=channel, title=title)
-    proc = subprocess.run(plan["command_line"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
-    plan["stdout"] = proc.stdout
-    plan["stderr"] = proc.stderr
-    plan["exit_status"] = proc.returncode
-    plan["ok"] = proc.returncode == 0
-    plan["status"] = "ok" if proc.returncode == 0 else "error"
-    plan["summary"] = "GitHub Release published." if proc.returncode == 0 else "GitHub Release publication failed."
+    tag = plan["tag"]
+    title = title or f"GNUstep CLI {version}"
+    prerelease_args = ["--prerelease"] if channel != "stable" else []
+    view_proc = subprocess.run(
+        ["gh", "release", "view", tag, "--repo", repo],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    commands = []
+    stdout_parts = []
+    stderr_parts = []
+
+    if view_proc.returncode == 0:
+        edit_command = ["gh", "release", "edit", tag, "--repo", repo, "--title", title, *prerelease_args]
+        upload_command = ["gh", "release", "upload", tag, "--repo", repo, "--clobber", *plan["assets"]]
+        commands.extend([edit_command, upload_command])
+    else:
+        create_command = list(plan["command_line"])
+        commands.append(create_command)
+
+    ok = True
+    exit_status = 0
+    for command in commands:
+        proc = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        stdout_parts.append(proc.stdout)
+        stderr_parts.append(proc.stderr)
+        if proc.returncode != 0:
+            ok = False
+            exit_status = proc.returncode
+            break
+
+    plan["executed_commands"] = commands
+    plan["release_existed"] = view_proc.returncode == 0
+    plan["stdout"] = "".join(stdout_parts)
+    plan["stderr"] = "".join(stderr_parts)
+    plan["exit_status"] = exit_status
+    plan["ok"] = ok
+    plan["status"] = "ok" if ok else "error"
+    plan["summary"] = "GitHub Release published." if ok else "GitHub Release publication failed."
     return plan
+
+
+def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
+    root = Path(packages_dir).resolve()
+    entries: list[dict[str, Any]] = []
+    plan_blockers: list[dict[str, str]] = []
+    if not root.exists():
+        return {
+            "schema_version": 1,
+            "command": "package-artifact-build-plan",
+            "ok": False,
+            "status": "error",
+            "summary": "Package directory does not exist.",
+            "packages_dir": str(root),
+        }
+
+    for manifest_path in sorted(root.glob('*/package.json')):
+        manifest = json.loads(manifest_path.read_text())
+        package_id = manifest["id"]
+        source = manifest.get("source", {})
+        source_sha = source.get("sha256")
+        source_url = source.get("url")
+        package_blockers: list[str] = []
+        if not source_url:
+            package_blockers.append("missing_source_url")
+        if not source_sha or str(source_sha).endswith("tbd") or "placeholder" in str(source_sha).lower() or "development" in str(source_sha).lower():
+            package_blockers.append("missing_verified_source_digest")
+        for blocker in package_blockers:
+            plan_blockers.append({"package": package_id, "artifact": "", "code": blocker})
+        artifacts = []
+        for artifact in manifest.get("artifacts", []):
+            artifact_sha = artifact.get("sha256")
+            artifact_blockers = list(package_blockers)
+            if not artifact.get("url"):
+                artifact_blockers.append("missing_artifact_url")
+            if not artifact_sha or str(artifact_sha).endswith("tbd") or "placeholder" in str(artifact_sha).lower() or "published-artifact-checksum-tbd" == str(artifact_sha):
+                artifact_blockers.append("missing_published_artifact_digest")
+            for blocker in artifact_blockers:
+                if blocker not in package_blockers:
+                    plan_blockers.append({"package": package_id, "artifact": artifact["id"], "code": blocker})
+            artifact_ready = len(artifact_blockers) == 0
+            artifacts.append(
+                {
+                    "id": artifact["id"],
+                    "os": artifact["os"],
+                    "arch": artifact["arch"],
+                    "compiler_family": artifact["compiler_family"],
+                    "toolchain_flavor": artifact["toolchain_flavor"],
+                    "format": artifact.get("format", "tar.gz" if artifact.get("os") != "windows" else "zip"),
+                    "source_manifest": str(manifest_path),
+                    "source": source,
+                    "build_from_source": True,
+                    "provenance_required": True,
+                    "signature_required": True,
+                    "source_verified": len(package_blockers) == 0,
+                    "artifact_verified": not any(blocker.startswith("missing_artifact") or blocker.startswith("missing_published") for blocker in artifact_blockers),
+                    "production_ready": artifact_ready,
+                    "publish": artifact_ready,
+                    "policy_blockers": artifact_blockers,
+                }
+            )
+        package_ready = len(package_blockers) == 0 and all(artifact["production_ready"] for artifact in artifacts)
+        entries.append(
+            {
+                "id": package_id,
+                "version": manifest["version"],
+                "kind": manifest["kind"],
+                "source": source,
+                "source_type": source.get("type"),
+                "source_url": source_url,
+                "source_sha256": source_sha,
+                "source_verified": len(package_blockers) == 0,
+                "provenance_required": True,
+                "production_ready": package_ready,
+                "dependencies": manifest.get("dependencies", []),
+                "policy_blockers": package_blockers,
+                "artifacts": artifacts,
+            }
+        )
+    production_ready = len(plan_blockers) == 0 and all(package["production_ready"] for package in entries)
+
+    return {
+        "schema_version": 1,
+        "command": "package-artifact-build-plan",
+        "ok": True,
+        "status": "ok",
+        "summary": "Package artifact build plan generated." if production_ready else "Package artifact build plan generated with policy blockers.",
+        "packages_dir": str(root),
+        "production_ready": production_ready,
+        "policy_blockers": plan_blockers,
+        "packages": entries,
+    }
+
+
+
+
+def package_artifact_publication_gate(packages_dir: str | Path) -> dict[str, Any]:
+    plan = package_artifact_build_plan(packages_dir)
+    checks: list[dict[str, Any]] = []
+    if not plan.get("ok"):
+        checks.append({
+            "id": "package-artifact-build-plan",
+            "ok": False,
+            "summary": plan.get("summary", "Package artifact build plan failed."),
+            "payload": plan,
+        })
+    else:
+        checks.append({
+            "id": "package-artifact-build-plan",
+            "ok": True,
+            "summary": plan.get("summary", "Package artifact build plan generated."),
+            "payload": {
+                "packages_dir": plan.get("packages_dir"),
+                "package_count": len(plan.get("packages", [])),
+            },
+        })
+        checks.append({
+            "id": "package-artifacts-production-ready",
+            "ok": bool(plan.get("production_ready")),
+            "summary": "Package artifacts are production-ready." if plan.get("production_ready") else "Package artifacts have policy blockers and must not be published.",
+            "payload": {
+                "policy_blockers": plan.get("policy_blockers", []),
+                "packages": [
+                    {
+                        "id": package.get("id"),
+                        "production_ready": package.get("production_ready"),
+                        "policy_blockers": package.get("policy_blockers", []),
+                        "artifacts": [
+                            {
+                                "id": artifact.get("id"),
+                                "production_ready": artifact.get("production_ready"),
+                                "policy_blockers": artifact.get("policy_blockers", []),
+                            }
+                            for artifact in package.get("artifacts", [])
+                        ],
+                    }
+                    for package in plan.get("packages", [])
+                ],
+            },
+        })
+    ok = all(check["ok"] for check in checks)
+    return {
+        "schema_version": 1,
+        "command": "package-artifact-publication-gate",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": "Package artifact publication gate passed." if ok else "Package artifact publication gate failed.",
+        "packages_dir": str(Path(packages_dir).resolve()),
+        "checks": checks,
+    }
+
+def published_url_qualification_plan(
+    release_url: str,
+    *,
+    config_path: str = "~/oracletestvms-libvirt.toml",
+) -> dict[str, Any]:
+    release_manifest_url = release_url.rstrip("/") + "/release-manifest.json"
+    targets = [
+        {
+            "id": "debian-public-bootstrap-full-cli-package",
+            "profile": "debian-13-gnome-wayland",
+            "status": "ready",
+            "validation_kind": "published-url-managed-release",
+            "manifest_url": release_manifest_url,
+            "expected_probes": [
+                "bootstrap setup from the public release-manifest.json",
+                "installed gnustep --version and --help",
+                "installed gnustep doctor --json",
+                "package install/remove smoke from a reviewed package index",
+            ],
+        },
+        {
+            "id": "openbsd-public-native-package-smoke",
+            "profile": "openbsd-7.8-fvwm",
+            "status": "ready",
+            "validation_kind": "published-url-native-packaged-release",
+            "manifest_url": release_manifest_url,
+            "expected_probes": [
+                "pkg_add native GNUstep prerequisites",
+                "build and run the full CLI against packaged GNUstep",
+                "doctor --json native classification",
+                "package install/remove smoke",
+            ],
+        },
+        {
+            "id": "fedora-public-gcc-interop-smoke",
+            "profile": "fedora-gnome",
+            "status": "ready",
+            "validation_kind": "published-url-gcc-interoperability",
+            "manifest_url": release_manifest_url,
+            "expected_probes": [
+                "install Fedora packaged GNUstep prerequisites",
+                "build and run the full CLI against GCC/libobjc GNUstep",
+                "doctor --json reports interoperability-only policy",
+                "package install/remove smoke selects GCC-compatible artifacts",
+            ],
+        },
+        {
+            "id": "arch-public-gcc-interop-smoke",
+            "profile": "arch-gnome",
+            "status": "ready",
+            "validation_kind": "published-url-gcc-interoperability",
+            "manifest_url": release_manifest_url,
+            "expected_probes": [
+                "install Arch packaged GNUstep prerequisites",
+                "build and run the full CLI against GCC/libobjc GNUstep",
+                "doctor --json reports interoperability-only policy",
+                "package install/remove smoke selects GCC-compatible artifacts",
+            ],
+        },
+        {
+            "id": "windows-public-bootstrap-runtime-package",
+            "profile": "windows-2022",
+            "status": "ready",
+            "validation_kind": "published-url-managed-msys2-release",
+            "manifest_url": release_manifest_url,
+            "expected_probes": [
+                "PowerShell bootstrap setup from public release-manifest.json",
+                "installed gnustep.exe --version and --help from PowerShell and cmd.exe",
+                "installed gnustep.exe doctor --json with managed msys2-clang64 classification",
+                "package install/remove smoke",
+                "extracted toolchain rebuild smoke using GNUstep.ps1/GNUstep.bat activation",
+            ],
+        },
+    ]
+    return {
+        "schema_version": 1,
+        "command": "published-url-qualification-plan",
+        "ok": True,
+        "status": "ready",
+        "summary": "Published URL release qualification plan generated.",
+        "release_url": release_url.rstrip("/"),
+        "release_manifest_url": release_manifest_url,
+        "config_path": config_path,
+        "cleanup_policy": "destroy-on-exit",
+        "targets": targets,
+    }
+
+
+def otvm_release_host_validation_plan(
+    release_dir: str | Path,
+    *,
+    config_path: str = "~/oracletestvms-libvirt.toml",
+) -> dict[str, Any]:
+    root = Path(release_dir).resolve()
+    manifest_path = root / "release-manifest.json"
+    if not manifest_path.exists():
+        return {
+            "schema_version": 1,
+            "command": "otvm-release-host-validation-plan",
+            "ok": False,
+            "status": "error",
+            "summary": "Release manifest is missing.",
+            "release_dir": str(root),
+        }
+
+    release_manifest_root_unix = "/tmp/gnustep-smoke/release"
+    release_manifest_root_windows = r"C:\gnustep-smoke\release"
+    release_manifest_guest_unix = f"{release_manifest_root_unix}/release-manifest.json"
+    release_manifest_guest_windows = f"{release_manifest_root_windows}\\release-manifest.json"
+    config_ref = config_path
+
+    targets = [
+        {
+            "id": "debian-release-artifact-smoke",
+            "profile": "debian-13-gnome-wayland",
+            "status": "ready",
+            "validation_kind": "managed-release-artifact",
+            "commands": [
+                f'PYTHONPATH=src python3 -m oracletestvms --config {config_ref} preflight debian-13-gnome-wayland',
+                f'PYTHONPATH=src python3 -m oracletestvms --config {config_ref} create debian-13-gnome-wayland',
+            ],
+            "guest_release_manifest_path": release_manifest_guest_unix,
+            "expected_probes": [
+                "bootstrap setup against the staged release-manifest.json",
+                "managed clang compile-link-run on a clean lease",
+                "package install/remove smoke with reviewed package fixtures",
+            ],
+            "notes": "Use the staged release artifacts from this release directory and the ~/.ssh/otvm operator keypair.",
+        },
+        {
+            "id": "openbsd-native-packaged-smoke",
+            "profile": "openbsd-7.8-fvwm",
+            "status": "ready",
+            "validation_kind": "native-packaged-toolchain",
+            "commands": [
+                f'PYTHONPATH=src python3 -m oracletestvms --config {config_ref} preflight openbsd-7.8-fvwm',
+                f'PYTHONPATH=src python3 -m oracletestvms --config {config_ref} create openbsd-7.8-fvwm',
+            ],
+            "guest_release_manifest_path": release_manifest_guest_unix,
+            "expected_probes": [
+                "pkg_add gmake gnustep-make gnustep-base gnustep-libobjc2",
+                "source /usr/local/share/GNUstep/Makefiles/GNUstep.sh",
+                "Foundation compile-link-run probe in the packaged GNUstep environment",
+            ],
+            "notes": "Keep OpenBSD on the native pkg_add path by default; do not substitute a managed OpenBSD toolchain unless qualification explicitly requires it.",
+        },
+        {
+            "id": "windows-release-artifact-smoke",
+            "profile": "windows-2022",
+            "status": "ready",
+            "validation_kind": "managed-msys2-release-artifact",
+            "commands": [
+                f'PYTHONPATH=src python3 -m oracletestvms --config {config_ref} preflight windows-2022',
+                f'PYTHONPATH=src python3 -m oracletestvms --config {config_ref} create windows-2022',
+            ],
+            "guest_release_manifest_path": release_manifest_guest_windows,
+            "expected_probes": [
+                "stage the release directory onto the Windows lease",
+                "assemble or activate the MSYS2 clang64 managed toolchain from the staged release",
+                "run bootstrap/full CLI smoke against the staged release artifacts",
+            ],
+            "notes": "Windows now uses the libvirt-backed otvm path rather than OCI-oriented assumptions.",
+        },
+    ]
+
+    return {
+        "schema_version": 1,
+        "command": "otvm-release-host-validation-plan",
+        "ok": True,
+        "status": "ok",
+        "summary": "Release-scoped otvm host validation plan generated.",
+        "release_dir": str(root),
+        "release_manifest_path": str(manifest_path),
+        "config_path": config_ref,
+        "operator_key_public": "~/.ssh/otvm/id_rsa.pub",
+        "operator_key_private": "~/.ssh/otvm/id_rsa",
+        "guest_stage_roots": {
+            "unix": release_manifest_root_unix,
+            "windows": release_manifest_root_windows,
+        },
+        "targets": targets,
+    }
+
+
+def prepare_github_release(
+    repo: str,
+    version: str,
+    output_dir: str | Path,
+    base_url: str,
+    *,
+    cli_inputs: dict[str, str | Path] | None = None,
+    toolchain_inputs: dict[str, str | Path] | None = None,
+    install_root: str | Path | None = None,
+    handoff_install_root: str | Path | None = None,
+    channel: str = "stable",
+    title: str | None = None,
+) -> dict[str, Any]:
+    staged = stage_release_assets(
+        version,
+        output_dir,
+        base_url,
+        cli_inputs=cli_inputs,
+        toolchain_inputs=toolchain_inputs,
+        channel=channel,
+    )
+    release_dir = staged["release_dir"]
+    verification = verify_release_directory(release_dir)
+
+    toolchain_audits = []
+    manifest = json.loads((Path(release_dir) / "release-manifest.json").read_text())
+    for artifact in manifest["releases"][0]["artifacts"]:
+        if artifact["kind"] != "toolchain":
+            continue
+        audit = toolchain_archive_audit(Path(release_dir) / artifact["filename"], target_id=artifact["id"].removeprefix("toolchain-"))
+        toolchain_audits.append(audit)
+
+    if install_root is None:
+        install_root = Path(output_dir).resolve() / "qualification" / "artifacts"
+    qualified = qualify_release_install(release_dir, install_root)
+
+    handoff = None
+    if handoff_install_root is not None:
+        handoff = qualify_full_cli_handoff(release_dir, handoff_install_root)
+
+    host_validation_plan = otvm_release_host_validation_plan(release_dir)
+    host_validation_plan_path = Path(release_dir) / "otvm-host-validation-plan.json"
+    host_validation_plan_path.write_text(json.dumps(host_validation_plan, indent=2) + "\n")
+
+    publish_plan = github_release_plan(
+        repo,
+        version,
+        release_dir,
+        channel=channel,
+        title=title,
+    )
+
+    ok = staged["ok"] and verification["ok"] and all(audit["ok"] for audit in toolchain_audits) and qualified["ok"] and (handoff is None or handoff["ok"])
+    return {
+        "schema_version": 1,
+        "command": "prepare-github-release",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": (
+            "Release staging, verification, qualification, and publish planning completed."
+            if ok
+            else "Release preparation failed."
+        ),
+        "stage_release": staged,
+        "verify_release": verification,
+        "toolchain_archive_audits": toolchain_audits,
+        "qualify_release": qualified,
+        "qualify_full_cli_handoff": handoff,
+        "otvm_host_validation_plan": host_validation_plan,
+        "otvm_host_validation_plan_path": str(host_validation_plan_path),
+        "github_release_plan": publish_plan,
+    }
 
 
 def write_release_manifest(version: str, base_url: str, output_path: str | Path) -> Path:

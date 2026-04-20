@@ -5,9 +5,12 @@
   "ok": false,
   "status": "error",
   "environment_classification": "toolchain_incompatible",
+  "native_toolchain_assessment": "interoperability_only",
   "summary": "A GNUstep toolchain was detected, but it is incompatible with the selected managed artifacts.",
   "environment": {
     "os": "linux",
+    "os_version": "debian-sid",
+    "distribution_id": "debian",
     "arch": "amd64",
     "detected_layouts": [
       "debian"
@@ -33,6 +36,17 @@
         "associated_objects": false,
         "exceptions": true
       }
+    },
+    "native_toolchain": {
+      "assessment": "interoperability_only",
+      "preference": "managed",
+      "message": "The detected packaged GNUstep environment is suitable for interoperability validation, but it is not the preferred runtime model.",
+      "reasons": [
+        {
+          "code": "gcc_interop_only",
+          "message": "debian currently looks like a GCC-oriented packaged GNUstep environment."
+        }
+      ]
     }
   },
   "compatibility": {
@@ -54,6 +68,20 @@
   },
   "checks": [
     {
+      "id": "host.identity",
+      "title": "Determine host identity",
+      "status": "ok",
+      "severity": "info",
+      "message": "Detected linux on amd64."
+    },
+    {
+      "id": "bootstrap.downloader",
+      "title": "Check for downloader",
+      "status": "ok",
+      "severity": "error",
+      "message": "Found curl or wget."
+    },
+    {
       "id": "toolchain.detect",
       "title": "Detect GNUstep toolchain",
       "status": "ok",
@@ -61,19 +89,44 @@
       "message": "Detected a GCC-based GNUstep toolchain."
     },
     {
+      "id": "native-toolchain.assess",
+      "title": "Assess native packaged toolchain path",
+      "status": "warning",
+      "severity": "warning",
+      "message": "The detected packaged GNUstep environment is suitable for interoperability validation, but it is not the preferred runtime model."
+    },
+    {
+      "id": "toolchain.probe",
+      "title": "Compile/link/run probe",
+      "status": "ok",
+      "severity": "error",
+      "message": "The compiler can compile, link, and run a minimal Objective-C probe."
+    },
+    {
+      "id": "managed.install.integrity",
+      "title": "Inspect managed install integrity",
+      "status": "not_run",
+      "severity": "warning",
+      "message": "No managed install state was detected on this host."
+    },
+    {
       "id": "toolchain.compatibility",
       "title": "Evaluate managed artifact compatibility",
       "status": "error",
       "severity": "error",
-      "message": "The detected toolchain is not compatible with the selected managed Clang artifact."
+      "message": "The environment is not compatible with artifact linux-amd64-clang."
     }
   ],
   "actions": [
     {
+      "kind": "use_existing_toolchain",
+      "priority": 2,
+      "message": "The detected native GNUstep toolchain is suitable for interoperability validation, but the managed toolchain remains the preferred path."
+    },
+    {
       "kind": "install_managed_toolchain",
       "priority": 1,
-      "message": "Install the supported Clang-based managed toolchain."
+      "message": "Install the supported managed GNUstep toolchain for the preferred runtime model."
     }
   ]
 }
-

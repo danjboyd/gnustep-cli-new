@@ -1,0 +1,180 @@
+{
+  "profiles": {
+    "arch-gnome-wayland": {
+      "acceptance_default": false,
+      "acceptance_verify_command": "sudo /usr/local/libexec/oracletestvms-linux-gnome-validate",
+      "description": "Arch GNOME desktop over xrdp for GUI validation from a repo-built or operator-pinned libvirt image",
+      "exposed_ports": [
+        22,
+        3389
+      ],
+      "family": "linux",
+      "gui_desktop": "gnome",
+      "gui_service": "xrdp",
+      "gui_session_model": "on-demand-tester-desktop",
+      "gui_session_type": "x11",
+      "gui_username": "tester",
+      "image_config_key": "arch_gnome_wayland_image_ocid",
+      "image_mode": "config",
+      "image_os": "",
+      "image_os_version": "",
+      "image_override_config_key": "",
+      "lease_configured_marker": "/var/lib/oracletestvms/arch-lease-configured",
+      "lease_validation_command": "sudo /usr/local/libexec/oracletestvms-linux-gnome-validate",
+      "memory_gbs": 8,
+      "ocpus": 2,
+      "readiness_probes": [
+        "tcp:22",
+        "tcp:3389",
+        "ssh:test -f /var/lib/oracletestvms/linux-gnome-image-ready"
+      ],
+      "remote_access": [
+        "ssh",
+        "rdp"
+      ],
+      "shape": "VM.Standard.E5.Flex",
+      "slug": "arch-gnome-wayland",
+      "ssh_username": "arch"
+    },
+    "debian-13-gnome-wayland": {
+      "acceptance_default": true,
+      "acceptance_verify_command": "sudo /usr/local/libexec/oracletestvms-debian13-validate",
+      "description": "Debian 13 GNOME desktop over xrdp for GUI validation",
+      "exposed_ports": [
+        22,
+        3389
+      ],
+      "family": "linux",
+      "gui_desktop": "gnome",
+      "gui_service": "xrdp",
+      "gui_session_model": "on-demand-tester-desktop",
+      "gui_session_type": "x11",
+      "gui_username": "tester",
+      "image_config_key": "debian13_wayland_image_ocid",
+      "image_mode": "config",
+      "image_os": "",
+      "image_os_version": "",
+      "image_override_config_key": "",
+      "lease_configured_marker": "/var/lib/oracletestvms/debian13-lease-configured",
+      "lease_validation_command": "sudo /usr/local/libexec/oracletestvms-debian13-validate",
+      "memory_gbs": 8,
+      "ocpus": 2,
+      "readiness_probes": [
+        "tcp:22",
+        "tcp:3389",
+        "ssh:test -f /var/lib/oracletestvms/debian13-wayland-image-ready"
+      ],
+      "remote_access": [
+        "ssh",
+        "rdp"
+      ],
+      "shape": "VM.Standard.E5.Flex",
+      "slug": "debian-13-gnome-wayland",
+      "ssh_username": "debian"
+    },
+    "fedora-gnome-wayland": {
+      "acceptance_default": false,
+      "acceptance_verify_command": "sudo /usr/local/libexec/oracletestvms-linux-gnome-validate",
+      "description": "Fedora GNOME desktop over xrdp for GUI validation from a repo-built or operator-pinned libvirt image",
+      "exposed_ports": [
+        22,
+        3389
+      ],
+      "family": "linux",
+      "gui_desktop": "gnome",
+      "gui_service": "xrdp",
+      "gui_session_model": "on-demand-tester-desktop",
+      "gui_session_type": "x11",
+      "gui_username": "tester",
+      "image_config_key": "fedora_gnome_wayland_image_ocid",
+      "image_mode": "config",
+      "image_os": "",
+      "image_os_version": "",
+      "image_override_config_key": "",
+      "lease_configured_marker": "/var/lib/oracletestvms/fedora-lease-configured",
+      "lease_validation_command": "sudo /usr/local/libexec/oracletestvms-linux-gnome-validate",
+      "memory_gbs": 8,
+      "ocpus": 2,
+      "readiness_probes": [
+        "tcp:22",
+        "tcp:3389",
+        "ssh:test -f /var/lib/oracletestvms/linux-gnome-image-ready"
+      ],
+      "remote_access": [
+        "ssh",
+        "rdp"
+      ],
+      "shape": "VM.Standard.E5.Flex",
+      "slug": "fedora-gnome-wayland",
+      "ssh_username": "fedora"
+    },
+    "openbsd-7.8-fvwm": {
+      "acceptance_default": true,
+      "acceptance_verify_command": "doas true && test -f /var/run/oracletestvms/openbsd78-ready && pgrep Xvnc >/dev/null",
+      "description": "OpenBSD 7.8 custom image with stock fvwm and VNC tunneled over SSH",
+      "exposed_ports": [
+        22
+      ],
+      "family": "openbsd",
+      "gui_desktop": "",
+      "gui_service": "",
+      "gui_session_model": "",
+      "gui_session_type": "",
+      "gui_username": "tester",
+      "image_config_key": "openbsd78_image_ocid",
+      "image_mode": "config",
+      "image_os": "",
+      "image_os_version": "",
+      "image_override_config_key": "",
+      "lease_configured_marker": "",
+      "lease_validation_command": "",
+      "memory_gbs": 4,
+      "ocpus": 2,
+      "readiness_probes": [
+        "tcp:22",
+        "ssh:test -f /var/run/oracletestvms/openbsd78-ready"
+      ],
+      "remote_access": [
+        "ssh",
+        "vnc-over-ssh"
+      ],
+      "shape": "VM.Standard.E5.Flex",
+      "slug": "openbsd-7.8-fvwm",
+      "ssh_username": "oracleadmin"
+    },
+    "windows-2022": {
+      "acceptance_default": true,
+      "acceptance_verify_command": "whoami",
+      "description": "Windows Server 2022 for MSI validation and UAT",
+      "exposed_ports": [
+        22,
+        3389
+      ],
+      "family": "windows",
+      "gui_desktop": "",
+      "gui_service": "",
+      "gui_session_model": "",
+      "gui_session_type": "",
+      "gui_username": "opc",
+      "image_config_key": "",
+      "image_mode": "platform_latest",
+      "image_os": "Windows",
+      "image_os_version": "Server 2022 Standard",
+      "image_override_config_key": "windows_2022_image_ocid",
+      "lease_configured_marker": "",
+      "lease_validation_command": "",
+      "memory_gbs": 12,
+      "ocpus": 1,
+      "readiness_probes": [
+        "tcp:3389"
+      ],
+      "remote_access": [
+        "ssh",
+        "rdp"
+      ],
+      "shape": "VM.Standard.E5.Flex",
+      "slug": "windows-2022",
+      "ssh_username": "otvmbootstrap"
+    }
+  }
+}

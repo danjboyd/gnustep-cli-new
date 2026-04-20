@@ -1,1 +1,59 @@
-Build infrastructure payload generated.
+{
+  "schema_version": 1,
+  "kind": "managed-toolchain",
+  "toolchain_version": "2026.04.0",
+  "target": {
+    "id": "windows-amd64-msys2-clang64",
+    "os": "windows",
+    "arch": "amd64",
+    "compiler_family": "clang",
+    "toolchain_flavor": "msys2-clang64"
+  },
+  "runtime": {
+    "objc_runtime": "libobjc2",
+    "objc_abi": "modern",
+    "required_features": [
+      "blocks"
+    ]
+  },
+  "components": [
+    "libobjc2",
+    "libdispatch",
+    "tools-make",
+    "libs-base",
+    "libs-gui",
+    "libs-back"
+  ],
+  "published": true,
+  "platform_policy": {
+    "supported_distributions": [],
+    "portability_policy": "platform-wide",
+    "notes": null
+  },
+  "source_policy": {
+    "strategy": "msys2-assembly",
+    "production_eligible": true,
+    "lock_file": "input-manifest.json",
+    "component_inventory": "component-inventory.json",
+    "host_origin_paths_allowed": false
+  },
+  "developer_entrypoints": {
+    "compiler": [
+      "bin/clang.exe"
+    ],
+    "build_shell": [
+      "usr/bin/bash.exe",
+      "usr/bin/sh.exe"
+    ],
+    "build_driver": [
+      "usr/bin/make.exe"
+    ],
+    "checksum_tool": [
+      "usr/bin/sha256sum.exe"
+    ],
+    "gnustep_makefiles": [
+      "share/GNUstep/Makefiles/common.make",
+      "share/GNUstep/Makefiles/tool.make"
+    ]
+  }
+}

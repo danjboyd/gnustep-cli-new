@@ -1,1 +1,36 @@
-Build infrastructure payload generated.
+{
+  "schema_version": 1,
+  "kind": "managed-toolchain",
+  "toolchain_version": "2026.04.0",
+  "target": {
+    "id": "openbsd-amd64-clang",
+    "os": "openbsd",
+    "arch": "amd64",
+    "compiler_family": "clang",
+    "toolchain_flavor": "clang"
+  },
+  "runtime": {
+    "objc_runtime": "libobjc2",
+    "objc_abi": "modern",
+    "required_features": [
+      "blocks"
+    ]
+  },
+  "components": [
+    "libobjc2",
+    "libdispatch",
+    "tools-make",
+    "libs-base",
+    "libs-corebase",
+    "libs-gui",
+    "libs-back"
+  ],
+  "published": true,
+  "source_policy": {
+    "strategy": "source-build",
+    "production_eligible": true,
+    "lock_file": "source-lock.json",
+    "component_inventory": "component-inventory.json",
+    "host_origin_paths_allowed": false
+  }
+}

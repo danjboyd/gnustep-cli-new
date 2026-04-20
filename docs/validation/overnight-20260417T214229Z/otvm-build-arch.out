@@ -1,0 +1,9 @@
+{
+  "contract_version": "v1",
+  "error": {
+    "code": "internal_error",
+    "details": {},
+    "message": "[Errno 28] No space left on device: '/tmp/oracletestvms-libvirt/image-cache/arch-gnome/arch-gnome-wayland-prepared-base.qcow2' -> '/tmp/oracletestvms-libvirt/image-cache/arch-gnome/arch-gnome-wayland-prepared-base-validate-snqtw1vq.qcow2'",
+    "retryable": false
+  }
+}

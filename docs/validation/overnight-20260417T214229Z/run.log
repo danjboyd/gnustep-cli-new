@@ -1,0 +1,78 @@
+2026-04-17T21:42:29Z overnight validation evidence: /home/danboyd/gnustep-cli-new/docs/validation/overnight-20260417T214229Z
+2026-04-17T21:42:29Z repo: /home/danboyd/gnustep-cli-new
+2026-04-17T21:42:29Z otvm root: /home/danboyd/gnustep-cli-new/../OracleTestVMs
+2026-04-17T21:42:29Z otvm config: /home/danboyd/oracletestvms-libvirt.toml
+2026-04-17T21:42:29Z profiles: debian-13-gnome-wayland openbsd-7.8-fvwm fedora-gnome-wayland arch-gnome-wayland windows-2022
+2026-04-17T21:42:29Z START git-status-before
+2026-04-17T21:42:29Z PASS git-status-before
+2026-04-17T21:42:29Z START otvm-head
+2026-04-17T21:42:29Z PASS otvm-head
+2026-04-17T21:42:29Z START otvm-config-show
+2026-04-17T21:42:29Z PASS otvm-config-show
+2026-04-17T21:42:29Z START otvm-catalog-list
+2026-04-17T21:42:30Z PASS otvm-catalog-list
+2026-04-17T21:42:30Z START otvm-list-before
+2026-04-17T21:42:30Z PASS otvm-list-before
+2026-04-17T21:42:30Z START python-unit-tests
+2026-04-17T21:42:42Z PASS python-unit-tests
+2026-04-17T21:42:42Z START native-unit-tests
+2026-04-17T21:42:46Z PASS native-unit-tests
+2026-04-17T21:42:46Z START release-plan
+2026-04-17T21:42:46Z PASS release-plan
+2026-04-17T21:42:46Z START local-release-host-validation-plan
+2026-04-17T21:42:46Z PASS local-release-host-validation-plan
+2026-04-17T21:42:46Z START local-release-qualification-bundle
+2026-04-17T21:42:50Z PASS local-release-qualification-bundle
+2026-04-17T21:42:50Z fedora image pin missing; building Fedora libvirt image
+2026-04-17T21:42:50Z START otvm-build-fedora
+2026-04-17T22:18:59Z FAIL otvm-build-fedora rc=1
+2026-04-17T22:18:59Z arch image pin missing; building Arch libvirt image
+2026-04-17T22:18:59Z START otvm-build-arch
+2026-04-17T22:18:59Z FAIL otvm-build-arch rc=1
+2026-04-17T22:18:59Z START otvm-config-show-after-image-build
+2026-04-17T22:18:59Z PASS otvm-config-show-after-image-build
+2026-04-17T22:18:59Z START preflight-debian-13-gnome-wayland
+2026-04-17T22:19:08Z PASS preflight-debian-13-gnome-wayland
+2026-04-17T22:19:08Z START preflight-openbsd-7-8-fvwm
+2026-04-17T22:19:16Z PASS preflight-openbsd-7-8-fvwm
+2026-04-17T22:19:16Z START preflight-fedora-gnome-wayland
+2026-04-17T22:19:22Z FAIL preflight-fedora-gnome-wayland rc=1
+2026-04-17T22:19:22Z START preflight-arch-gnome-wayland
+2026-04-17T22:19:28Z FAIL preflight-arch-gnome-wayland rc=1
+2026-04-17T22:19:28Z START preflight-windows-2022
+2026-04-17T22:19:36Z PASS preflight-windows-2022
+2026-04-17T22:19:36Z START acceptance-debian-13-gnome-wayland
+2026-04-17T22:20:07Z PASS acceptance-debian-13-gnome-wayland
+2026-04-17T22:20:07Z START otvm-list-after-debian-13-gnome-wayland
+2026-04-17T22:20:07Z PASS otvm-list-after-debian-13-gnome-wayland
+2026-04-17T22:20:07Z START otvm-reap-after-debian-13-gnome-wayland
+2026-04-17T22:20:09Z PASS otvm-reap-after-debian-13-gnome-wayland
+2026-04-17T22:20:09Z START acceptance-openbsd-7-8-fvwm
+2026-04-17T22:21:13Z PASS acceptance-openbsd-7-8-fvwm
+2026-04-17T22:21:13Z START otvm-list-after-openbsd-7-8-fvwm
+2026-04-17T22:21:13Z PASS otvm-list-after-openbsd-7-8-fvwm
+2026-04-17T22:21:13Z START otvm-reap-after-openbsd-7-8-fvwm
+2026-04-17T22:21:14Z PASS otvm-reap-after-openbsd-7-8-fvwm
+2026-04-17T22:21:14Z START acceptance-fedora-gnome-wayland
+2026-04-17T22:21:20Z FAIL acceptance-fedora-gnome-wayland rc=1
+2026-04-17T22:21:20Z START otvm-list-after-fedora-gnome-wayland
+2026-04-17T22:21:21Z PASS otvm-list-after-fedora-gnome-wayland
+2026-04-17T22:21:21Z START otvm-reap-after-fedora-gnome-wayland
+2026-04-17T22:21:21Z PASS otvm-reap-after-fedora-gnome-wayland
+2026-04-17T22:21:21Z START acceptance-arch-gnome-wayland
+2026-04-17T22:21:27Z FAIL acceptance-arch-gnome-wayland rc=1
+2026-04-17T22:21:27Z START otvm-list-after-arch-gnome-wayland
+2026-04-17T22:21:28Z PASS otvm-list-after-arch-gnome-wayland
+2026-04-17T22:21:28Z START otvm-reap-after-arch-gnome-wayland
+2026-04-17T22:21:28Z PASS otvm-reap-after-arch-gnome-wayland
+2026-04-17T22:21:28Z START acceptance-windows-2022
+2026-04-17T22:22:37Z PASS acceptance-windows-2022
+2026-04-17T22:22:37Z START otvm-list-after-windows-2022
+2026-04-17T22:22:37Z PASS otvm-list-after-windows-2022
+2026-04-17T22:22:37Z START otvm-reap-after-windows-2022
+2026-04-17T22:22:38Z PASS otvm-reap-after-windows-2022
+2026-04-17T22:22:38Z START otvm-list-final
+2026-04-17T22:22:38Z PASS otvm-list-final
+2026-04-17T22:22:38Z START git-status-after
+2026-04-17T22:22:38Z PASS git-status-after
+2026-04-17T22:22:38Z overnight validation complete

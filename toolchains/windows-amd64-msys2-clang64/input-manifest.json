@@ -13,44 +13,52 @@
     {
       "name": "make",
       "version": "TBD",
-      "sha256": "TBD"
+      "sha256": "TBD",
+      "source_channel": "msys2"
     }
   ],
   "packages": [
     {
       "name": "mingw-w64-clang-x86_64-clang",
       "version": "TBD",
-      "sha256": "TBD"
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-libobjc2",
       "version": "TBD",
-      "sha256": "TBD"
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-libdispatch",
       "version": "TBD",
-      "sha256": "TBD"
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-make",
       "version": "TBD",
-      "sha256": "TBD"
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-base",
       "version": "TBD",
-      "sha256": "TBD"
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-gui",
       "version": "TBD",
-      "sha256": "TBD"
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-back",
       "version": "TBD",
-      "sha256": "TBD"
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
     }
   ],
   "conflict_rules": [

@@ -1,0 +1,13 @@
+{
+  "cleanup_jobs_remaining": [],
+  "contract_version": "v1",
+  "count": 0,
+  "leases": [],
+  "reconciled_resources": {
+    "errors": [],
+    "instances_terminated": [],
+    "nsg_rule_ids_removed": [],
+    "provider_name": "libvirt",
+    "remote_access_ids_removed": []
+  }
+}

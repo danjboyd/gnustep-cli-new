@@ -8,7 +8,10 @@ from typing import Any
 
 def _parse_gnumakefile(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
-    for line in path.read_text().splitlines():
+    content = path.read_text()
+    if "aggregate.make" in content:
+        values["__contains_aggregate_make"] = "true"
+    for line in content.splitlines():
         stripped = line.strip()
         if not stripped or stripped.startswith("#") or "=" not in stripped:
             continue
@@ -41,12 +44,11 @@ def detect_project(project_dir: str | Path = ".") -> dict[str, Any]:
         target_name = values["LIBRARY_NAME"]
 
     if not project_type:
-        return {
-            "supported": False,
-            "reason": "unsupported_gnumakefile",
-            "project_dir": str(root),
-            "gnumakefile": str(gnumakefile),
-        }
+        if "SUBPROJECTS" in values or values.get("__contains_aggregate_make") == "true":
+            project_type = "aggregate"
+        else:
+            project_type = "unknown"
+
 
     return {
         "supported": True,
@@ -54,6 +56,8 @@ def detect_project(project_dir: str | Path = ".") -> dict[str, Any]:
         "gnumakefile": str(gnumakefile),
         "project_type": project_type,
         "target_name": target_name,
+        "build_system": "gnustep-make",
+        "detection_reason": "gnumakefile_marker",
     }
 
 
@@ -65,7 +69,7 @@ def plan_build(project_dir: str | Path = ".") -> dict[str, Any]:
             "command": "build",
             "ok": False,
             "status": "error",
-            "summary": "The current directory is not a supported GNUstep Make project.",
+            "summary": "The current directory is not a supported GNUstep project.",
             "project": project,
             "backend": None,
             "invocation": None,
@@ -75,7 +79,7 @@ def plan_build(project_dir: str | Path = ".") -> dict[str, Any]:
         "command": "build",
         "ok": True,
         "status": "ok",
-        "summary": "GNUstep Make build plan created.",
+        "summary": "GNUstep project build plan created.",
         "project": project,
         "backend": "gnustep-make",
         "invocation": ["make"],
@@ -99,7 +103,7 @@ def execute_build(project_dir: str | Path = ".") -> tuple[dict[str, Any], int]:
     payload["exit_status"] = proc.returncode
     payload["ok"] = proc.returncode == 0
     payload["status"] = "ok" if proc.returncode == 0 else "error"
-    payload["summary"] = "GNUstep Make build completed." if proc.returncode == 0 else "GNUstep Make build failed."
+    payload["summary"] = "GNUstep project build completed." if proc.returncode == 0 else "GNUstep project build failed."
     return payload, 0 if proc.returncode == 0 else 1
 
 
@@ -125,7 +129,7 @@ def plan_run(project_dir: str | Path = ".") -> dict[str, Any]:
             "command": "run",
             "ok": False,
             "status": "error",
-            "summary": "The current directory is not a supported GNUstep Make project.",
+            "summary": "The current directory is not a supported GNUstep project.",
             "project": project,
             "backend": None,
             "invocation": None,
@@ -142,7 +146,7 @@ def plan_run(project_dir: str | Path = ".") -> dict[str, Any]:
             "command": "run",
             "ok": False,
             "status": "error",
-            "summary": "The detected project type does not have a runnable target.",
+            "summary": "This GNUstep project can be built, but no runnable target was detected.",
             "project": project,
             "backend": None,
             "invocation": None,

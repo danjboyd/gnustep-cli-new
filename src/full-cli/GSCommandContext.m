@@ -44,7 +44,7 @@
         }
       if (commandSeen == NO && [argument hasPrefix: @"--"])
         {
-          context->_usageError = [NSString stringWithFormat: @"Unknown global option: %@", argument];
+          context->_usageError = [[NSString stringWithFormat: @"Unknown global option: %@", argument] copy];
           return context;
         }
 

@@ -1,0 +1,67 @@
+ M .github/workflows/release.yml
+ M AGENTS.md
+ M README.md
+ M docs/implementation-roadmap.md
+ M docs/specs/command-contract.md
+ M docs/specs/compatibility-model.md
+ M docs/specs/lifecycle-integration-qa.md
+ M docs/specs/managed-toolchain-bom.md
+ M docs/specs/package-repo-and-build-infra.md
+ M docs/specs/release-publication.md
+ M docs/specs/tier1-toolchain-phase17.md
+ M examples/doctor-output-v1.json
+ M schemas/doctor-output-v1.schema.json
+ M scripts/bootstrap/gnustep-bootstrap.ps1
+ M scripts/bootstrap/gnustep-bootstrap.sh
+ M scripts/internal/build_infra.py
+ M scripts/internal/install_package.py
+ M scripts/internal/package_repo.py
+ M src/full-cli/GNUmakefile
+ M src/full-cli/GSCommandContext.m
+ M src/full-cli/GSCommandRunner.h
+ M src/full-cli/GSCommandRunner.m
+ M src/gnustep_cli_shared/build_infra.py
+ M src/gnustep_cli_shared/compatibility.py
+ M src/gnustep_cli_shared/doctor_engine.py
+ M src/gnustep_cli_shared/lifecycle.py
+ M src/gnustep_cli_shared/package_manager.py
+ M src/gnustep_cli_shared/package_repository.py
+ M src/gnustep_cli_shared/qa.py
+ M src/gnustep_cli_shared/setup_planner.py
+ M templates/gnustep-packages/README.md
+ M tests/test_bootstrap_ps1.py
+ M tests/test_build_infra.py
+ M tests/test_doctor_engine.py
+ M tests/test_full_cli_skeleton.py
+ M tests/test_lifecycle.py
+ M tests/test_package_manager.py
+ M tests/test_package_repository.py
+ M tests/test_package_tooling.py
+ M tests/test_qa.py
+ M tests/test_repository_contracts.py
+ M tests/test_setup_planner.py
+ M toolchains/linux-amd64-clang/build-toolchain.sh
+ M toolchains/linux-amd64-clang/source-lock.json
+ M toolchains/linux-amd64-clang/toolchain-manifest.json
+ M toolchains/openbsd-amd64-clang/build-toolchain.sh
+ M toolchains/openbsd-amd64-clang/component-inventory.json
+ M toolchains/openbsd-amd64-clang/source-lock.json
+ M toolchains/openbsd-amd64-clang/toolchain-manifest.json
+ M toolchains/windows-amd64-msys2-clang64/assemble-toolchain.ps1
+ M toolchains/windows-amd64-msys2-clang64/component-inventory.json
+ M toolchains/windows-amd64-msys2-clang64/input-manifest.json
+ M toolchains/windows-amd64-msys2-clang64/toolchain-manifest.json
+?? .github/workflows/ci.yml
+?? docs/release-candidate-qualification.md
+?? docs/release-readiness-review.md
+?? docs/security-production-signing.md
+?? docs/specs/native-linux-validation.md
+?? docs/support-matrix.md
+?? docs/validation/
+?? docs/windows-integration.md
+?? packages/
+?? scripts/ci/
+?? scripts/dev/
+?? src/full-cli/Tests/
+?? toolchains/linux-amd64-clang/component-inventory.json
+?? vendor/

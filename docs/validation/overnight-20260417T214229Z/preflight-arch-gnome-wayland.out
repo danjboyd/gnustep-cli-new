@@ -1,0 +1,9 @@
+{
+  "contract_version": "v1",
+  "error": {
+    "code": "image_not_configured",
+    "details": {},
+    "message": "Profile arch-gnome-wayland requires config.infra.arch_gnome_wayland_image_ocid to be populated",
+    "retryable": false
+  }
+}

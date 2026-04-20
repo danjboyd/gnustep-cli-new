@@ -1,0 +1,3 @@
+usage: build_infra.py qualify-release --release-dir RELEASE_DIR
+                                      --install-root INSTALL_ROOT
+build_infra.py qualify-release: error: the following arguments are required: --install-root

@@ -1,1 +1,43 @@
-{"schema_version":1,"kind":"managed-toolchain","toolchain_version":"2026.04.0","target":{"id":"linux-amd64-clang","os":"linux","arch":"amd64","compiler_family":"clang","toolchain_flavor":"clang"},"runtime":{"objc_runtime":"libobjc2","objc_abi":"modern","required_features":["blocks"]},"components":["libobjc2","libdispatch","tools-make","libs-base","libs-corebase","libs-gui","libs-back"],"published":true}
+{
+  "schema_version": 1,
+  "kind": "managed-toolchain",
+  "toolchain_version": "2026.04.0",
+  "target": {
+    "id": "linux-amd64-clang",
+    "os": "linux",
+    "arch": "amd64",
+    "compiler_family": "clang",
+    "toolchain_flavor": "clang"
+  },
+  "runtime": {
+    "objc_runtime": "libobjc2",
+    "objc_abi": "modern",
+    "required_features": [
+      "blocks"
+    ]
+  },
+  "components": [
+    "libobjc2",
+    "libdispatch",
+    "tools-make",
+    "libs-base",
+    "libs-corebase",
+    "libs-gui",
+    "libs-back"
+  ],
+  "published": true,
+  "platform_policy": {
+    "supported_distributions": [
+      "debian"
+    ],
+    "portability_policy": "distribution-scoped",
+    "notes": "Current source-built Linux artifact is validated on Debian only; Fedora and Arch require dependency closure or per-distro artifacts before managed artifact support is claimed."
+  },
+  "source_policy": {
+    "strategy": "source-build",
+    "production_eligible": true,
+    "lock_file": "source-lock.json",
+    "component_inventory": "component-inventory.json",
+    "host_origin_paths_allowed": false
+  }
+}

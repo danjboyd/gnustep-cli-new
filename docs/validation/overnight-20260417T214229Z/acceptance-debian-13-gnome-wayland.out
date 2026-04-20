@@ -1,0 +1,303 @@
+{
+  "contract_version": "v1",
+  "duration_seconds": 30,
+  "finished_at": "2026-04-17T22:20:07Z",
+  "keep_on_failure": false,
+  "requested_profiles": [
+    "debian-13-gnome-wayland"
+  ],
+  "results": [
+    {
+      "checks": [
+        {
+          "details": {
+            "auth": "public-key",
+            "port": 22,
+            "username": "debian"
+          },
+          "name": "ssh_contract",
+          "status": "ok"
+        },
+        {
+          "details": {
+            "desktop": "gnome",
+            "port": 3389,
+            "protocol": "rdp",
+            "service": "xrdp",
+            "session_model": "on-demand-tester-desktop",
+            "session_type": "x11",
+            "username": "tester"
+          },
+          "name": "gui_contract",
+          "status": "ok"
+        },
+        {
+          "details": {
+            "username": "tester"
+          },
+          "name": "gui_credentials",
+          "status": "ok"
+        },
+        {
+          "details": {
+            "command": "sudo /usr/local/libexec/oracletestvms-debian13-validate",
+            "host": "172.17.2.168"
+          },
+          "name": "ssh_post_ready_probe",
+          "status": "ok"
+        }
+      ],
+      "destroyed": true,
+      "finished_at": "2026-04-17T22:20:07Z",
+      "lease": {
+        "availability_domain": "",
+        "compartment_ocid": "",
+        "error_code": "",
+        "error_message": "",
+        "gui_username": "tester",
+        "idempotency_key": "acceptance-debian-13-gnome-wayland-20260417221936",
+        "image_ocid": "",
+        "image_reference": "oracletestvms-debian13-wayland-libvirt-20260414181129.qcow2",
+        "instance_ocid": "",
+        "lease_id": "lease-20260417221944-u0gl7d",
+        "metadata": {
+          "purpose": "acceptance"
+        },
+        "private_ip": "172.17.2.168",
+        "profile_slug": "debian-13-gnome-wayland",
+        "provider_metadata": {
+          "base_image_path": "/var/lib/libvirt/images/oracletestvms-debian13-wayland-libvirt-20260414181129.qcow2",
+          "domain_name": "oracletestvms-debian-13-gnome-wayland-lease-20260417221944-u0gl7d",
+          "guest_access_mode": "direct-lan",
+          "host_address": "iep-vm2",
+          "host_name": "iep-vm2",
+          "libvirt_uri": "qemu+ssh://danboyd@iep-vm2/system",
+          "network_mode": "network",
+          "network_name": "br0",
+          "overlay_path": "/var/lib/oracletestvms/leases/oracletestvms-debian-13-gnome-wayland-lease-20260417221944-u0gl7d.qcow2"
+        },
+        "provider_name": "libvirt",
+        "provider_resource_id": "iep-vm2:oracletestvms-debian-13-gnome-wayland-lease-20260417221944-u0gl7d",
+        "public_ip": "172.17.2.168",
+        "remote_access": {
+          "gui": {
+            "desktop": "gnome",
+            "port": 3389,
+            "protocol": "rdp",
+            "service": "xrdp",
+            "session_model": "on-demand-tester-desktop",
+            "session_type": "x11",
+            "username": "tester"
+          },
+          "host": "172.17.2.168",
+          "private_ip": "172.17.2.168",
+          "security_rule_ids": [],
+          "ssh": {
+            "auth": "public-key",
+            "port": 22,
+            "username": "debian"
+          }
+        },
+        "requested_at": "2026-04-17T22:19:44Z",
+        "ssh_username": "debian",
+        "status": "ready",
+        "subnet_ocid": "",
+        "ttl_expires_at": "2026-04-18T00:19:44Z",
+        "updated_at": "2026-04-17T22:20:06Z"
+      },
+      "lease_id": "lease-20260417221944-u0gl7d",
+      "preflight": {
+        "checks": [
+          {
+            "details": null,
+            "name": "libvirt_dependencies",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "hosts": [
+                {
+                  "address": "iep-vm1",
+                  "libvirt_uri": "qemu+ssh://danboyd@iep-vm1/system",
+                  "name": "iep-vm1",
+                  "network_mode": "bridge",
+                  "network_name": "br0",
+                  "storage_pool": "default"
+                },
+                {
+                  "address": "iep-vm2",
+                  "libvirt_uri": "qemu+ssh://danboyd@iep-vm2/system",
+                  "name": "iep-vm2",
+                  "network_mode": "network",
+                  "network_name": "br0",
+                  "storage_pool": "default"
+                },
+                {
+                  "address": "iep-ocr01",
+                  "libvirt_uri": "qemu+ssh://danboyd@iep-ocr01/system",
+                  "name": "iep-ocr01",
+                  "network_mode": "network",
+                  "network_name": "br0",
+                  "storage_pool": "default"
+                }
+              ]
+            },
+            "name": "libvirt_inventory",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "cidrs": [
+                "192.152.203.234/32"
+              ]
+            },
+            "name": "operator_ingress_cidrs",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "allowed": true,
+              "configured_cidrs": [
+                "192.152.203.234/32"
+              ],
+              "detected_ip": "192.152.203.234",
+              "enforced": false
+            },
+            "name": "operator_public_ip",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "address": "iep-vm1",
+              "available_cpu_count": 14.82,
+              "available_memory_mib": 41394,
+              "cpu_count": 16,
+              "disk_available_bytes": 431694286848,
+              "disk_total_bytes": 1967589113856,
+              "host": "iep-vm1",
+              "libvirt_uri": "qemu+ssh://danboyd@iep-vm1/system",
+              "load_average_1m": 1.18,
+              "memory_mib": 64221,
+              "network_mode": "bridge",
+              "network_name": "br0"
+            },
+            "name": "host_connectivity:iep-vm1",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm1",
+              "network_mode": "bridge",
+              "storage_pool": "default",
+              "target_path": "/var/lib/libvirt/images"
+            },
+            "name": "storage_pool:iep-vm1",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "address": "iep-vm2",
+              "available_cpu_count": 30.81,
+              "available_memory_mib": 75605,
+              "cpu_count": 32,
+              "disk_available_bytes": 1598727233536,
+              "disk_total_bytes": 1860607164416,
+              "host": "iep-vm2",
+              "libvirt_uri": "qemu+ssh://danboyd@iep-vm2/system",
+              "load_average_1m": 1.19,
+              "memory_mib": 94182,
+              "network_mode": "network",
+              "network_name": "br0"
+            },
+            "name": "host_connectivity:iep-vm2",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm2",
+              "network_mode": "network",
+              "storage_pool": "default",
+              "target_path": "/var/lib/libvirt/images"
+            },
+            "name": "storage_pool:iep-vm2",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "address": "iep-ocr01",
+              "available_cpu_count": 15.76,
+              "available_memory_mib": 14594,
+              "cpu_count": 16,
+              "disk_available_bytes": 713403940864,
+              "disk_total_bytes": 989755674624,
+              "host": "iep-ocr01",
+              "libvirt_uri": "qemu+ssh://danboyd@iep-ocr01/system",
+              "load_average_1m": 0.24,
+              "memory_mib": 31435,
+              "network_mode": "network",
+              "network_name": "br0"
+            },
+            "name": "host_connectivity:iep-ocr01",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-ocr01",
+              "network_mode": "network",
+              "storage_pool": "default",
+              "target_path": "/var/lib/libvirt/images"
+            },
+            "name": "storage_pool:iep-ocr01",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "image_reference": "oracletestvms-debian13-wayland-libvirt-20260414181129.qcow2",
+              "profile": "debian-13-gnome-wayland"
+            },
+            "name": "profile_image",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm1",
+              "image_path": "/var/lib/libvirt/images/oracletestvms-debian13-wayland-libvirt-20260414181129.qcow2",
+              "image_reference": "oracletestvms-debian13-wayland-libvirt-20260414181129.qcow2"
+            },
+            "name": "profile_image_present:iep-vm1",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm2",
+              "image_path": "/var/lib/libvirt/images/oracletestvms-debian13-wayland-libvirt-20260414181129.qcow2",
+              "image_reference": "oracletestvms-debian13-wayland-libvirt-20260414181129.qcow2"
+            },
+            "name": "profile_image_present:iep-vm2",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-ocr01",
+              "image_path": "/var/lib/libvirt/images/oracletestvms-debian13-wayland-libvirt-20260414181129.qcow2",
+              "image_reference": "oracletestvms-debian13-wayland-libvirt-20260414181129.qcow2"
+            },
+            "name": "profile_image_present:iep-ocr01",
+            "status": "ok"
+          }
+        ],
+        "contract_version": "v1",
+        "provider": "libvirt",
+        "ready": true
+      },
+      "profile": "debian-13-gnome-wayland",
+      "started_at": "2026-04-17T22:19:36Z",
+      "status": "passed"
+    }
+  ],
+  "started_at": "2026-04-17T22:19:36Z",
+  "summary": {
+    "failed": 0,
+    "passed": 1
+  }
+}

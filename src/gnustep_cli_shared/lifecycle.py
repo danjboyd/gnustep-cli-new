@@ -124,12 +124,29 @@ def repair_managed_root(managed_root: str | Path) -> dict[str, Any]:
     staging = root / ".staging"
     if staging.exists():
         shutil.rmtree(staging)
+        issues.append({"code": "stale_staging", "message": f"Stale staging directory found: {staging}"})
         repairs.append({"kind": "clear_staging", "message": f"Removed stale staging directory {staging}"})
+
+    transactions = root / ".transactions"
+    if transactions.exists():
+        shutil.rmtree(transactions)
+        issues.append({"code": "stale_transactions", "message": f"Stale transaction directory found: {transactions}"})
+        repairs.append({"kind": "clear_transactions", "message": f"Removed stale transaction directory {transactions}"})
+
+    setup_transaction = _state_dir(root) / "setup-transaction.json"
+    if setup_transaction.exists():
+        setup_transaction.unlink()
+        issues.append({"code": "stale_setup_transaction", "message": f"Stale setup transaction found: {setup_transaction}"})
+        repairs.append({"kind": "clear_setup_transaction", "message": f"Removed stale setup transaction {setup_transaction}"})
 
     state = load_cli_state(root)
     if state["schema_version"] != 1:
         issues.append({"code": "unsupported_state_version", "message": "Unsupported CLI state schema version."})
     else:
+        if state.get("status") in {"installing", "upgrading", "repairing"}:
+            issues.append({"code": "interrupted_lifecycle_action", "message": f"Lifecycle action was interrupted while status was {state.get('status')}."})
+            state["status"] = "needs_repair"
+            repairs.append({"kind": "mark_needs_repair", "message": "Marked interrupted managed environment for explicit repair validation."})
         save_cli_state(root, state)
         repairs.append({"kind": "normalize_state", "message": "Ensured CLI state file exists."})
 

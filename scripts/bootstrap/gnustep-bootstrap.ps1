@@ -9,9 +9,34 @@ $Script:RootDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PS
 $Script:SetupScope = "user"
 $Script:SetupRoot = $null
 $Script:SetupManifest = $env:SETUP_MANIFEST
+$Script:TracePath = $env:GNUSTEP_BOOTSTRAP_TRACE
+
+
+function Write-TraceEvent {
+    param([string]$Step, [string]$Message = "")
+    if (-not $Script:TracePath) {
+        return
+    }
+    try {
+        $traceDir = Split-Path -Parent $Script:TracePath
+        if ($traceDir) {
+            New-Item -ItemType Directory -Force -Path $traceDir | Out-Null
+        }
+        $record = @{
+            timestamp = [DateTimeOffset]::UtcNow.ToString("o")
+            step = $Step
+            message = $Message
+            pid = $PID
+        } | ConvertTo-Json -Compress
+        Add-Content -Encoding UTF8 -Path $Script:TracePath -Value $record
+    }
+    catch {
+    }
+}
 
 function Get-ManifestObject {
     param([string]$ManifestSource)
+    Write-TraceEvent "manifest.start" $ManifestSource
     if (-not $ManifestSource) {
         $localManifest = Join-Path $Script:RootDir "dist\stable\$($Script:CliVersion)\release-manifest.json"
         if (Test-Path $localManifest) {
@@ -23,11 +48,15 @@ function Get-ManifestObject {
     }
     if ($ManifestSource -match '^https?://') {
         $manifestPath = Join-Path ([System.IO.Path]::GetTempPath()) ("gnustep-manifest-" + [guid]::NewGuid().ToString() + ".json")
+        Write-TraceEvent "manifest.download" $ManifestSource
         Invoke-WebRequest -UseBasicParsing -Uri $ManifestSource -OutFile $manifestPath
+        Write-TraceEvent "manifest.downloaded" $manifestPath
     }
     else {
         $manifestPath = (Resolve-Path $ManifestSource).Path
+        Write-TraceEvent "manifest.local" $manifestPath
     }
+    Write-TraceEvent "manifest.loaded" $manifestPath
     return @{
         path = $manifestPath
         dir = Split-Path -Parent $manifestPath
@@ -52,9 +81,44 @@ function Get-Sha256 {
 
 function Expand-Artifact {
     param([string]$ArchivePath, [string]$Destination)
+    Write-TraceEvent "extract.start" "$ArchivePath -> $Destination"
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
     if ($ArchivePath.ToLowerInvariant().EndsWith(".zip")) {
-        Expand-Archive -Path $ArchivePath -DestinationPath $Destination -Force
+        if ($IsWindows) {
+            tar -xf $ArchivePath -C $Destination
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to extract $ArchivePath"
+            }
+        }
+        else {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $archive = [System.IO.Compression.ZipFile]::OpenRead($ArchivePath)
+            $destinationFull = [System.IO.Path]::GetFullPath($Destination)
+            try {
+                foreach ($entry in $archive.Entries) {
+                    if ([string]::IsNullOrEmpty($entry.FullName)) {
+                        continue
+                    }
+                    $relativePath = $entry.FullName.Replace("/", [System.IO.Path]::DirectorySeparatorChar).Replace("\", [System.IO.Path]::DirectorySeparatorChar)
+                    $targetPath = [System.IO.Path]::GetFullPath((Join-Path $Destination $relativePath))
+                    if (-not $targetPath.StartsWith($destinationFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        throw "Archive entry escapes destination root: $($entry.FullName)"
+                    }
+                    if ($relativePath.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
+                        New-Item -ItemType Directory -Force -Path $targetPath | Out-Null
+                        continue
+                    }
+                    $targetDir = Split-Path -Parent $targetPath
+                    if ($targetDir) {
+                        New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+                    }
+                    [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $targetPath, $true)
+                }
+            }
+            finally {
+                $archive.Dispose()
+            }
+        }
     }
     else {
         tar -xzf $ArchivePath -C $Destination
@@ -62,6 +126,7 @@ function Expand-Artifact {
             throw "Failed to extract $ArchivePath"
         }
     }
+    Write-TraceEvent "extract.complete" "$ArchivePath -> $Destination"
 }
 
 function Get-SingleChildDirectory {
@@ -75,8 +140,30 @@ function Get-SingleChildDirectory {
 
 function Copy-TreeContents {
     param([string]$Source, [string]$Destination)
+    Write-TraceEvent "copy.start" "$Source -> $Destination"
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
     Copy-Item -Recurse -Force (Join-Path $Source '*') $Destination
+    Write-TraceEvent "copy.complete" "$Source -> $Destination"
+}
+
+function Remove-TempTree {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) {
+        return
+    }
+    if ($env:GNUSTEP_BOOTSTRAP_KEEP_TEMP -eq "1") {
+        Write-TraceEvent "cleanup.skipped" $Path
+        return
+    }
+    Write-TraceEvent "cleanup.start" $Path
+    if ($IsWindows) {
+        $quoted = '"' + $Path.Replace('"', '""') + '"'
+        Start-Process -FilePath "cmd.exe" -ArgumentList "/d", "/c", "rmdir /s /q $quoted" -WindowStyle Hidden | Out-Null
+        Write-TraceEvent "cleanup.deferred" $Path
+        return
+    }
+    Remove-Item -Recurse -Force $Path
+    Write-TraceEvent "cleanup.complete" $Path
 }
 
 function Install-CliBundle {
@@ -106,6 +193,7 @@ Commands:
   new        Unavailable in bootstrap. Install the full interface first.
   install    Unavailable in bootstrap. Install the full interface first.
   remove     Unavailable in bootstrap. Install the full interface first.
+  update     Unavailable in bootstrap. Install the full interface first.
 
 Global options:
   --help
@@ -169,12 +257,13 @@ foreach ($arg in $ArgsList) {
         "--verbose" { }
         "--quiet" { }
         "--yes" { }
+        "--trace" { }
         "--system" { $Script:SetupScope = "system" }
         "--user" { $Script:SetupScope = "user" }
         "--manifest" { }
         default {
             if ($arg.StartsWith("--")) {
-                if ($arg -eq "--root" -or $arg -eq "--manifest") {
+                if ($arg -eq "--root" -or $arg -eq "--manifest" -or $arg -eq "--trace") {
                     continue
                 }
                 Write-Error "Unknown option: $arg"
@@ -192,6 +281,13 @@ for ($i = 0; $i -lt $ArgsList.Count; $i++) {
             exit 2
         }
         $Script:SetupRoot = $ArgsList[$i + 1]
+    }
+    if ($ArgsList[$i] -eq "--trace") {
+        if ($i + 1 -ge $ArgsList.Count) {
+            Write-Error "--trace requires a value"
+            exit 2
+        }
+        $Script:TracePath = $ArgsList[$i + 1]
     }
     if ($ArgsList[$i] -eq "--manifest") {
         if ($i + 1 -ge $ArgsList.Count) {
@@ -228,6 +324,13 @@ for ($i = 0; $i -lt $commandArgs.Count; $i++) {
             exit 2
         }
         $Script:SetupRoot = $commandArgs[$i + 1]
+    }
+    if ($commandArgs[$i] -eq "--trace") {
+        if ($i + 1 -ge $commandArgs.Count) {
+            Write-Error "--trace requires a value"
+            exit 2
+        }
+        $Script:TracePath = $commandArgs[$i + 1]
     }
     if ($commandArgs[$i] -eq "--manifest") {
         if ($i + 1 -ge $commandArgs.Count) {
@@ -349,7 +452,13 @@ switch ($command) {
             exit 3
         }
         try {
+            Write-TraceEvent "setup.start" $selectedRoot
+            if (-not $Script:SetupManifest) {
+                $Script:SetupManifest = "https://github.com/danjboyd/gnustep-cli-new/releases/download/v$($Script:CliVersion)/release-manifest.json"
+            }
+            Write-TraceEvent "setup.manifest.resolve" $Script:SetupManifest
             $manifest = Get-ManifestObject -ManifestSource $Script:SetupManifest
+            Write-TraceEvent "setup.target" "windows"
             $target = Get-HostTarget
             $release = $manifest.json.releases[0]
             $cliArtifact = $release.artifacts | Where-Object { $_.id -eq $target.cliId } | Select-Object -First 1
@@ -357,26 +466,37 @@ switch ($command) {
             if (-not $cliArtifact -or -not $toolchainArtifact) {
                 throw "No matching release artifacts were found for this host."
             }
-            $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("gnustep-bootstrap-" + [guid]::NewGuid().ToString())
+            $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("gsb-" + [guid]::NewGuid().ToString("N"))
             New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
             try {
                 $cliFile = Join-Path $tempRoot ([System.IO.Path]::GetFileName($cliArtifact.url))
                 $toolchainFile = Join-Path $tempRoot ([System.IO.Path]::GetFileName($toolchainArtifact.url))
                 $localCli = Join-Path $manifest.dir ([System.IO.Path]::GetFileName($cliArtifact.url))
                 $localToolchain = Join-Path $manifest.dir ([System.IO.Path]::GetFileName($toolchainArtifact.url))
+                Write-TraceEvent "artifact.cli.fetch.start" $cliArtifact.url
                 if (Test-Path $localCli) { Copy-Item -Force $localCli $cliFile } else { Invoke-WebRequest -UseBasicParsing -Uri $cliArtifact.url -OutFile $cliFile }
+                Write-TraceEvent "artifact.cli.fetch.complete" $cliFile
+                Write-TraceEvent "artifact.toolchain.fetch.start" $toolchainArtifact.url
                 if (Test-Path $localToolchain) { Copy-Item -Force $localToolchain $toolchainFile } else { Invoke-WebRequest -UseBasicParsing -Uri $toolchainArtifact.url -OutFile $toolchainFile }
+                Write-TraceEvent "artifact.toolchain.fetch.complete" $toolchainFile
+                Write-TraceEvent "artifact.checksum.start" $cliFile
                 if ((Get-Sha256 $cliFile) -ne $cliArtifact.sha256.ToLowerInvariant()) { throw "CLI checksum verification failed." }
+                Write-TraceEvent "artifact.checksum.cli.complete" $cliFile
                 if ((Get-Sha256 $toolchainFile) -ne $toolchainArtifact.sha256.ToLowerInvariant()) { throw "Toolchain checksum verification failed." }
-                $cliExtract = Join-Path $tempRoot "cli"
-                $toolchainExtract = Join-Path $tempRoot "toolchain"
+                Write-TraceEvent "artifact.checksum.complete" $toolchainFile
+                $cliExtract = Join-Path $tempRoot "c"
+                $toolchainExtract = Join-Path $tempRoot "t"
                 Expand-Artifact -ArchivePath $cliFile -Destination $cliExtract
                 Expand-Artifact -ArchivePath $toolchainFile -Destination $toolchainExtract
                 $cliRoot = Get-SingleChildDirectory -Path $cliExtract
                 $toolchainRoot = Get-SingleChildDirectory -Path $toolchainExtract
                 New-Item -ItemType Directory -Force -Path (Join-Path $selectedRoot "bin") | Out-Null
+                Write-TraceEvent "install.cli.start" $cliRoot
                 Install-CliBundle -Source $cliRoot -Destination $selectedRoot
+                Write-TraceEvent "install.cli.complete" $selectedRoot
+                Write-TraceEvent "install.toolchain.start" $toolchainRoot
                 Copy-TreeContents -Source $toolchainRoot -Destination $selectedRoot
+                Write-TraceEvent "install.toolchain.complete" $selectedRoot
                 New-Item -ItemType Directory -Force -Path (Join-Path $selectedRoot "state") | Out-Null
                 @{
                     schema_version = 1
@@ -386,8 +506,10 @@ switch ($command) {
                     last_action = "setup"
                     status = "healthy"
                 } | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $selectedRoot "state\\cli-state.json")
+                Write-TraceEvent "install.state.complete" (Join-Path $selectedRoot "state\\cli-state.json")
                 $pathHint = '$env:Path = "' + (Join-Path $selectedRoot 'bin') + ';' + (Join-Path $selectedRoot 'System\\Tools') + ';$env:Path"'
                 if ($Script:JsonMode) {
+                    Write-TraceEvent "setup.success" $selectedRoot
                     Write-JsonObject @{
                         schema_version = 1
                         command = "setup"
@@ -405,6 +527,7 @@ switch ($command) {
                             scope = $Script:SetupScope
                             install_root = $selectedRoot
                             channel = "stable"
+                            manifest_path = $Script:SetupManifest
                             selected_release = $release.version
                             selected_artifacts = @($cliArtifact.id, $toolchainArtifact.id)
                             system_privileges_ok = $true
@@ -428,9 +551,7 @@ switch ($command) {
                 }
             }
             finally {
-                if (Test-Path $tempRoot) {
-                    Remove-Item -Recurse -Force $tempRoot
-                }
+                Remove-TempTree -Path $tempRoot
             }
             exit 0
         }
@@ -457,6 +578,7 @@ switch ($command) {
                         selected_artifacts = @()
                         system_privileges_ok = $true
                     }
+                    trace_path = $Script:TracePath
                     actions = @(
                         @{
                             kind = "report_bug"
@@ -467,6 +589,7 @@ switch ($command) {
                 }
             }
             else {
+                Write-TraceEvent "setup.error" $_.Exception.Message
                 Write-Output "setup: $($_.Exception.Message)"
                 Write-Output "next: Check the manifest and artifact availability, then rerun setup."
             }
@@ -478,6 +601,7 @@ switch ($command) {
     "new" { Invoke-UnsupportedCommand "new" }
     "install" { Invoke-UnsupportedCommand "install" }
     "remove" { Invoke-UnsupportedCommand "remove" }
+    "update" { Invoke-UnsupportedCommand "update" }
     default {
         Write-Error "Unknown command: $command"
         exit 2

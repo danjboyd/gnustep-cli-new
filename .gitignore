@@ -8,3 +8,7 @@ build/
 tmp/
 coverage/
 src/full-cli/obj/
+src/full-cli/Tests/obj/
+src/full-cli/Tests/*.bundle/
+vendor/tools-xctest/
+docs/validation/**/local-release-install-root/

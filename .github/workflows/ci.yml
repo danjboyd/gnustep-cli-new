@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  python-shared:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run Python/shared unit suite
+        run: python3 -m unittest discover -s tests
+
+      - name: Verify generated package index
+        run: |
+          python3 scripts/internal/package_repo.py --json packages --output /tmp/package-index.json >/dev/null
+          diff -u packages/package-index.json /tmp/package-index.json
+          mkdir -p /tmp/package-index-trust
+          cp /tmp/package-index.json /tmp/package-index-trust/package-index.json
+          python3 scripts/internal/package_repo.py --json --provenance /tmp/package-index-trust/package-index.json >/dev/null
+          python3 scripts/internal/package_repo.py --json --trust-gate --allow-unsigned /tmp/package-index-trust/package-index.json
+
+  native-full-cli:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install GNUstep toolchain prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang gnustep-devel git
+
+      - name: Install tools-xctest
+        run: ./scripts/ci/install-tools-xctest.sh
+
+      - name: Run native Objective-C tools-xctest suite
+        run: ./scripts/dev/run-native-tests.sh

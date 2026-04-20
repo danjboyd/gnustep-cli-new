@@ -1,1 +1,60 @@
-Build infrastructure payload generated.
+{
+  "schema_version": 1,
+  "target": {
+    "id": "windows-amd64-msys2-clang64",
+    "os": "windows",
+    "arch": "amd64",
+    "compiler_family": "clang",
+    "toolchain_flavor": "msys2-clang64"
+  },
+  "toolchain_version": "2026.04.0",
+  "platform_policy": {
+    "supported_distributions": [],
+    "portability_policy": "platform-wide",
+    "notes": null
+  },
+  "components": [
+    {
+      "name": "libobjc2",
+      "version": "TBD",
+      "source": "curated-binary-input",
+      "input_manifest": "input-manifest.json",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "libdispatch",
+      "version": "TBD",
+      "source": "curated-binary-input",
+      "input_manifest": "input-manifest.json",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "tools-make",
+      "version": "TBD",
+      "source": "curated-binary-input",
+      "input_manifest": "input-manifest.json",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "libs-base",
+      "version": "TBD",
+      "source": "curated-binary-input",
+      "input_manifest": "input-manifest.json",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "libs-gui",
+      "version": "TBD",
+      "source": "curated-binary-input",
+      "input_manifest": "input-manifest.json",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "libs-back",
+      "version": "TBD",
+      "source": "curated-binary-input",
+      "input_manifest": "input-manifest.json",
+      "source_channel": "msys2-mingw-clang64"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "contract_version": "v1",
+  "duration_seconds": 5,
+  "finished_at": "2026-04-17T22:21:27Z",
+  "keep_on_failure": false,
+  "requested_profiles": [
+    "arch-gnome-wayland"
+  ],
+  "results": [
+    {
+      "checks": [],
+      "destroyed": false,
+      "error": {
+        "code": "image_not_configured",
+        "details": {},
+        "message": "Profile arch-gnome-wayland requires config.infra.arch_gnome_wayland_image_ocid to be populated",
+        "retryable": false
+      },
+      "finished_at": "2026-04-17T22:21:27Z",
+      "lease_id": null,
+      "preflight": null,
+      "profile": "arch-gnome-wayland",
+      "started_at": "2026-04-17T22:21:22Z",
+      "status": "failed"
+    }
+  ],
+  "started_at": "2026-04-17T22:21:22Z",
+  "summary": {
+    "failed": 1,
+    "passed": 0
+  }
+}

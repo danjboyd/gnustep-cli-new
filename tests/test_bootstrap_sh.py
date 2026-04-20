@@ -26,6 +26,7 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("doctor", proc.stdout)
         self.assertIn("build", proc.stdout)
         self.assertIn("remove", proc.stdout)
+        self.assertIn("update", proc.stdout)
 
     def test_unknown_option_fails_with_usage_code(self):
         proc = self.run_script("--bogus")
@@ -58,6 +59,12 @@ class BootstrapShTests(unittest.TestCase):
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["command"], "setup")
         self.assertIn("summary", payload)
+
+    def test_bootstrap_script_does_not_depend_on_python(self):
+        content = BOOTSTRAP.read_text(encoding="utf-8")
+        self.assertNotIn("python3", content)
+        self.assertNotIn("scripts/internal/doctor.py", content)
+        self.assertNotIn("scripts/internal/setup_plan.py", content)
 
 
 if __name__ == "__main__":

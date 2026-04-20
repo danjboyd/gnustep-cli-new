@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "id": "org.gnustep.tools-xctest",
+  "name": "tools-xctest",
+  "version": "0.1.0",
+  "kind": "cli-tool",
+  "summary": "XCTest runner and harness for native GNUstep Objective-C unit tests.",
+  "license": "LGPL-2.1-or-later",
+  "maintainers": [
+    {
+      "name": "GNUstep Project"
+    }
+  ],
+  "source": {
+    "type": "git",
+    "url": "https://github.com/gnustep/tools-xctest.git",
+    "sha256": "development-source-checksum-tbd"
+  },
+  "requirements": {
+    "supported_os": [
+      "linux",
+      "openbsd"
+    ],
+    "supported_arch": [
+      "amd64"
+    ],
+    "supported_compiler_families": [
+      "clang"
+    ],
+    "supported_objc_runtimes": [
+      "libobjc2"
+    ],
+    "supported_objc_abi": [
+      "modern"
+    ],
+    "required_features": [
+      "blocks"
+    ],
+    "forbidden_features": []
+  },
+  "dependencies": [
+    "org.gnustep.make"
+  ],
+  "artifacts": [
+    {
+      "id": "tools-xctest-linux-amd64-clang",
+      "os": "linux",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "url": "https://example.invalid/packages/tools-xctest-linux-amd64-clang.tar.gz",
+      "sha256": "published-artifact-checksum-tbd"
+    },
+    {
+      "id": "tools-xctest-openbsd-amd64-clang",
+      "os": "openbsd",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "url": "https://example.invalid/packages/tools-xctest-openbsd-amd64-clang.tar.gz",
+      "sha256": "published-artifact-checksum-tbd"
+    }
+  ],
+  "install": {
+    "strategy": "archive",
+    "prefix_layout": "gnustep",
+    "executables": [
+      "xctest"
+    ]
+  }
+}

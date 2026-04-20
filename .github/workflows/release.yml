@@ -23,8 +23,54 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Run repository test suite
-        run: python3 -m unittest discover -s tests
+      - name: Install GNUstep toolchain prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang gnustep-devel git
+
+      - name: Install tools-xctest
+        run: ./scripts/ci/install-tools-xctest.sh
+
+      - name: Run full regression suite
+        run: |
+          python3 -c 'import sys, json; sys.path.insert(0, "src"); from gnustep_cli_shared.qa import regression_suite; payload = regression_suite(); print(json.dumps(payload, indent=2)); raise SystemExit(0 if payload["ok"] else 1)'
+
+      - name: Verify package artifact publication readiness
+        run: |
+          python3 scripts/internal/build_infra.py --json package-artifact-publication-gate \
+            --packages-dir packages
+
+      - name: Verify and sign generated package index
+        env:
+          GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY }}
+          GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY }}
+          GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT }}
+        run: |
+          if [ -z "${GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY is required for release publication" >&2
+            exit 3
+          fi
+          if [ -z "${GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT:-}" ]; then
+            echo "GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT is required for release publication" >&2
+            exit 3
+          fi
+          python3 scripts/internal/package_repo.py --json packages --output /tmp/package-index.json >/dev/null
+          diff -u packages/package-index.json /tmp/package-index.json
+          mkdir -p /tmp/package-index-trust
+          cp /tmp/package-index.json /tmp/package-index-trust/package-index.json
+          umask 077
+          printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY" > /tmp/gnustep-cli-package-index-signing-private.pem
+          args=(--json --sign-private-key /tmp/gnustep-cli-package-index-signing-private.pem)
+          if [ -n "${GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY:-}" ]; then
+            printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY" > /tmp/gnustep-cli-package-index-signing-public.pem
+            args+=(--sign-public-key /tmp/gnustep-cli-package-index-signing-public.pem)
+          fi
+          args+=(/tmp/package-index-trust/package-index.json)
+          python3 scripts/internal/package_repo.py "${args[@]}"
+          printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT" > /tmp/gnustep-cli-package-index-trust-root.pem
+          python3 scripts/internal/package_repo.py --json --trust-gate \
+            --trusted-public-key /tmp/gnustep-cli-package-index-trust-root.pem \
+            /tmp/package-index-trust/package-index.json
 
       - name: Verify staged release directory exists
         run: |
@@ -35,6 +81,60 @@ jobs:
       - name: Verify staged release contents
         run: |
           python3 scripts/internal/build_infra.py --json verify-release \
+            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}"
+
+      - name: Build release evidence bundle
+        run: |
+          python3 scripts/internal/build_infra.py --json release-evidence-bundle \
+            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}"
+
+      - name: Run release key rotation drill
+        run: |
+          python3 scripts/internal/build_infra.py --json release-key-rotation-drill \
+            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}"
+
+      - name: Sign release metadata
+        env:
+          GNUSTEP_CLI_RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.GNUSTEP_CLI_RELEASE_SIGNING_PRIVATE_KEY }}
+          GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY: ${{ secrets.GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY }}
+        run: |
+          if [ -z "${GNUSTEP_CLI_RELEASE_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "GNUSTEP_CLI_RELEASE_SIGNING_PRIVATE_KEY is required for release publication" >&2
+            exit 3
+          fi
+          umask 077
+          printf '%s\n' "$GNUSTEP_CLI_RELEASE_SIGNING_PRIVATE_KEY" > /tmp/gnustep-cli-release-signing-private.pem
+          args=(--json sign-release-metadata --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}" --private-key /tmp/gnustep-cli-release-signing-private.pem)
+          if [ -n "${GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY:-}" ]; then
+            printf '%s\n' "$GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY" > /tmp/gnustep-cli-release-signing-public.pem
+            args+=(--public-key /tmp/gnustep-cli-release-signing-public.pem)
+          fi
+          python3 scripts/internal/build_infra.py "${args[@]}"
+
+      - name: Enforce controlled release gate
+        env:
+          GNUSTEP_CLI_RELEASE_TRUST_ROOT: ${{ secrets.GNUSTEP_CLI_RELEASE_TRUST_ROOT }}
+          GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT }}
+        run: |
+          args=(--json controlled-release-gate --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}")
+          if [ -n "${GNUSTEP_CLI_RELEASE_TRUST_ROOT:-}" ]; then
+            printf '%s\n' "$GNUSTEP_CLI_RELEASE_TRUST_ROOT" > /tmp/gnustep-cli-release-trust-root.pem
+            args+=(--release-trust-root /tmp/gnustep-cli-release-trust-root.pem)
+          fi
+          if [ -f /tmp/package-index-trust/package-index.json ]; then
+            args+=(--package-index /tmp/package-index-trust/package-index.json)
+            if [ -z "${GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT:-}" ]; then
+              echo "GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT is required for controlled release publication" >&2
+              exit 3
+            fi
+            printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT" > /tmp/gnustep-cli-package-index-trust-root.pem
+            args+=(--package-index-trust-root /tmp/gnustep-cli-package-index-trust-root.pem)
+          fi
+          python3 scripts/internal/build_infra.py "${args[@]}"
+
+      - name: Enforce release claim consistency
+        run: |
+          python3 scripts/internal/build_infra.py --json release-claim-consistency-gate \
             --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}"
 
       - name: Publish GitHub Release

@@ -39,7 +39,7 @@ Current validation status:
   the current operator key material and must be rebuilt or revalidated through
   the OpenBSD image pipeline before Phase 17 can be considered complete
 - the failing OpenBSD lease and builder instance were explicitly terminated to
-  avoid idle OCI cost
+  avoid idle hypervisor resource use
 
 ## Windows `amd64/msys2-clang64`
 
@@ -64,8 +64,8 @@ Current validation status:
 
 - the generated PowerShell script parses cleanly under `pwsh`
 - `otvm preflight windows-2022` is ready in this environment
-- live Windows validation was executed on a short-lived `windows-2022` `otvm`
-  lease
+- live Windows validation was executed on a short-lived libvirt-backed
+  `windows-2022` `otvm` lease
 - the generated assembly script was copied to the blank Windows host and run
   under `powershell.exe`
 - the script now bootstraps MSYS2 automatically from the official installer
@@ -83,12 +83,25 @@ Current validation status:
   Foundation plus the current MSYS2 `libdispatch` stack fails to compile the
   full CLI due to a `mode_t` typedef conflict between
   `os/generic_win_base.h` and `sys/types.h`
-- that means the Windows `msys2-clang64` managed toolchain assembly path is now
-  materially working, but the full GNUstep CLI is not yet confirmed buildable
-  there without either an upstream fix or a project-local workaround for that
-  header conflict
+- the current documentation baseline should therefore treat Windows the same as
+  the Linux/OpenBSD lease-backed validation path: use `otvm` libvirt rather
+  than the older OCI-oriented assumptions unless a specific fallback is called
+  out explicitly
+- that means the Windows `msys2-clang64` managed toolchain assembly path now
+  reaches a stronger state: on April 15, 2026 a fresh libvirt lease assembled a
+  managed prefix containing `clang.exe`, `share/GNUstep/Makefiles`, and a
+  curated MSYS2 developer shell/tool slice, and that same lease built the full
+  Objective-C CLI successfully
+- the remaining Windows toolchain issue is now publication freshness rather than
+  basic assembly viability: the current published toolchain zip is still stale
+  and does not yet pass the build-capability audit, so release-backed Windows
+  validation must be refreshed with a newly assembled/published artifact
 - the validation lease was explicitly destroyed afterward and followed by
   `otvm reap`
+- release-prep flow should now treat Windows the same way as Debian/OpenBSD:
+  `prepare-github-release` emits an `otvm-host-validation-plan.json` file that
+  includes the `windows-2022` libvirt validation lane alongside the Unix host
+  lanes
 
 ## Windows `amd64/msvc`
 

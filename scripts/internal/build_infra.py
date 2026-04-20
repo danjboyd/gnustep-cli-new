@@ -14,6 +14,10 @@ if str(ROOT / "src") not in sys.path:
 
 from gnustep_cli_shared.build_infra import build_matrix, release_manifest_from_matrix, write_release_manifest
 from gnustep_cli_shared.build_infra import (
+    package_artifact_build_plan,
+    package_artifact_publication_gate,
+    assemble_linux_toolchain_artifact,
+    package_source_built_linux_toolchain_artifact,
     component_inventory,
     debian_gcc_interop_plan,
     bundle_full_cli,
@@ -23,14 +27,30 @@ from gnustep_cli_shared.build_infra import (
     msys2_input_manifest_template,
     msvc_status,
     openbsd_build_script,
+    otvm_release_host_validation_plan,
     qualify_full_cli_handoff,
     publish_github_release,
+    prepare_github_release,
+    published_url_qualification_plan,
+    toolchain_archive_audit,
+    toolchain_tree_host_origin_audit,
+    validate_input_manifest,
+    validate_source_lock,
     qualify_release_install,
     stage_release_assets,
     source_lock_template,
     toolchain_manifest,
     toolchain_plan,
     verify_release_directory,
+    windows_extracted_toolchain_rebuild_plan,
+    release_trust_gate,
+    release_claim_consistency_gate,
+    controlled_release_gate,
+    sign_release_metadata,
+    write_release_provenance,
+    write_windows_current_source_marker,
+    write_release_evidence_bundle,
+    release_key_rotation_drill,
 )
 
 
@@ -59,6 +79,18 @@ def main() -> int:
     bundle_cli.add_argument("--output-dir", required=True)
     bundle_cli.add_argument("--repo-root")
 
+    assemble_linux_toolchain = subparsers.add_parser("assemble-linux-toolchain", add_help=False)
+    assemble_linux_toolchain.add_argument("--runtime-binary", required=True)
+    assemble_linux_toolchain.add_argument("--output-dir", required=True)
+
+    package_linux_toolchain = subparsers.add_parser("package-source-built-linux-toolchain", add_help=False)
+    package_linux_toolchain.add_argument("--staging-prefix", required=True)
+    package_linux_toolchain.add_argument("--output-dir", required=True)
+    package_linux_toolchain.add_argument("--toolchain-version", default="2026.04.0")
+
+    host_origin_audit = subparsers.add_parser("toolchain-host-origin-audit", add_help=False)
+    host_origin_audit.add_argument("--toolchain-root", required=True)
+
     github_plan = subparsers.add_parser("github-release-plan", add_help=False)
     github_plan.add_argument("--repo", required=True)
     github_plan.add_argument("--version", required=True)
@@ -73,8 +105,78 @@ def main() -> int:
     github_publish.add_argument("--channel", default="stable")
     github_publish.add_argument("--title")
 
+    prepare_release = subparsers.add_parser("prepare-github-release", add_help=False)
+    prepare_release.add_argument("--repo", required=True)
+    prepare_release.add_argument("--version", required=True)
+    prepare_release.add_argument("--base-url", required=True)
+    prepare_release.add_argument("--output-dir", required=True)
+    prepare_release.add_argument("--channel", default="stable")
+    prepare_release.add_argument("--title")
+    prepare_release.add_argument("--install-root")
+    prepare_release.add_argument("--handoff-install-root")
+    prepare_release.add_argument("--cli-input", action="append", default=[])
+    prepare_release.add_argument("--toolchain-input", action="append", default=[])
+
     verify_release = subparsers.add_parser("verify-release", add_help=False)
     verify_release.add_argument("--release-dir", required=True)
+
+
+    release_provenance = subparsers.add_parser("release-provenance", add_help=False)
+    release_provenance.add_argument("--release-dir", required=True)
+
+    sign_release = subparsers.add_parser("sign-release-metadata", add_help=False)
+    sign_release.add_argument("--release-dir", required=True)
+    sign_release.add_argument("--private-key", required=True)
+    sign_release.add_argument("--public-key")
+
+    trust_gate = subparsers.add_parser("release-trust-gate", add_help=False)
+    trust_gate.add_argument("--release-dir", required=True)
+    trust_gate.add_argument("--allow-unsigned", action="store_true")
+    trust_gate.add_argument("--trusted-public-key")
+
+    claim_gate = subparsers.add_parser("release-claim-consistency-gate", add_help=False)
+    claim_gate.add_argument("--release-dir", required=True)
+    claim_gate.add_argument("--evidence-dir")
+    claim_gate.add_argument("--allow-stale-windows-artifact", action="store_true")
+
+    windows_marker = subparsers.add_parser("windows-current-source-marker", add_help=False)
+    windows_marker.add_argument("--release-dir", required=True)
+    windows_marker.add_argument("--artifact-id", default="cli-windows-amd64-msys2-clang64")
+    windows_marker.add_argument("--source-revision")
+    windows_marker.add_argument("--builder-identity", default="local")
+
+    evidence_bundle = subparsers.add_parser("release-evidence-bundle", add_help=False)
+    evidence_bundle.add_argument("--release-dir", required=True)
+    evidence_bundle.add_argument("--evidence-dir")
+
+    key_rotation_drill = subparsers.add_parser("release-key-rotation-drill", add_help=False)
+    key_rotation_drill.add_argument("--release-dir", required=True)
+    key_rotation_drill.add_argument("--work-dir")
+
+    controlled_gate = subparsers.add_parser("controlled-release-gate", add_help=False)
+    controlled_gate.add_argument("--release-dir", required=True)
+    controlled_gate.add_argument("--package-index")
+    controlled_gate.add_argument("--release-trust-root")
+    controlled_gate.add_argument("--package-index-trust-root")
+    controlled_gate.add_argument("--allow-unsigned-package-index", action="store_true")
+
+    toolchain_audit = subparsers.add_parser("toolchain-archive-audit", add_help=False)
+    toolchain_audit.add_argument("--archive", required=True)
+    toolchain_audit.add_argument("--target")
+
+    package_plan = subparsers.add_parser("package-artifact-build-plan", add_help=False)
+    package_plan.add_argument("--packages-dir", required=True)
+
+    package_gate = subparsers.add_parser("package-artifact-publication-gate", add_help=False)
+    package_gate.add_argument("--packages-dir", required=True)
+
+    otvm_release_validation = subparsers.add_parser("otvm-release-host-validation-plan", add_help=False)
+    otvm_release_validation.add_argument("--release-dir", required=True)
+    otvm_release_validation.add_argument("--config-path", default="~/oracletestvms-libvirt.toml")
+
+    published_url_validation = subparsers.add_parser("published-url-qualification-plan", add_help=False)
+    published_url_validation.add_argument("--release-url", required=True)
+    published_url_validation.add_argument("--config-path", default="~/oracletestvms-libvirt.toml")
 
     qualify_release = subparsers.add_parser("qualify-release", add_help=False)
     qualify_release.add_argument("--release-dir", required=True)
@@ -87,7 +189,15 @@ def main() -> int:
     source_lock = subparsers.add_parser("source-lock", add_help=False)
     source_lock.add_argument("--target", required=True)
 
+    validate_source_lock_cmd = subparsers.add_parser("validate-source-lock", add_help=False)
+    validate_source_lock_cmd.add_argument("--path", required=True)
+    validate_source_lock_cmd.add_argument("--target")
+
     msys2_manifest = subparsers.add_parser("msys2-input-manifest", add_help=False)
+
+    validate_input_manifest_cmd = subparsers.add_parser("validate-input-manifest", add_help=False)
+    validate_input_manifest_cmd.add_argument("--path", required=True)
+    validate_input_manifest_cmd.add_argument("--target")
 
     subparsers.add_parser("debian-gcc-interop-plan", add_help=False)
 
@@ -119,6 +229,7 @@ def main() -> int:
     msys2_script.add_argument("--cache-dir", required=True)
 
     subparsers.add_parser("msvc-status", add_help=False)
+    subparsers.add_parser("windows-extracted-toolchain-rebuild-plan", add_help=False)
 
     args = parser.parse_args()
     def mapping(values: list[str]) -> dict[str, str]:
@@ -147,6 +258,19 @@ def main() -> int:
         )
     elif args.subcommand == "bundle-cli":
         payload = bundle_full_cli(args.binary, args.output_dir, repo_root=args.repo_root)
+    elif args.subcommand == "assemble-linux-toolchain":
+        payload = assemble_linux_toolchain_artifact(
+            args.output_dir,
+            runtime_binary=args.runtime_binary,
+        )
+    elif args.subcommand == "package-source-built-linux-toolchain":
+        payload = package_source_built_linux_toolchain_artifact(
+            args.staging_prefix,
+            args.output_dir,
+            toolchain_version=args.toolchain_version,
+        )
+    elif args.subcommand == "toolchain-host-origin-audit":
+        payload = toolchain_tree_host_origin_audit(args.toolchain_root)
     elif args.subcommand == "github-release-plan":
         payload = github_release_plan(
             args.repo,
@@ -163,16 +287,75 @@ def main() -> int:
             channel=args.channel,
             title=args.title,
         )
+    elif args.subcommand == "prepare-github-release":
+        payload = prepare_github_release(
+            args.repo,
+            args.version,
+            args.output_dir,
+            args.base_url,
+            cli_inputs=mapping(args.cli_input),
+            toolchain_inputs=mapping(args.toolchain_input),
+            install_root=args.install_root,
+            handoff_install_root=args.handoff_install_root,
+            channel=args.channel,
+            title=args.title,
+        )
     elif args.subcommand == "verify-release":
         payload = verify_release_directory(args.release_dir)
+    elif args.subcommand == "release-provenance":
+        path = write_release_provenance(args.release_dir)
+        payload = {"schema_version": 1, "command": "release-provenance", "ok": True, "status": "ok", "provenance_path": str(path)}
+    elif args.subcommand == "sign-release-metadata":
+        payload = sign_release_metadata(args.release_dir, args.private_key, public_key_path=args.public_key)
+    elif args.subcommand == "release-trust-gate":
+        payload = release_trust_gate(args.release_dir, require_signatures=not args.allow_unsigned, trusted_public_key_path=args.trusted_public_key)
+    elif args.subcommand == "release-claim-consistency-gate":
+        payload = release_claim_consistency_gate(
+            args.release_dir,
+            evidence_dir=args.evidence_dir,
+            require_windows_current_source=not args.allow_stale_windows_artifact,
+        )
+    elif args.subcommand == "windows-current-source-marker":
+        payload = write_windows_current_source_marker(
+            args.release_dir,
+            artifact_id=args.artifact_id,
+            source_revision=args.source_revision,
+            builder_identity=args.builder_identity,
+        )
+    elif args.subcommand == "release-evidence-bundle":
+        payload = write_release_evidence_bundle(args.release_dir, evidence_dir=args.evidence_dir)
+    elif args.subcommand == "release-key-rotation-drill":
+        payload = release_key_rotation_drill(args.release_dir, work_dir=args.work_dir)
+    elif args.subcommand == "controlled-release-gate":
+        payload = controlled_release_gate(
+            args.release_dir,
+            package_index_path=args.package_index,
+            release_trust_root=args.release_trust_root,
+            package_index_trust_root=args.package_index_trust_root,
+            allow_unsigned_package_index=args.allow_unsigned_package_index,
+        )
+    elif args.subcommand == "toolchain-archive-audit":
+        payload = toolchain_archive_audit(args.archive, target_id=args.target)
+    elif args.subcommand == "package-artifact-build-plan":
+        payload = package_artifact_build_plan(args.packages_dir)
+    elif args.subcommand == "package-artifact-publication-gate":
+        payload = package_artifact_publication_gate(args.packages_dir)
+    elif args.subcommand == "otvm-release-host-validation-plan":
+        payload = otvm_release_host_validation_plan(args.release_dir, config_path=args.config_path)
+    elif args.subcommand == "published-url-qualification-plan":
+        payload = published_url_qualification_plan(args.release_url, config_path=args.config_path)
     elif args.subcommand == "qualify-release":
         payload = qualify_release_install(args.release_dir, args.install_root)
     elif args.subcommand == "qualify-full-cli-handoff":
         payload = qualify_full_cli_handoff(args.release_dir, args.install_root)
     elif args.subcommand == "source-lock":
         payload = source_lock_template(args.target)
+    elif args.subcommand == "validate-source-lock":
+        payload = validate_source_lock(json.loads(Path(args.path).read_text()), target_id=args.target)
     elif args.subcommand == "msys2-input-manifest":
         payload = msys2_input_manifest_template()
+    elif args.subcommand == "validate-input-manifest":
+        payload = validate_input_manifest(json.loads(Path(args.path).read_text()), target_id=args.target)
     elif args.subcommand == "debian-gcc-interop-plan":
         payload = debian_gcc_interop_plan()
     elif args.subcommand == "component-inventory":
@@ -204,14 +387,18 @@ def main() -> int:
             return 0
     elif args.subcommand == "msvc-status":
         payload = msvc_status()
+    elif args.subcommand == "windows-extracted-toolchain-rebuild-plan":
+        payload = windows_extracted_toolchain_rebuild_plan()
     else:
         print(
             "build-infra: expected 'matrix', 'manifest', 'bundle-cli', 'source-lock', "
+            "'assemble-linux-toolchain', 'package-source-built-linux-toolchain', 'toolchain-host-origin-audit', "
             "'stage-release', 'github-release-plan', 'github-release-publish', "
-            "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', "
-            "'msys2-input-manifest', 'component-inventory', 'toolchain-manifest', "
+            "'prepare-github-release', 'package-artifact-publication-gate', 'published-url-qualification-plan', "
+            "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', 'windows-current-source-marker', 'release-evidence-bundle', 'release-key-rotation-drill', "
+            "'validate-source-lock', 'msys2-input-manifest', 'validate-input-manifest', 'component-inventory', 'toolchain-manifest', "
             "'toolchain-plan', 'linux-build-script', 'openbsd-build-script', "
-            "'msys2-assembly-script', 'debian-gcc-interop-plan', or 'msvc-status'",
+            "'msys2-assembly-script', 'toolchain-archive-audit', 'debian-gcc-interop-plan', 'windows-extracted-toolchain-rebuild-plan', or 'msvc-status'",
             file=sys.stderr,
         )
         return 2
@@ -220,6 +407,8 @@ def main() -> int:
         print(json.dumps(payload, separators=(",", ":")))
     else:
         print("Build infrastructure payload generated.")
+    if isinstance(payload, dict) and payload.get("ok") is False:
+        return 1
     return 0
 
 

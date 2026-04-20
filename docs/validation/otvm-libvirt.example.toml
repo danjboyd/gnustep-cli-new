@@ -1,0 +1,56 @@
+[project]
+state_dir = "/tmp/oracletestvms-libvirt"
+default_ttl_hours = 8
+operator_public_key_file = "/home/danboyd/.ssh/otvm/id_rsa.pub"
+ssh_connect_timeout_seconds = 5
+readiness_timeout_seconds = 900
+poll_interval_seconds = 15
+
+[provider]
+name = "libvirt"
+
+[operations]
+max_active_leases = 0
+enforce_current_operator_ip = false
+
+[infra]
+operator_ingress_cidrs = ["192.152.203.234/32"]
+# Under provider.name = "libvirt", the OracleTestVMs config still uses the
+# historical *_image_ocid field names, but they should contain provider-neutral
+# qcow2 image references rather than OCI OCIDs.
+windows_2022_image_ocid = "oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2"
+debian13_wayland_image_ocid = "oracletestvms-debian13-wayland-libvirt-20260414181129.qcow2"
+openbsd78_image_ocid = "openbsd78-fvwm.qcow2"
+
+[libvirt]
+connection_mode = "libvirt-ssh"
+guest_access_mode = "direct-lan"
+image_store_mode = "per-host-local-pool"
+image_store_path = "/var/lib/oracletestvms"
+
+[[libvirt.hosts]]
+name = "iep-vm1"
+address = "iep-vm1"
+ssh_user = "danboyd"
+libvirt_uri = "qemu+ssh://danboyd@iep-vm1/system"
+storage_pool = "default"
+network_name = "br0"
+network_mode = "bridge"
+
+[[libvirt.hosts]]
+name = "iep-vm2"
+address = "iep-vm2"
+ssh_user = "danboyd"
+libvirt_uri = "qemu+ssh://danboyd@iep-vm2/system"
+storage_pool = "default"
+network_name = "br0"
+network_mode = "network"
+
+[[libvirt.hosts]]
+name = "iep-ocr01"
+address = "iep-ocr01"
+ssh_user = "danboyd"
+libvirt_uri = "qemu+ssh://danboyd@iep-ocr01/system"
+storage_pool = "default"
+network_name = "br0"
+network_mode = "network"

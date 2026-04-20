@@ -1,0 +1,297 @@
+{
+  "contract_version": "v1",
+  "duration_seconds": 58,
+  "finished_at": "2026-04-17T21:41:09Z",
+  "keep_on_failure": false,
+  "requested_profiles": [
+    "windows-2022"
+  ],
+  "results": [
+    {
+      "checks": [
+        {
+          "details": {
+            "auth": "public-key",
+            "port": 22,
+            "username": "otvmbootstrap"
+          },
+          "name": "ssh_contract",
+          "status": "ok"
+        },
+        {
+          "details": {
+            "port": 3389,
+            "protocol": "rdp",
+            "username": "Administrator"
+          },
+          "name": "gui_contract",
+          "status": "ok"
+        },
+        {
+          "details": {
+            "username": "Administrator"
+          },
+          "name": "windows_gui_credentials",
+          "status": "ok"
+        },
+        {
+          "details": {
+            "command": "whoami",
+            "host": "172.17.2.182"
+          },
+          "name": "ssh_post_ready_probe",
+          "status": "ok"
+        }
+      ],
+      "destroyed": true,
+      "finished_at": "2026-04-17T21:41:09Z",
+      "lease": {
+        "availability_domain": "",
+        "compartment_ocid": "",
+        "error_code": "",
+        "error_message": "",
+        "gui_username": "Administrator",
+        "idempotency_key": "acceptance-windows-2022-20260417214011",
+        "image_ocid": "",
+        "image_reference": "oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2",
+        "instance_ocid": "",
+        "lease_id": "lease-20260417214019-8as087",
+        "metadata": {
+          "purpose": "acceptance"
+        },
+        "private_ip": "172.17.2.182",
+        "profile_slug": "windows-2022",
+        "provider_metadata": {
+          "base_image_path": "/var/lib/libvirt/images/oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2",
+          "computer_name": "OTVM-WIN-8AS087",
+          "domain_name": "oracletestvms-windows-2022-lease-20260417214019-8as087",
+          "guest_access_mode": "direct-lan",
+          "host_address": "iep-vm2",
+          "host_name": "iep-vm2",
+          "libvirt_uri": "qemu+ssh://danboyd@iep-vm2/system",
+          "network_mode": "network",
+          "network_name": "br0",
+          "overlay_path": "/var/lib/oracletestvms/leases/oracletestvms-windows-2022-lease-20260417214019-8as087.qcow2",
+          "windows_gui_username": "Administrator"
+        },
+        "provider_name": "libvirt",
+        "provider_resource_id": "iep-vm2:oracletestvms-windows-2022-lease-20260417214019-8as087",
+        "public_ip": "172.17.2.182",
+        "remote_access": {
+          "gui": {
+            "port": 3389,
+            "protocol": "rdp",
+            "username": "Administrator"
+          },
+          "host": "172.17.2.182",
+          "private_ip": "172.17.2.182",
+          "security_rule_ids": [],
+          "ssh": {
+            "auth": "public-key",
+            "port": 22,
+            "username": "otvmbootstrap"
+          }
+        },
+        "requested_at": "2026-04-17T21:40:19Z",
+        "ssh_username": "otvmbootstrap",
+        "status": "ready",
+        "subnet_ocid": "",
+        "ttl_expires_at": "2026-04-17T23:40:19Z",
+        "updated_at": "2026-04-17T21:41:08Z"
+      },
+      "lease_id": "lease-20260417214019-8as087",
+      "preflight": {
+        "checks": [
+          {
+            "details": null,
+            "name": "libvirt_dependencies",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "hosts": [
+                {
+                  "address": "iep-vm1",
+                  "libvirt_uri": "qemu+ssh://danboyd@iep-vm1/system",
+                  "name": "iep-vm1",
+                  "network_mode": "bridge",
+                  "network_name": "br0",
+                  "storage_pool": "default"
+                },
+                {
+                  "address": "iep-vm2",
+                  "libvirt_uri": "qemu+ssh://danboyd@iep-vm2/system",
+                  "name": "iep-vm2",
+                  "network_mode": "network",
+                  "network_name": "br0",
+                  "storage_pool": "default"
+                },
+                {
+                  "address": "iep-ocr01",
+                  "libvirt_uri": "qemu+ssh://danboyd@iep-ocr01/system",
+                  "name": "iep-ocr01",
+                  "network_mode": "network",
+                  "network_name": "br0",
+                  "storage_pool": "default"
+                }
+              ]
+            },
+            "name": "libvirt_inventory",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "cidrs": [
+                "192.152.203.234/32"
+              ]
+            },
+            "name": "operator_ingress_cidrs",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "allowed": true,
+              "configured_cidrs": [
+                "192.152.203.234/32"
+              ],
+              "detected_ip": "192.152.203.234",
+              "enforced": false
+            },
+            "name": "operator_public_ip",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "address": "iep-vm1",
+              "available_cpu_count": 14.59,
+              "available_memory_mib": 41353,
+              "cpu_count": 16,
+              "disk_available_bytes": 431708643328,
+              "disk_total_bytes": 1967589113856,
+              "host": "iep-vm1",
+              "libvirt_uri": "qemu+ssh://danboyd@iep-vm1/system",
+              "load_average_1m": 1.41,
+              "memory_mib": 64221,
+              "network_mode": "bridge",
+              "network_name": "br0"
+            },
+            "name": "host_connectivity:iep-vm1",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm1",
+              "network_mode": "bridge",
+              "storage_pool": "default",
+              "target_path": "/var/lib/libvirt/images"
+            },
+            "name": "storage_pool:iep-vm1",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "address": "iep-vm2",
+              "available_cpu_count": 30.32,
+              "available_memory_mib": 75596,
+              "cpu_count": 32,
+              "disk_available_bytes": 1600727195648,
+              "disk_total_bytes": 1860607164416,
+              "host": "iep-vm2",
+              "libvirt_uri": "qemu+ssh://danboyd@iep-vm2/system",
+              "load_average_1m": 1.68,
+              "memory_mib": 94182,
+              "network_mode": "network",
+              "network_name": "br0"
+            },
+            "name": "host_connectivity:iep-vm2",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm2",
+              "network_mode": "network",
+              "storage_pool": "default",
+              "target_path": "/var/lib/libvirt/images"
+            },
+            "name": "storage_pool:iep-vm2",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "address": "iep-ocr01",
+              "available_cpu_count": 15.8,
+              "available_memory_mib": 14605,
+              "cpu_count": 16,
+              "disk_available_bytes": 713404530688,
+              "disk_total_bytes": 989755674624,
+              "host": "iep-ocr01",
+              "libvirt_uri": "qemu+ssh://danboyd@iep-ocr01/system",
+              "load_average_1m": 0.2,
+              "memory_mib": 31435,
+              "network_mode": "network",
+              "network_name": "br0"
+            },
+            "name": "host_connectivity:iep-ocr01",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-ocr01",
+              "network_mode": "network",
+              "storage_pool": "default",
+              "target_path": "/var/lib/libvirt/images"
+            },
+            "name": "storage_pool:iep-ocr01",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "image_reference": "oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2",
+              "profile": "windows-2022"
+            },
+            "name": "profile_image",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm1",
+              "image_path": "/var/lib/libvirt/images/oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2",
+              "image_reference": "oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2"
+            },
+            "name": "profile_image_present:iep-vm1",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm2",
+              "image_path": "/var/lib/libvirt/images/oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2",
+              "image_reference": "oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2"
+            },
+            "name": "profile_image_present:iep-vm2",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-ocr01",
+              "image_path": "/var/lib/libvirt/images/oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2",
+              "image_reference": "oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2"
+            },
+            "name": "profile_image_present:iep-ocr01",
+            "status": "ok"
+          }
+        ],
+        "contract_version": "v1",
+        "provider": "libvirt",
+        "ready": true
+      },
+      "profile": "windows-2022",
+      "started_at": "2026-04-17T21:40:11Z",
+      "status": "passed"
+    }
+  ],
+  "started_at": "2026-04-17T21:40:11Z",
+  "summary": {
+    "failed": 0,
+    "passed": 1
+  }
+}

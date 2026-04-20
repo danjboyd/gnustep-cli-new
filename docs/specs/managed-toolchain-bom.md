@@ -16,6 +16,22 @@ The short answer is:
 - Windows `msvc` should remain a separate managed target with its own build
   pipeline and must not be conflated with the MSYS2 target
 
+## Core Source Policy
+
+Official managed toolchain artifacts must be assembled from explicit, locked,
+reviewable inputs. For source-built targets, that means pinned upstream source
+revisions built by project-controlled automation. Distro-installed GNUstep
+trees, distro-generated GNUstep Makefiles, and ad hoc host library copies are
+acceptable only as native packaged execution paths, interoperability validation
+inputs, or clearly marked provisional staging inputs. They are not the canonical
+source of truth for an official managed artifact.
+
+Every managed artifact should be explainable from metadata: upstream URLs, exact
+revisions or package identities, checksums, applied patches, configure/build
+flags, target applicability, and build identity. Any exception to this policy
+needs to be visible in the roadmap, release qualification notes, and artifact
+metadata.
+
 ## Goals
 
 - keep managed toolchains reproducible
@@ -93,6 +109,12 @@ should not scrape GitHub release pages directly.
 
 For Linux `amd64/clang` and OpenBSD `amd64/clang`, the recommended managed
 toolchain source set is:
+
+The GNUstep Make input for this source set should come from the upstream
+`gnustep/tools-make` repository. Copying a distro-installed `gnustep-config`,
+Makefiles tree, or generated filesystem configuration into a managed artifact is
+only a temporary bring-up shortcut unless it has been rebuilt from the locked
+upstream source into the managed prefix.
 
 - `libobjc2`
 - `libdispatch`

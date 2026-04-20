@@ -1,0 +1,307 @@
+{
+  "contract_version": "v1",
+  "duration_seconds": 63,
+  "finished_at": "2026-04-17T21:39:55Z",
+  "keep_on_failure": false,
+  "requested_profiles": [
+    "openbsd-7.8-fvwm"
+  ],
+  "results": [
+    {
+      "checks": [
+        {
+          "details": {
+            "auth": "public-key",
+            "port": 22,
+            "username": "oracleadmin"
+          },
+          "name": "ssh_contract",
+          "status": "ok"
+        },
+        {
+          "details": {
+            "port": 5901,
+            "protocol": "vnc-over-ssh",
+            "tunnel": {
+              "host": "172.17.2.179",
+              "remote_port": 5901,
+              "ssh_port": 22,
+              "ssh_username": "oracleadmin"
+            },
+            "username": "tester"
+          },
+          "name": "gui_contract",
+          "status": "ok"
+        },
+        {
+          "details": {
+            "username": "tester"
+          },
+          "name": "gui_credentials",
+          "status": "ok"
+        },
+        {
+          "details": {
+            "command": "doas true && test -f /var/run/oracletestvms/openbsd78-ready && pgrep Xvnc >/dev/null",
+            "host": "172.17.2.179"
+          },
+          "name": "ssh_post_ready_probe",
+          "status": "ok"
+        }
+      ],
+      "destroyed": true,
+      "finished_at": "2026-04-17T21:39:55Z",
+      "lease": {
+        "availability_domain": "",
+        "compartment_ocid": "",
+        "error_code": "",
+        "error_message": "",
+        "gui_username": "tester",
+        "idempotency_key": "acceptance-openbsd-7.8-fvwm-20260417213851",
+        "image_ocid": "",
+        "image_reference": "openbsd78-fvwm.qcow2",
+        "instance_ocid": "",
+        "lease_id": "lease-20260417213859-ezt6rw",
+        "metadata": {
+          "purpose": "acceptance"
+        },
+        "private_ip": "172.17.2.179",
+        "profile_slug": "openbsd-7.8-fvwm",
+        "provider_metadata": {
+          "base_image_path": "/var/lib/libvirt/images/openbsd78-fvwm.qcow2",
+          "domain_name": "oracletestvms-openbsd-7.8-fvwm-lease-20260417213859-ezt6rw",
+          "guest_access_mode": "direct-lan",
+          "host_address": "iep-vm2",
+          "host_name": "iep-vm2",
+          "libvirt_uri": "qemu+ssh://danboyd@iep-vm2/system",
+          "network_mode": "network",
+          "network_name": "br0",
+          "overlay_path": "/var/lib/oracletestvms/leases/oracletestvms-openbsd-7.8-fvwm-lease-20260417213859-ezt6rw.qcow2"
+        },
+        "provider_name": "libvirt",
+        "provider_resource_id": "iep-vm2:oracletestvms-openbsd-7.8-fvwm-lease-20260417213859-ezt6rw",
+        "public_ip": "172.17.2.179",
+        "remote_access": {
+          "gui": {
+            "port": 5901,
+            "protocol": "vnc-over-ssh",
+            "tunnel": {
+              "host": "172.17.2.179",
+              "remote_port": 5901,
+              "ssh_port": 22,
+              "ssh_username": "oracleadmin"
+            },
+            "username": "tester"
+          },
+          "host": "172.17.2.179",
+          "private_ip": "172.17.2.179",
+          "security_rule_ids": [],
+          "ssh": {
+            "auth": "public-key",
+            "port": 22,
+            "username": "oracleadmin"
+          }
+        },
+        "requested_at": "2026-04-17T21:38:59Z",
+        "ssh_username": "oracleadmin",
+        "status": "ready",
+        "subnet_ocid": "",
+        "ttl_expires_at": "2026-04-17T23:38:59Z",
+        "updated_at": "2026-04-17T21:39:54Z"
+      },
+      "lease_id": "lease-20260417213859-ezt6rw",
+      "preflight": {
+        "checks": [
+          {
+            "details": null,
+            "name": "libvirt_dependencies",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "hosts": [
+                {
+                  "address": "iep-vm1",
+                  "libvirt_uri": "qemu+ssh://danboyd@iep-vm1/system",
+                  "name": "iep-vm1",
+                  "network_mode": "bridge",
+                  "network_name": "br0",
+                  "storage_pool": "default"
+                },
+                {
+                  "address": "iep-vm2",
+                  "libvirt_uri": "qemu+ssh://danboyd@iep-vm2/system",
+                  "name": "iep-vm2",
+                  "network_mode": "network",
+                  "network_name": "br0",
+                  "storage_pool": "default"
+                },
+                {
+                  "address": "iep-ocr01",
+                  "libvirt_uri": "qemu+ssh://danboyd@iep-ocr01/system",
+                  "name": "iep-ocr01",
+                  "network_mode": "network",
+                  "network_name": "br0",
+                  "storage_pool": "default"
+                }
+              ]
+            },
+            "name": "libvirt_inventory",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "cidrs": [
+                "192.152.203.234/32"
+              ]
+            },
+            "name": "operator_ingress_cidrs",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "allowed": true,
+              "configured_cidrs": [
+                "192.152.203.234/32"
+              ],
+              "detected_ip": "192.152.203.234",
+              "enforced": false
+            },
+            "name": "operator_public_ip",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "address": "iep-vm1",
+              "available_cpu_count": 15.68,
+              "available_memory_mib": 41351,
+              "cpu_count": 16,
+              "disk_available_bytes": 431708839936,
+              "disk_total_bytes": 1967589113856,
+              "host": "iep-vm1",
+              "libvirt_uri": "qemu+ssh://danboyd@iep-vm1/system",
+              "load_average_1m": 0.32,
+              "memory_mib": 64221,
+              "network_mode": "bridge",
+              "network_name": "br0"
+            },
+            "name": "host_connectivity:iep-vm1",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm1",
+              "network_mode": "bridge",
+              "storage_pool": "default",
+              "target_path": "/var/lib/libvirt/images"
+            },
+            "name": "storage_pool:iep-vm1",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "address": "iep-vm2",
+              "available_cpu_count": 30.75,
+              "available_memory_mib": 75583,
+              "cpu_count": 32,
+              "disk_available_bytes": 1600727203840,
+              "disk_total_bytes": 1860607164416,
+              "host": "iep-vm2",
+              "libvirt_uri": "qemu+ssh://danboyd@iep-vm2/system",
+              "load_average_1m": 1.25,
+              "memory_mib": 94182,
+              "network_mode": "network",
+              "network_name": "br0"
+            },
+            "name": "host_connectivity:iep-vm2",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm2",
+              "network_mode": "network",
+              "storage_pool": "default",
+              "target_path": "/var/lib/libvirt/images"
+            },
+            "name": "storage_pool:iep-vm2",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "address": "iep-ocr01",
+              "available_cpu_count": 15.37,
+              "available_memory_mib": 14585,
+              "cpu_count": 16,
+              "disk_available_bytes": 713404727296,
+              "disk_total_bytes": 989755674624,
+              "host": "iep-ocr01",
+              "libvirt_uri": "qemu+ssh://danboyd@iep-ocr01/system",
+              "load_average_1m": 0.63,
+              "memory_mib": 31435,
+              "network_mode": "network",
+              "network_name": "br0"
+            },
+            "name": "host_connectivity:iep-ocr01",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-ocr01",
+              "network_mode": "network",
+              "storage_pool": "default",
+              "target_path": "/var/lib/libvirt/images"
+            },
+            "name": "storage_pool:iep-ocr01",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "image_reference": "openbsd78-fvwm.qcow2",
+              "profile": "openbsd-7.8-fvwm"
+            },
+            "name": "profile_image",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm1",
+              "image_path": "/var/lib/libvirt/images/openbsd78-fvwm.qcow2",
+              "image_reference": "openbsd78-fvwm.qcow2"
+            },
+            "name": "profile_image_present:iep-vm1",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-vm2",
+              "image_path": "/var/lib/libvirt/images/openbsd78-fvwm.qcow2",
+              "image_reference": "openbsd78-fvwm.qcow2"
+            },
+            "name": "profile_image_present:iep-vm2",
+            "status": "ok"
+          },
+          {
+            "details": {
+              "host": "iep-ocr01",
+              "image_path": "/var/lib/libvirt/images/openbsd78-fvwm.qcow2",
+              "image_reference": "openbsd78-fvwm.qcow2"
+            },
+            "name": "profile_image_present:iep-ocr01",
+            "status": "ok"
+          }
+        ],
+        "contract_version": "v1",
+        "provider": "libvirt",
+        "ready": true
+      },
+      "profile": "openbsd-7.8-fvwm",
+      "started_at": "2026-04-17T21:38:51Z",
+      "status": "passed"
+    }
+  ],
+  "started_at": "2026-04-17T21:38:51Z",
+  "summary": {
+    "failed": 0,
+    "passed": 1
+  }
+}

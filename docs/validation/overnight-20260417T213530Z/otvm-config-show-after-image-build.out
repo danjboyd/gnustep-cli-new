@@ -1,0 +1,76 @@
+{
+  "arch": {
+    "base_image_url": "https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2",
+    "base_object_name": "Arch-Linux-x86_64-cloudimg.qcow2",
+    "image_name_prefix": "oracletestvms-arch-gnome"
+  },
+  "config_path": "/home/danboyd/oracletestvms-libvirt.toml",
+  "fedora": {
+    "base_image_url": "https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2",
+    "base_object_name": "Fedora-Cloud-Base-Generic-42-1.1.x86_64.qcow2",
+    "image_name_prefix": "oracletestvms-fedora-gnome"
+  },
+  "infra": {
+    "arch_gnome_wayland_image_ocid": "",
+    "builder_nsg_ocid": "",
+    "compartment_ocid": "",
+    "debian13_wayland_image_ocid": "oracletestvms-debian13-wayland-libvirt-20260414181129.qcow2",
+    "fedora_gnome_wayland_image_ocid": "",
+    "lease_nsg_ocid": "",
+    "namespace": "",
+    "openbsd78_image_ocid": "openbsd78-fvwm.qcow2",
+    "operator_ingress_cidrs": [
+      "192.152.203.234/32"
+    ],
+    "subnet_ocid": "",
+    "windows_2022_image_ocid": "oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2"
+  },
+  "libvirt": {
+    "connection_mode": "libvirt-ssh",
+    "guest_access_mode": "direct-lan",
+    "hosts": [
+      {
+        "address": "iep-vm1",
+        "libvirt_uri": "qemu+ssh://danboyd@iep-vm1/system",
+        "name": "iep-vm1",
+        "network_mode": "bridge",
+        "network_name": "br0",
+        "ssh_user": "danboyd",
+        "storage_pool": "default"
+      },
+      {
+        "address": "iep-vm2",
+        "libvirt_uri": "qemu+ssh://danboyd@iep-vm2/system",
+        "name": "iep-vm2",
+        "network_mode": "network",
+        "network_name": "br0",
+        "ssh_user": "danboyd",
+        "storage_pool": "default"
+      },
+      {
+        "address": "iep-ocr01",
+        "libvirt_uri": "qemu+ssh://danboyd@iep-ocr01/system",
+        "name": "iep-ocr01",
+        "network_mode": "network",
+        "network_name": "br0",
+        "ssh_user": "danboyd",
+        "storage_pool": "default"
+      }
+    ],
+    "image_store_mode": "per-host-local-pool",
+    "image_store_path": "/var/lib/oracletestvms"
+  },
+  "oci": {
+    "availability_domain": "",
+    "region": "us-phoenix-1",
+    "tenancy_ocid": "ocid1.tenancy.oc1..aaaaaaaa5dvvl3wfab3mrwynbmzo2phelufhur62pp23cywsvbxy3a3kdd2q"
+  },
+  "operations": {
+    "enforce_current_operator_ip": false,
+    "max_active_leases": 0,
+    "profile_active_lease_limits": {}
+  },
+  "provider": {
+    "name": "libvirt"
+  }
+}

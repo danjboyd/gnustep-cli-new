@@ -25,6 +25,11 @@ if (-not (Test-Path $bash)) {
 }
 
 $env:CHERE_INVOKING = '1'
+$pacmanLock = Join-Path $MsysRoot 'var\lib\pacman\db.lck'
+if (Test-Path $pacmanLock) {
+  Remove-Item -Force $pacmanLock -ErrorAction SilentlyContinue
+}
+
 & $bash -lc "true"
 if ($LASTEXITCODE -ne 0) { throw 'MSYS2 shell bootstrap command failed.' }
 & $bash -lc "pacman -Syuu --noconfirm || true"
@@ -46,5 +51,48 @@ foreach ($entry in $toolDirs) {
     Copy-Item -Recurse -Force $source (Join-Path $Prefix $entry)
   }
 }
+$clangPrefix = Join-Path $Prefix 'clang64'
+New-Item -ItemType Directory -Force -Path $clangPrefix | Out-Null
+foreach ($entry in $toolDirs) {
+  $source = Join-Path $clangRoot $entry
+  if (Test-Path $source) {
+    Copy-Item -Recurse -Force $source (Join-Path $clangPrefix $entry)
+  }
+}
+
+$developerBin = Join-Path $Prefix 'usr\bin'
+New-Item -ItemType Directory -Force -Path $developerBin | Out-Null
+$developerTools = @('bash.exe', 'sh.exe', 'make.exe', 'sha256sum.exe')
+foreach ($tool in $developerTools) {
+  $source = Join-Path $MsysRoot ('usr\\bin\\' + $tool)
+  if (-not (Test-Path $source)) {
+    throw ('Required MSYS2 developer tool is missing: ' + $source)
+  }
+  Copy-Item -Force -LiteralPath $source -Destination (Join-Path $developerBin $tool)
+}
+$developerRuntimeFiles = Get-ChildItem -Path (Join-Path (Join-Path $MsysRoot 'usr\bin') '*') -File | Where-Object { $_.Extension -in @('.exe', '.dll') }
+if ($developerRuntimeFiles.Count -eq 0) {
+  throw 'No MSYS2 usr\bin executable/DLL runtime files were found for developer tools.'
+}
+foreach ($runtimeFile in $developerRuntimeFiles) {
+  Copy-Item -Force -LiteralPath $runtimeFile.FullName -Destination (Join-Path $developerBin $runtimeFile.Name)
+}
+
+$activateBat = @(
+  '@echo off',
+  'set GNUSTEP_MAKEFILES=%~dp0share\GNUstep\Makefiles',
+  'set GNUSTEP_CONFIG_FILE=%~dp0etc\GNUstep\GNUstep.conf',
+  'set PATH=%~dp0clang64\bin;%~dp0bin;%~dp0usr\bin;%PATH%'
+)
+Set-Content -Path (Join-Path $Prefix 'GNUstep.bat') -Value $activateBat -Encoding ASCII
+
+$activatePs1 = @(
+  '$prefix = Split-Path -Parent $MyInvocation.MyCommand.Path',
+  '$env:GNUSTEP_MAKEFILES = Join-Path $prefix ''share\GNUstep\Makefiles''',
+  '$env:GNUSTEP_CONFIG_FILE = Join-Path $prefix ''etc\GNUstep\GNUstep.conf''',
+  '$env:PATH = (Join-Path $prefix ''clang64\bin'') + '';'' + (Join-Path $prefix ''bin'') + '';'' + (Join-Path $prefix ''usr\bin'') + '';'' + $env:PATH'
+)
+Set-Content -Path (Join-Path $Prefix 'GNUstep.ps1') -Value $activatePs1 -Encoding ASCII
 
 Write-Host "MSYS2 managed toolchain assembly completed at $Prefix"
+

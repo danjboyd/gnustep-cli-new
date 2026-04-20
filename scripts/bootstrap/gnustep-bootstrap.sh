@@ -6,8 +6,6 @@ PROGRAM_NAME="${0##*/}"
 CLI_VERSION="0.1.0-dev"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
-INTERNAL_DOCTOR="$ROOT_DIR/scripts/internal/doctor.py"
-INTERNAL_SETUP="$ROOT_DIR/scripts/internal/setup_plan.py"
 SETUP_MANIFEST="${SETUP_MANIFEST:-}"
 
 detect_os() {
@@ -102,6 +100,24 @@ copy_tree_contents() {
   (cd "$source_dir" && tar -cf - .) | (cd "$dest_dir" && tar -xf -)
 }
 
+sed_replacement_escape() {
+  printf '%s' "$1" | sed 's/[\&|]/\\&/g'
+}
+
+relocate_managed_toolchain() {
+  root="$1"
+  placeholder="__GNUSTEP_CLI_INSTALL_ROOT__"
+  escaped_root=$(sed_replacement_escape "$root")
+  find "$root" -type f 2>/dev/null | while IFS= read -r file; do
+    if LC_ALL=C grep -Iq "$placeholder" "$file" 2>/dev/null; then
+      temp_file="$file.relocating.$$"
+      sed "s|$placeholder|$escaped_root|g" "$file" >"$temp_file"
+      cat "$temp_file" >"$file"
+      rm -f "$temp_file"
+    fi
+  done
+}
+
 install_cli_bundle() {
   source_dir="$1"
   dest_dir="$2"
@@ -116,7 +132,7 @@ install_cli_bundle() {
 
 path_hint() {
   root="$1"
-  printf 'export PATH="%s/bin:%s/System/Tools:$PATH"\n' "$root" "$root"
+  printf 'export PATH="%s/bin:%s/Tools:%s/System/Tools:$PATH"\n' "$root" "$root" "$root"
 }
 
 install_root_writable() {
@@ -268,6 +284,7 @@ EOF
     return 1
   fi
   copy_tree_contents "$toolchain_root" "$selected_root"
+  relocate_managed_toolchain "$selected_root"
   mkdir -p "$selected_root/state"
   cat >"$selected_root/state/cli-state.json" <<EOF
 {
@@ -281,17 +298,18 @@ EOF
 EOF
   path_command=$(path_hint "$selected_root")
   path_command_json=$(json_escape "$path_command")
+  manifest_source_json=$(json_escape "$manifest_source")
 
   if [ "${JSON_MODE:-0}" = "1" ]; then
     cat <<EOF
-{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":true,"status":"ok","summary":"Managed installation completed.","doctor":{"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","selected_release":"$release_version","selected_artifacts":["$target_id","$toolchain_id"],"system_privileges_ok":true},"actions":[{"kind":"add_path","priority":1,"message":"Add $selected_root/bin and $selected_root/System/Tools to PATH for future shells."},{"kind":"delete_bootstrap","priority":2,"message":"The bootstrap script is no longer required and may be deleted."}],"install":{"install_root":"$selected_root","path_hint":$path_command_json}}
+{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":true,"status":"ok","summary":"Managed installation completed.","doctor":{"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","manifest_path":$manifest_source_json,"selected_release":"$release_version","selected_artifacts":["$target_id","$toolchain_id"],"system_privileges_ok":true},"actions":[{"kind":"add_path","priority":1,"message":"Add $selected_root/bin, $selected_root/Tools, and $selected_root/System/Tools to PATH for future shells."},{"kind":"delete_bootstrap","priority":2,"message":"The bootstrap script is no longer required and may be deleted."}],"install":{"install_root":"$selected_root","path_hint":$path_command_json}}
 EOF
   else
     printf '%s\n' "setup: managed installation completed"
     printf '%s\n' "setup: scope=$selected_scope root=$selected_root"
     printf '%s\n' "next: Run this in the current shell:"
     printf '%s\n' "  $path_command"
-    printf '%s\n' "next: New shells should include $selected_root/bin and $selected_root/System/Tools on PATH."
+    printf '%s\n' "next: New shells should include $selected_root/bin, $selected_root/Tools, and $selected_root/System/Tools on PATH."
     printf '%s\n' "next: The bootstrap script is no longer required and may be deleted."
   fi
   return 0
@@ -312,6 +330,7 @@ Commands:
   new        Unavailable in bootstrap. Install the full interface first.
   install    Unavailable in bootstrap. Install the full interface first.
   remove     Unavailable in bootstrap. Install the full interface first.
+  update     Unavailable in bootstrap. Install the full interface first.
 
 Global options:
   --help
@@ -324,7 +343,9 @@ EOF
 }
 
 json_escape() {
-  printf '%s' "$1" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'
+  printf '"'
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+  printf '"'
 }
 
 emit_doctor_json() {
@@ -548,7 +569,7 @@ case "$COMMAND" in
     perform_setup
     exit $?
     ;;
-  build|run|new|install|remove)
+  build|run|new|install|remove|update)
     unsupported_command "$COMMAND"
     exit $?
     ;;

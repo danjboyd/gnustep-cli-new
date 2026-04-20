@@ -1,0 +1,10 @@
+2026-04-17T21:32:21Z overnight validation evidence: /home/danboyd/gnustep-cli-new/docs/validation/overnight-20260417T213221Z
+2026-04-17T21:32:21Z repo: /home/danboyd/gnustep-cli-new
+2026-04-17T21:32:21Z otvm root: /home/danboyd/gnustep-cli-new/../OracleTestVMs
+2026-04-17T21:32:21Z otvm config: /home/danboyd/oracletestvms-libvirt.toml
+2026-04-17T21:32:21Z profiles: debian-13-gnome-wayland openbsd-7.8-fvwm fedora-gnome-wayland arch-gnome-wayland windows-2022
+2026-04-17T21:32:21Z START git-status-before
+2026-04-17T21:32:21Z PASS git-status-before
+2026-04-17T21:32:21Z START otvm-head
+2026-04-17T21:32:21Z PASS otvm-head
+2026-04-17T21:32:21Z START otvm-config-show

@@ -40,13 +40,14 @@ Current native command coverage:
 - `new`
 - `install`
 - `remove`
+- `update`
 
 The Objective-C runtime now owns:
 
 - command dispatch
 - JSON envelope generation
 - release-manifest loading for `doctor` and `setup`
-- GNUstep Make project detection for `build` and `run`
+- backend-oriented GNUstep project detection for `build` and `run`, with GNUstep Make as the first implemented backend
 - template generation for `new`
 - managed package state handling for `install` and `remove`
 

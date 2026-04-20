@@ -13,6 +13,25 @@ from zipfile import ZipFile
 
 from .doctor_engine import CLI_VERSION, DEFAULT_MANIFEST, build_doctor_payload
 from .lifecycle import save_cli_state
+from .compatibility import select_artifact_for_environment
+
+MANAGED_PREFIX_PLACEHOLDER = "__GNUSTEP_CLI_INSTALL_ROOT__"
+
+
+def _relocate_managed_toolchain(root: Path) -> None:
+    replacement = str(root)
+    placeholder_bytes = MANAGED_PREFIX_PLACEHOLDER.encode("utf-8")
+    for path in root.rglob("*"):
+        if not path.is_file() or path.is_symlink():
+            continue
+        data = path.read_bytes()
+        if placeholder_bytes not in data or b"\0" in data:
+            continue
+        try:
+            content = data.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        path.write_text(content.replace(MANAGED_PREFIX_PLACEHOLDER, replacement), encoding="utf-8")
 
 
 def _default_user_root(os_name: str) -> str:
@@ -61,25 +80,29 @@ def _validate_manifest_payload(manifest: dict[str, Any]) -> list[str]:
     return errors
 
 
-def _select_release(manifest_file: Path, doctor: dict[str, Any]) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str]]:
+def _select_release(manifest_file: Path, doctor: dict[str, Any]) -> tuple[dict[str, Any] | None, list[dict[str, Any]], list[str], list[str]]:
     manifest = json.loads(manifest_file.read_text())
     errors = _validate_manifest_payload(manifest)
     if errors:
-        return None, [], errors
+        return None, [], errors, []
     releases = manifest["releases"]
     active_release = next((release for release in releases if release.get("status") == "active"), releases[0])
-    selected = [artifact for artifact in active_release.get("artifacts", []) if _artifact_matches_host(artifact, doctor)]
-    selected_by_kind: dict[str, dict[str, Any]] = {}
-    for artifact in selected:
-        selected_by_kind.setdefault(artifact["kind"], artifact)
-    ordered = [selected_by_kind[kind] for kind in ("cli", "toolchain") if kind in selected_by_kind]
-    return active_release, ordered, errors
+    artifacts = active_release.get("artifacts", [])
+    ordered: list[dict[str, Any]] = []
+    selection_errors: list[str] = []
+    for kind in ("cli", "toolchain"):
+        artifact, selection_error = select_artifact_for_environment(doctor["environment"], artifacts, kind=kind)
+        if artifact is not None:
+            ordered.append(artifact)
+        elif selection_error is not None:
+            selection_errors.append(selection_error)
+    return active_release, ordered, errors, selection_errors
 
 
 def _path_export_hint(root: Path, os_name: str) -> str:
     if os_name == "windows":
-        return rf"$env:Path = '{root}\bin;{root}\System\Tools;' + $env:Path"
-    return f'export PATH="{root}/bin:{root}/System/Tools:$PATH"'
+        return rf"$env:Path = '{root}\bin;{root}\Tools;{root}\System\Tools;' + $env:Path"
+    return f'export PATH="{root}/bin:{root}/Tools:{root}/System/Tools:$PATH"'
 
 
 def _sha256(path: Path) -> str:
@@ -163,11 +186,13 @@ def execute_setup(
     payload, exit_code = build_setup_payload(scope=scope, manifest_path=manifest_path, install_root=install_root)
     if not payload["ok"]:
         return payload, exit_code
+    if payload["plan"].get("install_mode") == "native":
+        return payload, 0
 
     manifest_file = Path(manifest_path) if manifest_path else DEFAULT_MANIFEST
     install_path = Path(payload["plan"]["install_root"]).expanduser().resolve()
     doctor = build_doctor_payload(manifest_file, interface="bootstrap")
-    _, selected_artifacts, validation_errors = _select_release(manifest_file, doctor)
+    _, selected_artifacts, validation_errors, selection_errors = _select_release(manifest_file, doctor)
     if validation_errors:
         payload["ok"] = False
         payload["status"] = "error"
@@ -175,6 +200,13 @@ def execute_setup(
         payload["actions"] = [{"kind": "report_bug", "priority": 1, "message": validation_errors[0]}]
         payload["plan"]["manifest_validation_errors"] = validation_errors
         return payload, 2
+    if selection_errors:
+        payload["ok"] = False
+        payload["status"] = "error"
+        payload["summary"] = "Managed artifact selection failed."
+        payload["actions"] = [{"kind": "report_bug", "priority": 1, "message": selection_errors[0]}]
+        payload["plan"]["selection_errors"] = selection_errors
+        return payload, 4
     if len(selected_artifacts) < 2:
         payload["ok"] = False
         payload["status"] = "error"
@@ -213,6 +245,8 @@ def execute_setup(
             )
             installed_items.append({"artifact_id": artifact["id"], "paths": installed_paths})
 
+        _relocate_managed_toolchain(install_path)
+
         save_cli_state(
             install_path,
             {
@@ -233,7 +267,10 @@ def execute_setup(
         {
             "kind": "add_path",
             "priority": 1,
-            "message": f"Add {install_path / 'bin'} and {install_path / 'System/Tools'} to PATH for future shells.",
+                "message": (
+                    f"Add {install_path / 'bin'}, {install_path / 'Tools'}, and "
+                    f"{install_path / 'System/Tools'} to PATH for future shells."
+                ),
         },
         {
             "kind": "delete_bootstrap",
@@ -260,9 +297,12 @@ def build_setup_payload(
     os_name = doctor["environment"]["os"]
     selected_scope = scope
     selected_root = install_root or (_default_system_root(os_name) if selected_scope == "system" else _default_user_root(os_name))
-    active_release, selected_artifacts, validation_errors = _select_release(manifest_file, doctor)
+    active_release, selected_artifacts, validation_errors, selection_errors = _select_release(manifest_file, doctor)
     system_priv_ok = selected_scope != "system" or _has_system_privileges(os_name)
     install_path = Path(selected_root).expanduser()
+    native_toolchain_assessment = doctor["environment"].get("native_toolchain", {}).get("assessment", "unavailable")
+    install_mode = "managed"
+    disposition = "install_managed"
 
     status = "ok"
     ok = True
@@ -276,6 +316,12 @@ def build_setup_payload(
         summary = "Release manifest validation failed."
         actions.append({"kind": "report_bug", "priority": 1, "message": validation_errors[0]})
         exit_code = 2
+    elif selection_errors:
+        status = "error"
+        ok = False
+        summary = "Managed artifact selection failed."
+        actions.append({"kind": "report_bug", "priority": 1, "message": selection_errors[0]})
+        exit_code = 4
     elif not system_priv_ok:
         status = "error"
         ok = False
@@ -304,6 +350,17 @@ def build_setup_payload(
             }
         )
         exit_code = 3
+    elif install_root is None and selected_scope == "user" and native_toolchain_assessment in {"preferred", "supported"}:
+        install_mode = "native"
+        disposition = "use_existing_toolchain"
+        summary = "Using the detected native GNUstep toolchain; managed installation is not required."
+        actions.append(
+            {
+                "kind": "use_existing_toolchain",
+                "priority": 1,
+                "message": doctor["environment"]["native_toolchain"]["message"],
+            }
+        )
     elif not doctor["environment"]["bootstrap_prerequisites"]["curl"] and not doctor["environment"]["bootstrap_prerequisites"]["wget"]:
         status = "error"
         ok = False
@@ -362,13 +419,17 @@ def build_setup_payload(
         },
         "plan": {
             "scope": selected_scope,
+            "install_mode": install_mode,
+            "disposition": disposition,
             "install_root": selected_root,
             "channel": "stable",
             "manifest_path": str(manifest_file),
             "selected_release": active_release["version"] if active_release else None,
+            "native_toolchain_assessment": native_toolchain_assessment,
             "selected_artifacts": [artifact["id"] for artifact in selected_artifacts],
             "system_privileges_ok": system_priv_ok,
             "manifest_validation_errors": validation_errors,
+            "selection_errors": selection_errors,
         },
         "actions": actions,
     }

@@ -1,5 +1,6 @@
 import sys
 import unittest
+import os
 from pathlib import Path
 
 
@@ -16,8 +17,13 @@ class QATests(unittest.TestCase):
         payload = regression_suite()
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["exit_status"], 0)
+        if os.environ.get("GNUSTEP_CLI_QA_NESTED") == "1":
+            self.assertEqual(payload["summary"], "Nested regression invocation skipped.")
+        else:
+            stage_ids = [stage["id"] for stage in payload["stages"]]
+            self.assertEqual(stage_ids, ["python", "native-full-cli"])
+            self.assertTrue(all(stage["ok"] for stage in payload["stages"]))
 
 
 if __name__ == "__main__":
     unittest.main()
-

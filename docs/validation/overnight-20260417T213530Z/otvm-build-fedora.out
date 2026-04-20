@@ -1,0 +1,9 @@
+{
+  "contract_version": "v1",
+  "error": {
+    "code": "file_missing",
+    "details": {},
+    "message": "[Errno 2] No such file or directory: 'virt-customize'",
+    "retryable": false
+  }
+}

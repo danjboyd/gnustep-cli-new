@@ -14,3 +14,6 @@ Recommended top-level structure:
 
 The canonical published package index should be generated from `packages/`, not maintained by hand.
 
+Recommended generated artifact:
+
+- `packages/package-index.json`

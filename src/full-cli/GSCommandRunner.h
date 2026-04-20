@@ -2,7 +2,7 @@
 
 @interface GSCommandRunner : NSObject
 
-- (int)runWithArguments:(NSArray<NSString *> *)arguments;
+- (int)runWithArguments:(NSArray *)arguments;
 - (NSArray *)knownCommands;
 
 @end

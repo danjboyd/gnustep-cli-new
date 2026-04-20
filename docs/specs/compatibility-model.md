@@ -31,6 +31,31 @@ Compatibility decisions answer:
 - `windows/amd64/msys2-clang64`
 - `windows/amd64/msvc`
 
+## Current Release Native-Toolchain Discovery Goals
+
+- The current release should explicitly investigate platform-native GNUstep package viability on:
+  - OpenBSD
+  - Fedora
+  - Debian
+  - Arch
+- These investigations are not all expected to produce the same answer.
+- The goal is to classify each ecosystem honestly:
+  - preferred packaged toolchain path
+  - supported but not preferred packaged path
+  - interoperability-only path
+  - incompatible path that should use the managed toolchain instead
+- OpenBSD and Fedora are currently the most plausible packaged-toolchain candidates for a preferred or supported native-package path because they may ship a Clang plus `libobjc2`-oriented stack.
+- Arch is also now treated as a supported native-package candidate when its packaged GNUstep environment matches the Clang plus `libobjc2` runtime model.
+- Debian remains a current-release discovery target, but today it is primarily treated as a GCC interoperability path unless a validated packaged Clang plus `libobjc2` stack is proven.
+
+## Deferred Native-Toolchain Discovery Targets
+
+- The following distro families are explicitly deferred beyond the current release target set:
+  - openSUSE
+  - RHEL-family distributions and clones
+  - Alpine
+- They remain valid future investigation targets, but they should not expand the current release validation scope until the higher-leverage current-release targets are classified first.
+
 ## OpenBSD Packaged Toolchain Policy
 
 - OpenBSD system packages should be treated as a first-class external toolchain path, not as an inherently inferior fallback.
@@ -56,3 +81,8 @@ Compatibility decisions answer:
 - GCC environments are detected and classified.
 - GCC is not rejected ideologically.
 - v1 managed artifacts are not promised for GCC unless validated GCC artifacts are actually published.
+- A distro may still be a current-release discovery target even when its packaged GNUstep stack is GCC-based.
+- In those cases, the release goal is to determine whether the packaged path is:
+  - sufficient for interoperability validation
+  - sufficient for some supported workflows
+  - or incompatible with the CLI's required runtime/capability model

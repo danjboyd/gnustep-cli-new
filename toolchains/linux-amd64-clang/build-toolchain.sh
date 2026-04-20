@@ -4,7 +4,8 @@ set -eu
 PREFIX="/tmp/gnustep-cli-linux-toolchain/install"
 SOURCES_DIR="/tmp/gnustep-cli-linux-toolchain/sources"
 BUILD_ROOT="/tmp/gnustep-cli-linux-toolchain/build"
-JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc 2>/dev/null || echo 4)"
+HOST_OS="linux"
+JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
 
 mkdir -p "$PREFIX" "$SOURCES_DIR" "$BUILD_ROOT"
 
@@ -50,6 +51,19 @@ fi
 git -C "$SOURCES_DIR/libs-back" fetch --tags origin
 git -C "$SOURCES_DIR/libs-back" checkout --detach "bf3b3ced525f08415a20d109f05be1f91492414c"
 
+case "$HOST_OS" in
+  linux)
+    : "${MAKE:=make}"
+    export MAKE
+    ;;
+  openbsd)
+    export MAKE=gmake
+    export PKG_CONFIG=pkg-config
+    export AUTOCONF_VERSION=${AUTOCONF_VERSION:-2.72}
+    export AUTOMAKE_VERSION=${AUTOMAKE_VERSION:-1.17}
+    ;;
+esac
+
 cd "$SOURCES_DIR/libobjc2"
 rm -rf build
 cmake -S . -B build \
@@ -92,8 +106,8 @@ export LDFLAGS="-L$PREFIX/lib -L$PREFIX/lib64 ${LDFLAGS:-}"
 
 cd "$SOURCES_DIR/tools-make"
 ./configure --prefix="$PREFIX" --with-layout=gnustep --enable-native-objc-exceptions --enable-objc-arc --with-library-combo=ng-gnu-gnu
-make -j"$JOBS"
-make install
+"${MAKE:-make}" -j"$JOBS"
+"${MAKE:-make}" install
 
 export GNUSTEP_SYSTEM_ROOT="$PREFIX/System"
 export GNUSTEP_LOCAL_ROOT="$PREFIX/Local"
@@ -102,14 +116,21 @@ export GNUSTEP_MAKEFILES="$PREFIX/System/Library/Makefiles"
 set +u
 . "$GNUSTEP_MAKEFILES/GNUstep.sh"
 set -u
+unset GNUSTEP_SYSTEM_ROOT GNUSTEP_LOCAL_ROOT GNUSTEP_NETWORK_ROOT
+
+# Expose the managed Objective-C runtime headers through the GNUstep header domain.
+mkdir -p "$PREFIX/Local/Library/Headers"
+ln -sfn "$PREFIX/include/objc" "$PREFIX/Local/Library/Headers/objc"
+cp -f "$PREFIX/include/Block.h" "$PREFIX/Local/Library/Headers/Block.h"
+cp -f "$PREFIX/include/Block_private.h" "$PREFIX/Local/Library/Headers/Block_private.h"
 
 for lib in libs-base libs-corebase libs-gui libs-back; do
   cd "$SOURCES_DIR/$lib"
-  make distclean >/dev/null 2>&1 || true
+  "${MAKE:-make}" distclean >/dev/null 2>&1 || true
   ./configure --prefix="$PREFIX"
-  make -j"$JOBS"
-  make install
+  "${MAKE:-make}" -j"$JOBS"
+  "${MAKE:-make}" install
 done
 
-printf "%s\n" "Linux managed toolchain build completed at $PREFIX"
+printf "%s\n" "$HOST_OS managed toolchain build completed at $PREFIX"
 

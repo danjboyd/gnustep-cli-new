@@ -53,7 +53,8 @@ git -C "$SOURCES_DIR/libs-back" checkout --detach "bf3b3ced525f08415a20d109f05be
 
 case "$HOST_OS" in
   linux)
-    export MAKE=gmake
+    : "${MAKE:=make}"
+    export MAKE
     ;;
   openbsd)
     export MAKE=gmake

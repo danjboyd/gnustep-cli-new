@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ROOT / "schemas"
 EXAMPLES = ROOT / "examples"
+TOOLCHAINS = ROOT / "toolchains"
 
 
 class RepositoryContractsTests(unittest.TestCase):
@@ -89,10 +90,43 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertEqual(payload["schema_version"], 1)
         self.assertTrue(payload["components"])
 
+    def test_checked_in_toolchain_json_files_are_valid_json(self):
+        for path in sorted(TOOLCHAINS.glob("**/*.json")):
+            with self.subTest(path=path.relative_to(ROOT)):
+                self.assertIsInstance(self.load_json(path), dict)
+
     def test_toolchain_manifest_example_shape(self):
         payload = self.load_json(EXAMPLES / "toolchain-manifest-v1.json")
         self.assertEqual(payload["kind"], "managed-toolchain")
         self.assertTrue(payload["components"])
+
+
+    def test_windows_public_bootstrap_diagnostic_script_exists(self):
+        script = ROOT / "scripts" / "dev" / "windows-public-bootstrap-diagnose.ps1"
+        self.assertTrue(script.exists())
+        content = script.read_text()
+        self.assertIn("Register-ScheduledTask", content)
+        self.assertIn("GNUSTEP_BOOTSTRAP_TRACE", content)
+        self.assertIn("GNUSTEP_BOOTSTRAP_KEEP_TEMP", content)
+
+
+    def test_production_signing_policy_is_documented(self):
+        doc = ROOT / "docs" / "security-production-signing.md"
+        self.assertTrue(doc.exists())
+        content = doc.read_text()
+        self.assertIn("externally pinned release trust root", content)
+        self.assertIn("package-index signing key is distinct", content)
+        self.assertIn("--allow-unsigned-package-index", content)
+        self.assertIn("key rotation", content)
+
+    def test_otvm_release_validation_runner_has_execute_cleanup_path(self):
+        script = ROOT / "scripts" / "dev" / "run-otvm-release-validation.sh"
+        self.assertTrue(script.exists())
+        content = script.read_text()
+        self.assertIn("--execute", content)
+        self.assertIn("trap cleanup EXIT INT TERM", content)
+        self.assertIn("--ttl-hours 2", content)
+        self.assertIn("destroy", content)
 
 
 if __name__ == "__main__":
