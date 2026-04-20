@@ -486,7 +486,8 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 
 ### C. Package Artifact Builds
 - Implement official package builds from source and package metadata.
-- Emit provenance attestations, source revision linkage, and artifact identities that can be signed and published alongside the package artifacts.
+- Apply package-scoped downstream patches from reviewed manifest declarations after source verification and before invoking the selected build backend.
+- Emit provenance attestations, source revision linkage, applied patch identities/digests, and artifact identities that can be signed and published alongside the package artifacts.
 
 ### D. Publishing Pipeline
 - Publish artifacts, regenerate manifests and indexes, and stage releases by channel.
@@ -518,7 +519,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
   release metadata, signed package-index metadata, externally pinned release and
   package-index trust roots, and package artifact publication readiness before
   publication.
-- Package artifact build planning now surfaces source-provenance, artifact-digest, signing, publishability, and production-readiness blockers per package and per artifact instead of emitting a loose artifact list that publication tooling must reinterpret. A package artifact publication gate fails release publication while blockers remain; the current `tools-xctest` package now has real Linux and OpenBSD dogfood artifacts with source provenance and verified artifact digests, and regression coverage includes a synthetic production-ready package manifest.
+- Package artifact build planning now surfaces source-provenance, patch provenance, artifact-digest, signing, publishability, and production-readiness blockers per package and per artifact instead of emitting a loose artifact list that publication tooling must reinterpret. A package artifact publication gate fails release publication while blockers remain; the current `tools-xctest` package now has real Linux and OpenBSD dogfood artifacts with source provenance and verified artifact digests, and regression coverage includes a synthetic production-ready package manifest.
 - The remaining Phase 12 work is now centered on:
   - provisioning CI secrets or a signing service with production release and package-index keys
   - making host-backed qualification less operator-manual
@@ -677,6 +678,12 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Build GNUstep Make from `gnustep/tools-make` into the managed prefix instead of copying distro-generated Makefiles or `gnustep-config` output.
 - Produce a toolchain manifest, source lock, component inventory, checksums, and archive artifact.
 
+### B2. Linux `arm64/clang` Debian Managed Toolchain Build
+- Add Debian/aarch64 as a managed build target for the full CLI, managed toolchain, and official packages.
+- Use canonical target id `linux-arm64-clang` and canonical architecture value `arm64`, while documenting Debian/aarch64 as the initial host profile.
+- Prefer `../OracleTestVMs` local libvirt/mac capacity for build and validation leases, falling back to OCI only when local capacity is unavailable.
+- Keep publication disabled until source-built toolchain, full CLI, package artifacts, and host-backed install/remove validation pass on the target.
+
 ### C. Linux Validation
 - Run `doctor` against the staged Linux managed toolchain.
 - Build and run minimal GNUstep Make fixtures against the staged toolchain.
@@ -698,6 +705,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Phase 16D regression coverage includes source-lock validation, MSYS2 input-manifest validation, source-built Linux artifact packaging, release metadata propagation, archive metadata auditing, setup-time managed-prefix relocation, and host-origin GNUstep path leakage detection.
 - The older host-derived Linux assembler remains available only as a transitional non-production path and marks its artifacts `production_eligible = false`.
 - Phase 16 follow-up now resolves the immediate Linux portability blocker by making the current `linux-amd64-clang` managed artifact explicitly Debian-scoped in generated release metadata, toolchain manifests, component inventories, and artifact selection. Fedora and Arch remain validated GCC/libobjc interoperability targets, and future managed Clang support there requires dependency closure or per-distro artifacts rather than reusing the Debian-scoped artifact.
+- Phase 16.B2 is implemented at metadata/planning level: the build matrix, source lock, toolchain manifest, component inventory, generated build script, package target metadata, and regression coverage now exist for `linux-arm64-clang`. Publication remains disabled until a Debian/aarch64 host-backed build and install/remove validation pass. Interim validation can use the new `../OracleTestVMs` `ubuntu-24.04-aarch64` profile because Ubuntu is close enough to exercise the Debian-family apt/prerequisite and Linux arm64 managed-build path. Blocker for final 16.B2 closeout: `../OracleTestVMs` must provide the in-progress Debian/aarch64 image/profile or we must explicitly revise 16.B2 from Debian/aarch64 to Ubuntu/aarch64.
 
 ## Phase 17. Remaining Tier 1 Toolchain Builds
 
@@ -707,6 +715,15 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Record and apply OpenBSD-specific patches explicitly.
 - Validate the resulting artifact with compile, link, run, and `doctor` coverage.
 - Keep the managed OpenBSD toolchain path optional in product policy if the packaged OpenBSD GNUstep environment proves sufficient for the CLI's supported workflows.
+
+### A2. OpenBSD `arm64/clang` Managed Toolchain Build
+- Add OpenBSD/arm64 as a first-class planned target for the full CLI, managed toolchain metadata, and official packages.
+- Use canonical target id `openbsd-arm64-clang` and canonical architecture value `arm64`.
+- Validate initially on the available OpenBSD arm64 server before enabling artifact publication.
+- Keep publication disabled until source-built toolchain, full CLI, package artifacts, and host-backed install/remove validation pass on the target.
+
+### Phase 17 Execution Status
+- Phase 17.A2 is implemented at metadata/planning level: the build matrix, source lock, toolchain manifest, component inventory, generated build script, package target metadata, and regression coverage now exist for `openbsd-arm64-clang`. Publication remains disabled until a live OpenBSD/arm64 build, full-CLI smoke, package artifact rebuild, and install/remove validation pass. Blocker: `../OracleTestVMs` must provide the in-progress OpenBSD/arm64 image/profile or equivalent managed access to the available OpenBSD arm64 host for finishing 17.A2.
 
 ### B. Windows `amd64/msys2-clang64` Managed Toolchain Assembly
 - Define the pinned MSYS2 package input set for the Windows `clang64` target.
@@ -1084,6 +1101,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 ### G. Testing
 - Add end-to-end install/remove tests using a generated package index.
 - Add package publication/installation tests that reject opaque official binaries without reviewed source provenance unless a documented exception policy applies.
+- Reject package publication when declared downstream patches are missing, use placeholder digests, or do not match their reviewed patch files.
 - Add dependency, conflict, compatibility, and ownership regression tests.
 - Add upgrade and reinstall tests for reviewed packages.
 
@@ -1223,6 +1241,50 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 ### E. Exit Criteria
 - The project has a defensible v1 release candidate with accurate docs, passing release gates, and validated support claims.
 - No managed artifact is treated as production-supported unless its source/input provenance, component inventory, signing metadata, and host-backed qualification evidence satisfy the managed artifact source policy.
+
+## Phase 24. Official Package Initiative And `tools-xctest` Installability
+
+### A. Package Source-Of-Truth And Update Policy
+- Extend package manifests so every official package declares its upstream source of truth, tracking strategy, update cadence, and channel policy.
+- Default stable packages to tagged upstream releases; allow commit or branch snapshots only on dogfood/snapshot channels or through an explicit package exception.
+- Record upstream PRs, downstream patches, source revisions, source digests, and package-version mapping in package metadata and generated provenance.
+
+### B. Patch-Aware Package Build Pipeline
+- Apply declared package patches after verified source fetch and before invoking the selected build backend.
+- Verify patch file digests, safe relative paths, target applicability, and upstream status before a package artifact can be published.
+- Add regression coverage for successful patch application, failed patch application, patch digest mismatch, and target-specific patch selection.
+- Current `tools-xctest` package state: PR `https://github.com/gnustep/tools-xctest/pull/5` is recorded as downstream patch `add-apple-style-xctest-cli-filters`; existing dogfood artifacts are marked pending rebuild because they predate this patch.
+
+### C. `tools-xctest` Build-With-Our-CLI Flow
+- Teach package build tooling to build `tools-xctest` through our own CLI/package workflow rather than only through ad hoc shell commands.
+- Build patched `tools-xctest` artifacts for Linux `amd64/clang`, Debian Linux `arm64/clang`, OpenBSD `amd64/clang`, OpenBSD `arm64/clang`, and Windows `amd64/msys2-clang64`; use local libvirt/mac VM capacity through `../OracleTestVMs` first and fall back to OCI only when local capacity is unavailable.
+- Preserve the OpenBSD linker-name workaround either as an upstreamable patch, a package build step, or a target-specific post-build fix with provenance.
+- Regenerate package artifact checksums and package-index metadata from the rebuilt artifacts.
+
+### D. Package Index Publication And Trust
+- Publish package artifacts and package index metadata through the same signed/trusted artifact model used for release metadata.
+- Ensure the generated package index only exposes artifacts that correspond exactly to the declared source revision plus declared patches.
+- Add package provenance evidence including upstream source, applied patches, builder identity, target profile, artifact digest, and install/remove validation result.
+
+### Phase 24 Execution Status
+- Phase 24.A-D are implemented at repository-tooling level: the `tools-xctest` package manifest records upstream source policy, update cadence, channel policy, submitted PR #5 as a verified downstream patch, and a `gnustep build`-oriented build workflow. Package tooling can now validate and apply declared patches to a source checkout, package build planning exposes build backend/invocation metadata, and generated package indexes/provenance carry package and per-artifact source/patch identity. Remaining Phase 24 work is artifact rebuild, signed publication, native install/remove dogfood, and release-gate integration.
+
+### E. Native CLI Install/Remove Dogfood
+- Use the native full CLI to install `org.gnustep.tools-xctest` from the generated package index on a clean managed root.
+- Verify `xctest` is on the expected installed path, can execute `--help` or equivalent smoke behavior, and can run at least one minimal XCTest bundle.
+- Remove the package through the CLI and verify owned-file cleanup, state updates, and dependency behavior.
+- Run this flow on Linux amd64, Linux arm64/Debian, OpenBSD, and Windows/MSYS2 as target artifacts become available.
+
+### F. Release Gate Integration
+- Add `tools-xctest` package install/remove smoke to release qualification so Objective-C unit-test infrastructure is validated as a real package, not only as a developer prerequisite.
+- Fail release qualification if the package index references stale artifacts, unsigned/untrusted metadata, unapplied declared patches, or package artifacts that do not pass install/remove smoke.
+- Treat `tools-xctest` as the canonical first official package proving the package lifecycle: upstream source, downstream patch, package build, artifact publication, index trust, install, smoke, remove, and update.
+
+### G. Exit Criteria
+- `gnustep install org.gnustep.tools-xctest --package-index <signed-index>` works on the validated Linux target.
+- `gnustep remove org.gnustep.tools-xctest` restores package state cleanly.
+- Linux arm64/Debian, OpenBSD, and Windows/MSYS2 have either the same install/remove proof or explicitly documented non-release blockers.
+- Published `tools-xctest` artifacts are rebuilt from the declared upstream source plus PR #5 patch, with recorded source/patch/artifact digests and host-backed validation evidence.
 
 ## Testing Principles For All Phases
 

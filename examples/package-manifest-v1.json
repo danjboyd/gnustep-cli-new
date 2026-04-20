@@ -15,7 +15,12 @@
   "source": {
     "type": "archive",
     "url": "https://example.invalid/myapp-1.2.3.tar.gz",
-    "sha256": "deadbeef"
+    "sha256": "deadbeef",
+    "upstream": "example/myapp",
+    "upstream_url": "https://example.invalid/myapp",
+    "tracking_strategy": "tagged-release",
+    "update_cadence": "on-upstream-release",
+    "channel_policy": "stable tracks signed upstream releases; snapshot may track reviewed commits."
   },
   "requirements": {
     "supported_os": [
@@ -68,6 +73,29 @@
     "strategy": "archive",
     "prefix_layout": "gnustep",
     "primary_executable": "MyApp"
+  },
+  "patches": [
+    {
+      "id": "fix-example-build-flags",
+      "path": "patches/fix-example-build-flags.patch",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "strip": 1,
+      "applies_to": [
+        "myapp-linux-amd64-clang"
+      ],
+      "rationale": "Carry a downstream build fix until it is accepted upstream.",
+      "upstream_status": "submitted"
+    }
+  ],
+  "build": {
+    "backend": "gnustep-cli",
+    "build_system": "gnustep-make",
+    "build": [
+      "gnustep",
+      "build",
+      "--build-system",
+      "gnustep-make"
+    ],
+    "patch_application": "after-source-verification-before-build"
   }
 }
-

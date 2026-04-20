@@ -15,11 +15,29 @@ def discover_package_manifests(packages_root: str | Path) -> list[Path]:
     return sorted(path for path in root.glob("*/package.json") if path.is_file())
 
 
+
+def _patches_for_artifact(package_patches: list[dict[str, Any]], artifact_id: str) -> list[dict[str, Any]]:
+    selected = []
+    for patch in package_patches:
+        applies_to = patch.get("applies_to")
+        if applies_to is None or artifact_id in applies_to:
+            selected.append(patch)
+    return selected
+
+
 def generate_package_index(packages_root: str | Path, channel: str = "stable") -> dict[str, Any]:
     manifests = discover_package_manifests(packages_root)
     packages: list[dict[str, Any]] = []
     for manifest_path in manifests:
         payload = json.loads(manifest_path.read_text())
+        package_source = payload.get("source", {})
+        package_patches = payload.get("patches", [])
+        artifacts = []
+        for artifact in payload["artifacts"]:
+            enriched = dict(artifact)
+            enriched["source"] = package_source
+            enriched["patches"] = _patches_for_artifact(package_patches, str(artifact.get("id", "")))
+            artifacts.append(enriched)
         packages.append(
             {
                 "id": payload["id"],
@@ -27,9 +45,12 @@ def generate_package_index(packages_root: str | Path, channel: str = "stable") -
                 "version": payload["version"],
                 "kind": payload["kind"],
                 "summary": payload.get("summary", ""),
+                "source": package_source,
+                "patches": package_patches,
+                "build": payload.get("build", {}),
                 "requirements": payload["requirements"],
                 "dependencies": payload.get("dependencies", []),
-                "artifacts": payload["artifacts"],
+                "artifacts": artifacts,
             }
         )
     return {
@@ -132,11 +153,29 @@ def package_index_provenance_document(index_path: str | Path, *, builder_identit
                 "id": package.get("id"),
                 "version": package.get("version"),
                 "kind": package.get("kind"),
+                "source": package.get("source", {}),
+                "patches": [
+                    {
+                        "id": patch.get("id"),
+                        "path": patch.get("path"),
+                        "sha256": patch.get("sha256"),
+                    }
+                    for patch in package.get("patches", [])
+                ],
                 "artifact_count": len(package.get("artifacts", [])),
+                "build": package.get("build", {}),
                 "artifact_digests": [
                     {
                         "id": artifact.get("id"),
                         "sha256": artifact.get("sha256"),
+                        "source_sha256": artifact.get("source", {}).get("sha256"),
+                        "patches": [
+                            {
+                                "id": patch.get("id"),
+                                "sha256": patch.get("sha256"),
+                            }
+                            for patch in artifact.get("patches", [])
+                        ],
                     }
                     for artifact in package.get("artifacts", [])
                 ],

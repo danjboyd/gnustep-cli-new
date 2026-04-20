@@ -52,6 +52,17 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("checks", payload)
         self.assertIn("actions", payload)
 
+    def test_doctor_reports_tools_scripts_host_prerequisites(self):
+        proc = self.run_script("--json", "doctor")
+        self.assertIn(proc.returncode, (0, 3))
+        payload = json.loads(proc.stdout)
+        host_prereqs = payload["environment"]["host_prerequisites"]
+        self.assertEqual(host_prereqs["source"], "https://github.com/gnustep/tools-scripts")
+        if payload["environment"]["platform"] in {"debian", "ubuntu"}:
+            self.assertIn("libxml2-dev", host_prereqs["packages"])
+            self.assertIn("libavahi-client-dev", host_prereqs["packages"])
+            self.assertIn("libcurl4-gnutls-dev", host_prereqs["packages"])
+
     def test_setup_json_shape(self):
         proc = self.run_script("--json", "setup")
         self.assertIn(proc.returncode, (0, 3))

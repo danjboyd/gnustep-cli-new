@@ -53,7 +53,39 @@
         "type",
         "url",
         "sha256"
-      ]
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
+        "upstream": {
+          "type": "string"
+        },
+        "upstream_url": {
+          "type": "string"
+        },
+        "tracking_strategy": {
+          "type": "string"
+        },
+        "update_cadence": {
+          "type": "string"
+        },
+        "channel_policy": {
+          "type": "string"
+        }
+      }
     },
     "requirements": {
       "type": "object",
@@ -79,8 +111,49 @@
     },
     "install": {
       "type": "object"
+    },
+    "patches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "path",
+          "sha256"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "strip": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "applies_to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "upstream_status": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "build": {
+      "type": "object"
     }
   },
   "additionalProperties": true
 }
-

@@ -8,6 +8,162 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 SETUP_MANIFEST="${SETUP_MANIFEST:-}"
 
+YES_MODE=0
+HOST_PREREQUISITE_SOURCE="https://github.com/gnustep/tools-scripts"
+HOST_PREREQUISITE_SOURCE_NOTE="Derived from GNUstep tools-scripts install-dependencies-* and normalized for this bootstrap."
+
+
+detect_linux_distribution() {
+  if [ -r /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    case "${ID:-}" in
+      debian|ubuntu|fedora|arch) printf '%s\n' "$ID"; return 0 ;;
+    esac
+    case " ${ID_LIKE:-} " in
+      *" debian "*) printf '%s\n' "debian"; return 0 ;;
+      *" ubuntu "*) printf '%s\n' "ubuntu"; return 0 ;;
+      *" fedora "*) printf '%s\n' "fedora"; return 0 ;;
+      *" arch "*) printf '%s\n' "arch"; return 0 ;;
+    esac
+  fi
+  printf '%s\n' "unknown"
+}
+
+host_platform_id() {
+  os=$(detect_os)
+  if [ "$os" = "linux" ]; then
+    detect_linux_distribution
+    return 0
+  fi
+  printf '%s\n' "$os"
+}
+
+host_prerequisite_packages() {
+  platform="$1"
+  case "$platform" in
+    debian|ubuntu)
+      printf '%s\n' "ca-certificates curl tar gzip xz-utils zstd git make cmake ninja-build pkg-config clang lld libxml2-dev libxslt1-dev libicu-dev libavahi-client-dev libcurl4-gnutls-dev libgnutls28-dev libffi-dev libjpeg-dev libtiff-dev libpng-dev libcairo2-dev libxft-dev libxt-dev libx11-dev libxext-dev"
+      ;;
+    fedora)
+      printf '%s\n' "ca-certificates curl tar gzip xz zstd git make cmake ninja-build pkgconf-pkg-config clang lld libxml2-devel libxslt-devel libicu-devel avahi-devel libcurl-devel gnutls-devel libffi-devel libjpeg-turbo-devel libtiff-devel libpng-devel cairo-devel libXft-devel libXt-devel libX11-devel libXext-devel"
+      ;;
+    arch)
+      printf '%s\n' "ca-certificates curl tar gzip xz zstd git make cmake ninja pkgconf clang lld libxml2 libxslt icu avahi gnutls libffi libjpeg-turbo libtiff libpng cairo libxft libxt libx11 libxext"
+      ;;
+    openbsd)
+      printf '%s\n' "curl gmake cmake ninja pkgconf clang libxml libxslt icu4c avahi gnutls libffi jpeg tiff png cairo libXft"
+      ;;
+    *)
+      printf '%s\n' ""
+      ;;
+  esac
+}
+
+host_prerequisite_install_command() {
+  platform="$1"
+  packages=$(host_prerequisite_packages "$platform")
+  if [ -z "$packages" ]; then
+    return 1
+  fi
+  case "$platform" in
+    debian|ubuntu)
+      printf '%s\n' "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y $packages"
+      ;;
+    fedora)
+      printf '%s\n' "dnf install -y $packages"
+      ;;
+    arch)
+      printf '%s\n' "pacman -Sy --needed --noconfirm $packages"
+      ;;
+    openbsd)
+      printf '%s\n' "pkg_add $packages"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+can_install_host_prerequisites() {
+  platform="$1"
+  case "$platform" in
+    debian|ubuntu) command -v apt-get >/dev/null 2>&1 ;;
+    fedora) command -v dnf >/dev/null 2>&1 ;;
+    arch) command -v pacman >/dev/null 2>&1 ;;
+    openbsd) command -v pkg_add >/dev/null 2>&1 ;;
+    *) return 1 ;;
+  esac
+}
+
+run_as_root_command() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+    return $?
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    sudo "$@"
+    return $?
+  fi
+  return 127
+}
+
+install_host_prerequisites() {
+  platform="$1"
+  packages=$(host_prerequisite_packages "$platform")
+  if [ -z "$packages" ]; then
+    return 0
+  fi
+  if ! can_install_host_prerequisites "$platform"; then
+    printf '%s\n' "setup: package manager for host prerequisites is not available for $platform" >&2
+    return 0
+  fi
+  if [ "$YES_MODE" != "1" ]; then
+    command_text=$(host_prerequisite_install_command "$platform" || true)
+    if [ -n "$command_text" ]; then
+      printf '%s\n' "setup: host prerequisites are derived from $HOST_PREREQUISITE_SOURCE" >&2
+      printf '%s\n' "setup: to install GNUstep host prerequisites, run: $command_text" >&2
+      printf '%s\n' "setup: rerun bootstrap with --yes to let setup install these prerequisites automatically" >&2
+    fi
+    return 0
+  fi
+  printf '%s\n' "setup: installing GNUstep host prerequisites for $platform" >&2
+  case "$platform" in
+    debian|ubuntu)
+      run_as_root_command apt-get update >&2
+      # shellcheck disable=SC2086
+      run_as_root_command env DEBIAN_FRONTEND=noninteractive apt-get install -y $packages >&2
+      ;;
+    fedora)
+      # shellcheck disable=SC2086
+      run_as_root_command dnf install -y $packages >&2
+      ;;
+    arch)
+      # shellcheck disable=SC2086
+      run_as_root_command pacman -Sy --needed --noconfirm $packages >&2
+      ;;
+    openbsd)
+      # shellcheck disable=SC2086
+      run_as_root_command pkg_add $packages >&2
+      ;;
+  esac
+}
+
+json_string_array_from_words() {
+  words="$1"
+  printf '['
+  first=1
+  for word in $words; do
+    if [ "$first" = "1" ]; then
+      first=0
+    else
+      printf ','
+    fi
+    json_escape "$word"
+  done
+  printf ']'
+}
+
 detect_os() {
   case "$(uname -s 2>/dev/null | tr '[:upper:]' '[:lower:]')" in
     linux*) printf '%s\n' "linux" ;;
@@ -152,6 +308,7 @@ perform_setup() {
   selected_scope=${SETUP_SCOPE:-user}
   host_os=$(detect_os)
   host_arch=$(detect_arch)
+  host_platform=$(host_platform_id)
   manifest_source=${SETUP_MANIFEST:-}
   selected_root=${SETUP_ROOT:-}
 
@@ -167,16 +324,34 @@ EOF
     return 3
   fi
 
+  if [ "$YES_MODE" = "1" ]; then
+    if ! install_host_prerequisites "$host_platform"; then
+      if [ "${JSON_MODE:-0}" = "1" ]; then
+        cat <<EOF
+{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":false,"status":"error","summary":"Failed to install host prerequisites.","doctor":{"status":"error","environment_classification":"no_toolchain","summary":"Host prerequisite installation failed.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"${selected_root:-~/.local/share/gnustep-cli}","channel":"stable","selected_release":null,"selected_artifacts":[],"system_privileges_ok":true},"actions":[{"kind":"install_host_prerequisites","priority":1,"message":"Install the GNUstep host prerequisites manually, then rerun setup."}]}
+EOF
+      else
+        printf '%s\n' "setup: failed to install host prerequisites"
+        printf '%s\n' "next: Install the GNUstep host prerequisites manually, then rerun setup."
+      fi
+      return 3
+    fi
+  fi
+
   if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
     if [ "${JSON_MODE:-0}" = "1" ]; then
       cat <<EOF
-{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":false,"status":"error","summary":"Bootstrap prerequisites are incomplete.","doctor":{"status":"error","environment_classification":"no_toolchain","summary":"A required downloader is missing.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"${selected_root:-~/.local/share/gnustep-cli}","channel":"stable","selected_release":null,"selected_artifacts":[],"system_privileges_ok":true},"actions":[{"kind":"install_downloader","priority":1,"message":"Install curl or wget, then rerun setup."}]}
+{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":false,"status":"error","summary":"Bootstrap prerequisites are incomplete.","doctor":{"status":"error","environment_classification":"no_toolchain","summary":"A required downloader is missing.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"${selected_root:-~/.local/share/gnustep-cli}","channel":"stable","selected_release":null,"selected_artifacts":[],"system_privileges_ok":true,"host_prerequisites":{"source":"$HOST_PREREQUISITE_SOURCE","platform":"$host_platform","install_command":$(json_escape "$(host_prerequisite_install_command "$host_platform" || true)")}},"actions":[{"kind":"install_downloader","priority":1,"message":"Install curl or wget, or rerun setup with --yes to let bootstrap install host prerequisites."}]}
 EOF
     else
       printf '%s\n' "setup: neither curl nor wget is available"
       printf '%s\n' "next: Install curl or wget, then rerun setup."
     fi
     return 3
+  fi
+
+  if [ "$YES_MODE" != "1" ]; then
+    install_host_prerequisites "$host_platform"
   fi
 
   if [ -z "$selected_root" ]; then
@@ -299,10 +474,14 @@ EOF
   path_command=$(path_hint "$selected_root")
   path_command_json=$(json_escape "$path_command")
   manifest_source_json=$(json_escape "$manifest_source")
+  host_packages=$(host_prerequisite_packages "$host_platform")
+  host_packages_json=$(json_string_array_from_words "$host_packages")
+  host_install_command=$(host_prerequisite_install_command "$host_platform" || true)
+  host_install_command_json=$(json_escape "$host_install_command")
 
   if [ "${JSON_MODE:-0}" = "1" ]; then
     cat <<EOF
-{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":true,"status":"ok","summary":"Managed installation completed.","doctor":{"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","manifest_path":$manifest_source_json,"selected_release":"$release_version","selected_artifacts":["$target_id","$toolchain_id"],"system_privileges_ok":true},"actions":[{"kind":"add_path","priority":1,"message":"Add $selected_root/bin, $selected_root/Tools, and $selected_root/System/Tools to PATH for future shells."},{"kind":"delete_bootstrap","priority":2,"message":"The bootstrap script is no longer required and may be deleted."}],"install":{"install_root":"$selected_root","path_hint":$path_command_json}}
+{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":true,"status":"ok","summary":"Managed installation completed.","doctor":{"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","manifest_path":$manifest_source_json,"selected_release":"$release_version","selected_artifacts":["$target_id","$toolchain_id"],"system_privileges_ok":true,"host_prerequisites":{"source":"$HOST_PREREQUISITE_SOURCE","source_note":"$HOST_PREREQUISITE_SOURCE_NOTE","platform":"$host_platform","packages":$host_packages_json,"install_command":$host_install_command_json,"auto_install_requested":$([ "$YES_MODE" = "1" ] && printf true || printf false)}},"actions":[{"kind":"add_path","priority":1,"message":"Add $selected_root/bin, $selected_root/Tools, and $selected_root/System/Tools to PATH for future shells."},{"kind":"delete_bootstrap","priority":2,"message":"The bootstrap script is no longer required and may be deleted."}],"install":{"install_root":"$selected_root","path_hint":$path_command_json}}
 EOF
   else
     printf '%s\n' "setup: managed installation completed"
@@ -310,6 +489,7 @@ EOF
     printf '%s\n' "next: Run this in the current shell:"
     printf '%s\n' "  $path_command"
     printf '%s\n' "next: New shells should include $selected_root/bin, $selected_root/Tools, and $selected_root/System/Tools on PATH."
+    printf '%s\n' "note: Host prerequisite guidance is derived from $HOST_PREREQUISITE_SOURCE."
     printf '%s\n' "next: The bootstrap script is no longer required and may be deleted."
   fi
   return 0
@@ -349,6 +529,11 @@ json_escape() {
 }
 
 emit_doctor_json() {
+  host_platform=$(host_platform_id)
+  host_packages=$(host_prerequisite_packages "$host_platform")
+  host_packages_json=$(json_string_array_from_words "$host_packages")
+  host_install_command=$(host_prerequisite_install_command "$host_platform" || true)
+  host_install_command_json=$(json_escape "$host_install_command")
   has_curl=false
   has_wget=false
   if command -v curl >/dev/null 2>&1; then
@@ -359,12 +544,12 @@ emit_doctor_json() {
   fi
   if [ "$has_curl" = true ] || [ "$has_wget" = true ]; then
     cat <<EOF
-{"schema_version":1,"command":"doctor","cli_version":"$CLI_VERSION","ok":true,"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","environment":{"os":"unknown","arch":"unknown","bootstrap_prerequisites":{"curl":$has_curl,"wget":$has_wget}},"compatibility":{"compatible":true,"target_kind":null,"target_id":null,"reasons":[],"warnings":[{"code":"toolchain_not_present","message":"No preexisting GNUstep toolchain was detected; a managed install will be required."}]},"checks":[{"id":"bootstrap.downloader","title":"Check for downloader","status":"ok","severity":"error","message":"Found curl or wget."}],"actions":[{"kind":"install_managed_toolchain","priority":1,"message":"Install the supported managed GNUstep toolchain."}]}
+{"schema_version":1,"command":"doctor","cli_version":"$CLI_VERSION","ok":true,"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","environment":{"os":"$(detect_os)","arch":"$(detect_arch)","platform":"$host_platform","bootstrap_prerequisites":{"curl":$has_curl,"wget":$has_wget},"host_prerequisites":{"source":"$HOST_PREREQUISITE_SOURCE","source_note":"$HOST_PREREQUISITE_SOURCE_NOTE","packages":$host_packages_json,"install_command":$host_install_command_json}},"compatibility":{"compatible":true,"target_kind":null,"target_id":null,"reasons":[],"warnings":[{"code":"toolchain_not_present","message":"No preexisting GNUstep toolchain was detected; a managed install will be required."}]},"checks":[{"id":"bootstrap.downloader","title":"Check for downloader","status":"ok","severity":"error","message":"Found curl or wget."}],"actions":[{"kind":"install_managed_toolchain","priority":1,"message":"Install the supported managed GNUstep toolchain."}]}
 EOF
     return 0
   fi
   cat <<EOF
-{"schema_version":1,"command":"doctor","cli_version":"$CLI_VERSION","ok":false,"status":"error","environment_classification":"no_toolchain","summary":"A required downloader is missing.","environment":{"os":"unknown","arch":"unknown","bootstrap_prerequisites":{"curl":false,"wget":false}},"compatibility":{"compatible":false,"target_kind":null,"target_id":null,"reasons":[{"code":"bootstrap_downloader_missing","message":"Neither curl nor wget is available."}],"warnings":[]},"checks":[{"id":"bootstrap.downloader","title":"Check for downloader","status":"error","severity":"error","message":"Neither curl nor wget is available."}],"actions":[{"kind":"install_downloader","priority":1,"message":"Install curl or wget, then rerun setup."}]}
+{"schema_version":1,"command":"doctor","cli_version":"$CLI_VERSION","ok":false,"status":"error","environment_classification":"no_toolchain","summary":"A required downloader is missing.","environment":{"os":"$(detect_os)","arch":"$(detect_arch)","platform":"$host_platform","bootstrap_prerequisites":{"curl":false,"wget":false},"host_prerequisites":{"source":"$HOST_PREREQUISITE_SOURCE","source_note":"$HOST_PREREQUISITE_SOURCE_NOTE","packages":$host_packages_json,"install_command":$host_install_command_json}},"compatibility":{"compatible":false,"target_kind":null,"target_id":null,"reasons":[{"code":"bootstrap_downloader_missing","message":"Neither curl nor wget is available."}],"warnings":[]},"checks":[{"id":"bootstrap.downloader","title":"Check for downloader","status":"error","severity":"error","message":"Neither curl nor wget is available."}],"actions":[{"kind":"install_downloader","priority":1,"message":"Install curl or wget, then rerun setup."}]}
 EOF
   return 3
 }
@@ -374,12 +559,22 @@ emit_doctor_human() {
     printf '%s\n' "doctor: found curl"
     printf '%s\n' "doctor: no preexisting GNUstep toolchain was detected"
     printf '%s\n' "next: Install the supported managed GNUstep toolchain."
+    command_text=$(host_prerequisite_install_command "$(host_platform_id)" || true)
+    if [ -n "$command_text" ]; then
+      printf '%s\n' "note: Host prerequisite guidance is derived from $HOST_PREREQUISITE_SOURCE."
+      printf '%s\n' "note: Prerequisite install command: $command_text"
+    fi
     return 0
   fi
   if command -v wget >/dev/null 2>&1; then
     printf '%s\n' "doctor: found wget"
     printf '%s\n' "doctor: no preexisting GNUstep toolchain was detected"
     printf '%s\n' "next: Install the supported managed GNUstep toolchain."
+    command_text=$(host_prerequisite_install_command "$(host_platform_id)" || true)
+    if [ -n "$command_text" ]; then
+      printf '%s\n' "note: Host prerequisite guidance is derived from $HOST_PREREQUISITE_SOURCE."
+      printf '%s\n' "note: Prerequisite install command: $command_text"
+    fi
     return 0
   fi
   printf '%s\n' "doctor: neither curl nor wget is available"
@@ -472,7 +667,11 @@ while [ "$#" -gt 0 ]; do
       JSON_MODE=1
       shift
       ;;
-    --verbose|--quiet|--yes)
+    --verbose|--quiet)
+      shift
+      ;;
+    --yes)
+      YES_MODE=1
       shift
       ;;
     --system)
@@ -547,7 +746,11 @@ while [ "$#" -gt 0 ]; do
       SETUP_MANIFEST="$1"
       shift
       ;;
-    --verbose|--quiet|--yes)
+    --verbose|--quiet)
+      shift
+      ;;
+    --yes)
+      YES_MODE=1
       shift
       ;;
     *)

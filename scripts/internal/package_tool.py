@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from gnustep_cli_shared.package_tooling import init_package_manifest, validate_package_manifest
+from gnustep_cli_shared.package_tooling import apply_package_patches, init_package_manifest, validate_package_manifest
 
 
 def main() -> int:
@@ -28,6 +28,11 @@ def main() -> int:
     validate_parser = subparsers.add_parser("validate", add_help=False)
     validate_parser.add_argument("manifest_path")
 
+    patch_parser = subparsers.add_parser("apply-patches", add_help=False)
+    patch_parser.add_argument("manifest_path")
+    patch_parser.add_argument("source_dir")
+    patch_parser.add_argument("--target")
+
     args = parser.parse_args()
     if args.subcommand == "init":
         payload = init_package_manifest(args.package_dir, args.name, args.kind)
@@ -35,8 +40,11 @@ def main() -> int:
     elif args.subcommand == "validate":
         payload = validate_package_manifest(args.manifest_path)
         code = 0 if payload["ok"] else 1
+    elif args.subcommand == "apply-patches":
+        payload = apply_package_patches(args.manifest_path, args.source_dir, target_id=args.target)
+        code = 0 if payload["ok"] else 1
     else:
-        print("package: expected 'init' or 'validate'", file=sys.stderr)
+        print("package: expected 'init', 'validate', or 'apply-patches'", file=sys.stderr)
         return 2
 
     if args.json:

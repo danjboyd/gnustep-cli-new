@@ -1,0 +1,76 @@
+{
+    "schema_version": 1,
+    "target": {
+        "id": "linux-arm64-clang",
+        "os": "linux",
+        "arch": "arm64",
+        "compiler_family": "clang",
+        "toolchain_flavor": "clang"
+    },
+    "toolchain_version": "2026.04.0",
+    "platform_policy": {
+        "supported_distributions": [
+            "debian"
+        ],
+        "portability_policy": "distribution-scoped",
+        "notes": "Planned Debian aarch64 managed target; publish remains false until OracleTestVMs build/validation evidence exists."
+    },
+    "components": [
+        {
+            "name": "libobjc2",
+            "version": "TBD",
+            "source": "upstream-source",
+            "source_url": "https://github.com/gnustep/libobjc2.git",
+            "source_revision": "b67709ad7851973fde127022d8ac6a710c82b1d5",
+            "source_lock": "source-lock.json"
+        },
+        {
+            "name": "libdispatch",
+            "version": "TBD",
+            "source": "upstream-source",
+            "source_url": "https://github.com/swiftlang/swift-corelibs-libdispatch.git",
+            "source_revision": "4ce40128f607a6eb7b58077a06b7464c1518a30d",
+            "source_lock": "source-lock.json"
+        },
+        {
+            "name": "tools-make",
+            "version": "TBD",
+            "source": "upstream-source",
+            "source_url": "https://github.com/gnustep/tools-make.git",
+            "source_revision": "50cf9619e672fb2ff6825f239b5a172c5dc55630",
+            "source_lock": "source-lock.json"
+        },
+        {
+            "name": "libs-base",
+            "version": "TBD",
+            "source": "upstream-source",
+            "source_url": "https://github.com/gnustep/libs-base.git",
+            "source_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+            "source_lock": "source-lock.json"
+        },
+        {
+            "name": "libs-corebase",
+            "version": "TBD",
+            "source": "upstream-source",
+            "source_url": "https://github.com/gnustep/libs-corebase.git",
+            "source_revision": "e5983493d5ddf9c5b7e562f166855d9517a3f179",
+            "source_lock": "source-lock.json"
+        },
+        {
+            "name": "libs-gui",
+            "version": "TBD",
+            "source": "upstream-source",
+            "source_url": "https://github.com/gnustep/libs-gui.git",
+            "source_revision": "7892137bdedd007eba8425f766e41481ddb4fda6",
+            "source_lock": "source-lock.json"
+        },
+        {
+            "name": "libs-back",
+            "version": "TBD",
+            "source": "upstream-source",
+            "source_url": "https://github.com/gnustep/libs-back.git",
+            "source_revision": "bf3b3ced525f08415a20d109f05be1f91492414c",
+            "source_lock": "source-lock.json"
+        }
+    ]
+}

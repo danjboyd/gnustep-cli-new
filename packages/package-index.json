@@ -16,13 +16,62 @@
       "version": "0.1.0",
       "kind": "cli-tool",
       "summary": "XCTest runner and harness for native GNUstep Objective-C unit tests.",
+      "source": {
+        "type": "git",
+        "url": "https://github.com/gnustep/tools-xctest.git",
+        "sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+        "revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3",
+        "upstream": "gnustep/tools-xctest",
+        "upstream_url": "https://github.com/gnustep/tools-xctest",
+        "tracking_strategy": "commit-with-submitted-downstream-patch",
+        "update_cadence": "manual-for-dogfood-until-first-stable-package-release",
+        "channel_policy": "dogfood snapshots may track reviewed commits; stable must track an upstream tag or an approved package exception."
+      },
+      "patches": [
+        {
+          "id": "add-apple-style-xctest-cli-filters",
+          "path": "patches/add-apple-style-xctest-cli-filters.patch",
+          "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed",
+          "strip": 1,
+          "applies_to": [
+            "tools-xctest-linux-amd64-clang",
+            "tools-xctest-openbsd-amd64-clang",
+            "tools-xctest-linux-arm64-clang",
+            "tools-xctest-windows-amd64-msys2-clang64",
+            "tools-xctest-openbsd-arm64-clang"
+          ],
+          "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
+          "upstream_status": "submitted",
+          "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
+          "upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc"
+        }
+      ],
+      "build": {
+        "backend": "gnustep-cli",
+        "build_system": "gnustep-make",
+        "configure": [],
+        "build": [
+          "gnustep",
+          "build",
+          "--build-system",
+          "gnustep-make"
+        ],
+        "install": [
+          "make",
+          "install"
+        ],
+        "patch_application": "after-source-verification-before-build",
+        "builder_policy": "official artifacts must be produced by project-controlled builders using this CLI workflow"
+      },
       "requirements": {
         "supported_os": [
           "linux",
-          "openbsd"
+          "openbsd",
+          "windows"
         ],
         "supported_arch": [
-          "amd64"
+          "amd64",
+          "arm64"
         ],
         "supported_compiler_families": [
           "clang"
@@ -56,7 +105,39 @@
           "url": "dist/dogfood/packages/tools-xctest-linux-amd64-clang-0.1.0.tar.gz",
           "sha256": "d322792dd6aab2db083c386218e54bd5510c0bcbb1f3715f4d04cda5296fe7d1",
           "format": "tar.gz",
-          "publish": true
+          "publish": false,
+          "status": "pending_rebuild_with_declared_patches",
+          "notes": "Existing dogfood artifact predates the declared downstream patch and must be rebuilt before publication or installability claims.",
+          "source": {
+            "type": "git",
+            "url": "https://github.com/gnustep/tools-xctest.git",
+            "sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+            "revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3",
+            "upstream": "gnustep/tools-xctest",
+            "upstream_url": "https://github.com/gnustep/tools-xctest",
+            "tracking_strategy": "commit-with-submitted-downstream-patch",
+            "update_cadence": "manual-for-dogfood-until-first-stable-package-release",
+            "channel_policy": "dogfood snapshots may track reviewed commits; stable must track an upstream tag or an approved package exception."
+          },
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "path": "patches/add-apple-style-xctest-cli-filters.patch",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed",
+              "strip": 1,
+              "applies_to": [
+                "tools-xctest-linux-amd64-clang",
+                "tools-xctest-openbsd-amd64-clang",
+                "tools-xctest-linux-arm64-clang",
+                "tools-xctest-windows-amd64-msys2-clang64",
+                "tools-xctest-openbsd-arm64-clang"
+              ],
+              "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
+              "upstream_status": "submitted",
+              "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
+              "upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc"
+            }
+          ]
         },
         {
           "id": "tools-xctest-openbsd-amd64-clang",
@@ -71,8 +152,188 @@
           ],
           "url": "dist/dogfood/packages/tools-xctest-openbsd-amd64-clang-0.1.0.tar.gz",
           "sha256": "854b0974fd936599789eda27e308ebaf695ca8c94eab69f84d9397ed7c5dfac4",
-          "publish": true,
-          "format": "tar.gz"
+          "publish": false,
+          "format": "tar.gz",
+          "status": "pending_rebuild_with_declared_patches",
+          "notes": "Existing dogfood artifact predates the declared downstream patch and must be rebuilt before publication or installability claims.",
+          "source": {
+            "type": "git",
+            "url": "https://github.com/gnustep/tools-xctest.git",
+            "sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+            "revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3",
+            "upstream": "gnustep/tools-xctest",
+            "upstream_url": "https://github.com/gnustep/tools-xctest",
+            "tracking_strategy": "commit-with-submitted-downstream-patch",
+            "update_cadence": "manual-for-dogfood-until-first-stable-package-release",
+            "channel_policy": "dogfood snapshots may track reviewed commits; stable must track an upstream tag or an approved package exception."
+          },
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "path": "patches/add-apple-style-xctest-cli-filters.patch",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed",
+              "strip": 1,
+              "applies_to": [
+                "tools-xctest-linux-amd64-clang",
+                "tools-xctest-openbsd-amd64-clang",
+                "tools-xctest-linux-arm64-clang",
+                "tools-xctest-windows-amd64-msys2-clang64",
+                "tools-xctest-openbsd-arm64-clang"
+              ],
+              "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
+              "upstream_status": "submitted",
+              "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
+              "upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc"
+            }
+          ]
+        },
+        {
+          "id": "tools-xctest-linux-arm64-clang",
+          "os": "linux",
+          "arch": "arm64",
+          "compiler_family": "clang",
+          "toolchain_flavor": "clang",
+          "objc_runtime": "libobjc2",
+          "objc_abi": "modern",
+          "required_features": [
+            "blocks"
+          ],
+          "supported_distributions": [
+            "debian"
+          ],
+          "portability_policy": "distribution-scoped",
+          "url": "dist/dogfood/packages/tools-xctest-linux-arm64-clang-0.1.0.tar.gz",
+          "sha256": "planned-artifact-checksum-tbd",
+          "format": "tar.gz",
+          "publish": false,
+          "status": "planned_debian_aarch64_build",
+          "notes": "Planned target; artifact must be built from declared upstream source plus declared patches before publication or installability claims.",
+          "source": {
+            "type": "git",
+            "url": "https://github.com/gnustep/tools-xctest.git",
+            "sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+            "revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3",
+            "upstream": "gnustep/tools-xctest",
+            "upstream_url": "https://github.com/gnustep/tools-xctest",
+            "tracking_strategy": "commit-with-submitted-downstream-patch",
+            "update_cadence": "manual-for-dogfood-until-first-stable-package-release",
+            "channel_policy": "dogfood snapshots may track reviewed commits; stable must track an upstream tag or an approved package exception."
+          },
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "path": "patches/add-apple-style-xctest-cli-filters.patch",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed",
+              "strip": 1,
+              "applies_to": [
+                "tools-xctest-linux-amd64-clang",
+                "tools-xctest-openbsd-amd64-clang",
+                "tools-xctest-linux-arm64-clang",
+                "tools-xctest-windows-amd64-msys2-clang64",
+                "tools-xctest-openbsd-arm64-clang"
+              ],
+              "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
+              "upstream_status": "submitted",
+              "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
+              "upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc"
+            }
+          ]
+        },
+        {
+          "id": "tools-xctest-windows-amd64-msys2-clang64",
+          "os": "windows",
+          "arch": "amd64",
+          "compiler_family": "clang",
+          "toolchain_flavor": "msys2-clang64",
+          "objc_runtime": "libobjc2",
+          "objc_abi": "modern",
+          "required_features": [
+            "blocks"
+          ],
+          "url": "dist/dogfood/packages/tools-xctest-windows-amd64-msys2-clang64-0.1.0.zip",
+          "sha256": "planned-artifact-checksum-tbd",
+          "format": "zip",
+          "publish": false,
+          "status": "planned_windows_msys2_clang64_build",
+          "notes": "Planned target; artifact must be built from declared upstream source plus declared patches before publication or installability claims.",
+          "source": {
+            "type": "git",
+            "url": "https://github.com/gnustep/tools-xctest.git",
+            "sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+            "revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3",
+            "upstream": "gnustep/tools-xctest",
+            "upstream_url": "https://github.com/gnustep/tools-xctest",
+            "tracking_strategy": "commit-with-submitted-downstream-patch",
+            "update_cadence": "manual-for-dogfood-until-first-stable-package-release",
+            "channel_policy": "dogfood snapshots may track reviewed commits; stable must track an upstream tag or an approved package exception."
+          },
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "path": "patches/add-apple-style-xctest-cli-filters.patch",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed",
+              "strip": 1,
+              "applies_to": [
+                "tools-xctest-linux-amd64-clang",
+                "tools-xctest-openbsd-amd64-clang",
+                "tools-xctest-linux-arm64-clang",
+                "tools-xctest-windows-amd64-msys2-clang64",
+                "tools-xctest-openbsd-arm64-clang"
+              ],
+              "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
+              "upstream_status": "submitted",
+              "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
+              "upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc"
+            }
+          ]
+        },
+        {
+          "id": "tools-xctest-openbsd-arm64-clang",
+          "os": "openbsd",
+          "arch": "arm64",
+          "compiler_family": "clang",
+          "toolchain_flavor": "clang",
+          "objc_runtime": "libobjc2",
+          "objc_abi": "modern",
+          "required_features": [
+            "blocks"
+          ],
+          "url": "dist/dogfood/packages/tools-xctest-openbsd-arm64-clang-0.1.0.tar.gz",
+          "sha256": "planned-artifact-checksum-tbd",
+          "format": "tar.gz",
+          "publish": false,
+          "status": "planned_openbsd_arm64_build",
+          "notes": "Planned target; artifact must be built from declared upstream source plus declared patches on OpenBSD arm64 before publication or installability claims.",
+          "source": {
+            "type": "git",
+            "url": "https://github.com/gnustep/tools-xctest.git",
+            "sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+            "revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3",
+            "upstream": "gnustep/tools-xctest",
+            "upstream_url": "https://github.com/gnustep/tools-xctest",
+            "tracking_strategy": "commit-with-submitted-downstream-patch",
+            "update_cadence": "manual-for-dogfood-until-first-stable-package-release",
+            "channel_policy": "dogfood snapshots may track reviewed commits; stable must track an upstream tag or an approved package exception."
+          },
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "path": "patches/add-apple-style-xctest-cli-filters.patch",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed",
+              "strip": 1,
+              "applies_to": [
+                "tools-xctest-linux-amd64-clang",
+                "tools-xctest-openbsd-amd64-clang",
+                "tools-xctest-linux-arm64-clang",
+                "tools-xctest-windows-amd64-msys2-clang64",
+                "tools-xctest-openbsd-arm64-clang"
+              ],
+              "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
+              "upstream_status": "submitted",
+              "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
+              "upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc"
+            }
+          ]
         }
       ]
     }

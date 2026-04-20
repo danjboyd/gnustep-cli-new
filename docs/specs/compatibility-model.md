@@ -27,7 +27,9 @@ Compatibility decisions answer:
 ## Primary v1 Managed Targets
 
 - `linux/amd64/clang`
+- `linux/arm64/clang` (Debian/aarch64 first)
 - `openbsd/amd64/clang`
+- `openbsd/arm64/clang`
 - `windows/amd64/msys2-clang64`
 - `windows/amd64/msvc`
 

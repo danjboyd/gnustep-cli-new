@@ -107,7 +107,7 @@ should not scrape GitHub release pages directly.
 
 ### Unix-like Clang Targets
 
-For Linux `amd64/clang` and OpenBSD `amd64/clang`, the recommended managed
+For Linux `amd64/clang`, Linux `arm64/clang` on Debian/aarch64, OpenBSD `amd64/clang`, and OpenBSD `arm64/clang`, the recommended managed
 toolchain source set is:
 
 The GNUstep Make input for this source set should come from the upstream
@@ -338,13 +338,17 @@ The recommended initial BOM policy for this repository is:
 1. Linux `amd64/clang`: source-build `libobjc2`, `tools-make`, `libs-base`,
    `libdispatch`, `libs-corebase`, `libs-gui`, and `libs-back` from pinned
    upstream revisions.
-2. OpenBSD `amd64/clang`: source-build the same GNUstep component set from
+2. Linux `arm64/clang`: source-build the same GNUstep component set on
+   Debian/aarch64, using `../OracleTestVMs` local VM capacity before OCI
+   fallback.
+3. OpenBSD `amd64/clang`: source-build the same GNUstep component set from
    pinned upstream revisions, with any required OpenBSD patches recorded
    explicitly.
-3. Windows `amd64/msys2-clang64`: assemble a managed toolchain from pinned,
+4. OpenBSD `arm64/clang`: source-build the same GNUstep component set, using the available OpenBSD arm64 server for initial evidence.
+5. Windows `amd64/msys2-clang64`: assemble a managed toolchain from pinned,
    curated MSYS2 packages, including `libdispatch` if supported cleanly, and
    publish that normalized result as the official managed artifact.
-4. Windows `amd64/msvc`: keep as a first-class target in the support matrix,
+6. Windows `amd64/msvc`: keep as a first-class target in the support matrix,
    but do not publish production claims for `libdispatch`, `libs-corebase`, or
    the overall managed stack until a repeatable dedicated MSVC pipeline exists.
 

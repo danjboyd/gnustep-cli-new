@@ -49,6 +49,14 @@ targets the project is actively discussing.
   toolchain, adding runtime SONAME aliases, and adding full-CLI HTTPS manifest
   downloader fallback. Signing/provenance remains pending before any production
   security claim.
+- `debian-arm64-managed-clang`
+  status: `planned_build_target`
+  notes: planned Debian/aarch64 managed target for the full CLI and official
+  package artifacts. Target metadata uses canonical `arch = arm64`; build and
+  validation should use `../OracleTestVMs` local libvirt/mac capacity first and
+  fall back to OCI only when local capacity is unavailable. No release artifact
+  or installability claim exists until the managed toolchain, full CLI, and
+  `tools-xctest` package artifacts are built and host-validated.
 - `arch-amd64-gcc`
   status: `interoperability_only`
   notes: Arch libvirt preflight and acceptance passed on April 16, 2026 using
@@ -61,6 +69,11 @@ targets the project is actively discussing.
   GCC/libobjc interoperability path, not the preferred Clang/libobjc2 runtime.
   Arch Tier 1 modern-runtime workflows require the managed Clang/libobjc2
   toolchain unless Arch later ships a validated modern GNUstep stack.
+- `openbsd-arm64-clang`
+  status: `planned_build_target`
+  notes: planned OpenBSD/arm64 target for the full CLI and official package
+  artifacts. Initial evidence should come from the available OpenBSD arm64
+  server before publication is enabled.
 - `windows-amd64-msys2-clang64`
   status: `managed_target_staged_artifacts_validated`
   notes: planned Tier 1 managed target with live host and staged release-artifact

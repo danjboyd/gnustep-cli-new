@@ -1,0 +1,87 @@
+{
+    "schema_version": 1,
+    "target": {
+        "id": "linux-arm64-clang",
+        "os": "linux",
+        "arch": "arm64",
+        "compiler_family": "clang",
+        "toolchain_flavor": "clang"
+    },
+    "strategy": "source-build",
+    "runtime": {
+        "objc_runtime": "libobjc2",
+        "objc_abi": "modern"
+    },
+    "components": [
+        {
+            "name": "libobjc2",
+            "source_type": "git",
+            "url": "https://github.com/gnustep/libobjc2.git",
+            "revision": "b67709ad7851973fde127022d8ac6a710c82b1d5",
+            "revision_type": "commit",
+            "archive_sha256": null,
+            "configure_args": [],
+            "patches": []
+        },
+        {
+            "name": "libdispatch",
+            "source_type": "git",
+            "url": "https://github.com/swiftlang/swift-corelibs-libdispatch.git",
+            "revision": "4ce40128f607a6eb7b58077a06b7464c1518a30d",
+            "revision_type": "commit",
+            "archive_sha256": null,
+            "configure_args": [],
+            "patches": []
+        },
+        {
+            "name": "tools-make",
+            "source_type": "git",
+            "url": "https://github.com/gnustep/tools-make.git",
+            "revision": "50cf9619e672fb2ff6825f239b5a172c5dc55630",
+            "revision_type": "commit",
+            "archive_sha256": null,
+            "configure_args": [],
+            "patches": []
+        },
+        {
+            "name": "libs-base",
+            "source_type": "git",
+            "url": "https://github.com/gnustep/libs-base.git",
+            "revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+            "revision_type": "commit",
+            "archive_sha256": null,
+            "configure_args": [],
+            "patches": []
+        },
+        {
+            "name": "libs-corebase",
+            "source_type": "git",
+            "url": "https://github.com/gnustep/libs-corebase.git",
+            "revision": "e5983493d5ddf9c5b7e562f166855d9517a3f179",
+            "revision_type": "commit",
+            "archive_sha256": null,
+            "configure_args": [],
+            "patches": []
+        },
+        {
+            "name": "libs-gui",
+            "source_type": "git",
+            "url": "https://github.com/gnustep/libs-gui.git",
+            "revision": "7892137bdedd007eba8425f766e41481ddb4fda6",
+            "revision_type": "commit",
+            "archive_sha256": null,
+            "configure_args": [],
+            "patches": []
+        },
+        {
+            "name": "libs-back",
+            "source_type": "git",
+            "url": "https://github.com/gnustep/libs-back.git",
+            "revision": "bf3b3ced525f08415a20d109f05be1f91492414c",
+            "revision_type": "commit",
+            "archive_sha256": null,
+            "configure_args": [],
+            "patches": []
+        }
+    ]
+}

@@ -44,6 +44,19 @@ TIER1_TARGETS = [
         "portability_notes": "Current source-built Linux artifact is validated on Debian only; Fedora and Arch require dependency closure or per-distro artifacts before managed artifact support is claimed.",
     },
     {
+        "id": "linux-arm64-clang",
+        "os": "linux",
+        "arch": "arm64",
+        "compiler_family": "clang",
+        "toolchain_flavor": "clang",
+        "strategy": "source-build",
+        "publish": False,
+        "core_components": UNIX_CORE_COMPONENTS,
+        "supported_distributions": ["debian"],
+        "portability_policy": "distribution-scoped",
+        "portability_notes": "Planned Debian aarch64 managed target; publish remains false until OracleTestVMs build/validation evidence exists.",
+    },
+    {
         "id": "openbsd-amd64-clang",
         "os": "openbsd",
         "arch": "amd64",
@@ -52,6 +65,18 @@ TIER1_TARGETS = [
         "strategy": "source-build",
         "publish": True,
         "core_components": UNIX_CORE_COMPONENTS,
+    },
+    {
+        "id": "openbsd-arm64-clang",
+        "os": "openbsd",
+        "arch": "arm64",
+        "compiler_family": "clang",
+        "toolchain_flavor": "clang",
+        "strategy": "source-build",
+        "publish": False,
+        "core_components": UNIX_CORE_COMPONENTS,
+        "portability_policy": "platform-wide",
+        "portability_notes": "Planned OpenBSD arm64 target; publish remains false until host-backed build/validation evidence exists.",
     },
     {
         "id": "windows-amd64-msys2-clang64",
@@ -187,6 +212,7 @@ def release_manifest_from_matrix(version: str, base_url: str) -> dict[str, Any]:
                 "url": f"{base_url.rstrip('/')}/{version}/{cli_id}",
                 "sha256": "TBD",
                 "integrity": {"sha256": "TBD"},
+                "published": target["publish"],
                 "provenance": {
                     "build_system": "project-controlled",
                     "source_revision": "TBD",
@@ -1146,6 +1172,16 @@ def current_support_matrix() -> dict[str, Any]:
                 "notes": "Debian remains primarily a GCC interoperability target unless a validated packaged Clang/libobjc2 path is proven, and fresh libvirt host evidence was rerun on April 14, 2026 with the ~/.ssh/otvm operator keypair.",
             },
             {
+                "id": "debian-arm64-managed-clang",
+                "os": "linux",
+                "distribution": "debian",
+                "arch": "arm64",
+                "toolchain_model": "managed-clang-libobjc2",
+                "status": "planned_build_target",
+                "evidence_status": "not_started",
+                "notes": "Planned Debian aarch64 managed target for the full CLI and official packages. Build and validation should use ../OracleTestVMs local libvirt/mac capacity first and fall back to OCI only when local capacity is unavailable.",
+            },
+            {
                 "id": "arch-amd64-clang",
                 "os": "linux",
                 "distribution": "arch",
@@ -1154,6 +1190,15 @@ def current_support_matrix() -> dict[str, Any]:
                 "status": "interoperability_only",
                 "evidence_status": "validated",
                 "notes": "Fresh libvirt evidence from April 16, 2026 shows Arch packaged GNUstep builds and runs the CLI through GCC/libobjc interoperability, not the preferred Clang/libobjc2 stack. Managed Clang support is blocked until a distro-scoped artifact or dependency closure exists.",
+            },
+            {
+                "id": "openbsd-arm64-clang",
+                "os": "openbsd",
+                "arch": "arm64",
+                "toolchain_model": "packaged-or-managed-clang-libobjc2",
+                "status": "planned_build_target",
+                "evidence_status": "not_started",
+                "notes": "Planned OpenBSD arm64 target for the full CLI and official packages. Use the available OpenBSD arm64 server for initial build/validation evidence before enabling publication.",
             },
             {
                 "id": "windows-amd64-msys2-clang64",
@@ -2930,7 +2975,7 @@ def toolchain_archive_audit(archive_path: str | Path, *, target_id: str | None =
         add_check("common_make", "GNUstep Make common.make is present.", [r"/common\.make$"])
         add_check("tool_make", "GNUstep Make tool.make is present.", [r"/tool\.make$"])
         add_check("gnustep_env", "GNUstep environment activation script is present.", [r"/gnustep\.(sh|bat|ps1)$"], required=False)
-    elif inferred_target in {"linux-amd64-clang", "openbsd-amd64-clang"}:
+    elif inferred_target in {"linux-amd64-clang", "linux-arm64-clang", "openbsd-amd64-clang", "openbsd-arm64-clang"}:
         add_check("runtime_tools", "Managed tool directory is present.", [r"/system/tools/", r"/tools/"])
         add_check("source_lock", "Source-built managed toolchain source lock is present.", [r"/source-lock\.json$"])
         add_check("component_inventory", "Managed toolchain component inventory is present.", [r"/component-inventory\.json$"])
@@ -3317,6 +3362,8 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
         manifest = json.loads(manifest_path.read_text())
         package_id = manifest["id"]
         source = manifest.get("source", {})
+        patches = manifest.get("patches", []) or []
+        build = manifest.get("build", {}) or {}
         source_sha = source.get("sha256")
         source_url = source.get("url")
         package_blockers: list[str] = []
@@ -3324,7 +3371,17 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
             package_blockers.append("missing_source_url")
         if not source_sha or str(source_sha).endswith("tbd") or "placeholder" in str(source_sha).lower() or "development" in str(source_sha).lower():
             package_blockers.append("missing_verified_source_digest")
-        for blocker in package_blockers:
+        for patch in patches:
+            patch_id = patch.get("id", "") if isinstance(patch, dict) else ""
+            patch_sha = patch.get("sha256") if isinstance(patch, dict) else None
+            patch_path = patch.get("path") if isinstance(patch, dict) else None
+            if not patch_id:
+                package_blockers.append("missing_patch_id")
+            if not patch_path:
+                package_blockers.append("missing_patch_path")
+            if not patch_sha or str(patch_sha).endswith("tbd") or "placeholder" in str(patch_sha).lower() or "development" in str(patch_sha).lower():
+                package_blockers.append("missing_verified_patch_digest")
+        for blocker in sorted(set(package_blockers)):
             plan_blockers.append({"package": package_id, "artifact": "", "code": blocker})
         artifacts = []
         for artifact in manifest.get("artifacts", []):
@@ -3349,6 +3406,10 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
                     "format": artifact.get("format", "tar.gz" if artifact.get("os") != "windows" else "zip"),
                     "source_manifest": str(manifest_path),
                     "source": source,
+                    "patches": patches,
+                    "build": build,
+                    "build_backend": build.get("backend", "unspecified"),
+                    "build_invocation": build.get("build", []),
                     "build_from_source": True,
                     "provenance_required": artifact_publishable,
                     "signature_required": artifact_publishable,
@@ -3367,6 +3428,8 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
                 "version": manifest["version"],
                 "kind": manifest["kind"],
                 "source": source,
+                "patches": patches,
+                "build": build,
                 "source_type": source.get("type"),
                 "source_url": source_url,
                 "source_sha256": source_sha,

@@ -37,6 +37,15 @@ class PackageRepositoryTests(unittest.TestCase):
         self.assertEqual(payload["metadata_version"], 1)
         self.assertEqual(payload["trust"]["signature_policy"], "single-role-v1")
 
+    def test_package_index_artifacts_include_source_and_selected_patches(self):
+        payload = generate_package_index(ROOT / "packages")
+        package = next(package for package in payload["packages"] if package["id"] == "org.gnustep.tools-xctest")
+        self.assertEqual(package["build"]["backend"], "gnustep-cli")
+        artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-linux-amd64-clang")
+        self.assertEqual(artifact["source"]["tracking_strategy"], "commit-with-submitted-downstream-patch")
+        self.assertEqual(artifact["patches"][0]["id"], "add-apple-style-xctest-cli-filters")
+        self.assertEqual(artifact["patches"][0]["upstream_status"], "submitted")
+
     def test_package_index_unsigned_trust_gate_requires_provenance(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)

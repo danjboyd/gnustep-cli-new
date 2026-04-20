@@ -69,13 +69,13 @@ class BuildInfraTests(unittest.TestCase):
     def test_matrix_contains_tier1_targets(self):
         payload = build_matrix()
         self.assertEqual(payload["schema_version"], 1)
-        self.assertEqual(len(payload["targets"]), 4)
+        self.assertEqual(len(payload["targets"]), 6)
 
     def test_release_manifest_generation(self):
         payload = release_manifest_from_matrix("0.1.0", "https://example.invalid/releases")
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["releases"][0]["version"], "0.1.0")
-        self.assertEqual(len(payload["releases"][0]["artifacts"]), 8)
+        self.assertEqual(len(payload["releases"][0]["artifacts"]), 12)
         linux_artifacts = [artifact for artifact in payload["releases"][0]["artifacts"] if artifact["os"] == "linux"]
         self.assertTrue(linux_artifacts)
         self.assertTrue(all(artifact["supported_distributions"] == ["debian"] for artifact in linux_artifacts))
@@ -91,6 +91,20 @@ class BuildInfraTests(unittest.TestCase):
             components["libobjc2"]["revision"],
             "b67709ad7851973fde127022d8ac6a710c82b1d5",
         )
+
+
+    def test_arm64_managed_targets_have_source_locks_and_stay_unpublished_until_validated(self):
+        for target_id in ("linux-arm64-clang", "openbsd-arm64-clang"):
+            with self.subTest(target_id=target_id):
+                lock = source_lock_template(target_id)
+                validation = validate_source_lock(lock, target_id=target_id)
+                manifest = toolchain_manifest(target_id, "2026.04.0")
+                self.assertTrue(validation["ok"])
+                self.assertEqual(lock["target"]["arch"], "arm64")
+                self.assertEqual(lock["target"]["compiler_family"], "clang")
+                self.assertEqual(lock["runtime"]["objc_runtime"], "libobjc2")
+                self.assertFalse(manifest["published"])
+                self.assertEqual(manifest["target"]["arch"], "arm64")
 
 
     def test_source_lock_validation_rejects_unpinned_revision(self):
@@ -1044,17 +1058,33 @@ class BuildInfraTests(unittest.TestCase):
         self.assertTrue(package["source_verified"])
         artifact_ids = [artifact["id"] for artifact in package["artifacts"]]
         self.assertIn("tools-xctest-linux-amd64-clang", artifact_ids)
+        self.assertIn("tools-xctest-linux-arm64-clang", artifact_ids)
         self.assertIn("tools-xctest-openbsd-amd64-clang", artifact_ids)
+        self.assertIn("tools-xctest-openbsd-arm64-clang", artifact_ids)
+        self.assertIn("tools-xctest-windows-amd64-msys2-clang64", artifact_ids)
         linux_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-linux-amd64-clang")
+        linux_arm64_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-linux-arm64-clang")
         openbsd_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-openbsd-amd64-clang")
-        self.assertTrue(linux_artifact["provenance_required"])
-        self.assertTrue(linux_artifact["signature_required"])
+        openbsd_arm64_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-openbsd-arm64-clang")
+        windows_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-windows-amd64-msys2-clang64")
+        self.assertFalse(linux_artifact["provenance_required"])
+        self.assertFalse(linux_artifact["signature_required"])
         self.assertTrue(linux_artifact["production_ready"])
-        self.assertTrue(linux_artifact["publish"])
-        self.assertTrue(openbsd_artifact["provenance_required"])
-        self.assertTrue(openbsd_artifact["signature_required"])
+        self.assertFalse(linux_artifact["publish"])
+        self.assertEqual(linux_artifact["patches"][0]["upstream_status"], "submitted")
+        self.assertEqual(linux_artifact["build_backend"], "gnustep-cli")
+        self.assertEqual(linux_artifact["build_invocation"][:2], ["gnustep", "build"])
+        self.assertFalse(openbsd_artifact["provenance_required"])
+        self.assertFalse(openbsd_artifact["signature_required"])
         self.assertTrue(openbsd_artifact["production_ready"])
-        self.assertTrue(openbsd_artifact["publish"])
+        self.assertFalse(openbsd_artifact["publish"])
+        self.assertEqual(openbsd_artifact["patches"][0]["upstream_pr"], "https://github.com/gnustep/tools-xctest/pull/5")
+        self.assertFalse(linux_arm64_artifact["publish"])
+        self.assertEqual(linux_arm64_artifact["arch"], "arm64")
+        self.assertFalse(openbsd_arm64_artifact["publish"])
+        self.assertEqual(openbsd_arm64_artifact["arch"], "arm64")
+        self.assertFalse(windows_artifact["publish"])
+        self.assertEqual(windows_artifact["toolchain_flavor"], "msys2-clang64")
 
     def test_package_artifact_build_plan_allows_production_ready_manifest(self):
         with tempfile.TemporaryDirectory() as tempdir:
