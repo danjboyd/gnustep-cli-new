@@ -219,6 +219,7 @@ json_file_value() {
   id="$2"
   field="$3"
   awk -v target="\"id\": \"$id\"" -v field="\"$field\"" '
+    index($0, "\"id\":") && $0 !~ target && inblock {exit}
     $0 ~ target {inblock=1}
     inblock && index($0, field) {
       line=$0
@@ -227,7 +228,6 @@ json_file_value() {
       print line
       exit
     }
-    inblock && /^[[:space:]]*}[,]?[[:space:]]*$/ {inblock=0}
   ' "$path"
 }
 
@@ -236,6 +236,7 @@ json_file_bool() {
   id="$2"
   field="$3"
   awk -v target="\"id\": \"$id\"" -v field="\"$field\"" '
+    index($0, "\"id\":") && $0 !~ target && inblock {exit}
     $0 ~ target {inblock=1}
     inblock && index($0, field) {
       line=$0
@@ -245,7 +246,6 @@ json_file_bool() {
       print line
       exit
     }
-    inblock && /^[[:space:]]*}[,]?[[:space:]]*$/ {inblock=0}
   ' "$path"
 }
 

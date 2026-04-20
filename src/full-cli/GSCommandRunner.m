@@ -1729,17 +1729,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                            stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceCharacterSet]]
                   forKey: [line substringToIndex: equalsRange.location]];
     }
-  if ([values objectForKey: @"VERSION_CODENAME"] != nil)
-    {
-      return [NSString stringWithFormat: @"%@-%@",
-                        [values objectForKey: @"ID"] ? [values objectForKey: @"ID"] : @"linux",
-                        [values objectForKey: @"VERSION_CODENAME"]];
-    }
   if ([values objectForKey: @"VERSION_ID"] != nil)
     {
       return [NSString stringWithFormat: @"%@-%@",
                         [values objectForKey: @"ID"] ? [values objectForKey: @"ID"] : @"linux",
                         [values objectForKey: @"VERSION_ID"]];
+    }
+  if ([values objectForKey: @"VERSION_CODENAME"] != nil)
+    {
+      return [NSString stringWithFormat: @"%@-%@",
+                        [values objectForKey: @"ID"] ? [values objectForKey: @"ID"] : @"linux",
+                        [values objectForKey: @"VERSION_CODENAME"]];
     }
   return [values objectForKey: @"ID"];
 }

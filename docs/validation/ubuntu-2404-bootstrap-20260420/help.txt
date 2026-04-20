@@ -1,0 +1,22 @@
+GNUstep CLI full interface
+
+Usage:
+  gnustep <command> [options] [args]
+
+Global options:
+  --help
+  --version
+  --json
+  --verbose
+  --quiet
+  --yes
+
+Commands:
+  setup   Install or repair the managed GNUstep CLI environment.
+  doctor  Inspect the local GNUstep environment and report readiness.
+  build   Build the current GNUstep project.
+  run     Run the current GNUstep project.
+  new     Create a new GNUstep project from a curated template.
+  install Install a GNUstep package into the managed environment.
+  remove  Remove a GNUstep package from the managed environment.
+  update  Check for and apply CLI, toolchain, and package updates.

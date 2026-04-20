@@ -86,11 +86,13 @@
         "required_features": [
           "blocks"
         ],
-        "forbidden_features": []
+        "forbidden_features": [],
+        "gnustep_make": true,
+        "toolchain_components": [
+          "gnustep-make"
+        ]
       },
-      "dependencies": [
-        "org.gnustep.make"
-      ],
+      "dependencies": [],
       "artifacts": [
         {
           "id": "tools-xctest-linux-amd64-clang",
@@ -109,6 +111,11 @@
           "publish": false,
           "status": "pending_rebuild_with_declared_patches",
           "notes": "Existing dogfood artifact predates the declared downstream patch and must be rebuilt before publication or installability claims.",
+          "supported_distributions": [
+            "debian"
+          ],
+          "portability_policy": "distribution-scoped",
+          "supported_os_versions": [],
           "source": {
             "type": "git",
             "url": "https://github.com/gnustep/tools-xctest.git",
@@ -157,14 +164,16 @@
           ],
           "portability_policy": "distribution-scoped",
           "url": "dist/dogfood/packages/tools-xctest-linux-ubuntu2404-amd64-clang-0.1.0.tar.gz",
-          "sha256": "planned-artifact-checksum-tbd",
+          "sha256": "351311bb3496997edc5cac2fe7f3008cdcd425c166cbe0bca3f1a99699e7e842",
           "format": "tar.gz",
-          "publish": false,
-          "status": "planned_ubuntu2404_amd64_docker_build",
-          "notes": "Planned Ubuntu 24.04 Docker-built target; artifact must be built from declared upstream source plus declared patches before publication or installability claims.",
+          "publish": true,
+          "status": "validated_ubuntu2404_amd64_docker_with_declared_patch_and_launcher",
+          "notes": "Built in Ubuntu 24.04 Docker from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes a bin/xctest launcher that sets package-local and managed-root library paths before execing libexec/xctest.",
           "supported_os_versions": [
             "ubuntu-24.04"
           ],
+          "build_evidence": "dist/dogfood/packages/build-linux-ubuntu2404-amd64-clang/package-result.json",
+          "validation_evidence": "docs/validation/tools-xctest-ubuntu-2404-20260420/tools-xctest-linux-ubuntu2404-amd64-clang.json",
           "source": {
             "type": "git",
             "url": "https://github.com/gnustep/tools-xctest.git",

@@ -88,6 +88,7 @@ def main() -> int:
     managed_cli.add_argument("--toolchain-archive", required=True)
     managed_cli.add_argument("--output-archive", required=True)
     managed_cli.add_argument("--version", default="0.1.0-dev")
+    managed_cli.add_argument("--target", default="linux-amd64-clang")
     managed_cli.add_argument("--repo-root")
     managed_cli.add_argument("--work-dir")
     managed_cli.add_argument("--release-dir")
@@ -395,6 +396,7 @@ def main() -> int:
             args.toolchain_archive,
             args.output_archive,
             version=args.version,
+            target_id=args.target,
             repo_root=args.repo_root,
             work_dir=args.work_dir,
             release_dir=args.release_dir,

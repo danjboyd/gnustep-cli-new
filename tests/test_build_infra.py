@@ -87,6 +87,9 @@ class BuildInfraTests(unittest.TestCase):
         version_by_id = {artifact["id"]: artifact["supported_os_versions"] for artifact in linux_artifacts}
         self.assertEqual(version_by_id["cli-linux-ubuntu2404-amd64-clang"], ["ubuntu-24.04"])
         self.assertEqual(version_by_id["toolchain-linux-ubuntu2404-amd64-clang"], ["ubuntu-24.04"])
+        published_by_id = {artifact["id"]: artifact["published"] for artifact in linux_artifacts}
+        self.assertTrue(published_by_id["cli-linux-ubuntu2404-amd64-clang"])
+        self.assertTrue(published_by_id["toolchain-linux-ubuntu2404-amd64-clang"])
         self.assertTrue(all(artifact["portability_policy"] == "distribution-scoped" for artifact in linux_artifacts))
 
     def test_source_lock_template_for_linux(self):
@@ -487,6 +490,7 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("gnustep-cli-linux-amd64-clang-0.1.0.tar.gz", filenames)
             self.assertIn("gnustep-toolchain-linux-amd64-clang-0.1.0.tar.gz", filenames)
             toolchain_artifact = next(artifact for artifact in payload["artifacts"] if artifact["kind"] == "toolchain")
+            self.assertTrue(all(artifact["published"] for artifact in payload["artifacts"]))
             self.assertIn("metadata", toolchain_artifact)
             self.assertIsNone(toolchain_artifact["metadata"]["lock_file"])
 
@@ -1060,9 +1064,15 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(artifact_path.exists())
             with tarfile.open(artifact_path, "r:gz") as archive:
                 names = archive.getnames()
+                launcher = archive.extractfile("./bin/xctest").read().decode()
             self.assertIn("./bin/xctest", names)
+            self.assertIn("./libexec/xctest", names)
             self.assertIn("./Library/Headers/XCTest/XCTest.h", names)
             self.assertIn("./Library/Libraries/libXCTest.so", names)
+            self.assertIn("LD_LIBRARY_PATH", launcher)
+            self.assertIn("managed_root", launcher)
+            self.assertIn("System/Library/Libraries", launcher)
+            self.assertIn("libexec/xctest", launcher)
 
     def test_package_artifact_build_plan(self):
         payload = package_artifact_build_plan(ROOT / "packages")
@@ -1092,7 +1102,8 @@ class BuildInfraTests(unittest.TestCase):
         self.assertTrue(linux_artifact["production_ready"])
         self.assertFalse(linux_artifact["publish"])
         self.assertEqual(linux_artifact["patches"][0]["upstream_status"], "submitted")
-        self.assertFalse(ubuntu_artifact["publish"])
+        self.assertTrue(ubuntu_artifact["publish"])
+        self.assertTrue(ubuntu_artifact["production_ready"])
         self.assertEqual(ubuntu_artifact["arch"], "amd64")
         self.assertEqual(ubuntu_artifact["toolchain_flavor"], "clang")
         self.assertEqual(linux_artifact["build_backend"], "gnustep-cli")

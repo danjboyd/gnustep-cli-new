@@ -50,13 +50,13 @@ TIER1_TARGETS = [
         "compiler_family": "clang",
         "toolchain_flavor": "clang",
         "strategy": "source-build",
-        "publish": False,
+        "publish": True,
         "core_components": UNIX_CORE_COMPONENTS,
         "supported_distributions": ["ubuntu"],
         "supported_os_versions": ["ubuntu-24.04"],
         "build_host": "ubuntu:24.04 docker amd64",
         "portability_policy": "distribution-scoped",
-        "portability_notes": "Planned Ubuntu amd64 managed target built in a base Ubuntu Docker image; publish remains false until ICU/runtime dependency closure and Docker smoke validation exist.",
+        "portability_notes": "Ubuntu amd64 managed target built in a base Ubuntu 24.04 Docker image; publish is enabled after runtime dependency closure and Docker setup smoke validation.",
     },
     {
         "id": "linux-arm64-clang",
@@ -2155,11 +2155,19 @@ def linux_cli_abi_audit(binary_path: str | Path) -> dict[str, Any]:
     return {"schema_version": 1, "command": "linux-cli-abi-audit", "ok": ok, "status": "ok" if ok else "error", "summary": "Linux CLI ABI audit passed." if ok else "Linux CLI ABI audit failed.", "binary": str(binary), "checks": checks}
 
 
+def _linux_gcc_runtime_include_path() -> str | None:
+    candidates = sorted(Path("/usr/lib/gcc/x86_64-linux-gnu").glob("*/include"))
+    if not candidates:
+        return None
+    return str(candidates[-1])
+
+
 def build_linux_cli_against_managed_toolchain(
     toolchain_archive: str | Path,
     output_archive: str | Path,
     *,
     version: str = "0.1.0-dev",
+    target_id: str = "linux-amd64-clang",
     repo_root: str | Path | None = None,
     work_dir: str | Path | None = None,
     release_dir: str | Path | None = None,
@@ -2196,12 +2204,13 @@ def build_linux_cli_against_managed_toolchain(
         objc_flags = ["-fobjc-runtime=gnustep-2.0", "-fblocks"] + _managed_gnustep_config(managed_root, "--objc-flags", env)
         base_libs = _managed_gnustep_config(managed_root, "--base-libs", env)
         binary = build_dir / "gnustep"
+        gcc_include = _linux_gcc_runtime_include_path()
         command = [
             "clang",
             *objc_flags,
             f"-I{managed_root / 'Local' / 'Library' / 'Headers'}",
             f"-I{managed_root / 'System' / 'Library' / 'Headers'}",
-            "-I/usr/lib/gcc/x86_64-linux-gnu/14/include",
+            *([f"-I{gcc_include}"] if gcc_include else []),
             f"-I{root / 'src' / 'full-cli'}",
             str(root / "src" / "full-cli" / "main.m"),
             str(root / "src" / "full-cli" / "GSCommandContext.m"),
@@ -2230,11 +2239,11 @@ def build_linux_cli_against_managed_toolchain(
             return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": False, "status": "error", "summary": "Managed-prefix Linux CLI ABI audit failed.", "abi_audit": abi}
         bundle_full_cli(binary, bundle_dir, repo_root=root)
         output.parent.mkdir(parents=True, exist_ok=True)
-        _archive_directory(bundle_dir, output, f"gnustep-cli-linux-amd64-clang-{version}")
+        _archive_directory(bundle_dir, output, f"gnustep-cli-{target_id}-{version}")
         refresh = None
         if release_dir is not None:
             refresh = refresh_local_release_metadata(release_dir, private_key_path=private_key)
-        return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": True, "status": "ok", "summary": "Linux CLI artifact built against managed GNUstep toolchain.", "toolchain_archive": str(toolchain), "output_archive": str(output), "version": version, "work_dir": str(work), "rewritten_placeholders": rewritten, "abi_audit": abi, "refresh_release_metadata": refresh}
+        return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": True, "status": "ok", "summary": "Linux CLI artifact built against managed GNUstep toolchain.", "toolchain_archive": str(toolchain), "output_archive": str(output), "version": version, "target_id": target_id, "work_dir": str(work), "rewritten_placeholders": rewritten, "abi_audit": abi, "refresh_release_metadata": refresh}
     finally:
         if owns_work_dir:
             shutil.rmtree(work, ignore_errors=True)
@@ -2804,6 +2813,7 @@ def stage_release_assets(
                 "supported_distributions": target.get("supported_distributions", []),
                 "supported_os_versions": target.get("supported_os_versions", []),
                 "portability_policy": target.get("portability_policy", "platform-wide"),
+                "published": True,
             }
             if kind == "toolchain":
                 lock_file = "source-lock.json" if target["strategy"] == "source-build" else "input-manifest.json"
@@ -3314,7 +3324,7 @@ def package_tools_xctest_artifact(
     if rebuild:
         makefiles = os.environ.get("GNUSTEP_MAKEFILES_DIR", "/usr/share/GNUstep/Makefiles")
         gcc_headers = os.environ.get("GCC_OBJC_HEADERS", "/usr/lib/gcc/x86_64-linux-gnu/14/include")
-        build_script = "set -eu\n. \"{}/GNUstep.sh\"\nmake -C \"{}\" clean >/dev/null || true\nmake -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\"\nmake -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\" GNUSTEP_INSTALLATION_DOMAIN=USER install\n".format(makefiles, source, source, gcc_headers, source, gcc_headers)
+        build_script = "set -e\n. \"{}/GNUstep.sh\"\nmake -C \"{}\" clean >/dev/null || true\nmake -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\"\nmake -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\" GNUSTEP_INSTALLATION_DOMAIN=USER install\n".format(makefiles, source, source, gcc_headers, source, gcc_headers)
         commands.append(["sh", "-c", build_script])
         built = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
         if built.returncode != 0:
@@ -3336,9 +3346,22 @@ def package_tools_xctest_artifact(
     if package_root.exists():
         shutil.rmtree(package_root)
     (package_root / "bin").mkdir(parents=True)
+    (package_root / "libexec").mkdir(parents=True)
     (package_root / "Library" / "Headers").mkdir(parents=True)
     (package_root / "Library" / "Libraries").mkdir(parents=True)
-    shutil.copy2(install_root / "Tools" / "xctest", package_root / "bin" / "xctest")
+    shutil.copy2(install_root / "Tools" / "xctest", package_root / "libexec" / "xctest")
+    launcher = package_root / "bin" / "xctest"
+    launcher.write_text(
+        "#!/bin/sh\n"
+        "set -e\n"
+        "bin_dir=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\n"
+        "package_root=$(CDPATH= cd -- \"$bin_dir/..\" && pwd)\n"
+        "managed_root=$(CDPATH= cd -- \"$package_root/../..\" && pwd)\n"
+        "runtime_libs=$package_root/Library/Libraries:$managed_root/Local/Library/Libraries:$managed_root/System/Library/Libraries:$managed_root/lib:$managed_root/lib64\n"
+        "export LD_LIBRARY_PATH=\"$runtime_libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\"\n"
+        "exec \"$package_root/libexec/xctest\" \"$@\"\n"
+    )
+    launcher.chmod(0o755)
     shutil.copytree(install_root / "Library" / "Headers" / "XCTest", package_root / "Library" / "Headers" / "XCTest")
     for lib in sorted((install_root / "Library" / "Libraries").glob("libXCTest.so*")):
         shutil.copy2(lib, package_root / "Library" / "Libraries" / lib.name)
