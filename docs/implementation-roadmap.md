@@ -704,7 +704,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Phase 16C is validated locally and on a fresh Debian 13 OTVM lease: the source-built artifact packages as `production_eligible = true`, passes host-origin path leakage audit after placeholder normalization, relocates into a release-style install root, and successfully drives installed CLI smoke, `doctor`, managed Foundation compile/run, `gnustep new`, `gnustep build`, `gnustep run`, and package install/remove through the installed native CLI.
 - Phase 16D regression coverage includes source-lock validation, MSYS2 input-manifest validation, source-built Linux artifact packaging, release metadata propagation, archive metadata auditing, setup-time managed-prefix relocation, and host-origin GNUstep path leakage detection.
 - The older host-derived Linux assembler remains available only as a transitional non-production path and marks its artifacts `production_eligible = false`.
-- Phase 16 follow-up now resolves the immediate Linux portability blocker by making the current `linux-amd64-clang` managed artifact explicitly Debian-scoped in generated release metadata, toolchain manifests, component inventories, and artifact selection. Fedora and Arch remain validated GCC/libobjc interoperability targets, and future managed Clang support there requires dependency closure or per-distro artifacts rather than reusing the Debian-scoped artifact.
+- Phase 16 follow-up now resolves the immediate Linux portability blocker by making the current `linux-amd64-clang` managed artifact explicitly Debian-scoped in generated release metadata, toolchain manifests, component inventories, and artifact selection. Ubuntu `amd64/clang` is now a separate planned target (`linux-ubuntu2404-amd64-clang`) because ICU and other runtime SONAMEs differ from Debian; Fedora and Arch remain validated GCC/libobjc interoperability targets, and future managed Clang support there requires dependency closure or per-distro artifacts rather than reusing the Debian-scoped artifact.
 - Phase 16.B2 is implemented at metadata/planning level: the build matrix, source lock, toolchain manifest, component inventory, generated build script, package target metadata, and regression coverage now exist for `linux-arm64-clang`. Publication remains disabled until a Debian/aarch64 host-backed build and install/remove validation pass. Interim validation can use the new `../OracleTestVMs` `ubuntu-24.04-aarch64` profile because Ubuntu is close enough to exercise the Debian-family apt/prerequisite and Linux arm64 managed-build path. Blocker for final 16.B2 closeout: `../OracleTestVMs` must provide the in-progress Debian/aarch64 image/profile or we must explicitly revise 16.B2 from Debian/aarch64 to Ubuntu/aarch64.
 
 ## Phase 17. Remaining Tier 1 Toolchain Builds
@@ -1236,7 +1236,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Run explicit OpenBSD qualification against the packaged GNUstep path and record whether that path is supported and preferred versus managed installation.
 - Fedora qualification against the packaged GNUstep path has live evidence from April 16, 2026 and is classified as GCC interoperability-only; do not mark it preferred for modern-runtime workflows without a validated Clang/libobjc2 stack.
 - Debian and Arch qualification have live evidence and are classified as GCC interoperability-oriented unless a validated packaged Clang/libobjc2 path is later proven.
-- Fedora and Arch managed Clang/libobjc2 support remains blocked pending dependency closure or per-distro artifact work. The current `linux-amd64-clang` managed artifact is now explicitly Debian-scoped in metadata and artifact selection so setup does not claim Fedora/Arch portability from the Debian-built artifact.
+- Ubuntu `amd64/clang` managed support is now represented by the planned `linux-ubuntu2404-amd64-clang` target and should be built in a base Ubuntu Docker image before any Ubuntu installability claim. Fedora and Arch managed Clang/libobjc2 support remains blocked pending dependency closure or per-distro artifact work. The current `linux-amd64-clang` managed artifact is explicitly Debian-scoped in metadata and artifact selection so setup does not claim Ubuntu/Fedora/Arch portability from the Debian-built artifact.
 
 ### E. Exit Criteria
 - The project has a defensible v1 release candidate with accurate docs, passing release gates, and validated support claims.
@@ -1257,7 +1257,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 
 ### C. `tools-xctest` Build-With-Our-CLI Flow
 - Teach package build tooling to build `tools-xctest` through our own CLI/package workflow rather than only through ad hoc shell commands.
-- Build patched `tools-xctest` artifacts for Linux `amd64/clang`, Debian Linux `arm64/clang`, OpenBSD `amd64/clang`, OpenBSD `arm64/clang`, and Windows `amd64/msys2-clang64`; use local libvirt/mac VM capacity through `../OracleTestVMs` first and fall back to OCI only when local capacity is unavailable.
+- Build patched `tools-xctest` artifacts for Debian Linux `amd64/clang`, Ubuntu Linux `amd64/clang`, Debian Linux `arm64/clang`, OpenBSD `amd64/clang`, OpenBSD `arm64/clang`, and Windows `amd64/msys2-clang64`; use Docker for the Ubuntu amd64 build, local libvirt/mac VM capacity through `../OracleTestVMs` first for VM-backed targets, and fall back to OCI only when local capacity is unavailable.
 - Preserve the OpenBSD linker-name workaround either as an upstreamable patch, a package build step, or a target-specific post-build fix with provenance.
 - Regenerate package artifact checksums and package-index metadata from the rebuilt artifacts.
 
@@ -1267,23 +1267,27 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Add package provenance evidence including upstream source, applied patches, builder identity, target profile, artifact digest, and install/remove validation result.
 
 ### Phase 24 Execution Status
-- Phase 24.A-D are implemented at repository-tooling level: the `tools-xctest` package manifest records upstream source policy, update cadence, channel policy, submitted PR #5 as a verified downstream patch, and a `gnustep build`-oriented build workflow. Package tooling can now validate and apply declared patches to a source checkout, package build planning exposes build backend/invocation metadata, and generated package indexes/provenance carry package and per-artifact source/patch identity. Remaining Phase 24 work is artifact rebuild, signed publication, native install/remove dogfood, and release-gate integration.
+- Phase 24.A-D are implemented at repository-tooling level: the `tools-xctest` package manifest records upstream source policy, update cadence, channel policy, submitted PR #5 as a verified downstream patch, and a `gnustep build`-oriented build workflow. Package tooling can now validate and apply declared patches to a source checkout, package build planning exposes build backend/invocation metadata, and generated package indexes/provenance carry package and per-artifact source/patch identity.
+- Phase 24.E-G now have a repository release gate through `scripts/internal/build_infra.py --json tools-xctest-release-gate --packages-dir packages --evidence-dir <evidence-dir>`. The gate is intentionally blocked until all `tools-xctest` artifacts are rebuilt from the declared upstream revision plus PR #5 patch, published through a signed package index, and validated with native install/smoke/remove evidence on the target hosts.
+- Current blockers: Debian Linux and OpenBSD amd64 dogfood artifacts predate the declared patch; Ubuntu Linux amd64, Linux arm64/Debian, OpenBSD arm64, and Windows/MSYS2 artifacts are planned but not built; host-backed native install/remove dogfood evidence is not yet recorded for the patched package set.
 
 ### E. Native CLI Install/Remove Dogfood
 - Use the native full CLI to install `org.gnustep.tools-xctest` from the generated package index on a clean managed root.
 - Verify `xctest` is on the expected installed path, can execute `--help` or equivalent smoke behavior, and can run at least one minimal XCTest bundle.
 - Remove the package through the CLI and verify owned-file cleanup, state updates, and dependency behavior.
-- Run this flow on Linux amd64, Linux arm64/Debian, OpenBSD, and Windows/MSYS2 as target artifacts become available.
+- Run this flow on Debian Linux amd64, Ubuntu Linux amd64, Linux arm64/Debian, OpenBSD, and Windows/MSYS2 as target artifacts become available.
+- Status: gate defined and enforced at repository level; blocked on rebuilt patched artifacts and recorded host evidence.
 
 ### F. Release Gate Integration
 - Add `tools-xctest` package install/remove smoke to release qualification so Objective-C unit-test infrastructure is validated as a real package, not only as a developer prerequisite.
 - Fail release qualification if the package index references stale artifacts, unsigned/untrusted metadata, unapplied declared patches, or package artifacts that do not pass install/remove smoke.
 - Treat `tools-xctest` as the canonical first official package proving the package lifecycle: upstream source, downstream patch, package build, artifact publication, index trust, install, smoke, remove, and update.
+- Status: `tools-xctest-release-gate` now reports stale-artifact, missing-artifact, missing-digest, and dogfood-evidence blockers in structured JSON for CI/release integration.
 
 ### G. Exit Criteria
 - `gnustep install org.gnustep.tools-xctest --package-index <signed-index>` works on the validated Linux target.
 - `gnustep remove org.gnustep.tools-xctest` restores package state cleanly.
-- Linux arm64/Debian, OpenBSD, and Windows/MSYS2 have either the same install/remove proof or explicitly documented non-release blockers.
+- Ubuntu Linux amd64, Linux arm64/Debian, OpenBSD, and Windows/MSYS2 have either the same install/remove proof or explicitly documented non-release blockers.
 - Published `tools-xctest` artifacts are rebuilt from the declared upstream source plus PR #5 patch, with recorded source/patch/artifact digests and host-backed validation evidence.
 
 ## Testing Principles For All Phases

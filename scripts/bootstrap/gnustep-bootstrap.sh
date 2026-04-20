@@ -30,6 +30,24 @@ detect_linux_distribution() {
   printf '%s\n' "unknown"
 }
 
+detect_linux_os_version() {
+  if [ -r /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    if [ -n "${VERSION_ID:-}" ]; then
+      printf '%s\n' "${ID:-linux}-$VERSION_ID"
+      return 0
+    fi
+    if [ -n "${VERSION_CODENAME:-}" ]; then
+      printf '%s\n' "${ID:-linux}-$VERSION_CODENAME"
+      return 0
+    fi
+    printf '%s\n' "${ID:-linux}"
+    return 0
+  fi
+  printf '%s\n' "unknown"
+}
+
 host_platform_id() {
   os=$(detect_os)
   if [ "$os" = "linux" ]; then
@@ -37,6 +55,22 @@ host_platform_id() {
     return 0
   fi
   printf '%s\n' "$os"
+}
+
+managed_target_suffix() {
+  os=$1
+  arch=$2
+  platform=$3
+  os_version=${4:-}
+  if [ "$os" = "linux" ] && [ "$platform" = "ubuntu" ] && [ "$arch" = "amd64" ]; then
+    if [ "$os_version" = "ubuntu-24.04" ]; then
+      printf '%s\n' "linux-ubuntu2404-amd64-clang"
+    else
+      printf '%s\n' "linux-ubuntu-unsupported-$arch-clang"
+    fi
+    return 0
+  fi
+  printf '%s\n' "$os-$arch-clang"
 }
 
 host_prerequisite_packages() {
@@ -197,6 +231,24 @@ json_file_value() {
   ' "$path"
 }
 
+json_file_bool() {
+  path="$1"
+  id="$2"
+  field="$3"
+  awk -v target="\"id\": \"$id\"" -v field="\"$field\"" '
+    $0 ~ target {inblock=1}
+    inblock && index($0, field) {
+      line=$0
+      sub(/^.*: /, "", line)
+      sub(/,?$/, "", line)
+      gsub(/[[:space:]]/, "", line)
+      print line
+      exit
+    }
+    inblock && /^[[:space:]]*}[,]?[[:space:]]*$/ {inblock=0}
+  ' "$path"
+}
+
 json_release_version() {
   path="$1"
   awk '
@@ -309,6 +361,10 @@ perform_setup() {
   host_os=$(detect_os)
   host_arch=$(detect_arch)
   host_platform=$(host_platform_id)
+  host_os_version=""
+  if [ "$host_os" = "linux" ]; then
+    host_os_version=$(detect_linux_os_version)
+  fi
   manifest_source=${SETUP_MANIFEST:-}
   selected_root=${SETUP_ROOT:-}
 
@@ -410,12 +466,20 @@ EOF
   esac
 
   release_version=$(json_release_version "$manifest_path")
-  target_id="cli-$host_os-$host_arch-clang"
-  toolchain_id="toolchain-$host_os-$host_arch-clang"
+  target_suffix=$(managed_target_suffix "$host_os" "$host_arch" "$host_platform" "$host_os_version")
+  target_id="cli-$target_suffix"
+  toolchain_id="toolchain-$target_suffix"
+  cli_published=$(json_file_bool "$manifest_path" "$target_id" "published")
+  toolchain_published=$(json_file_bool "$manifest_path" "$toolchain_id" "published")
   cli_url=$(json_file_value "$manifest_path" "$target_id" "url")
   cli_sha=$(json_file_value "$manifest_path" "$target_id" "sha256")
   toolchain_url=$(json_file_value "$manifest_path" "$toolchain_id" "url")
   toolchain_sha=$(json_file_value "$manifest_path" "$toolchain_id" "sha256")
+
+  if [ "$cli_published" != "true" ] || [ "$toolchain_published" != "true" ]; then
+    cli_url=""
+    toolchain_url=""
+  fi
 
   if [ -z "$cli_url" ] || [ -z "$toolchain_url" ]; then
     if [ "${JSON_MODE:-0}" = "1" ]; then

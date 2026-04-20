@@ -6,6 +6,7 @@
 @interface GSCommandRunner (Testing)
 - (NSString *)commandSummary:(NSString *)command;
 - (BOOL)artifact:(NSDictionary *)artifact matchesToolchain:(NSDictionary *)toolchain;
+- (BOOL)artifact:(NSDictionary *)artifact matchesDistributionForEnvironment:(NSDictionary *)environment;
 - (BOOL)packageRequirements:(NSDictionary *)requirements
            matchEnvironment:(NSDictionary *)environment
                      reason:(NSString **)reason;
@@ -13,6 +14,7 @@
                                         environment:(NSDictionary *)environment
                                      selectionError:(NSString **)selectionError;
 - (NSDictionary *)nativeToolchainAssessmentForEnvironment:(NSDictionary *)environment compatibility:(NSDictionary *)compatibility;
+- (NSDictionary *)evaluateCompatibilityForEnvironment:(NSDictionary *)environment artifact:(NSDictionary *)artifact;
 - (NSString *)classifyEnvironment:(NSDictionary *)environment compatibility:(NSDictionary *)compatibility;
 - (NSDictionary *)compilerInfoForExecutable:(NSString *)compilerExecutable;
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
@@ -234,6 +236,83 @@
 #else
   XCTAssertTrue(YES);
 #endif
+}
+
+- (void)testArtifactDistributionMatchingHonorsUbuntuOSVersion
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *artifact = [NSDictionary dictionaryWithObjectsAndKeys:
+                                           @"linux", @"os",
+                                           @"amd64", @"arch",
+                                           [NSArray arrayWithObject: @"ubuntu"], @"supported_distributions",
+                                           [NSArray arrayWithObject: @"ubuntu-24.04"], @"supported_os_versions",
+                                           nil];
+  NSDictionary *ubuntu2404 = [NSDictionary dictionaryWithObjectsAndKeys:
+                                             @"linux", @"os",
+                                             @"amd64", @"arch",
+                                             @"ubuntu", @"distribution_id",
+                                             @"ubuntu-24.04", @"os_version",
+                                             nil];
+  NSDictionary *ubuntu2604 = [NSDictionary dictionaryWithObjectsAndKeys:
+                                             @"linux", @"os",
+                                             @"amd64", @"arch",
+                                             @"ubuntu", @"distribution_id",
+                                             @"ubuntu-26.04", @"os_version",
+                                             nil];
+
+  XCTAssertTrue([runner artifact: artifact matchesDistributionForEnvironment: ubuntu2404]);
+  XCTAssertFalse([runner artifact: artifact matchesDistributionForEnvironment: ubuntu2604]);
+}
+
+- (void)testCompatibilityReasonsSeparateDistributionAndOSVersion
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *artifact = [NSDictionary dictionaryWithObjectsAndKeys:
+                                           @"cli-linux-ubuntu2404-amd64-clang", @"id",
+                                           @"cli", @"kind",
+                                           @"linux", @"os",
+                                           @"amd64", @"arch",
+                                           @"clang", @"compiler_family",
+                                           [NSArray arrayWithObject: @"ubuntu"], @"supported_distributions",
+                                           [NSArray arrayWithObject: @"ubuntu-24.04"], @"supported_os_versions",
+                                           nil];
+  NSDictionary *fedora = [NSDictionary dictionaryWithObjectsAndKeys:
+                                         @"linux", @"os",
+                                         @"amd64", @"arch",
+                                         @"fedora", @"distribution_id",
+                                         @"fedora-41", @"os_version",
+                                         [NSDictionary dictionaryWithObjectsAndKeys:
+                                                       [NSNumber numberWithBool: NO], @"present",
+                                                       nil], @"toolchain",
+                                         nil];
+  NSDictionary *ubuntu2604 = [NSDictionary dictionaryWithObjectsAndKeys:
+                                             @"linux", @"os",
+                                             @"amd64", @"arch",
+                                             @"ubuntu", @"distribution_id",
+                                             @"ubuntu-26.04", @"os_version",
+                                             [NSDictionary dictionaryWithObjectsAndKeys:
+                                                           [NSNumber numberWithBool: NO], @"present",
+                                                           nil], @"toolchain",
+                                             nil];
+
+  NSArray *fedoraReasons = [[runner evaluateCompatibilityForEnvironment: fedora artifact: artifact] objectForKey: @"reasons"];
+  NSArray *ubuntuReasons = [[runner evaluateCompatibilityForEnvironment: ubuntu2604 artifact: artifact] objectForKey: @"reasons"];
+  NSMutableArray *fedoraCodes = [NSMutableArray array];
+  NSMutableArray *ubuntuCodes = [NSMutableArray array];
+  NSUInteger index = 0;
+
+  for (index = 0; index < [fedoraReasons count]; index++)
+    {
+      [fedoraCodes addObject: [[fedoraReasons objectAtIndex: index] objectForKey: @"code"]];
+    }
+  for (index = 0; index < [ubuntuReasons count]; index++)
+    {
+      [ubuntuCodes addObject: [[ubuntuReasons objectAtIndex: index] objectForKey: @"code"]];
+    }
+
+  XCTAssertTrue([fedoraCodes containsObject: @"unsupported_distribution"]);
+  XCTAssertTrue([ubuntuCodes containsObject: @"unsupported_os_version"]);
+  XCTAssertFalse([ubuntuCodes containsObject: @"unsupported_distribution"]);
 }
 
 - (void)testArtifactMatchesToolchainWhenRuntimeAndFeaturesAlign

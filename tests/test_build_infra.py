@@ -36,6 +36,7 @@ from gnustep_cli_shared.build_infra import (
     package_artifact_build_plan,
     package_artifact_publication_gate,
     package_tools_xctest_artifact,
+    tools_xctest_release_gate,
     package_source_built_linux_toolchain_artifact,
     prepare_github_release,
     published_url_qualification_plan,
@@ -69,16 +70,23 @@ class BuildInfraTests(unittest.TestCase):
     def test_matrix_contains_tier1_targets(self):
         payload = build_matrix()
         self.assertEqual(payload["schema_version"], 1)
-        self.assertEqual(len(payload["targets"]), 6)
+        self.assertEqual(len(payload["targets"]), 7)
 
     def test_release_manifest_generation(self):
         payload = release_manifest_from_matrix("0.1.0", "https://example.invalid/releases")
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["releases"][0]["version"], "0.1.0")
-        self.assertEqual(len(payload["releases"][0]["artifacts"]), 12)
+        self.assertEqual(len(payload["releases"][0]["artifacts"]), 14)
         linux_artifacts = [artifact for artifact in payload["releases"][0]["artifacts"] if artifact["os"] == "linux"]
         self.assertTrue(linux_artifacts)
-        self.assertTrue(all(artifact["supported_distributions"] == ["debian"] for artifact in linux_artifacts))
+        distribution_by_id = {artifact["id"]: artifact["supported_distributions"] for artifact in linux_artifacts}
+        self.assertEqual(distribution_by_id["cli-linux-amd64-clang"], ["debian"])
+        self.assertEqual(distribution_by_id["toolchain-linux-amd64-clang"], ["debian"])
+        self.assertEqual(distribution_by_id["cli-linux-ubuntu2404-amd64-clang"], ["ubuntu"])
+        self.assertEqual(distribution_by_id["toolchain-linux-ubuntu2404-amd64-clang"], ["ubuntu"])
+        version_by_id = {artifact["id"]: artifact["supported_os_versions"] for artifact in linux_artifacts}
+        self.assertEqual(version_by_id["cli-linux-ubuntu2404-amd64-clang"], ["ubuntu-24.04"])
+        self.assertEqual(version_by_id["toolchain-linux-ubuntu2404-amd64-clang"], ["ubuntu-24.04"])
         self.assertTrue(all(artifact["portability_policy"] == "distribution-scoped" for artifact in linux_artifacts))
 
     def test_source_lock_template_for_linux(self):
@@ -119,8 +127,18 @@ class BuildInfraTests(unittest.TestCase):
     def test_linux_managed_artifact_is_debian_scoped_until_portability_is_closed(self):
         artifact = release_manifest_from_matrix("0.1.0", "https://example.invalid")["releases"][0]["artifacts"][0]
         debian_env = {"os": "linux", "arch": "amd64", "distribution_id": "debian", "toolchain": {}}
+        ubuntu_env = {"os": "linux", "arch": "amd64", "distribution_id": "ubuntu", "os_version": "ubuntu-24.04", "toolchain": {}}
+        ubuntu_2604_env = {"os": "linux", "arch": "amd64", "distribution_id": "ubuntu", "os_version": "ubuntu-26.04", "toolchain": {}}
         fedora_env = {"os": "linux", "arch": "amd64", "distribution_id": "fedora", "toolchain": {}}
+        ubuntu_artifact = next(
+            artifact
+            for artifact in release_manifest_from_matrix("0.1.0", "https://example.invalid")["releases"][0]["artifacts"]
+            if artifact["id"] == "cli-linux-ubuntu2404-amd64-clang"
+        )
         self.assertTrue(artifact_matches_host(debian_env, artifact))
+        self.assertFalse(artifact_matches_host(ubuntu_env, artifact))
+        self.assertTrue(artifact_matches_host(ubuntu_env, ubuntu_artifact))
+        self.assertFalse(artifact_matches_host(ubuntu_2604_env, ubuntu_artifact))
         self.assertFalse(artifact_matches_host(fedora_env, artifact))
         result = evaluate_environment_against_artifact(fedora_env, artifact)
         reason_codes = [reason["code"] for reason in result["reasons"]]
@@ -1058,11 +1076,13 @@ class BuildInfraTests(unittest.TestCase):
         self.assertTrue(package["source_verified"])
         artifact_ids = [artifact["id"] for artifact in package["artifacts"]]
         self.assertIn("tools-xctest-linux-amd64-clang", artifact_ids)
+        self.assertIn("tools-xctest-linux-ubuntu2404-amd64-clang", artifact_ids)
         self.assertIn("tools-xctest-linux-arm64-clang", artifact_ids)
         self.assertIn("tools-xctest-openbsd-amd64-clang", artifact_ids)
         self.assertIn("tools-xctest-openbsd-arm64-clang", artifact_ids)
         self.assertIn("tools-xctest-windows-amd64-msys2-clang64", artifact_ids)
         linux_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-linux-amd64-clang")
+        ubuntu_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-linux-ubuntu2404-amd64-clang")
         linux_arm64_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-linux-arm64-clang")
         openbsd_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-openbsd-amd64-clang")
         openbsd_arm64_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-openbsd-arm64-clang")
@@ -1072,6 +1092,9 @@ class BuildInfraTests(unittest.TestCase):
         self.assertTrue(linux_artifact["production_ready"])
         self.assertFalse(linux_artifact["publish"])
         self.assertEqual(linux_artifact["patches"][0]["upstream_status"], "submitted")
+        self.assertFalse(ubuntu_artifact["publish"])
+        self.assertEqual(ubuntu_artifact["arch"], "amd64")
+        self.assertEqual(ubuntu_artifact["toolchain_flavor"], "clang")
         self.assertEqual(linux_artifact["build_backend"], "gnustep-cli")
         self.assertEqual(linux_artifact["build_invocation"][:2], ["gnustep", "build"])
         self.assertFalse(openbsd_artifact["provenance_required"])
@@ -1128,6 +1151,83 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(artifact["artifact_verified"])
             self.assertTrue(artifact["production_ready"])
             self.assertTrue(artifact["publish"])
+
+    def test_tools_xctest_release_gate_blocks_until_artifacts_are_rebuilt_and_dogfooded(self):
+        payload = tools_xctest_release_gate(ROOT / "packages")
+        self.assertFalse(payload["ok"])
+        self.assertEqual(payload["status"], "blocked")
+        self.assertEqual(payload["phase"], "24.E-G")
+        self.assertEqual(payload["required_patch"], "add-apple-style-xctest-cli-filters")
+        blocker_codes = [blocker["code"] for blocker in payload["blockers"]]
+        self.assertIn("artifact_not_publishable", blocker_codes)
+        self.assertIn("artifact_pending_rebuild_with_declared_patches", blocker_codes)
+        self.assertIn("artifact_not_built", blocker_codes)
+        self.assertIn("artifact_digest_missing", blocker_codes)
+        self.assertIn("dogfood_evidence_missing", blocker_codes)
+        targets = {target["id"]: target for target in payload["targets"]}
+        self.assertEqual(targets["tools-xctest-linux-amd64-clang"]["selected_patches"], ["add-apple-style-xctest-cli-filters"])
+        self.assertFalse(targets["tools-xctest-linux-amd64-clang"]["release_ready"])
+        self.assertEqual(targets["tools-xctest-windows-amd64-msys2-clang64"]["format"], "zip")
+        self.assertIn("minimal XCTest bundle execution", payload["dogfood_checks"])
+
+    def test_tools_xctest_release_gate_passes_with_publishable_artifact_and_evidence(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            packages_dir = temp / "packages"
+            package_dir = packages_dir / "org.gnustep.tools-xctest"
+            package_dir.mkdir(parents=True)
+            artifact_id = "tools-xctest-linux-amd64-clang"
+            manifest = {
+                "schema_version": 1,
+                "id": "org.gnustep.tools-xctest",
+                "name": "tools-xctest",
+                "version": "1.0.0",
+                "kind": "cli-tool",
+                "source": {"type": "git", "url": "https://github.com/gnustep/tools-xctest.git", "sha256": "a" * 64},
+                "artifacts": [
+                    {
+                        "id": artifact_id,
+                        "os": "linux",
+                        "arch": "amd64",
+                        "compiler_family": "clang",
+                        "toolchain_flavor": "clang",
+                        "url": "https://example.invalid/tools-xctest.tar.gz",
+                        "sha256": "b" * 64,
+                        "publish": True,
+                        "status": "validated",
+                    }
+                ],
+                "patches": [
+                    {
+                        "id": "add-apple-style-xctest-cli-filters",
+                        "path": "patches/add-apple-style-xctest-cli-filters.patch",
+                        "sha256": "c" * 64,
+                        "applies_to": [artifact_id],
+                    }
+                ],
+            }
+            (package_dir / "package.json").write_text(json.dumps(manifest) + "\n")
+            evidence_dir = temp / "evidence" / "tools-xctest"
+            evidence_dir.mkdir(parents=True)
+            (evidence_dir / f"{artifact_id}.json").write_text(json.dumps({
+                "ok": True,
+                "package_id": "org.gnustep.tools-xctest",
+                "artifact_id": artifact_id,
+                "checks": ["install", "xctest-smoke", "minimal-bundle", "remove"],
+            }) + "\n")
+            payload = tools_xctest_release_gate(packages_dir, evidence_dir=temp / "evidence")
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["status"], "ok")
+            self.assertEqual(payload["blockers"], [])
+            self.assertEqual(payload["targets"][0]["dogfood_evidence"], "accepted")
+            self.assertTrue(payload["targets"][0]["release_ready"])
+
+    def test_tools_xctest_release_gate_requires_manifest(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            payload = tools_xctest_release_gate(Path(tempdir) / "packages")
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["status"], "blocked")
+            self.assertEqual(payload["blockers"][0]["code"], "tools_xctest_manifest_missing")
 
     def test_package_artifact_publication_gate_blocks_policy_placeholders(self):
         with tempfile.TemporaryDirectory() as tempdir:

@@ -21,7 +21,7 @@ The project has reached a local v0.1.x RC1-style validation point for the delibe
 - Release and package-index trust roots must be injected from an external trusted channel and verified by the release gate; local ephemeral signing is acceptable only as validation evidence. The controlled release gate no longer accepts a bundled package-index public key as production trust.
 - Key rotation, revocation, expiry, rollback/freeze, and compromised-key drills must be automated before making production security claims; the local release key-rotation drill now exists and must be run with CI-held production trust roots before any production claim.
 - Published-URL qualification still needs production persisted evidence and scheduled/CI execution; the staged-release OTVM lanes now have destroy-on-exit cleanup for Debian, OpenBSD, and Windows smoke coverage, and release evidence can now be bundled as `release-evidence-bundle.json`.
-- Package artifact publication is now blocked by automation until package manifests carry real source provenance and artifact checksums. The current `tools-xctest` package remains intentionally non-publishable until controlled package builds produce those values.
+- Package artifact publication is now blocked by automation until package manifests carry real source provenance and artifact checksums. The current `tools-xctest` package remains intentionally non-publishable until controlled package builds rebuild every target from the declared upstream revision plus PR #5 patch and native install/smoke/remove evidence is recorded.
 
 ## Next Gate
 

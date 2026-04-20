@@ -77,8 +77,9 @@ candidate.
   against the refreshed Debian-built artifact. Both proved the artifact is not
   portable across those distro families: Fedora fails to launch on missing
   `libcurl-gnutls.so.4`, and Arch fails to launch on missing `libxml2.so.2`.
-  The current `linux-amd64-clang` artifact is now Debian-scoped in metadata and
-  selection policy until dependency closure or per-distro artifacts exist.
+  The current `linux-amd64-clang` artifact is Debian-scoped in metadata and
+  selection policy; Ubuntu now has its own planned `linux-ubuntu2404-amd64-clang`
+  target because Ubuntu base images can have different ICU/runtime SONAMEs.
 - The Debian managed Linux release gap for normal project workflows is now
   closed for the current staged artifact: `gnustep new`, `gnustep build`, and
   `gnustep run` passed on a fresh Debian libvirt lease after explicit host

@@ -69,6 +69,31 @@
       "notes": "Existing dogfood artifact predates the declared downstream patch and must be rebuilt before publication or installability claims."
     },
     {
+      "id": "tools-xctest-linux-ubuntu2404-amd64-clang",
+      "os": "linux",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "supported_distributions": [
+        "ubuntu"
+      ],
+      "portability_policy": "distribution-scoped",
+      "url": "dist/dogfood/packages/tools-xctest-linux-ubuntu2404-amd64-clang-0.1.0.tar.gz",
+      "sha256": "planned-artifact-checksum-tbd",
+      "format": "tar.gz",
+      "publish": false,
+      "status": "planned_ubuntu2404_amd64_docker_build",
+      "notes": "Planned Ubuntu 24.04 Docker-built target; artifact must be built from declared upstream source plus declared patches before publication or installability claims.",
+      "supported_os_versions": [
+        "ubuntu-24.04"
+      ]
+    },
+    {
       "id": "tools-xctest-openbsd-amd64-clang",
       "os": "openbsd",
       "arch": "amd64",
@@ -160,6 +185,7 @@
       "strip": 1,
       "applies_to": [
         "tools-xctest-linux-amd64-clang",
+        "tools-xctest-linux-ubuntu2404-amd64-clang",
         "tools-xctest-openbsd-amd64-clang",
         "tools-xctest-linux-arm64-clang",
         "tools-xctest-windows-amd64-msys2-clang64",

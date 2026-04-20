@@ -52,7 +52,8 @@ This document records the current Phase 10-12 baseline.
   --target <artifact-id>` is the current repository-level patch application
   primitive; it verifies manifest and patch digests, selects target-applicable
   patches, and invokes the system `patch` tool with the declared strip level
-- initial `tools-xctest` package targets are Linux `amd64/clang`, Debian Linux `arm64/clang`, OpenBSD `amd64/clang`, OpenBSD `arm64/clang`, and Windows `amd64/msys2-clang64`; planned targets remain `publish: false` until rebuilt with declared patches and host-validated
+- initial `tools-xctest` package targets are Debian Linux `amd64/clang`, Ubuntu Linux `amd64/clang`, Debian Linux `arm64/clang`, OpenBSD `amd64/clang`, OpenBSD `arm64/clang`, and Windows `amd64/msys2-clang64`; all targets remain `publish: false` until rebuilt with declared patches and host-validated
+- `scripts/internal/build_infra.py --json tools-xctest-release-gate --packages-dir packages --evidence-dir <evidence-dir>` is the Phase 24 package lifecycle gate; it blocks release claims while artifacts predate declared patches, planned artifacts lack verified digests, or native install/smoke/remove evidence has not been collected
 - generated package indexes and provenance records carry the package source and
   patch list at package level and artifact level so a published artifact can be
   traced back to both upstream source and project-maintained downstream changes

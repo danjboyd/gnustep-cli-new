@@ -17,6 +17,7 @@ from gnustep_cli_shared.build_infra import (
     package_artifact_build_plan,
     package_artifact_publication_gate,
     package_tools_xctest_artifact,
+    tools_xctest_release_gate,
     build_linux_cli_against_managed_toolchain,
     linux_cli_abi_audit,
     refresh_local_release_metadata,
@@ -107,6 +108,7 @@ def main() -> int:
     package_linux_toolchain.add_argument("--staging-prefix", required=True)
     package_linux_toolchain.add_argument("--output-dir", required=True)
     package_linux_toolchain.add_argument("--toolchain-version", default="2026.04.0")
+    package_linux_toolchain.add_argument("--target", default="linux-amd64-clang")
 
     host_origin_audit = subparsers.add_parser("toolchain-host-origin-audit", add_help=False)
     host_origin_audit.add_argument("--toolchain-root", required=True)
@@ -189,6 +191,10 @@ def main() -> int:
 
     package_gate = subparsers.add_parser("package-artifact-publication-gate", add_help=False)
     package_gate.add_argument("--packages-dir", required=True)
+
+    tools_xctest_gate = subparsers.add_parser("tools-xctest-release-gate", add_help=False)
+    tools_xctest_gate.add_argument("--packages-dir", required=True)
+    tools_xctest_gate.add_argument("--evidence-dir")
 
     tools_xctest_artifact = subparsers.add_parser("package-tools-xctest-artifact", add_help=False)
     tools_xctest_artifact.add_argument("--output-dir", required=True)
@@ -298,6 +304,7 @@ def main() -> int:
             args.staging_prefix,
             args.output_dir,
             toolchain_version=args.toolchain_version,
+            target_id=args.target,
         )
     elif args.subcommand == "toolchain-host-origin-audit":
         payload = toolchain_tree_host_origin_audit(args.toolchain_root)
@@ -370,6 +377,8 @@ def main() -> int:
         payload = package_artifact_build_plan(args.packages_dir)
     elif args.subcommand == "package-artifact-publication-gate":
         payload = package_artifact_publication_gate(args.packages_dir)
+    elif args.subcommand == "tools-xctest-release-gate":
+        payload = tools_xctest_release_gate(args.packages_dir, evidence_dir=args.evidence_dir)
     elif args.subcommand == "package-tools-xctest-artifact":
         payload = package_tools_xctest_artifact(
             args.output_dir,
@@ -449,7 +458,7 @@ def main() -> int:
             "build-infra: expected 'matrix', 'manifest', 'bundle-cli', 'source-lock', "
             "'assemble-linux-toolchain', 'package-source-built-linux-toolchain', 'toolchain-host-origin-audit', "
             "'stage-release', 'github-release-plan', 'github-release-publish', "
-            "'prepare-github-release', 'package-artifact-publication-gate', 'package-tools-xctest-artifact', 'build-linux-cli-against-managed-toolchain', 'linux-cli-abi-audit', 'refresh-local-release-metadata', 'published-url-qualification-plan', "
+            "'prepare-github-release', 'package-artifact-publication-gate', 'tools-xctest-release-gate', 'package-tools-xctest-artifact', 'build-linux-cli-against-managed-toolchain', 'linux-cli-abi-audit', 'refresh-local-release-metadata', 'published-url-qualification-plan', "
             "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', 'windows-current-source-marker', 'release-evidence-bundle', 'release-key-rotation-drill', "
             "'validate-source-lock', 'msys2-input-manifest', 'validate-input-manifest', 'component-inventory', 'toolchain-manifest', "
             "'toolchain-plan', 'linux-build-script', 'openbsd-build-script', "

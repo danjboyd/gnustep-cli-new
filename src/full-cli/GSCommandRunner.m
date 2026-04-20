@@ -1461,22 +1461,38 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 - (BOOL)artifact:(NSDictionary *)artifact matchesDistributionForEnvironment:(NSDictionary *)environment
 {
   id supportedDistributions = [artifact objectForKey: @"supported_distributions"];
+  id supportedOSVersions = [artifact objectForKey: @"supported_os_versions"];
   id osName = [environment objectForKey: @"os"];
   id distributionID = [environment objectForKey: @"distribution_id"];
+  id osVersion = [environment objectForKey: @"os_version"];
 
-  if ([osName isEqual: @"linux"] == NO ||
-      supportedDistributions == nil ||
-      supportedDistributions == [NSNull null] ||
-      [supportedDistributions isKindOfClass: [NSArray class]] == NO ||
-      [supportedDistributions count] == 0)
+  if ([osName isEqual: @"linux"] == NO)
     {
       return YES;
     }
-  if (distributionID == nil || distributionID == [NSNull null])
+  if (supportedDistributions != nil &&
+      supportedDistributions != [NSNull null] &&
+      [supportedDistributions isKindOfClass: [NSArray class]] &&
+      [supportedDistributions count] > 0)
     {
-      return NO;
+      if (distributionID == nil || distributionID == [NSNull null] ||
+          [supportedDistributions containsObject: distributionID] == NO)
+        {
+          return NO;
+        }
     }
-  return [supportedDistributions containsObject: distributionID];
+  if (supportedOSVersions != nil &&
+      supportedOSVersions != [NSNull null] &&
+      [supportedOSVersions isKindOfClass: [NSArray class]] &&
+      [supportedOSVersions count] > 0)
+    {
+      if (osVersion == nil || osVersion == [NSNull null] ||
+          [supportedOSVersions containsObject: osVersion] == NO)
+        {
+          return NO;
+        }
+    }
+  return YES;
 }
 
 - (BOOL)artifact:(NSDictionary *)artifact matchesToolchain:(NSDictionary *)toolchain
@@ -2324,11 +2340,32 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                            @"Detected architecture does not match the selected artifact architecture.", @"message",
                                            nil]];
     }
-  if ([self artifact: artifact matchesDistributionForEnvironment: environment] == NO)
+  NSArray *supportedDistributions = [artifact objectForKey: @"supported_distributions"];
+  NSArray *supportedOSVersions = [artifact objectForKey: @"supported_os_versions"];
+  BOOL hasSupportedDistributions = (supportedDistributions != nil &&
+                                    (id)supportedDistributions != (id)[NSNull null] &&
+                                    [supportedDistributions isKindOfClass: [NSArray class]] &&
+                                    [supportedDistributions count] > 0);
+  BOOL hasSupportedOSVersions = (supportedOSVersions != nil &&
+                                 (id)supportedOSVersions != (id)[NSNull null] &&
+                                 [supportedOSVersions isKindOfClass: [NSArray class]] &&
+                                 [supportedOSVersions count] > 0);
+  if ([[environment objectForKey: @"os"] isEqualToString: @"linux"] &&
+      hasSupportedDistributions &&
+      [supportedDistributions containsObject: [environment objectForKey: @"distribution_id"]] == NO)
     {
       [reasons addObject: [NSDictionary dictionaryWithObjectsAndKeys:
                                            @"unsupported_distribution", @"code",
                                            @"Detected Linux distribution is not in the artifact's supported distributions.", @"message",
+                                           nil]];
+    }
+  if ([[environment objectForKey: @"os"] isEqualToString: @"linux"] &&
+      hasSupportedOSVersions &&
+      [supportedOSVersions containsObject: [environment objectForKey: @"os_version"]] == NO)
+    {
+      [reasons addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                           @"unsupported_os_version", @"code",
+                                           @"Detected Linux OS version is not in the artifact's supported OS versions.", @"message",
                                            nil]];
     }
   if ([[toolchain objectForKey: @"present"] boolValue])

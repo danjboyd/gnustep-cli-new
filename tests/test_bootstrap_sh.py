@@ -65,11 +65,19 @@ class BootstrapShTests(unittest.TestCase):
 
     def test_setup_json_shape(self):
         proc = self.run_script("--json", "setup")
-        self.assertIn(proc.returncode, (0, 3))
+        self.assertIn(proc.returncode, (0, 3, 4))
         payload = json.loads(proc.stdout)
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["command"], "setup")
         self.assertIn("summary", payload)
+
+
+    def test_bootstrap_knows_ubuntu_distro_scoped_target(self):
+        content = BOOTSTRAP.read_text(encoding="utf-8")
+        self.assertIn("managed_target_suffix", content)
+        self.assertIn("linux-ubuntu2404-amd64-clang", content)
+        self.assertIn("json_file_bool", content)
+        self.assertIn("published", content)
 
     def test_bootstrap_script_does_not_depend_on_python(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")

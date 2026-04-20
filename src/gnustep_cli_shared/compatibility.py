@@ -45,7 +45,11 @@ def artifact_matches_host(environment: dict[str, Any], artifact: dict[str, Any])
         return False
     supported_distributions = artifact.get("supported_distributions") or []
     if environment.get("os") == "linux" and supported_distributions:
-        return environment.get("distribution_id") in supported_distributions
+        if environment.get("distribution_id") not in supported_distributions:
+            return False
+    supported_os_versions = artifact.get("supported_os_versions") or []
+    if environment.get("os") == "linux" and supported_os_versions:
+        return environment.get("os_version") in supported_os_versions
     return True
 
 
@@ -130,6 +134,17 @@ def evaluate_environment_against_artifact(
                 "message": (
                     f"Detected Linux distribution {environment.get('distribution_id') or 'unknown'} "
                     f"is not in the artifact's supported distributions: {', '.join(supported_distributions)}."
+                ),
+            }
+        )
+    supported_os_versions = artifact.get("supported_os_versions") or []
+    if environment.get("os") == "linux" and supported_os_versions and environment.get("os_version") not in supported_os_versions:
+        reasons.append(
+            {
+                "code": "unsupported_os_version",
+                "message": (
+                    f"Detected Linux OS version {environment.get('os_version') or 'unknown'} "
+                    f"is not in the artifact's supported OS versions: {', '.join(supported_os_versions)}."
                 ),
             }
         )

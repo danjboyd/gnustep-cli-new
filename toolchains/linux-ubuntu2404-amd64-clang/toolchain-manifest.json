@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "kind": "managed-toolchain",
+  "toolchain_version": "2026.04.0",
+  "target": {
+    "id": "linux-ubuntu2404-amd64-clang",
+    "os": "linux",
+    "arch": "amd64",
+    "compiler_family": "clang",
+    "toolchain_flavor": "clang"
+  },
+  "runtime": {
+    "objc_runtime": "libobjc2",
+    "objc_abi": "modern",
+    "required_features": [
+      "blocks"
+    ]
+  },
+  "components": [
+    "libobjc2",
+    "libdispatch",
+    "tools-make",
+    "libs-base",
+    "libs-corebase",
+    "libs-gui",
+    "libs-back"
+  ],
+  "published": false,
+  "platform_policy": {
+    "supported_distributions": [
+      "ubuntu"
+    ],
+    "supported_os_versions": [
+      "ubuntu-24.04"
+    ],
+    "portability_policy": "distribution-scoped",
+    "notes": "Planned Ubuntu amd64 managed target built in a base Ubuntu Docker image; publish remains false until ICU/runtime dependency closure and Docker smoke validation exist."
+  },
+  "source_policy": {
+    "strategy": "source-build",
+    "production_eligible": true,
+    "lock_file": "source-lock.json",
+    "component_inventory": "component-inventory.json",
+    "host_origin_paths_allowed": false
+  }
+}

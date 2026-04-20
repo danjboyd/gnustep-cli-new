@@ -3,7 +3,8 @@
 This document records the current reference implementation path for the first
 real managed toolchain target:
 
-- `linux-amd64-clang`
+- `linux-amd64-clang` for Debian-scoped amd64 artifacts
+- `linux-ubuntu2404-amd64-clang` for Ubuntu-scoped amd64 artifacts
 
 ## Current State
 
@@ -16,6 +17,10 @@ toolchain:
   [toolchains/linux-amd64-clang/toolchain-manifest.json](/home/danboyd/gnustep-cli-new/toolchains/linux-amd64-clang/toolchain-manifest.json)
 - a generated reference build script at
   [toolchains/linux-amd64-clang/build-toolchain.sh](/home/danboyd/gnustep-cli-new/toolchains/linux-amd64-clang/build-toolchain.sh)
+- a planned Ubuntu 24.04 Docker-oriented target at
+  [toolchains/linux-ubuntu2404-amd64-clang/build-toolchain.sh](/home/danboyd/gnustep-cli-new/toolchains/linux-ubuntu2404-amd64-clang/build-toolchain.sh)
+- an Ubuntu 24.04 build container definition at
+  [toolchains/linux-ubuntu2404-amd64-clang/Dockerfile](/home/danboyd/gnustep-cli-new/toolchains/linux-ubuntu2404-amd64-clang/Dockerfile)
 
 ## Pinned Component Set
 
@@ -113,9 +118,14 @@ Examples:
 
 ```sh
 python3 scripts/internal/build_infra.py --json source-lock --target linux-amd64-clang
+python3 scripts/internal/build_infra.py --json source-lock --target linux-ubuntu2404-amd64-clang
+# Build the Ubuntu target in its distro-scoped container:
+docker build -t gnustep-cli-toolchain:ubuntu2404 toolchains/linux-ubuntu2404-amd64-clang
+docker run --rm -v /tmp/gnustep-cli-ubuntu2404-toolchain:/tmp/gnustep-cli-ubuntu2404-toolchain gnustep-cli-toolchain:ubuntu2404
 python3 scripts/internal/build_infra.py --json toolchain-manifest --target linux-amd64-clang --toolchain-version 2026.04.0
+python3 scripts/internal/build_infra.py --json toolchain-manifest --target linux-ubuntu2404-amd64-clang --toolchain-version 2026.04.0
 python3 scripts/internal/build_infra.py linux-build-script \
-  --target linux-amd64-clang \
+  --target linux-ubuntu2404-amd64-clang \
   --prefix /tmp/gnustep-cli-linux-toolchain/install \
   --sources-dir /tmp/gnustep-cli-linux-toolchain/sources \
   --build-root /tmp/gnustep-cli-linux-toolchain/build

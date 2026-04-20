@@ -41,7 +41,22 @@ TIER1_TARGETS = [
         "core_components": UNIX_CORE_COMPONENTS,
         "supported_distributions": ["debian"],
         "portability_policy": "distribution-scoped",
-        "portability_notes": "Current source-built Linux artifact is validated on Debian only; Fedora and Arch require dependency closure or per-distro artifacts before managed artifact support is claimed.",
+        "portability_notes": "Current source-built Linux artifact is validated on Debian only; Ubuntu requires its own distro-scoped artifact because ICU and other runtime SONAMEs differ by distro release.",
+    },
+    {
+        "id": "linux-ubuntu2404-amd64-clang",
+        "os": "linux",
+        "arch": "amd64",
+        "compiler_family": "clang",
+        "toolchain_flavor": "clang",
+        "strategy": "source-build",
+        "publish": False,
+        "core_components": UNIX_CORE_COMPONENTS,
+        "supported_distributions": ["ubuntu"],
+        "supported_os_versions": ["ubuntu-24.04"],
+        "build_host": "ubuntu:24.04 docker amd64",
+        "portability_policy": "distribution-scoped",
+        "portability_notes": "Planned Ubuntu amd64 managed target built in a base Ubuntu Docker image; publish remains false until ICU/runtime dependency closure and Docker smoke validation exist.",
     },
     {
         "id": "linux-arm64-clang",
@@ -208,6 +223,7 @@ def release_manifest_from_matrix(version: str, base_url: str) -> dict[str, Any]:
                 "required_features": [],
                 "format": "tar.gz" if target["os"] != "windows" else "zip",
                 "supported_distributions": target.get("supported_distributions", []),
+                "supported_os_versions": target.get("supported_os_versions", []),
                 "portability_policy": target.get("portability_policy", "platform-wide"),
                 "url": f"{base_url.rstrip('/')}/{version}/{cli_id}",
                 "sha256": "TBD",
@@ -235,6 +251,7 @@ def release_manifest_from_matrix(version: str, base_url: str) -> dict[str, Any]:
                 "required_features": ["blocks"] if target["compiler_family"] != "msvc" else [],
                 "format": "tar.gz" if target["os"] != "windows" else "zip",
                 "supported_distributions": target.get("supported_distributions", []),
+                "supported_os_versions": target.get("supported_os_versions", []),
                 "portability_policy": target.get("portability_policy", "platform-wide"),
                 "url": f"{base_url.rstrip('/')}/{version}/toolchain-{target['id']}",
                 "sha256": "TBD",
@@ -374,6 +391,7 @@ def toolchain_manifest(target_id: str, toolchain_version: str) -> dict[str, Any]
         "published": target["publish"],
         "platform_policy": {
             "supported_distributions": target.get("supported_distributions", []),
+            "supported_os_versions": target.get("supported_os_versions", []),
             "portability_policy": target.get("portability_policy", "platform-wide"),
             "notes": target.get("portability_notes"),
         },
@@ -433,6 +451,7 @@ def component_inventory(target_id: str, toolchain_version: str) -> dict[str, Any
         "toolchain_version": toolchain_version,
         "platform_policy": {
             "supported_distributions": target.get("supported_distributions", []),
+            "supported_os_versions": target.get("supported_os_versions", []),
             "portability_policy": target.get("portability_policy", "platform-wide"),
             "notes": target.get("portability_notes"),
         },
@@ -1923,6 +1942,7 @@ def package_source_built_linux_toolchain_artifact(
     output_dir: str | Path,
     *,
     toolchain_version: str = "2026.04.0",
+    target_id: str = "linux-amd64-clang",
 ) -> dict[str, Any]:
     source_root = Path(staging_prefix).resolve()
     output_root = Path(output_dir).resolve()
@@ -1936,7 +1956,7 @@ def package_source_built_linux_toolchain_artifact(
     normalization = normalize_source_built_toolchain_paths(output_root, source_root)
     metadata_result = write_toolchain_metadata(
         output_root,
-        "linux-amd64-clang",
+        target_id,
         toolchain_version,
         production_eligible=True,
     )
@@ -1950,7 +1970,7 @@ def package_source_built_linux_toolchain_artifact(
         manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     assembly_metadata = {
         "schema_version": 1,
-        "target": "linux-amd64-clang",
+        "target": target_id,
         "source_prefix": "<staging-prefix>",
         "source_policy": {
             "strategy": "source-build",
@@ -2782,6 +2802,7 @@ def stage_release_assets(
                 "size": archive_path.stat().st_size,
                 "filename": filename,
                 "supported_distributions": target.get("supported_distributions", []),
+                "supported_os_versions": target.get("supported_os_versions", []),
                 "portability_policy": target.get("portability_policy", "platform-wide"),
             }
             if kind == "toolchain":
@@ -2975,7 +2996,7 @@ def toolchain_archive_audit(archive_path: str | Path, *, target_id: str | None =
         add_check("common_make", "GNUstep Make common.make is present.", [r"/common\.make$"])
         add_check("tool_make", "GNUstep Make tool.make is present.", [r"/tool\.make$"])
         add_check("gnustep_env", "GNUstep environment activation script is present.", [r"/gnustep\.(sh|bat|ps1)$"], required=False)
-    elif inferred_target in {"linux-amd64-clang", "linux-arm64-clang", "openbsd-amd64-clang", "openbsd-arm64-clang"}:
+    elif inferred_target in {"linux-amd64-clang", "linux-ubuntu2404-amd64-clang", "linux-arm64-clang", "openbsd-amd64-clang", "openbsd-arm64-clang"}:
         add_check("runtime_tools", "Managed tool directory is present.", [r"/system/tools/", r"/tools/"])
         add_check("source_lock", "Source-built managed toolchain source lock is present.", [r"/source-lock\.json$"])
         add_check("component_inventory", "Managed toolchain component inventory is present.", [r"/component-inventory\.json$"])
@@ -3511,6 +3532,247 @@ def package_artifact_publication_gate(packages_dir: str | Path) -> dict[str, Any
         "summary": "Package artifact publication gate passed." if ok else "Package artifact publication gate failed.",
         "packages_dir": str(Path(packages_dir).resolve()),
         "checks": checks,
+    }
+
+
+def _package_digest_is_placeholder(value: Any) -> bool:
+    if value is None:
+        return True
+    text = str(value).strip().lower()
+    if not text:
+        return True
+    return (
+        text.endswith("tbd")
+        or "placeholder" in text
+        or "development" in text
+        or text in {
+            "published-artifact-checksum-tbd",
+            "planned-artifact-checksum-tbd",
+            "tbd",
+        }
+    )
+
+
+def tools_xctest_release_gate(packages_dir: str | Path, *, evidence_dir: str | Path | None = None) -> dict[str, Any]:
+    root = Path(packages_dir).resolve()
+    evidence_root = Path(evidence_dir).resolve() if evidence_dir is not None else None
+    manifest_path = root / "org.gnustep.tools-xctest" / "package.json"
+    blockers: list[dict[str, Any]] = []
+    targets: list[dict[str, Any]] = []
+    required_patch_id = "add-apple-style-xctest-cli-filters"
+    dogfood_checks = [
+        "native install org.gnustep.tools-xctest from a signed package index",
+        "xctest binary smoke test",
+        "minimal XCTest bundle execution",
+        "native remove org.gnustep.tools-xctest cleanup verification",
+    ]
+
+    if not manifest_path.exists():
+        return {
+            "schema_version": 1,
+            "command": "tools-xctest-release-gate",
+            "ok": False,
+            "status": "blocked",
+            "summary": "tools-xctest package release gate is blocked.",
+            "packages_dir": str(root),
+            "evidence_dir": str(evidence_root) if evidence_root else None,
+            "package_id": "org.gnustep.tools-xctest",
+            "blockers": [
+                {
+                    "code": "tools_xctest_manifest_missing",
+                    "message": "packages/org.gnustep.tools-xctest/package.json is required before tools-xctest can be release-gated.",
+                }
+            ],
+            "targets": [],
+            "dogfood_checks": dogfood_checks,
+            "next_actions": ["Add the tools-xctest package manifest."],
+        }
+
+    manifest = json.loads(manifest_path.read_text())
+    patches = manifest.get("patches", []) or []
+    patch_by_id = {patch.get("id"): patch for patch in patches if isinstance(patch, dict)}
+    declared_patch = patch_by_id.get(required_patch_id)
+    if declared_patch is None:
+        blockers.append(
+            {
+                "code": "required_patch_not_declared",
+                "artifact": None,
+                "message": f"tools-xctest must declare the downstream patch {required_patch_id}.",
+            }
+        )
+    elif _package_digest_is_placeholder(declared_patch.get("sha256")):
+        blockers.append(
+            {
+                "code": "required_patch_digest_missing",
+                "artifact": None,
+                "message": f"tools-xctest patch {required_patch_id} must have a verified sha256.",
+            }
+        )
+
+    def load_dogfood_evidence(artifact_id: str | None) -> tuple[str, dict[str, Any] | None, dict[str, Any] | None]:
+        if artifact_id is None:
+            return "missing", None, {
+                "code": "dogfood_evidence_missing",
+                "artifact": artifact_id,
+                "message": "tools-xctest artifact dogfood evidence is required.",
+            }
+        if evidence_root is None:
+            return "missing", None, {
+                "code": "dogfood_evidence_missing",
+                "artifact": artifact_id,
+                "message": f"{artifact_id} requires native install/smoke/remove dogfood evidence.",
+            }
+        candidates = [
+            evidence_root / "tools-xctest" / f"{artifact_id}.json",
+            evidence_root / f"{artifact_id}.json",
+        ]
+        evidence_path = next((candidate for candidate in candidates if candidate.exists()), None)
+        if evidence_path is None:
+            return "missing", None, {
+                "code": "dogfood_evidence_missing",
+                "artifact": artifact_id,
+                "message": f"{artifact_id} requires native install/smoke/remove dogfood evidence under {evidence_root}.",
+            }
+        try:
+            evidence = json.loads(evidence_path.read_text())
+        except json.JSONDecodeError as exc:
+            return "invalid", {"path": str(evidence_path), "error": str(exc)}, {
+                "code": "dogfood_evidence_invalid",
+                "artifact": artifact_id,
+                "message": f"{artifact_id} dogfood evidence is not valid JSON.",
+            }
+        if evidence.get("ok") is not True:
+            return "failed", evidence, {
+                "code": "dogfood_evidence_failed",
+                "artifact": artifact_id,
+                "message": f"{artifact_id} dogfood evidence did not pass.",
+            }
+        if evidence.get("package_id") != "org.gnustep.tools-xctest" or evidence.get("artifact_id") != artifact_id:
+            return "invalid", evidence, {
+                "code": "dogfood_evidence_mismatch",
+                "artifact": artifact_id,
+                "message": f"{artifact_id} dogfood evidence does not match the package and artifact identity.",
+            }
+        return "accepted", evidence, None
+
+    artifacts = manifest.get("artifacts", []) or []
+    if not artifacts:
+        blockers.append(
+            {
+                "code": "no_tools_xctest_artifacts",
+                "artifact": None,
+                "message": "tools-xctest must declare at least one artifact target.",
+            }
+        )
+
+    for artifact in artifacts:
+        artifact_id = artifact.get("id")
+        artifact_status = artifact.get("status", "")
+        publishable = artifact.get("publish", True) is not False
+        selected_patch_ids = [
+            patch.get("id")
+            for patch in patches
+            if isinstance(patch, dict)
+            and (not patch.get("applies_to") or artifact_id in patch.get("applies_to", []))
+        ]
+        artifact_blockers: list[dict[str, Any]] = []
+
+        if declared_patch is not None and required_patch_id not in selected_patch_ids:
+            artifact_blockers.append(
+                {
+                    "code": "required_patch_not_applied_to_artifact",
+                    "artifact": artifact_id,
+                    "message": f"{artifact_id} does not select required patch {required_patch_id}.",
+                }
+            )
+        if not publishable:
+            artifact_blockers.append(
+                {
+                    "code": "artifact_not_publishable",
+                    "artifact": artifact_id,
+                    "message": f"{artifact_id} is marked publish=false and cannot be used for a release claim.",
+                }
+            )
+        if "pending_rebuild" in str(artifact_status):
+            artifact_blockers.append(
+                {
+                    "code": "artifact_pending_rebuild_with_declared_patches",
+                    "artifact": artifact_id,
+                    "message": f"{artifact_id} predates the declared patch set and must be rebuilt.",
+                }
+            )
+        if str(artifact_status).startswith("planned"):
+            artifact_blockers.append(
+                {
+                    "code": "artifact_not_built",
+                    "artifact": artifact_id,
+                    "message": f"{artifact_id} is planned but has not been built.",
+                }
+            )
+        if _package_digest_is_placeholder(artifact.get("sha256")):
+            artifact_blockers.append(
+                {
+                    "code": "artifact_digest_missing",
+                    "artifact": artifact_id,
+                    "message": f"{artifact_id} must have a verified artifact sha256.",
+                }
+            )
+        if not artifact.get("url"):
+            artifact_blockers.append(
+                {
+                    "code": "artifact_url_missing",
+                    "artifact": artifact_id,
+                    "message": f"{artifact_id} must declare an artifact URL.",
+                }
+            )
+
+        evidence_status, evidence_payload, evidence_blocker = load_dogfood_evidence(artifact_id)
+        if evidence_blocker is not None:
+            artifact_blockers.append(evidence_blocker)
+
+        blockers.extend(artifact_blockers)
+        targets.append(
+            {
+                "id": artifact_id,
+                "os": artifact.get("os"),
+                "arch": artifact.get("arch"),
+                "compiler_family": artifact.get("compiler_family"),
+                "toolchain_flavor": artifact.get("toolchain_flavor"),
+                "format": artifact.get("format", "tar.gz" if artifact.get("os") != "windows" else "zip"),
+                "publish": publishable,
+                "status": artifact_status or "unspecified",
+                "url": artifact.get("url"),
+                "sha256": artifact.get("sha256"),
+                "selected_patches": selected_patch_ids,
+                "dogfood_evidence": evidence_status,
+                "dogfood_evidence_payload": evidence_payload,
+                "required_dogfood_checks": dogfood_checks,
+                "release_ready": len(artifact_blockers) == 0,
+                "blockers": artifact_blockers,
+            }
+        )
+
+    ok = len(blockers) == 0
+    return {
+        "schema_version": 1,
+        "command": "tools-xctest-release-gate",
+        "ok": ok,
+        "status": "ok" if ok else "blocked",
+        "summary": "tools-xctest package is release-ready." if ok else "tools-xctest package release gate is blocked.",
+        "packages_dir": str(root),
+        "evidence_dir": str(evidence_root) if evidence_root else None,
+        "package_id": "org.gnustep.tools-xctest",
+        "phase": "24.E-G",
+        "source": manifest.get("source", {}),
+        "required_patch": required_patch_id,
+        "dogfood_checks": dogfood_checks,
+        "targets": targets,
+        "blockers": blockers,
+        "next_actions": [
+            "Rebuild every tools-xctest artifact from the declared upstream revision plus declared patch set.",
+            "Publish rebuilt artifacts through the signed package index only after verified sha256 and provenance are present.",
+            "Run native install, xctest smoke, minimal XCTest bundle, and native remove validation on each target host.",
+        ] if not ok else [],
     }
 
 def published_url_qualification_plan(

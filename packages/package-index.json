@@ -35,6 +35,7 @@
           "strip": 1,
           "applies_to": [
             "tools-xctest-linux-amd64-clang",
+            "tools-xctest-linux-ubuntu2404-amd64-clang",
             "tools-xctest-openbsd-amd64-clang",
             "tools-xctest-linux-arm64-clang",
             "tools-xctest-windows-amd64-msys2-clang64",
@@ -127,6 +128,63 @@
               "strip": 1,
               "applies_to": [
                 "tools-xctest-linux-amd64-clang",
+                "tools-xctest-linux-ubuntu2404-amd64-clang",
+                "tools-xctest-openbsd-amd64-clang",
+                "tools-xctest-linux-arm64-clang",
+                "tools-xctest-windows-amd64-msys2-clang64",
+                "tools-xctest-openbsd-arm64-clang"
+              ],
+              "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
+              "upstream_status": "submitted",
+              "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
+              "upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc"
+            }
+          ]
+        },
+        {
+          "id": "tools-xctest-linux-ubuntu2404-amd64-clang",
+          "os": "linux",
+          "arch": "amd64",
+          "compiler_family": "clang",
+          "toolchain_flavor": "clang",
+          "objc_runtime": "libobjc2",
+          "objc_abi": "modern",
+          "required_features": [
+            "blocks"
+          ],
+          "supported_distributions": [
+            "ubuntu"
+          ],
+          "portability_policy": "distribution-scoped",
+          "url": "dist/dogfood/packages/tools-xctest-linux-ubuntu2404-amd64-clang-0.1.0.tar.gz",
+          "sha256": "planned-artifact-checksum-tbd",
+          "format": "tar.gz",
+          "publish": false,
+          "status": "planned_ubuntu2404_amd64_docker_build",
+          "notes": "Planned Ubuntu 24.04 Docker-built target; artifact must be built from declared upstream source plus declared patches before publication or installability claims.",
+          "supported_os_versions": [
+            "ubuntu-24.04"
+          ],
+          "source": {
+            "type": "git",
+            "url": "https://github.com/gnustep/tools-xctest.git",
+            "sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+            "revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3",
+            "upstream": "gnustep/tools-xctest",
+            "upstream_url": "https://github.com/gnustep/tools-xctest",
+            "tracking_strategy": "commit-with-submitted-downstream-patch",
+            "update_cadence": "manual-for-dogfood-until-first-stable-package-release",
+            "channel_policy": "dogfood snapshots may track reviewed commits; stable must track an upstream tag or an approved package exception."
+          },
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "path": "patches/add-apple-style-xctest-cli-filters.patch",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed",
+              "strip": 1,
+              "applies_to": [
+                "tools-xctest-linux-amd64-clang",
+                "tools-xctest-linux-ubuntu2404-amd64-clang",
                 "tools-xctest-openbsd-amd64-clang",
                 "tools-xctest-linux-arm64-clang",
                 "tools-xctest-windows-amd64-msys2-clang64",
@@ -175,6 +233,7 @@
               "strip": 1,
               "applies_to": [
                 "tools-xctest-linux-amd64-clang",
+                "tools-xctest-linux-ubuntu2404-amd64-clang",
                 "tools-xctest-openbsd-amd64-clang",
                 "tools-xctest-linux-arm64-clang",
                 "tools-xctest-windows-amd64-msys2-clang64",
@@ -227,6 +286,7 @@
               "strip": 1,
               "applies_to": [
                 "tools-xctest-linux-amd64-clang",
+                "tools-xctest-linux-ubuntu2404-amd64-clang",
                 "tools-xctest-openbsd-amd64-clang",
                 "tools-xctest-linux-arm64-clang",
                 "tools-xctest-windows-amd64-msys2-clang64",
@@ -275,6 +335,7 @@
               "strip": 1,
               "applies_to": [
                 "tools-xctest-linux-amd64-clang",
+                "tools-xctest-linux-ubuntu2404-amd64-clang",
                 "tools-xctest-openbsd-amd64-clang",
                 "tools-xctest-linux-arm64-clang",
                 "tools-xctest-windows-amd64-msys2-clang64",
@@ -323,6 +384,7 @@
               "strip": 1,
               "applies_to": [
                 "tools-xctest-linux-amd64-clang",
+                "tools-xctest-linux-ubuntu2404-amd64-clang",
                 "tools-xctest-openbsd-amd64-clang",
                 "tools-xctest-linux-arm64-clang",
                 "tools-xctest-windows-amd64-msys2-clang64",

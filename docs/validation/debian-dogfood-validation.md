@@ -45,7 +45,8 @@ This gate now proves controlled Debian dogfood for setup, doctor, a direct
 managed Foundation compile-link-run probe, normal GNUstep Make project workflows
 through `gnustep new` / `gnustep build` / `gnustep run`, and package flows.
 
-The remaining managed Linux hardening is portability beyond Debian: Fedora and
-Arch reruns against the refreshed Debian-built artifact still fail on distro
-library soname differences (`libcurl-gnutls.so.4` on Fedora and `libxml2.so.2`
-on Arch).
+The remaining managed Linux hardening is portability beyond Debian: Ubuntu now
+requires its own Docker-built amd64 target because ICU/runtime SONAMEs can differ
+from Debian, while Fedora and Arch reruns against the refreshed Debian-built
+artifact still fail on distro library soname differences (`libcurl-gnutls.so.4`
+on Fedora and `libxml2.so.2` on Arch).

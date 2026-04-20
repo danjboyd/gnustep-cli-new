@@ -57,6 +57,15 @@ targets the project is actively discussing.
   fall back to OCI only when local capacity is unavailable. No release artifact
   or installability claim exists until the managed toolchain, full CLI, and
   `tools-xctest` package artifacts are built and host-validated.
+- `ubuntu2404-amd64-managed-clang`
+  status: `planned_build_target`
+  notes: planned Ubuntu 24.04/amd64 managed target for the full CLI, managed
+  toolchain, and official package artifacts. This target exists because the
+  Debian-built artifact can require runtime SONAMEs such as `libicui18n.so.76`
+  that are not guaranteed in Ubuntu base images. Initial builds should use a
+  base Ubuntu Docker image so the artifact records and validates Ubuntu's actual
+  runtime dependency closure. No release or installability claim exists until
+  Docker build evidence, runtime-library audit, and setup smoke validation pass.
 - `arch-amd64-gcc`
   status: `interoperability_only`
   notes: Arch libvirt preflight and acceptance passed on April 16, 2026 using
