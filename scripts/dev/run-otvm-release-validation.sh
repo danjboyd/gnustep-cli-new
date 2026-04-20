@@ -162,16 +162,57 @@ PY2
 run_windows_probe() {
   host="$1"
   out="$RELEASE_DIR/otvm-windows-2022-smoke.json"
+  diagnostics="$RELEASE_DIR/otvm-windows-2022-diagnostics"
   smoke_script="$RELEASE_DIR/otvm-windows-2022-smoke.ps1"
+  mkdir -p "$diagnostics"
   cat > "$smoke_script" <<'PS1'
 $ErrorActionPreference = 'Stop'
 $root = 'C:\gnustep-smoke\install'
 $manifest = 'C:\gnustep-smoke\release\release-manifest.json'
 $bootstrap = 'C:\gnustep-smoke\bootstrap\gnustep-bootstrap.ps1'
 $setupOut = 'C:\gnustep-smoke\setup.json'
-& $bootstrap --json setup --root $root --manifest $manifest | Out-File -Encoding utf8 $setupOut
-$setup = Get-Content $setupOut -Raw | ConvertFrom-Json
-if (-not $setup.ok) { throw 'bootstrap setup failed' }
+function Write-SmokeSummary($payload) {
+  $payload | ConvertTo-Json -Depth 8 -Compress | Out-File -Encoding utf8 'C:\gnustep-smoke\summary.json'
+}
+
+try {
+  & $bootstrap --json setup --root $root --manifest $manifest | Out-File -Encoding utf8 $setupOut
+} catch {
+  Write-SmokeSummary @{
+    ok = $false
+    profile = 'windows-2022'
+    stage = 'bootstrap-setup'
+    summary = 'Windows bootstrap setup command failed.'
+    error = $_.Exception.Message
+  }
+  exit 1
+}
+
+$setupRaw = ''
+if (Test-Path $setupOut) { $setupRaw = Get-Content $setupOut -Raw }
+try {
+  $setup = $setupRaw | ConvertFrom-Json
+} catch {
+  Write-SmokeSummary @{
+    ok = $false
+    profile = 'windows-2022'
+    stage = 'bootstrap-setup-json'
+    summary = 'Windows bootstrap setup did not emit parseable JSON.'
+    error = $_.Exception.Message
+    setup_raw = $setupRaw
+  }
+  exit 1
+}
+if (-not $setup.ok) {
+  Write-SmokeSummary @{
+    ok = $false
+    profile = 'windows-2022'
+    stage = 'bootstrap-setup'
+    summary = 'Windows bootstrap setup failed.'
+    setup = $setup
+  }
+  exit 1
+}
 $exe = Join-Path $root 'bin\gnustep.exe'
 & $exe --version | Out-File -Encoding utf8 'C:\gnustep-smoke\version.txt'
 cmd.exe /c "`"$exe`" --help > C:\gnustep-smoke\cmd-help.txt"
@@ -187,18 +228,30 @@ try {
   $doctorCommand = 'parse-error'
 }
 if ($doctorOk) {
-  @{ ok = $true; profile = 'windows-2022'; summary = 'Windows bootstrap/full CLI smoke passed.' } | ConvertTo-Json -Compress | Out-File -Encoding utf8 'C:\gnustep-smoke\summary.json'
+  Write-SmokeSummary @{ ok = $true; profile = 'windows-2022'; summary = 'Windows bootstrap/full CLI smoke passed.' }
 } else {
-  @{ ok = $false; profile = 'windows-2022'; summary = 'Windows doctor JSON smoke failed.'; doctor_command = $doctorCommand; doctor_raw = $doctorRaw } | ConvertTo-Json -Compress | Out-File -Encoding utf8 'C:\gnustep-smoke\summary.json'
+  Write-SmokeSummary @{ ok = $false; profile = 'windows-2022'; stage = 'doctor-json'; summary = 'Windows doctor JSON smoke failed.'; doctor_command = $doctorCommand; doctor_raw = $doctorRaw }
+  exit 1
 }
 PS1
   ssh_guest otvmbootstrap "$host" 'powershell -NoProfile -Command "Remove-Item -Recurse -Force C:\\gnustep-smoke -ErrorAction SilentlyContinue; New-Item -ItemType Directory -Force C:\\gnustep-smoke\\release,C:\\gnustep-smoke\\bootstrap | Out-Null"'
   scp_to_guest otvmbootstrap "$host" "$RELEASE_DIR/." '/C:/gnustep-smoke/release/'
   scp_to_guest otvmbootstrap "$host" "$ROOT/scripts/bootstrap/gnustep-bootstrap.ps1" '/C:/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1'
   scp_to_guest otvmbootstrap "$host" "$smoke_script" '/C:/gnustep-smoke/bootstrap/otvm-windows-2022-smoke.ps1'
+  set +e
   ssh_guest otvmbootstrap "$host" 'powershell -NoProfile -ExecutionPolicy Bypass -File C:\gnustep-smoke\bootstrap\otvm-windows-2022-smoke.ps1'
+  remote_status=$?
   # shellcheck disable=SC2086
   scp $SSH_OPTS "otvmbootstrap@$host:/C:/gnustep-smoke/summary.json" "$out"
+  summary_status=$?
+  for name in setup.json doctor.json version.txt cmd-help.txt; do
+    # shellcheck disable=SC2086
+    scp $SSH_OPTS "otvmbootstrap@$host:/C:/gnustep-smoke/$name" "$diagnostics/$name" >/dev/null 2>&1 || true
+  done
+  set -e
+  if [ "$summary_status" -ne 0 ]; then
+    printf '{"ok":false,"profile":"windows-2022","stage":"diagnostics","summary":"Windows smoke failed before summary.json could be retrieved.","remote_status":%s}\n' "$remote_status" > "$out"
+  fi
   python3 - <<'PY2' "$out"
 import json, sys
 payload=json.load(open(sys.argv[1], encoding='utf-8-sig'))

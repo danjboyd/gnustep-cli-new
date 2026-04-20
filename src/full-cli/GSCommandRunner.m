@@ -5369,6 +5369,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                          nil]
                  forKey: packageID];
     [state setObject: packages forKey: @"packages"];
+    if (indexPath != nil)
+      {
+        NSDictionary *packageIndex = [self readJSONFile: indexPath error: NULL];
+        if ([packageIndex isKindOfClass: [NSDictionary class]])
+          {
+            [state setObject: [indexPath stringByResolvingSymlinksInPath] forKey: @"last_package_index_path"];
+            [state setObject: [packageIndex objectForKey: @"metadata_version"] ? [packageIndex objectForKey: @"metadata_version"] : [NSNull null] forKey: @"last_package_index_metadata_version"];
+            [state setObject: [packageIndex objectForKey: @"generated_at"] ? [packageIndex objectForKey: @"generated_at"] : [NSNull null] forKey: @"last_package_index_generated_at"];
+            [state setObject: [packageIndex objectForKey: @"expires_at"] ? [packageIndex objectForKey: @"expires_at"] : [NSNull null] forKey: @"last_package_index_expires_at"];
+          }
+      }
   }
   [self appendInstallTrace: @"saving install state"];
   [manager removeItemAtPath: staging error: NULL];

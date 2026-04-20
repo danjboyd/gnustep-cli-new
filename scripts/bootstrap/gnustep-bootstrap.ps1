@@ -5,12 +5,20 @@ param(
 
 $Script:CliVersion = "0.1.0-dev"
 $Script:JsonMode = $false
+$Script:QuietMode = $false
 $Script:RootDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
 $Script:SetupScope = "user"
 $Script:SetupRoot = $null
 $Script:SetupManifest = $env:SETUP_MANIFEST
 $Script:TracePath = $env:GNUSTEP_BOOTSTRAP_TRACE
 
+
+function Write-SetupProgress {
+    param([string]$Message)
+    if (-not $Script:JsonMode -and -not $Script:QuietMode) {
+        Write-Output "setup: $Message"
+    }
+}
 
 function Write-TraceEvent {
     param([string]$Step, [string]$Message = "")
@@ -255,7 +263,7 @@ foreach ($arg in $ArgsList) {
             $Script:JsonMode = $true
         }
         "--verbose" { }
-        "--quiet" { }
+        "--quiet" { $Script:QuietMode = $true }
         "--yes" { }
         "--trace" { }
         "--system" { $Script:SetupScope = "system" }
@@ -452,10 +460,12 @@ switch ($command) {
             exit 3
         }
         try {
+            Write-SetupProgress "starting managed installation into $selectedRoot"
             Write-TraceEvent "setup.start" $selectedRoot
             if (-not $Script:SetupManifest) {
                 $Script:SetupManifest = "https://github.com/danjboyd/gnustep-cli-new/releases/download/v$($Script:CliVersion)/release-manifest.json"
             }
+            Write-SetupProgress "loading release manifest from $Script:SetupManifest"
             Write-TraceEvent "setup.manifest.resolve" $Script:SetupManifest
             $manifest = Get-ManifestObject -ManifestSource $Script:SetupManifest
             Write-TraceEvent "setup.target" "windows"
@@ -466,6 +476,7 @@ switch ($command) {
             if (-not $cliArtifact -or -not $toolchainArtifact) {
                 throw "No matching release artifacts were found for this host."
             }
+            Write-SetupProgress "selected release $($release.version) artifacts: $($cliArtifact.id), $($toolchainArtifact.id)"
             $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("gsb-" + [guid]::NewGuid().ToString("N"))
             New-Item -ItemType Directory -Force -Path $tempRoot | Out-Null
             try {
@@ -473,12 +484,15 @@ switch ($command) {
                 $toolchainFile = Join-Path $tempRoot ([System.IO.Path]::GetFileName($toolchainArtifact.url))
                 $localCli = Join-Path $manifest.dir ([System.IO.Path]::GetFileName($cliArtifact.url))
                 $localToolchain = Join-Path $manifest.dir ([System.IO.Path]::GetFileName($toolchainArtifact.url))
+                Write-SetupProgress "fetching CLI artifact $([System.IO.Path]::GetFileName($cliArtifact.url))"
                 Write-TraceEvent "artifact.cli.fetch.start" $cliArtifact.url
                 if (Test-Path $localCli) { Copy-Item -Force $localCli $cliFile } else { Invoke-WebRequest -UseBasicParsing -Uri $cliArtifact.url -OutFile $cliFile }
                 Write-TraceEvent "artifact.cli.fetch.complete" $cliFile
+                Write-SetupProgress "fetching toolchain artifact $([System.IO.Path]::GetFileName($toolchainArtifact.url))"
                 Write-TraceEvent "artifact.toolchain.fetch.start" $toolchainArtifact.url
                 if (Test-Path $localToolchain) { Copy-Item -Force $localToolchain $toolchainFile } else { Invoke-WebRequest -UseBasicParsing -Uri $toolchainArtifact.url -OutFile $toolchainFile }
                 Write-TraceEvent "artifact.toolchain.fetch.complete" $toolchainFile
+                Write-SetupProgress "verifying artifact checksums"
                 Write-TraceEvent "artifact.checksum.start" $cliFile
                 if ((Get-Sha256 $cliFile) -ne $cliArtifact.sha256.ToLowerInvariant()) { throw "CLI checksum verification failed." }
                 Write-TraceEvent "artifact.checksum.cli.complete" $cliFile
@@ -486,18 +500,23 @@ switch ($command) {
                 Write-TraceEvent "artifact.checksum.complete" $toolchainFile
                 $cliExtract = Join-Path $tempRoot "c"
                 $toolchainExtract = Join-Path $tempRoot "t"
+                Write-SetupProgress "extracting CLI artifact"
                 Expand-Artifact -ArchivePath $cliFile -Destination $cliExtract
+                Write-SetupProgress "extracting toolchain artifact; this can take several minutes"
                 Expand-Artifact -ArchivePath $toolchainFile -Destination $toolchainExtract
                 $cliRoot = Get-SingleChildDirectory -Path $cliExtract
                 $toolchainRoot = Get-SingleChildDirectory -Path $toolchainExtract
                 New-Item -ItemType Directory -Force -Path (Join-Path $selectedRoot "bin") | Out-Null
+                Write-SetupProgress "installing CLI files"
                 Write-TraceEvent "install.cli.start" $cliRoot
                 Install-CliBundle -Source $cliRoot -Destination $selectedRoot
                 Write-TraceEvent "install.cli.complete" $selectedRoot
+                Write-SetupProgress "installing GNUstep toolchain files"
                 Write-TraceEvent "install.toolchain.start" $toolchainRoot
                 Copy-TreeContents -Source $toolchainRoot -Destination $selectedRoot
                 Write-TraceEvent "install.toolchain.complete" $selectedRoot
                 New-Item -ItemType Directory -Force -Path (Join-Path $selectedRoot "state") | Out-Null
+                Write-SetupProgress "recording managed install state"
                 @{
                     schema_version = 1
                     cli_version = $release.version

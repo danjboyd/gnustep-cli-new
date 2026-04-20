@@ -23,6 +23,8 @@ from gnustep_cli_shared.build_infra import (
     debian_gcc_interop_plan,
     github_release_plan,
     linux_build_script,
+    linux_cli_abi_audit,
+    refresh_local_release_metadata,
     release_candidate_qualification_status,
     native_linux_validation_plan,
     msys2_assembly_script,
@@ -33,6 +35,7 @@ from gnustep_cli_shared.build_infra import (
     otvm_release_host_validation_plan,
     package_artifact_build_plan,
     package_artifact_publication_gate,
+    package_tools_xctest_artifact,
     package_source_built_linux_toolchain_artifact,
     prepare_github_release,
     published_url_qualification_plan,
@@ -998,29 +1001,60 @@ class BuildInfraTests(unittest.TestCase):
         self.assertIn("rebuild-full-cli", step_ids)
         self.assertIn("run-rebuilt-cli", step_ids)
 
+    def test_package_tools_xctest_artifact_packages_installed_layout(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            source = temp / "src"
+            source.mkdir()
+            subprocess.run(["git", "-C", str(source), "init"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.email", "test@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.name", "Test"], check=True)
+            (source / "README.md").write_text("tools-xctest fixture\n")
+            subprocess.run(["git", "-C", str(source), "add", "README.md"], check=True)
+            subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            installed = temp / "GNUstep"
+            (installed / "Tools").mkdir(parents=True)
+            (installed / "Library" / "Headers" / "XCTest").mkdir(parents=True)
+            (installed / "Library" / "Libraries").mkdir(parents=True)
+            (installed / "Tools" / "xctest").write_text("#!/bin/sh\n")
+            (installed / "Library" / "Headers" / "XCTest" / "XCTest.h").write_text("// header\n")
+            (installed / "Library" / "Libraries" / "libXCTest.so").write_text("library\n")
+            payload = package_tools_xctest_artifact(temp / "out", source_dir=source, installed_root=installed, version="9.9.9")
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["package_id"], "org.gnustep.tools-xctest")
+            self.assertEqual(len(payload["source"]["sha256"]), 64)
+            self.assertEqual(len(payload["artifact"]["sha256"]), 64)
+            artifact_path = Path(payload["artifact"]["path"])
+            self.assertTrue(artifact_path.exists())
+            with tarfile.open(artifact_path, "r:gz") as archive:
+                names = archive.getnames()
+            self.assertIn("./bin/xctest", names)
+            self.assertIn("./Library/Headers/XCTest/XCTest.h", names)
+            self.assertIn("./Library/Libraries/libXCTest.so", names)
+
     def test_package_artifact_build_plan(self):
         payload = package_artifact_build_plan(ROOT / "packages")
         self.assertTrue(payload["ok"])
-        self.assertFalse(payload["production_ready"])
+        self.assertTrue(payload["production_ready"])
+        self.assertEqual(payload["policy_blockers"], [])
         package_map = {package["id"]: package for package in payload["packages"]}
         self.assertIn("org.gnustep.tools-xctest", package_map)
         package = package_map["org.gnustep.tools-xctest"]
-        self.assertFalse(package["production_ready"])
-        self.assertFalse(package["source_verified"])
-        self.assertIn("missing_verified_source_digest", package["policy_blockers"])
+        self.assertTrue(package["production_ready"])
+        self.assertTrue(package["source_verified"])
         artifact_ids = [artifact["id"] for artifact in package["artifacts"]]
         self.assertIn("tools-xctest-linux-amd64-clang", artifact_ids)
         self.assertIn("tools-xctest-openbsd-amd64-clang", artifact_ids)
         linux_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-linux-amd64-clang")
+        openbsd_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-openbsd-amd64-clang")
         self.assertTrue(linux_artifact["provenance_required"])
         self.assertTrue(linux_artifact["signature_required"])
-        self.assertFalse(linux_artifact["production_ready"])
-        self.assertFalse(linux_artifact["publish"])
-        self.assertIn("missing_verified_source_digest", linux_artifact["policy_blockers"])
-        self.assertIn("missing_published_artifact_digest", linux_artifact["policy_blockers"])
-        blocker_codes = [blocker["code"] for blocker in payload["policy_blockers"]]
-        self.assertIn("missing_verified_source_digest", blocker_codes)
-        self.assertIn("missing_published_artifact_digest", blocker_codes)
+        self.assertTrue(linux_artifact["production_ready"])
+        self.assertTrue(linux_artifact["publish"])
+        self.assertTrue(openbsd_artifact["provenance_required"])
+        self.assertTrue(openbsd_artifact["signature_required"])
+        self.assertTrue(openbsd_artifact["production_ready"])
+        self.assertTrue(openbsd_artifact["publish"])
 
     def test_package_artifact_build_plan_allows_production_ready_manifest(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -1066,14 +1100,36 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(artifact["publish"])
 
     def test_package_artifact_publication_gate_blocks_policy_placeholders(self):
-        payload = package_artifact_publication_gate(ROOT / "packages")
-        self.assertFalse(payload["ok"])
-        checks = {check["id"]: check for check in payload["checks"]}
-        self.assertIn("package-artifacts-production-ready", checks)
-        self.assertFalse(checks["package-artifacts-production-ready"]["ok"])
-        blocker_codes = [blocker["code"] for blocker in checks["package-artifacts-production-ready"]["payload"]["policy_blockers"]]
-        self.assertIn("missing_verified_source_digest", blocker_codes)
-        self.assertIn("missing_published_artifact_digest", blocker_codes)
+        with tempfile.TemporaryDirectory() as tempdir:
+            packages_dir = Path(tempdir) / "packages"
+            package_dir = packages_dir / "org.example.blocked"
+            package_dir.mkdir(parents=True)
+            (package_dir / "package.json").write_text(json.dumps({
+                "schema_version": 1,
+                "id": "org.example.blocked",
+                "name": "Blocked Example",
+                "version": "1.0.0",
+                "kind": "cli-tool",
+                "source": {"type": "archive", "url": "https://example.invalid/src.tar.gz", "sha256": "development-source-checksum-tbd"},
+                "dependencies": [],
+                "artifacts": [{
+                    "id": "blocked-linux-amd64-clang",
+                    "os": "linux",
+                    "arch": "amd64",
+                    "compiler_family": "clang",
+                    "toolchain_flavor": "clang",
+                    "url": "https://example.invalid/pkg.tar.gz",
+                    "sha256": "published-artifact-checksum-tbd",
+                }],
+            }) + "\n")
+            payload = package_artifact_publication_gate(packages_dir)
+            self.assertFalse(payload["ok"])
+            checks = {check["id"]: check for check in payload["checks"]}
+            self.assertIn("package-artifacts-production-ready", checks)
+            self.assertFalse(checks["package-artifacts-production-ready"]["ok"])
+            blocker_codes = [blocker["code"] for blocker in checks["package-artifacts-production-ready"]["payload"]["policy_blockers"]]
+            self.assertIn("missing_verified_source_digest", blocker_codes)
+            self.assertIn("missing_published_artifact_digest", blocker_codes)
 
     def test_package_artifact_publication_gate_passes_clean_manifest(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -1116,6 +1172,62 @@ class BuildInfraTests(unittest.TestCase):
             self.assertEqual(targets["openbsd-native-packaged-smoke"]["profile"], "openbsd-7.8-fvwm")
             self.assertEqual(targets["windows-release-artifact-smoke"]["profile"], "windows-2022")
             self.assertIn("release-manifest.json", targets["windows-release-artifact-smoke"]["guest_release_manifest_path"])
+
+
+    def test_linux_cli_abi_audit_rejects_legacy_objc_symbols(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            binary = Path(tempdir) / "gnustep"
+            binary.write_text("binary")
+            with patch("gnustep_cli_shared.build_infra.subprocess.run") as run:
+                run.return_value.returncode = 0
+                run.return_value.stdout = "                 U __objc_class_name_NSAutoreleasePool\n"
+                run.return_value.stderr = ""
+                payload = linux_cli_abi_audit(binary)
+            self.assertFalse(payload["ok"])
+            checks = {check["id"]: check for check in payload["checks"]}
+            self.assertFalse(checks["no-legacy-gcc-objc-class-symbols"]["ok"])
+            self.assertFalse(checks["modern-objc2-class-symbols"]["ok"])
+
+    def test_linux_cli_abi_audit_accepts_modern_objc_symbols(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            binary = Path(tempdir) / "gnustep"
+            binary.write_text("binary")
+            with patch("gnustep_cli_shared.build_infra.subprocess.run") as run:
+                run.return_value.returncode = 0
+                run.return_value.stdout = "                 U ._OBJC_REF_CLASS_NSAutoreleasePool\n"
+                run.return_value.stderr = ""
+                payload = linux_cli_abi_audit(binary)
+            self.assertTrue(payload["ok"])
+
+    def test_refresh_local_release_metadata_updates_digests_and_trust_fields(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            artifact = root / "gnustep-cli-linux-amd64-clang-0.1.0-dev.tar.gz"
+            artifact.write_text("new artifact")
+            manifest = {
+                "schema_version": 1,
+                "channel": "stable",
+                "generated_at": "2026-04-20T00:00:00Z",
+                "releases": [{
+                    "version": "0.1.0-dev",
+                    "status": "active",
+                    "artifacts": [{
+                        "id": "cli-linux-amd64-clang",
+                        "kind": "cli",
+                        "filename": artifact.name,
+                        "sha256": "0" * 64,
+                    }],
+                }],
+            }
+            (root / "release-manifest.json").write_text(json.dumps(manifest) + "\n")
+            payload = refresh_local_release_metadata(root)
+            self.assertTrue(payload["ok"])
+            refreshed = json.loads((root / "release-manifest.json").read_text())
+            self.assertNotEqual(refreshed["releases"][0]["artifacts"][0]["sha256"], "0" * 64)
+            self.assertEqual(refreshed["metadata_version"], 1)
+            self.assertIn("expires_at", refreshed)
+            self.assertTrue((root / "release-provenance.json").exists())
+            self.assertIn(artifact.name, (root / "SHA256SUMS").read_text())
 
     def test_bundle_full_cli(self):
         with tempfile.TemporaryDirectory() as tempdir:

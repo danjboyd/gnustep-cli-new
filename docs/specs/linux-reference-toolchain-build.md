@@ -68,14 +68,14 @@ What is in place:
   - `libs-back`
 - a locally validated build of the Objective-C full CLI against that staged
   managed Linux toolchain
-- unit coverage confirming the build-script and repository contracts still pass
-  after the Linux reference build updates
+- a promoted shared build-infra command, `build-linux-cli-against-managed-toolchain`, plus the dev wrapper `scripts/dev/build-linux-cli-against-managed-toolchain.sh`, for producing managed-prefix CLI release artifacts
+- an ABI audit command, `linux-cli-abi-audit`, that rejects Linux CLI binaries carrying legacy GCC Objective-C runtime symbols such as `__objc_class_name_NSAutoreleasePool`
+- unit coverage confirming the build-script, ABI audit, local metadata refresh, and repository contracts still pass after the Linux reference build updates
 
 What is not yet in place:
 
-- archive publication to GitHub Releases
-- end-to-end bootstrap `setup` downloading and installing this produced
-  toolchain artifact
+- production archive publication to GitHub Releases
+- direct integration of managed-prefix CLI artifact production into `prepare-github-release` so release preparation cannot accidentally consume a host-built GNUstep Make binary
 
 ## Local Validation Notes
 
@@ -92,11 +92,13 @@ core managed stack. The managed prefix successfully staged:
 
 The Objective-C full CLI under
 [src/full-cli](/home/danboyd/gnustep-cli-new/src/full-cli) also built
-successfully against that staged managed toolchain, and the resulting binary
-was smoke-tested with:
-
-- `--help`
-- `--json --version`
+successfully against that staged managed toolchain through the shared
+`build-linux-cli-against-managed-toolchain` command. The resulting binary was
+smoke-tested with `--help`, then archived as a full CLI bundle and checked with
+`linux-cli-abi-audit` before local release metadata was refreshed. This is now
+the required model for Linux release CLI artifacts; host GNUstep Make builds are
+only developer convenience builds and must not be promoted as managed-release
+artifacts.
 
 The generated Linux build script was revalidated with `bash -n`, and the
 repository unit suite passed with:
@@ -117,4 +119,12 @@ python3 scripts/internal/build_infra.py linux-build-script \
   --prefix /tmp/gnustep-cli-linux-toolchain/install \
   --sources-dir /tmp/gnustep-cli-linux-toolchain/sources \
   --build-root /tmp/gnustep-cli-linux-toolchain/build
+python3 scripts/internal/build_infra.py --json build-linux-cli-against-managed-toolchain \
+  --toolchain-archive dist/stable/0.1.0-dev/gnustep-toolchain-linux-amd64-clang-0.1.0-dev.tar.gz \
+  --output-dir dist/dogfood/linux-cli \
+  --version 0.1.1-dev \
+  --release-dir dist/stable/0.1.0-dev \
+  --private-key /path/to/dev-release-private.pem
+python3 scripts/internal/build_infra.py --json linux-cli-abi-audit \
+  --binary /path/to/staged/full-cli/bin/gnustep
 ```

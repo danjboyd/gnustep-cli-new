@@ -518,7 +518,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
   release metadata, signed package-index metadata, externally pinned release and
   package-index trust roots, and package artifact publication readiness before
   publication.
-- Package artifact build planning now surfaces source-provenance, artifact-digest, signing, publishability, and production-readiness blockers per package and per artifact instead of emitting a loose artifact list that publication tooling must reinterpret. A new package artifact publication gate fails release publication while those blockers remain. Regression coverage includes the current blocked `tools-xctest` manifest and a synthetic production-ready package manifest.
+- Package artifact build planning now surfaces source-provenance, artifact-digest, signing, publishability, and production-readiness blockers per package and per artifact instead of emitting a loose artifact list that publication tooling must reinterpret. A package artifact publication gate fails release publication while blockers remain; the current `tools-xctest` package now has real Linux and OpenBSD dogfood artifacts with source provenance and verified artifact digests, and regression coverage includes a synthetic production-ready package manifest.
 - The remaining Phase 12 work is now centered on:
   - provisioning CI secrets or a signing service with production release and package-index keys
   - making host-backed qualification less operator-manual
@@ -1161,7 +1161,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
   Remaining work is focused on production key material, final published-URL
   qualification gates, and turning the successful Windows public-bootstrap and
   extracted-toolchain evidence into repeatable CI/farm jobs:
-  - OpenBSD and Debian have fresh live evidence
+  - OpenBSD and Debian have fresh live evidence; on April 20, 2026 the OpenBSD packaged GNUstep smoke passed and a real OpenBSD `tools-xctest` package artifact was produced on a live OpenBSD lease
   - Windows native package-flow validation passed again on April 17, 2026 after
     refreshing the checked-in MSYS2 assembly script to include `sha256sum.exe`;
     lease `lease-20260417160327-z8fnih` built the full CLI, passed `--version`
@@ -1179,6 +1179,18 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
     bootstrap/full-CLI qualification also passed on April 17, 2026 after
     rebuilding the Linux CLI against the managed source-built toolchain and
     adding runtime SONAME aliases plus native HTTPS-manifest downloader fallback
+  - April 20, 2026 follow-up: a locally rebuilt Linux full-CLI artifact
+    produced from the host GNUstep Make environment failed live Debian upgrade
+    dogfood with `undefined symbol: __objc_class_name_NSAutoreleasePool` when
+    executed inside the managed libobjc2 runtime. The dev workflow now builds
+    Linux CLI artifacts against the managed source-built GNUstep/libobjc2 prefix
+    with `build-linux-cli-against-managed-toolchain` and the wrapper
+    `scripts/dev/build-linux-cli-against-managed-toolchain.sh`; the build now
+    includes a `linux-cli-abi-audit` gate that rejects legacy GCC Objective-C
+    class symbols. After refreshing staged old/new manifests, the live Debian
+    `gnustep update --check` / `gnustep update cli --yes` / rollback dogfood
+    lane passed on April 20, 2026. Production release builders must use the
+    managed-prefix build path, not ad hoc host GNUstep Make artifacts.
 
 ### B. Documentation Freshness
 - Bring the README and status docs into alignment with the actual implementation state.

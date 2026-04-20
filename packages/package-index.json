@@ -53,8 +53,10 @@
           "required_features": [
             "blocks"
           ],
-          "url": "https://example.invalid/packages/tools-xctest-linux-amd64-clang.tar.gz",
-          "sha256": "published-artifact-checksum-tbd"
+          "url": "dist/dogfood/packages/tools-xctest-linux-amd64-clang-0.1.0.tar.gz",
+          "sha256": "d322792dd6aab2db083c386218e54bd5510c0bcbb1f3715f4d04cda5296fe7d1",
+          "format": "tar.gz",
+          "publish": true
         },
         {
           "id": "tools-xctest-openbsd-amd64-clang",
@@ -67,8 +69,10 @@
           "required_features": [
             "blocks"
           ],
-          "url": "https://example.invalid/packages/tools-xctest-openbsd-amd64-clang.tar.gz",
-          "sha256": "published-artifact-checksum-tbd"
+          "url": "dist/dogfood/packages/tools-xctest-openbsd-amd64-clang-0.1.0.tar.gz",
+          "sha256": "854b0974fd936599789eda27e308ebaf695ca8c94eab69f84d9397ed7c5dfac4",
+          "publish": true,
+          "format": "tar.gz"
         }
       ]
     }

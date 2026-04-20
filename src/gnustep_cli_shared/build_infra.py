@@ -4,12 +4,13 @@ import hashlib
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tarfile
 import tempfile
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -2009,6 +2010,209 @@ def bundle_full_cli(
     }
 
 
+def _replace_managed_prefix_placeholders(root: Path) -> list[str]:
+    rewritten: list[str] = []
+    placeholder = MANAGED_PREFIX_PLACEHOLDER
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        try:
+            if path.stat().st_size > 2_000_000:
+                continue
+            data = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if placeholder in data:
+            path.write_text(data.replace(placeholder, str(root)), encoding="utf-8")
+            rewritten.append(str(path.relative_to(root)))
+    return rewritten
+
+
+def _shell_environment_for_managed_toolchain(managed_root: Path) -> str:
+    return (
+        "set +u; "
+        f". {shlex_quote(str(managed_root / 'System' / 'Library' / 'Makefiles' / 'GNUstep.sh'))}; "
+        "set -u; "
+        "env"
+    )
+
+
+def _load_managed_toolchain_environment(managed_root: Path) -> dict[str, str]:
+    proc = subprocess.run(
+        ["bash", "-lc", _shell_environment_for_managed_toolchain(managed_root)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or "failed to load managed GNUstep environment")
+    env = os.environ.copy()
+    for line in proc.stdout.splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            env[key] = value
+    return env
+
+
+def _managed_gnustep_config(managed_root: Path, option: str, env: dict[str, str]) -> list[str]:
+    tool = managed_root / "System" / "Tools" / "gnustep-config"
+    proc = subprocess.run([str(tool), option], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or f"gnustep-config {option} failed")
+    return proc.stdout.split()
+
+
+def shlex_quote(value: str) -> str:
+    return "'" + value.replace("'", "'\''") + "'"
+
+
+def linux_cli_abi_audit(binary_path: str | Path) -> dict[str, Any]:
+    binary = Path(binary_path).resolve()
+    checks: list[dict[str, Any]] = []
+
+    def add(check_id: str, ok: bool, message: str, **extra: Any) -> None:
+        item = {"id": check_id, "ok": ok, "message": message}
+        item.update(extra)
+        checks.append(item)
+
+    add("binary-present", binary.exists(), "CLI binary is present")
+    if not binary.exists():
+        return {"schema_version": 1, "command": "linux-cli-abi-audit", "ok": False, "status": "error", "summary": "Linux CLI ABI audit failed.", "binary": str(binary), "checks": checks}
+    proc = subprocess.run(["nm", "-D", str(binary)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    add("nm-dynamic-symbols", proc.returncode == 0, "dynamic symbols are readable", stderr=proc.stderr.strip())
+    symbols = proc.stdout if proc.returncode == 0 else ""
+    legacy_symbol = "__objc_class_name_NSAutoreleasePool" in symbols
+    modern_symbol = "._OBJC_REF_CLASS_NSAutoreleasePool" in symbols or "_OBJC_REF_CLASS_NSAutoreleasePool" in symbols
+    add("no-legacy-gcc-objc-class-symbols", not legacy_symbol, "CLI does not reference GCC Objective-C class symbols")
+    add("modern-objc2-class-symbols", modern_symbol, "CLI references modern Objective-C runtime class symbols")
+    ok = all(check["ok"] for check in checks)
+    return {"schema_version": 1, "command": "linux-cli-abi-audit", "ok": ok, "status": "ok" if ok else "error", "summary": "Linux CLI ABI audit passed." if ok else "Linux CLI ABI audit failed.", "binary": str(binary), "checks": checks}
+
+
+def build_linux_cli_against_managed_toolchain(
+    toolchain_archive: str | Path,
+    output_archive: str | Path,
+    *,
+    version: str = "0.1.0-dev",
+    repo_root: str | Path | None = None,
+    work_dir: str | Path | None = None,
+    release_dir: str | Path | None = None,
+    private_key: str | Path | None = None,
+) -> dict[str, Any]:
+    root = Path(repo_root).resolve() if repo_root else Path(__file__).resolve().parents[2]
+    toolchain = Path(toolchain_archive).resolve()
+    output = Path(output_archive).resolve()
+    if not toolchain.exists():
+        raise FileNotFoundError(toolchain)
+    owns_work_dir = work_dir is None
+    work = Path(tempfile.mkdtemp(prefix="gnustep-cli-managed-build-")) if work_dir is None else Path(work_dir).resolve()
+    managed_root = work / "managed-root"
+    build_dir = work / "build"
+    bundle_dir = work / "bundle"
+    try:
+        if managed_root.exists():
+            shutil.rmtree(managed_root)
+        if build_dir.exists():
+            shutil.rmtree(build_dir)
+        if bundle_dir.exists():
+            shutil.rmtree(bundle_dir)
+        managed_root.mkdir(parents=True)
+        build_dir.mkdir(parents=True)
+        _extract_archive(toolchain, managed_root)
+        children = list(managed_root.iterdir())
+        if len(children) == 1 and children[0].is_dir():
+            extracted_root = children[0]
+            for child in list(extracted_root.iterdir()):
+                shutil.move(str(child), managed_root / child.name)
+            shutil.rmtree(extracted_root)
+        rewritten = _replace_managed_prefix_placeholders(managed_root)
+        env = _load_managed_toolchain_environment(managed_root)
+        objc_flags = ["-fobjc-runtime=gnustep-2.0", "-fblocks"] + _managed_gnustep_config(managed_root, "--objc-flags", env)
+        base_libs = _managed_gnustep_config(managed_root, "--base-libs", env)
+        binary = build_dir / "gnustep"
+        command = [
+            "clang",
+            *objc_flags,
+            f"-I{managed_root / 'Local' / 'Library' / 'Headers'}",
+            f"-I{managed_root / 'System' / 'Library' / 'Headers'}",
+            "-I/usr/lib/gcc/x86_64-linux-gnu/14/include",
+            f"-I{root / 'src' / 'full-cli'}",
+            str(root / "src" / "full-cli" / "main.m"),
+            str(root / "src" / "full-cli" / "GSCommandContext.m"),
+            str(root / "src" / "full-cli" / "GSCommandRunner.m"),
+            "-o",
+            str(binary),
+            f"-L{managed_root / 'Local' / 'Library' / 'Libraries'}",
+            f"-L{managed_root / 'System' / 'Library' / 'Libraries'}",
+            f"-L{managed_root / 'lib'}",
+            "-Wl,-rpath,$ORIGIN/../../../Local/Library/Libraries",
+            "-Wl,-rpath,$ORIGIN/../../../System/Library/Libraries",
+            "-Wl,-rpath,$ORIGIN/../../../lib",
+            *base_libs,
+            "-lBlocksRuntime",
+        ]
+        proc = subprocess.run(command, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, check=False)
+        if proc.returncode != 0:
+            return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": False, "status": "error", "summary": "Managed-prefix Linux CLI build failed.", "stdout": proc.stdout, "stderr": proc.stderr, "build_command": command}
+        runtime_env = env.copy()
+        runtime_env["LD_LIBRARY_PATH"] = ":".join([str(managed_root / "Local" / "Library" / "Libraries"), str(managed_root / "System" / "Library" / "Libraries"), str(managed_root / "lib"), runtime_env.get("LD_LIBRARY_PATH", "")])
+        smoke = subprocess.run([str(binary), "--help"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=runtime_env, check=False)
+        if smoke.returncode != 0:
+            return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": False, "status": "error", "summary": "Managed-prefix Linux CLI smoke failed.", "stdout": smoke.stdout, "stderr": smoke.stderr}
+        abi = linux_cli_abi_audit(binary)
+        if not abi["ok"]:
+            return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": False, "status": "error", "summary": "Managed-prefix Linux CLI ABI audit failed.", "abi_audit": abi}
+        bundle_full_cli(binary, bundle_dir, repo_root=root)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        _archive_directory(bundle_dir, output, f"gnustep-cli-linux-amd64-clang-{version}")
+        refresh = None
+        if release_dir is not None:
+            refresh = refresh_local_release_metadata(release_dir, private_key_path=private_key)
+        return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": True, "status": "ok", "summary": "Linux CLI artifact built against managed GNUstep toolchain.", "toolchain_archive": str(toolchain), "output_archive": str(output), "version": version, "work_dir": str(work), "rewritten_placeholders": rewritten, "abi_audit": abi, "refresh_release_metadata": refresh}
+    finally:
+        if owns_work_dir:
+            shutil.rmtree(work, ignore_errors=True)
+
+
+def refresh_local_release_metadata(release_dir: str | Path, *, private_key_path: str | Path | None = None) -> dict[str, Any]:
+    root = Path(release_dir).resolve()
+    manifest_path = root / "release-manifest.json"
+    if not manifest_path.exists():
+        raise FileNotFoundError(manifest_path)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for release in manifest.get("releases", []):
+        for artifact in release.get("artifacts", []):
+            filename = artifact.get("filename")
+            if not filename:
+                continue
+            path = root / filename
+            if not path.exists():
+                continue
+            digest = _sha256(path)
+            artifact["sha256"] = digest
+            artifact["integrity"] = {"sha256": digest}
+            artifact["size"] = path.stat().st_size
+    manifest.setdefault("metadata_version", 1)
+    manifest.setdefault("expires_at", (datetime.now(UTC).replace(microsecond=0) + timedelta(days=30)).isoformat().replace("+00:00", "Z"))
+    manifest.setdefault("trust", {"root_version": 1, "signature_policy": "single-role-v1", "signatures": [], "revoked_artifacts": []})
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    provenance_path = write_release_provenance(root)
+    checksum_entries = []
+    for path in sorted(root.iterdir()):
+        if not path.is_file() or path.name == "SHA256SUMS" or path.name.endswith(".sig") or path.name == "release-signing-public.pem":
+            continue
+        checksum_entries.append(f"{_sha256(path)}  {path.name}\n")
+    (root / "SHA256SUMS").write_text("".join(checksum_entries), encoding="utf-8")
+    signing = None
+    if private_key_path is not None:
+        signing = sign_release_metadata(root, private_key_path)
+    verification = verify_release_directory(root)
+    trust = release_trust_gate(root) if private_key_path is not None else None
+    ok = verification["ok"] and (signing is None or signing["ok"]) and (trust is None or trust["ok"])
+    return {"schema_version": 1, "command": "refresh-local-release-metadata", "ok": ok, "status": "ok" if ok else "error", "summary": "Local release metadata refreshed." if ok else "Local release metadata refresh failed.", "release_dir": str(root), "manifest_path": str(manifest_path), "provenance_path": str(provenance_path), "verify_release": verification, "sign_release_metadata": signing, "release_trust_gate": trust}
+
+
 
 def _git_revision(repo_root: Path | None = None) -> str | None:
     root = repo_root or Path(__file__).resolve().parents[2]
@@ -3008,6 +3212,93 @@ def publish_github_release(
     return plan
 
 
+
+def package_tools_xctest_artifact(
+    output_dir: str | Path,
+    *,
+    source_dir: str | Path | None = None,
+    source_url: str = "https://github.com/gnustep/tools-xctest.git",
+    source_revision: str | None = None,
+    installed_root: str | Path | None = None,
+    target_id: str = "linux-amd64-clang",
+    version: str = "0.1.0",
+    rebuild: bool = False,
+) -> dict[str, Any]:
+    out = Path(output_dir).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    work_root = out / "work"
+    source = Path(source_dir).resolve() if source_dir else work_root / "tools-xctest-src"
+    install_root = Path(installed_root).resolve() if installed_root else Path.home() / "GNUstep"
+    commands: list[list[str]] = []
+
+    if not source.exists():
+        source.parent.mkdir(parents=True, exist_ok=True)
+        commands.append(["git", "clone", source_url, str(source)])
+        clone = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        if clone.returncode != 0:
+            return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Failed to clone tools-xctest source.", "stdout": clone.stdout, "stderr": clone.stderr, "commands": commands}
+    if source_revision:
+        commands.append(["git", "-C", str(source), "checkout", source_revision])
+        checkout = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        if checkout.returncode != 0:
+            return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Failed to check out tools-xctest source revision.", "stdout": checkout.stdout, "stderr": checkout.stderr, "commands": commands}
+    revision_proc = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    revision = revision_proc.stdout.strip() if revision_proc.returncode == 0 else source_revision or "unknown"
+
+    if rebuild:
+        makefiles = os.environ.get("GNUSTEP_MAKEFILES_DIR", "/usr/share/GNUstep/Makefiles")
+        gcc_headers = os.environ.get("GCC_OBJC_HEADERS", "/usr/lib/gcc/x86_64-linux-gnu/14/include")
+        build_script = "set -eu\n. \"{}/GNUstep.sh\"\nmake -C \"{}\" clean >/dev/null || true\nmake -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\"\nmake -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\" GNUSTEP_INSTALLATION_DOMAIN=USER install\n".format(makefiles, source, source, gcc_headers, source, gcc_headers)
+        commands.append(["sh", "-c", build_script])
+        built = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        if built.returncode != 0:
+            return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Failed to build and install tools-xctest.", "stdout": built.stdout, "stderr": built.stderr, "commands": commands}
+
+    required = [install_root / "Tools" / "xctest", install_root / "Library" / "Headers" / "XCTest", install_root / "Library" / "Libraries" / "libXCTest.so"]
+    missing = [str(item) for item in required if not item.exists()]
+    if missing:
+        return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Installed tools-xctest files are missing; run the tools-xctest install first or pass --rebuild.", "missing": missing, "installed_root": str(install_root), "commands": commands}
+
+    source_archive = out / f"tools-xctest-source-{revision[:12]}.tar.gz"
+    archive_command = ["git", "-C", str(source), "archive", "--format=tar.gz", "-o", str(source_archive), "HEAD"]
+    archive_proc = subprocess.run(archive_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    commands.append(archive_command)
+    if archive_proc.returncode != 0:
+        return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Failed to archive tools-xctest source.", "stdout": archive_proc.stdout, "stderr": archive_proc.stderr, "commands": commands}
+
+    package_root = out / "staging" / "tools-xctest"
+    if package_root.exists():
+        shutil.rmtree(package_root)
+    (package_root / "bin").mkdir(parents=True)
+    (package_root / "Library" / "Headers").mkdir(parents=True)
+    (package_root / "Library" / "Libraries").mkdir(parents=True)
+    shutil.copy2(install_root / "Tools" / "xctest", package_root / "bin" / "xctest")
+    shutil.copytree(install_root / "Library" / "Headers" / "XCTest", package_root / "Library" / "Headers" / "XCTest")
+    for lib in sorted((install_root / "Library" / "Libraries").glob("libXCTest.so*")):
+        shutil.copy2(lib, package_root / "Library" / "Libraries" / lib.name)
+
+    artifact_filename = f"tools-xctest-{target_id}-{version}.tar.gz"
+    artifact_path = out / artifact_filename
+    if artifact_path.exists():
+        artifact_path.unlink()
+    _archive_directory(package_root, artifact_path, ".")
+    source_sha = _sha256(source_archive)
+    artifact_sha = _sha256(artifact_path)
+    return {
+        "schema_version": 1,
+        "command": "package-tools-xctest-artifact",
+        "ok": True,
+        "status": "ok",
+        "summary": "tools-xctest package artifact generated.",
+        "package_id": "org.gnustep.tools-xctest",
+        "version": version,
+        "target": target_id,
+        "source": {"type": "git", "url": source_url, "revision": revision, "archive": str(source_archive), "sha256": source_sha},
+        "artifact": {"id": f"tools-xctest-{target_id}", "path": str(artifact_path), "filename": artifact_filename, "sha256": artifact_sha, "format": "tar.gz"},
+        "installed_root": str(install_root),
+        "commands": commands,
+    }
+
 def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
     root = Path(packages_dir).resolve()
     entries: list[dict[str, Any]] = []
@@ -3038,15 +3329,16 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
         artifacts = []
         for artifact in manifest.get("artifacts", []):
             artifact_sha = artifact.get("sha256")
-            artifact_blockers = list(package_blockers)
-            if not artifact.get("url"):
+            artifact_publishable = artifact.get("publish", True) is not False
+            artifact_blockers = list(package_blockers) if artifact_publishable else []
+            if artifact_publishable and not artifact.get("url"):
                 artifact_blockers.append("missing_artifact_url")
-            if not artifact_sha or str(artifact_sha).endswith("tbd") or "placeholder" in str(artifact_sha).lower() or "published-artifact-checksum-tbd" == str(artifact_sha):
+            if artifact_publishable and (not artifact_sha or str(artifact_sha).endswith("tbd") or "placeholder" in str(artifact_sha).lower() or "published-artifact-checksum-tbd" == str(artifact_sha)):
                 artifact_blockers.append("missing_published_artifact_digest")
             for blocker in artifact_blockers:
                 if blocker not in package_blockers:
                     plan_blockers.append({"package": package_id, "artifact": artifact["id"], "code": blocker})
-            artifact_ready = len(artifact_blockers) == 0
+            artifact_ready = (not artifact_publishable) or len(artifact_blockers) == 0
             artifacts.append(
                 {
                     "id": artifact["id"],
@@ -3058,16 +3350,17 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
                     "source_manifest": str(manifest_path),
                     "source": source,
                     "build_from_source": True,
-                    "provenance_required": True,
-                    "signature_required": True,
-                    "source_verified": len(package_blockers) == 0,
-                    "artifact_verified": not any(blocker.startswith("missing_artifact") or blocker.startswith("missing_published") for blocker in artifact_blockers),
+                    "provenance_required": artifact_publishable,
+                    "signature_required": artifact_publishable,
+                    "source_verified": (not artifact_publishable) or len(package_blockers) == 0,
+                    "artifact_verified": (not artifact_publishable) or not any(blocker.startswith("missing_artifact") or blocker.startswith("missing_published") for blocker in artifact_blockers),
                     "production_ready": artifact_ready,
-                    "publish": artifact_ready,
+                    "publish": artifact_publishable and artifact_ready,
                     "policy_blockers": artifact_blockers,
                 }
             )
-        package_ready = len(package_blockers) == 0 and all(artifact["production_ready"] for artifact in artifacts)
+        publishable_artifacts = [artifact for artifact in artifacts if artifact.get("publish") is not False or artifact.get("signature_required")]
+        package_ready = len(package_blockers) == 0 and all(artifact["production_ready"] for artifact in publishable_artifacts)
         entries.append(
             {
                 "id": package_id,

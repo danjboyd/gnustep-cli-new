@@ -130,7 +130,7 @@ current_step="upgrade"
 python3 - "$RESULTS/upgrade.json" <<'END_UPGRADE_PY'
 import json, sys
 payload = json.load(open(sys.argv[1]))
-if not payload.get('ok') or payload.get('operation') != 'upgrade':
+if not payload.get('ok') or payload.get('operation') not in {'update_cli', 'upgrade'}:
     raise SystemExit(json.dumps(payload, indent=2))
 END_UPGRADE_PY
 

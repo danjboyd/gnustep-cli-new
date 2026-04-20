@@ -16,6 +16,10 @@ from gnustep_cli_shared.build_infra import build_matrix, release_manifest_from_m
 from gnustep_cli_shared.build_infra import (
     package_artifact_build_plan,
     package_artifact_publication_gate,
+    package_tools_xctest_artifact,
+    build_linux_cli_against_managed_toolchain,
+    linux_cli_abi_audit,
+    refresh_local_release_metadata,
     assemble_linux_toolchain_artifact,
     package_source_built_linux_toolchain_artifact,
     component_inventory,
@@ -78,6 +82,22 @@ def main() -> int:
     bundle_cli.add_argument("--binary", required=True)
     bundle_cli.add_argument("--output-dir", required=True)
     bundle_cli.add_argument("--repo-root")
+
+    managed_cli = subparsers.add_parser("build-linux-cli-against-managed-toolchain", add_help=False)
+    managed_cli.add_argument("--toolchain-archive", required=True)
+    managed_cli.add_argument("--output-archive", required=True)
+    managed_cli.add_argument("--version", default="0.1.0-dev")
+    managed_cli.add_argument("--repo-root")
+    managed_cli.add_argument("--work-dir")
+    managed_cli.add_argument("--release-dir")
+    managed_cli.add_argument("--private-key")
+
+    linux_cli_abi = subparsers.add_parser("linux-cli-abi-audit", add_help=False)
+    linux_cli_abi.add_argument("--binary", required=True)
+
+    refresh_release = subparsers.add_parser("refresh-local-release-metadata", add_help=False)
+    refresh_release.add_argument("--release-dir", required=True)
+    refresh_release.add_argument("--private-key")
 
     assemble_linux_toolchain = subparsers.add_parser("assemble-linux-toolchain", add_help=False)
     assemble_linux_toolchain.add_argument("--runtime-binary", required=True)
@@ -169,6 +189,16 @@ def main() -> int:
 
     package_gate = subparsers.add_parser("package-artifact-publication-gate", add_help=False)
     package_gate.add_argument("--packages-dir", required=True)
+
+    tools_xctest_artifact = subparsers.add_parser("package-tools-xctest-artifact", add_help=False)
+    tools_xctest_artifact.add_argument("--output-dir", required=True)
+    tools_xctest_artifact.add_argument("--source-dir")
+    tools_xctest_artifact.add_argument("--source-url", default="https://github.com/gnustep/tools-xctest.git")
+    tools_xctest_artifact.add_argument("--source-revision")
+    tools_xctest_artifact.add_argument("--installed-root")
+    tools_xctest_artifact.add_argument("--target", default="linux-amd64-clang")
+    tools_xctest_artifact.add_argument("--version", default="0.1.0")
+    tools_xctest_artifact.add_argument("--rebuild", action="store_true")
 
     otvm_release_validation = subparsers.add_parser("otvm-release-host-validation-plan", add_help=False)
     otvm_release_validation.add_argument("--release-dir", required=True)
@@ -340,6 +370,31 @@ def main() -> int:
         payload = package_artifact_build_plan(args.packages_dir)
     elif args.subcommand == "package-artifact-publication-gate":
         payload = package_artifact_publication_gate(args.packages_dir)
+    elif args.subcommand == "package-tools-xctest-artifact":
+        payload = package_tools_xctest_artifact(
+            args.output_dir,
+            source_dir=args.source_dir,
+            source_url=args.source_url,
+            source_revision=args.source_revision,
+            installed_root=args.installed_root,
+            target_id=args.target,
+            version=args.version,
+            rebuild=args.rebuild,
+        )
+    elif args.subcommand == "build-linux-cli-against-managed-toolchain":
+        payload = build_linux_cli_against_managed_toolchain(
+            args.toolchain_archive,
+            args.output_archive,
+            version=args.version,
+            repo_root=args.repo_root,
+            work_dir=args.work_dir,
+            release_dir=args.release_dir,
+            private_key=args.private_key,
+        )
+    elif args.subcommand == "linux-cli-abi-audit":
+        payload = linux_cli_abi_audit(args.binary)
+    elif args.subcommand == "refresh-local-release-metadata":
+        payload = refresh_local_release_metadata(args.release_dir, private_key_path=args.private_key)
     elif args.subcommand == "otvm-release-host-validation-plan":
         payload = otvm_release_host_validation_plan(args.release_dir, config_path=args.config_path)
     elif args.subcommand == "published-url-qualification-plan":
@@ -394,7 +449,7 @@ def main() -> int:
             "build-infra: expected 'matrix', 'manifest', 'bundle-cli', 'source-lock', "
             "'assemble-linux-toolchain', 'package-source-built-linux-toolchain', 'toolchain-host-origin-audit', "
             "'stage-release', 'github-release-plan', 'github-release-publish', "
-            "'prepare-github-release', 'package-artifact-publication-gate', 'published-url-qualification-plan', "
+            "'prepare-github-release', 'package-artifact-publication-gate', 'package-tools-xctest-artifact', 'build-linux-cli-against-managed-toolchain', 'linux-cli-abi-audit', 'refresh-local-release-metadata', 'published-url-qualification-plan', "
             "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', 'windows-current-source-marker', 'release-evidence-bundle', 'release-key-rotation-drill', "
             "'validate-source-lock', 'msys2-input-manifest', 'validate-input-manifest', 'component-inventory', 'toolchain-manifest', "
             "'toolchain-plan', 'linux-build-script', 'openbsd-build-script', "

@@ -435,6 +435,9 @@
   [self writeJSONStringObject:
           [NSDictionary dictionaryWithObjectsAndKeys:
                          [NSNumber numberWithInt: 1], @"schema_version",
+                         [NSNumber numberWithInt: 7], @"metadata_version",
+                         @"2026-04-20T00:00:00Z", @"generated_at",
+                         @"2026-05-20T00:00:00Z", @"expires_at",
                          @"stable", @"channel",
                          [NSArray arrayWithObject:
                                     [NSDictionary dictionaryWithObjectsAndKeys:
@@ -1214,6 +1217,9 @@
   [self writeJSONStringObject:
           [NSDictionary dictionaryWithObjectsAndKeys:
                          [NSNumber numberWithInt: 1], @"schema_version",
+                         [NSNumber numberWithInt: 7], @"metadata_version",
+                         @"2026-04-20T00:00:00Z", @"generated_at",
+                         @"2026-05-20T00:00:00Z", @"expires_at",
                          @"stable", @"channel",
                          [NSArray arrayWithObject:
                                     [NSDictionary dictionaryWithObjectsAndKeys:
@@ -1285,6 +1291,9 @@
   XCTAssertTrue([[installedFile lastPathComponent] isEqualToString: @"xctest"]);
   XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: installedFile]);
   XCTAssertEqualObjects([[[state objectForKey: @"packages"] objectForKey: @"org.gnustep.tools-xctest"] objectForKey: @"selected_artifact"], @"tools-xctest-linux-clang");
+  XCTAssertEqualObjects([state objectForKey: @"last_package_index_metadata_version"], [NSNumber numberWithInt: 7]);
+  XCTAssertEqualObjects([state objectForKey: @"last_package_index_generated_at"], @"2026-04-20T00:00:00Z");
+  XCTAssertEqualObjects([state objectForKey: @"last_package_index_expires_at"], @"2026-05-20T00:00:00Z");
 }
 
 - (void)testUpdatePackagesChecksAndAppliesCompatiblePackageUpgrade

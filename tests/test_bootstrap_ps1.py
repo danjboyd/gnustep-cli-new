@@ -131,6 +131,42 @@ class BootstrapPowerShellTests(unittest.TestCase):
             self.assertTrue((install_root / "state" / "cli-state.json").exists())
 
 
+    def test_setup_human_mode_reports_progress(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            release_dir = temp / "release"
+            release_dir.mkdir()
+            cli_zip = release_dir / "gnustep-cli-windows-amd64-msys2-clang64-0.1.0-dev.zip"
+            with zipfile.ZipFile(cli_zip, "w") as archive:
+                archive.writestr("gnustep-cli-windows-amd64-msys2-clang64-0.1.0-dev/bin/gnustep.exe", "binary")
+            toolchain_zip = release_dir / "gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev.zip"
+            with zipfile.ZipFile(toolchain_zip, "w") as archive:
+                archive.writestr("gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev/System/Tools/make.exe", "tool")
+
+            def sha256(path: Path) -> str:
+                import hashlib
+                return hashlib.sha256(path.read_bytes()).hexdigest()
+
+            manifest = {
+                "schema_version": 1,
+                "channel": "stable",
+                "generated_at": "2026-04-20T00:00:00Z",
+                "releases": [{"version": "0.1.0-dev", "status": "active", "artifacts": [
+                    {"id": "cli-windows-amd64-msys2-clang64", "url": cli_zip.name, "sha256": sha256(cli_zip)},
+                    {"id": "toolchain-windows-amd64-msys2-clang64", "url": toolchain_zip.name, "sha256": sha256(toolchain_zip)},
+                ]}],
+            }
+            manifest_path = release_dir / "release-manifest.json"
+            manifest_path.write_text(json.dumps(manifest))
+            install_root = temp / "install-root"
+            proc = self.run_script("setup", "--root", str(install_root), "--manifest", str(manifest_path))
+            self.assertEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
+            self.assertIn("setup: starting managed installation", proc.stdout)
+            self.assertIn("setup: fetching CLI artifact", proc.stdout)
+            self.assertIn("setup: extracting toolchain artifact", proc.stdout)
+            self.assertIn("setup: managed installation completed", proc.stdout)
+
+
     def test_setup_writes_trace_file(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp = Path(tempdir)

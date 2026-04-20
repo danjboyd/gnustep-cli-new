@@ -41,6 +41,9 @@ Implemented subcommands include:
 - `controlled-release-gate`
 - `release-trust-gate`
 - `sign-release-metadata`
+- `refresh-local-release-metadata`
+- `build-linux-cli-against-managed-toolchain`
+- `linux-cli-abi-audit`
 
 `prepare-github-release` is the current controlled orchestration path for:
 
@@ -70,7 +73,9 @@ Implemented subcommands include:
   release-specific contract rather than ad hoc operator notes.
 - The shared `setup` backend can now install from a staged release manifest into
   a managed root with checksum verification and PATH guidance.
-- Manifest-driven update planning and transactional upgrade activation are now exposed through native `gnustep update` for staged releases, including smoke validation, current-pointer activation, rollback state, and frozen-metadata rejection. Production signing/key-rotation remains the release-claim blocker.
+- Manifest-driven update planning and transactional upgrade activation are now exposed through native `gnustep update` for staged releases, including smoke validation, current-pointer activation, rollback state, and frozen-metadata rejection. Debian upgrade/rollback dogfood passed again on April 20, 2026 using this path. Production signing/key-rotation remains the release-claim blocker.
+- Linux CLI release artifacts must be built against the managed source-built GNUstep/libobjc2 prefix, not the host GNUstep Make environment. `build-linux-cli-against-managed-toolchain` is now a shared build-infra command, with a dev wrapper at `scripts/dev/build-linux-cli-against-managed-toolchain.sh`; it produces the artifact, refreshes local release metadata when requested, and runs `linux-cli-abi-audit` to reject legacy GCC Objective-C class symbols before staging.
+- Host-backed validation on April 20, 2026 passed fresh Debian setup/package/project dogfood, Debian update/rollback dogfood, Windows bootstrap/full-CLI smoke, and OpenBSD smoke against libvirt leases. The OpenBSD lane also produced a real `tools-xctest` package artifact for the package publication gate.
 - The shell bootstrap has been live-qualified from the private GitHub Release
   assets on Linux outside the repository tree.
 - A live libvirt-backed Windows `otvm` lease successfully assembled the MSYS2
@@ -92,23 +97,23 @@ Implemented subcommands include:
   `oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2` image and the
   current `OracleTestVMs` readiness flow, and the staged `0.1.0-dev` bootstrap
   path is no longer blocked on PowerShell zip extraction.
-- broader cross-target host validation is still incomplete even though the
-  current Linux managed toolchain assembly now passes Debian lease-side
-  `clang` compile-link-run and package-flow validation against freshly staged
-  release artifacts
+- broader cross-target host validation is still incomplete as production CI,
+  persisted evidence bundles, and published-URL qualification are not yet fully
+  wired, even though the current Linux managed toolchain assembly and
+  managed-prefix CLI artifact now pass Debian lease-side setup/project/package
+  and update/rollback dogfood against freshly staged release artifacts
 - `prepare-github-release` still generates the host-validation plan but does not
   itself execute live `otvm` farm actions; live validation remains an explicit
   follow-up step so local release staging is not coupled directly to farm
   availability
-- `scripts/internal/build_infra.py --json package-artifact-build-plan --packages-dir packages` now exposes the reviewed package publication inputs explicitly, and `package-artifact-publication-gate` fails release publication while source or artifact digest placeholders remain. Package artifact production itself still needs real controlled build jobs that replace those placeholders with signed outputs.
+- `scripts/internal/build_infra.py --json package-artifact-build-plan --packages-dir packages` now exposes the reviewed package publication inputs explicitly, and `package-artifact-publication-gate` fails release publication while source or artifact digest placeholders remain. The current `tools-xctest` Linux and OpenBSD artifacts have real dogfood-built outputs and verified digests; package artifact production still needs controlled CI jobs, publication to the official artifact store, and signing before production release claims.
 - production signing policy is documented in `docs/security-production-signing.md`; release and package-index signing keys must remain distinct, release publication now requires package-index signing material, and production gates must verify against externally pinned trust roots
 - update safety now has native downgrade, expiry, revocation, freeze, smoke-validation, rollback, and live upgrade/rollback dogfood coverage; release tooling now includes a key-rotation drill, evidence bundle generation, and a Windows current-source marker, while production signing keys, externally pinned trust roots, current-source Windows artifact evidence, and CI persistence remain required before production update claims
 - MSVC remains explicitly deferred and unpublished for the v0.1.x line.
 
 ## Immediate Follow-Up
 
-- restore a fully repeatable local native CLI artifact build, then use
-  `prepare-github-release` as the main controlled release-prep entrypoint
+- wire `build-linux-cli-against-managed-toolchain` into the main controlled release-prep entrypoint so `prepare-github-release` consumes managed-prefix CLI artifacts by default instead of requiring a separate dev-wrapper invocation
 - fold the refreshed Windows MSYS2 assembly and extracted-toolchain rebuild
   evidence into the normal release qualification job, then refresh the staged
   Windows CLI/toolchain release artifacts from that path
@@ -127,3 +132,25 @@ Implemented subcommands include:
 - keep update-check, `gnustep update cli`, package-update planning/application, and rollback coverage in the signed staged old/new release gate before public update claims; setup lifecycle hooks remain compatibility/internal recovery coverage only
 - require `release-evidence-bundle`, `release-key-rotation-drill`, `controlled-release-gate`, and `release-claim-consistency-gate` to pass in CI before publication
 - decide when to make releases public versus keeping them private during bring-up
+
+## Local Staged Release Refresh
+
+When a developer rebuilds a local staged artifact after `release-manifest.json` has already been generated, they must refresh the manifest artifact digests, `SHA256SUMS`, provenance, and signatures before running bootstrap or OTVM dogfood validation. Use:
+
+```sh
+scripts/dev/refresh-local-release-metadata.sh dist/stable/0.1.0-dev --private-key /path/to/dev-release-private.pem
+```
+
+This helper is for local/dev-channel staging only. It delegates to the shared build-infra `refresh-local-release-metadata` command so local dogfood uses the same digest/signature refresh logic as tests. It must not be used to bypass the production release workflow, trusted release signing keys, source-built toolchain requirements, or published-URL qualification gates. Development signing keys should be generated outside the repository, passed with `--private-key`, and deleted or stored according to local operator policy; production release and package-index keys remain separate trust roots.
+
+## Managed-Prefix CLI Artifact Build
+
+Linux release CLI archives must be produced from the managed GNUstep/libobjc2 prefix that will run them. The supported local/dev command is:
+
+```sh
+PRIVATE_KEY=/path/to/dev-release-private.pem \
+VERSION=0.1.1-dev \
+scripts/dev/build-linux-cli-against-managed-toolchain.sh
+```
+
+The wrapper calls the shared `build-linux-cli-against-managed-toolchain` build-infra command, runs the ABI audit, smoke-tests the installed binary against the extracted managed runtime, archives the CLI bundle, and optionally refreshes release metadata/signatures. Production release jobs must use the same managed-prefix build model with production signing keys and externally pinned trust roots.

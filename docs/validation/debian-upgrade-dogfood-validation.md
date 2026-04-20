@@ -26,7 +26,7 @@ shell trap.
 - bootstrap install from the old release manifest
 - installed full CLI `update --check --json` against the new manifest
 - installed full CLI `update cli --yes --json` against the new manifest
-- lifecycle state validation for `last_action = upgrade`, active release path, current-pointer activation, and preserved previous-release path
+- lifecycle state validation for `last_action = upgrade` or `last_action = update_cli`, active release path, current-pointer activation, and preserved previous-release path
 - post-upgrade `gnustep --version`
 - post-upgrade `gnustep doctor --json`
 - installed full CLI `setup --rollback --json`
@@ -80,6 +80,17 @@ activation and explicit rollback work:
 
 The lane covered bootstrap install of the old release, installed full-CLI
 `update --check`, installed full-CLI `update cli --yes`, lifecycle state
-validation for `last_action = upgrade`, active release path, current-pointer
-activation, and preserved previous-release path, post-upgrade `--version`, and
-post-upgrade `doctor --json`.
+validation for `last_action = upgrade` or `last_action = update_cli`, active
+release path, current-pointer activation, preserved previous-release path,
+post-upgrade `--version`, post-upgrade `doctor --json`, rollback, and
+post-rollback smoke checks.
+
+The gate was rerun again on April 20, 2026 after rebuilding the Linux CLI
+artifact against the managed GNUstep/libobjc2 prefix and adding the ABI audit
+gate:
+
+- old release: local staged previous release under `dist/stable/previous`
+- new release: local staged release under `dist/stable/0.1.0-dev`
+- lease: `lease-20260420175845-1hcsgo`
+- guest: `172.17.2.125`
+- result: `{"ok":true,"summary":"Debian upgrade and rollback dogfood validation passed."}`
