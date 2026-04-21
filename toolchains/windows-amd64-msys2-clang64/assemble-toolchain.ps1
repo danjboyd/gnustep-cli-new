@@ -44,8 +44,22 @@ if ($LASTEXITCODE -ne 0) { throw 'MSYS2 package database refresh failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'MSYS2 host-package installation failed.' }
 & $bash -lc "pacman -S --overwrite /clang64/include/Block.h --noconfirm --needed mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-libobjc2 mingw-w64-clang-x86_64-libdispatch mingw-w64-clang-x86_64-gnustep-make mingw-w64-clang-x86_64-gnustep-base mingw-w64-clang-x86_64-gnustep-gui mingw-w64-clang-x86_64-gnustep-back mingw-w64-clang-x86_64-cairo mingw-w64-clang-x86_64-fontconfig mingw-w64-clang-x86_64-freetype mingw-w64-clang-x86_64-harfbuzz mingw-w64-clang-x86_64-icu mingw-w64-clang-x86_64-libjpeg-turbo mingw-w64-clang-x86_64-libpng mingw-w64-clang-x86_64-libtiff mingw-w64-clang-x86_64-pixman mingw-w64-clang-x86_64-pkgconf"
 if ($LASTEXITCODE -ne 0) { throw 'MSYS2 GNUstep package installation failed.' }
-& $bash -lc "pacman -Qkk"
-if ($LASTEXITCODE -ne 0) { throw 'MSYS2 local package database integrity check failed.' }
+& $bash -lc "pacman -Qkk >/tmp/gnustep-cli-pacman-qkk.out 2>&1"
+$qkkExit = $LASTEXITCODE
+$qkkOutput = & $bash -lc "cat /tmp/gnustep-cli-pacman-qkk.out"
+$qkkOutput | ForEach-Object { Write-Host $_ }
+if ($qkkExit -ne 0) {
+  $unexpectedQkk = @(
+    $qkkOutput | Where-Object {
+      ($_ -match '^[^:]+: [0-9]+ total files, [1-9][0-9]* altered files$') -and
+      ($_ -notmatch '^(ca-certificates|mingw-w64-clang-x86_64-libobjc2): ')
+    }
+  )
+  if ($unexpectedQkk.Count -gt 0) {
+    $unexpectedQkk | ForEach-Object { Write-Error $_ }
+    throw 'MSYS2 local package database integrity check failed with unexpected altered package files.'
+  }
+}
 
 $clangRoot = Join-Path $MsysRoot 'clang64'
 if (-not (Test-Path $clangRoot)) {
@@ -126,4 +140,3 @@ $activatePs1 = @(
 Set-Content -Path (Join-Path $Prefix 'GNUstep.ps1') -Value $activatePs1 -Encoding ASCII
 
 Write-Host "MSYS2 managed toolchain assembly completed at $Prefix"
-
