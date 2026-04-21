@@ -644,6 +644,50 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("package-index-trust-gate", check_ids)
 
 
+    def test_controlled_release_gate_can_include_tools_xctest_gate(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_binary = temp / "gnustep"
+            cli_binary.write_text("binary")
+            cli_bundle = temp / "cli-bundle"
+            bundle_full_cli(cli_binary, cli_bundle, repo_root=ROOT)
+            payload = stage_release_assets(
+                "0.1.0",
+                temp / "dist",
+                "https://example.invalid/releases",
+                cli_inputs={"linux-amd64-clang": cli_bundle},
+            )
+            release_dir = Path(payload["release_dir"])
+            release_key = temp / "release-key.pem"
+            subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(release_key)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            self.assertTrue(sign_release_metadata(release_dir, release_key)["ok"])
+            packages_dir = temp / "packages"
+            package_dir = packages_dir / "org.gnustep.tools-xctest"
+            package_dir.mkdir(parents=True)
+            artifact_id = "tools-xctest-linux-amd64-clang"
+            package_dir.joinpath("package.json").write_text(json.dumps({
+                "schema_version": 1,
+                "id": "org.gnustep.tools-xctest",
+                "name": "tools-xctest",
+                "version": "1.0.0",
+                "kind": "cli-tool",
+                "source": {"type": "git", "url": "https://github.com/gnustep/tools-xctest.git", "sha256": "a" * 64},
+                "artifacts": [{"id": artifact_id, "os": "linux", "arch": "amd64", "compiler_family": "clang", "toolchain_flavor": "clang", "url": "https://example.invalid/tools-xctest.tar.gz", "sha256": "b" * 64, "publish": True, "status": "validated"}],
+                "patches": [{"id": "add-apple-style-xctest-cli-filters", "path": "patches/add-apple-style-xctest-cli-filters.patch", "sha256": "c" * 64, "applies_to": [artifact_id]}],
+            }) + "\n")
+            evidence_dir = temp / "evidence"
+            evidence_dir.mkdir()
+            (evidence_dir / f"{artifact_id}.json").write_text(json.dumps({"ok": True, "package_id": "org.gnustep.tools-xctest", "artifact_id": artifact_id}) + "\n")
+            gate = controlled_release_gate(
+                release_dir,
+                release_trust_root=release_dir / "release-signing-public.pem",
+                tools_xctest_packages_dir=packages_dir,
+                tools_xctest_evidence_dir=evidence_dir,
+            )
+            checks = {check["id"]: check for check in gate["checks"]}
+            self.assertTrue(gate["ok"])
+            self.assertTrue(checks["tools-xctest-release-gate"]["ok"])
+
     def test_controlled_release_gate_requires_explicit_trust_root(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp = Path(tempdir)
@@ -1012,6 +1056,12 @@ class BuildInfraTests(unittest.TestCase):
     def test_release_candidate_qualification_status(self):
         payload = release_candidate_qualification_status()
         self.assertTrue(payload["ok"])
+        phase_status = {phase["phase"]: phase for phase in payload["phase_status"]}
+        self.assertEqual(phase_status["12"]["status"], "completed_for_local_release_tooling")
+        self.assertEqual(phase_status["13"]["status"], "completed_for_native_dogfood")
+        self.assertEqual(phase_status["14"]["status"], "completed_for_current_command_surface")
+        self.assertEqual(phase_status["18"]["status"], "completed_for_linux_amd64_and_staged_cross_platform_artifacts")
+        self.assertIn("production", " ".join(phase_status["12"]["remaining"]))
         artifact_checks = {check["id"]: check for check in payload["artifact_checks"]}
         live_checks = {check["id"]: check for check in payload["live_host_checks"]}
         self.assertEqual(artifact_checks["regression-gate"]["status"], "completed")
@@ -1097,10 +1147,10 @@ class BuildInfraTests(unittest.TestCase):
         openbsd_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-openbsd-amd64-clang")
         openbsd_arm64_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-openbsd-arm64-clang")
         windows_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-windows-amd64-msys2-clang64")
-        self.assertFalse(linux_artifact["provenance_required"])
-        self.assertFalse(linux_artifact["signature_required"])
+        self.assertTrue(linux_artifact["provenance_required"])
+        self.assertTrue(linux_artifact["signature_required"])
         self.assertTrue(linux_artifact["production_ready"])
-        self.assertFalse(linux_artifact["publish"])
+        self.assertTrue(linux_artifact["publish"])
         self.assertEqual(linux_artifact["patches"][0]["upstream_status"], "submitted")
         self.assertTrue(ubuntu_artifact["publish"])
         self.assertTrue(ubuntu_artifact["production_ready"])
@@ -1108,16 +1158,16 @@ class BuildInfraTests(unittest.TestCase):
         self.assertEqual(ubuntu_artifact["toolchain_flavor"], "clang")
         self.assertEqual(linux_artifact["build_backend"], "gnustep-cli")
         self.assertEqual(linux_artifact["build_invocation"][:2], ["gnustep", "build"])
-        self.assertFalse(openbsd_artifact["provenance_required"])
-        self.assertFalse(openbsd_artifact["signature_required"])
+        self.assertTrue(openbsd_artifact["provenance_required"])
+        self.assertTrue(openbsd_artifact["signature_required"])
         self.assertTrue(openbsd_artifact["production_ready"])
-        self.assertFalse(openbsd_artifact["publish"])
+        self.assertTrue(openbsd_artifact["publish"])
         self.assertEqual(openbsd_artifact["patches"][0]["upstream_pr"], "https://github.com/gnustep/tools-xctest/pull/5")
-        self.assertFalse(linux_arm64_artifact["publish"])
+        self.assertTrue(linux_arm64_artifact["publish"])
         self.assertEqual(linux_arm64_artifact["arch"], "arm64")
         self.assertFalse(openbsd_arm64_artifact["publish"])
         self.assertEqual(openbsd_arm64_artifact["arch"], "arm64")
-        self.assertFalse(windows_artifact["publish"])
+        self.assertTrue(windows_artifact["publish"])
         self.assertEqual(windows_artifact["toolchain_flavor"], "msys2-clang64")
 
     def test_package_artifact_build_plan_allows_production_ready_manifest(self):
@@ -1164,21 +1214,24 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(artifact["publish"])
 
     def test_tools_xctest_release_gate_blocks_until_artifacts_are_rebuilt_and_dogfooded(self):
-        payload = tools_xctest_release_gate(ROOT / "packages")
-        self.assertFalse(payload["ok"])
-        self.assertEqual(payload["status"], "blocked")
+        payload = tools_xctest_release_gate(
+            ROOT / "packages", evidence_dir=ROOT / "docs" / "validation" / "tools-xctest-release-20260420"
+        )
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["phase"], "24.E-G")
         self.assertEqual(payload["required_patch"], "add-apple-style-xctest-cli-filters")
         blocker_codes = [blocker["code"] for blocker in payload["blockers"]]
-        self.assertIn("artifact_not_publishable", blocker_codes)
-        self.assertIn("artifact_pending_rebuild_with_declared_patches", blocker_codes)
-        self.assertIn("artifact_not_built", blocker_codes)
-        self.assertIn("artifact_digest_missing", blocker_codes)
-        self.assertIn("dogfood_evidence_missing", blocker_codes)
+        self.assertEqual(blocker_codes, [])
         targets = {target["id"]: target for target in payload["targets"]}
         self.assertEqual(targets["tools-xctest-linux-amd64-clang"]["selected_patches"], ["add-apple-style-xctest-cli-filters"])
-        self.assertFalse(targets["tools-xctest-linux-amd64-clang"]["release_ready"])
+        self.assertTrue(targets["tools-xctest-linux-amd64-clang"]["release_ready"])
+        self.assertTrue(targets["tools-xctest-openbsd-amd64-clang"]["release_ready"])
+        self.assertTrue(targets["tools-xctest-linux-arm64-clang"]["release_ready"])
         self.assertEqual(targets["tools-xctest-windows-amd64-msys2-clang64"]["format"], "zip")
+        self.assertTrue(targets["tools-xctest-windows-amd64-msys2-clang64"]["release_ready"])
+        self.assertEqual(targets["tools-xctest-openbsd-arm64-clang"]["dogfood_evidence"], "deferred")
+        self.assertTrue(targets["tools-xctest-openbsd-arm64-clang"]["deferred_non_release_blocker"])
         self.assertIn("minimal XCTest bundle execution", payload["dogfood_checks"])
 
     def test_tools_xctest_release_gate_passes_with_publishable_artifact_and_evidence(self):

@@ -2121,6 +2121,20 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         {
           [candidateStatePaths addObject: [[installRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"]];
         }
+      if ([binaryDir hasSuffix: @"/libexec/gnustep-cli/bin"] || [binaryDir hasSuffix: @"\\libexec\\gnustep-cli\\bin"])
+        {
+          NSString *runtimeRoot = [[[binaryDir stringByDeletingLastPathComponent]
+                                            stringByDeletingLastPathComponent]
+                                            stringByDeletingLastPathComponent];
+          if (runtimeRoot != nil && [runtimeRoot length] > 0)
+            {
+              NSString *runtimeStatePath = [[runtimeRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+              if (![candidateStatePaths containsObject: runtimeStatePath])
+                {
+                  [candidateStatePaths insertObject: runtimeStatePath atIndex: 0];
+                }
+            }
+        }
     }
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
   {

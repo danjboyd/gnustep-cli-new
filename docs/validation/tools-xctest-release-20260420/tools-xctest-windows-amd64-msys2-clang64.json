@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "package_id": "org.gnustep.tools-xctest",
+  "artifact_id": "tools-xctest-windows-amd64-msys2-clang64",
+  "target": "windows-amd64-msys2-clang64",
+  "host_profile": "windows-2022",
+  "checks": [
+    "install",
+    "xctest-smoke",
+    "minimal-bundle",
+    "remove"
+  ],
+  "details": {
+    "install": "windows install --json selected tools-xctest-windows-amd64-msys2-clang64",
+    "xctest_help": "xctest.cmd --help passed",
+    "minimal_bundle_build": "FilterFixture.bundle built with installed package headers/import library",
+    "minimal_bundle_run": "FilterFixture.bundle passed with -only-testing:FilterFixture/AlphaTests/testOne",
+    "remove": "remove --json removed all package-owned files",
+    "artifact": "dist/dogfood/packages/tools-xctest-windows-amd64-msys2-clang64-0.1.0.zip",
+    "sha256": "6c66cd60bf95006c2429bde211fb7aebe885e8cc635b2a206b6ec7f8b828d27d",
+    "toolchain_archive": "dist/stable/0.1.0-dev/gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev.zip",
+    "toolchain_archive_sha256": "e11c87d68ea2e57cccfee4739e6d8e597177b42fa7625aa7ad3b047f6c8b0af0",
+    "build_note": "Build used ADDITIONAL_OBJCFLAGS=-DHAVE_MODE_T=1 for current MSYS2 clang64 dispatch header compatibility."
+  }
+}

@@ -520,11 +520,11 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
   package-index trust roots, and package artifact publication readiness before
   publication.
 - Package artifact build planning now surfaces source-provenance, patch provenance, artifact-digest, signing, publishability, and production-readiness blockers per package and per artifact instead of emitting a loose artifact list that publication tooling must reinterpret. A package artifact publication gate fails release publication while blockers remain; the current `tools-xctest` package now has real Linux and OpenBSD dogfood artifacts with source provenance and verified artifact digests, and regression coverage includes a synthetic production-ready package manifest.
-- The remaining Phase 12 work is now centered on:
-  - provisioning CI secrets or a signing service with production release and package-index keys
-  - making host-backed qualification less operator-manual
-  - turning package artifact build plans into real controlled build jobs that produce signed artifacts
-  - adding live production-channel expiry, rollback, revocation, and key-rotation drills around the trust gates
+- Phase 12 is complete for local release-tooling execution: release trust gates, package-index trust gates, package artifact publication gates, tools-xctest release gates, no-bundled-Python qualification, and key-rotation drill helpers are implemented and covered by regression tests. The remaining Phase 12 work is external production hardening:
+  - provision CI secrets or a signing service with production release and package-index keys
+  - move host-backed qualification from operator-manual lanes into release automation
+  - turn package artifact build plans into real controlled build jobs that produce signed artifacts
+  - run live production-channel expiry, rollback, revocation, and key-rotation drills around production-like trust roots
 
 ### G. Testing
 - CI verification for every build target.
@@ -604,7 +604,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Successful managed setup/upgrade now materializes `releases/<version>`, smoke-validates the candidate `bin/gnustep --version`, switches the stable `current` pointer, and writes the root `bin/gnustep` launcher as a pointer launcher into `current/bin/gnustep`.
 - `gnustep setup --rollback` is implemented for managed roots with preserved previous-release state and records rollback completion in `state/cli-state.json`; rollback remains explicit recovery UX while `gnustep update` becomes the normal update UX. The Debian upgrade dogfood lane now exercises upgrade followed by rollback on a live lease.
 - Regression coverage now includes update-available planning, downgrade rejection, expired metadata rejection, frozen older-manifest rejection, revoked selected-artifact rejection, needs-repair upgrade rejection, checksum rollback, stale transaction recovery, local artifact path staging, archive layout preservation, runtime-bundle double-wrap prevention, conflict rejection, smoke-validated pointer activation, explicit rollback, versioned-release snapshot creation, previous-release preservation, default `update all` planning, combined `update all --check`, `update cli --yes`, package-update rollback, update usage-error JSON, package-update human output, and built-executable `gnustep update` smoke tests.
-- Remaining Phase 13 hardening is now centered on live old-to-new release dogfood against real published artifacts, `update all --yes` coordination across a CLI/toolchain update plus package updates, and final signed metadata/key-mismatch cases that require production-like trust roots.
+- Phase 13 is complete for native dogfood: `gnustep update` owns check/apply UX for CLI, package, and default all-scope updates; rollback, stale transaction recovery, downgrade rejection, expired metadata rejection, revoked artifact rejection, and package-update rollback are covered. Remaining Phase 13 hardening is live old-to-new dogfood against two real published update-capable releases, one production-like `update all --yes` run covering both CLI/toolchain and package updates, and final signed metadata/key-mismatch cases that require production-like trust roots.
 - Debian old-to-new VM dogfood automation is available at `scripts/dev/debian-upgrade-dogfood-validation.sh` and now stages old/new managed-built synthetic release pairs when release-candidate artifacts are not yet published in two update-capable versions. The current-pointer/rollback refresh passed this lane on April 20, 2026.
 
 ## Phase 14. Cross-Platform Integration Polish
@@ -704,7 +704,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Phase 16C is validated locally and on a fresh Debian 13 OTVM lease: the source-built artifact packages as `production_eligible = true`, passes host-origin path leakage audit after placeholder normalization, relocates into a release-style install root, and successfully drives installed CLI smoke, `doctor`, managed Foundation compile/run, `gnustep new`, `gnustep build`, `gnustep run`, and package install/remove through the installed native CLI.
 - Phase 16D regression coverage includes source-lock validation, MSYS2 input-manifest validation, source-built Linux artifact packaging, release metadata propagation, archive metadata auditing, setup-time managed-prefix relocation, and host-origin GNUstep path leakage detection.
 - The older host-derived Linux assembler remains available only as a transitional non-production path and marks its artifacts `production_eligible = false`.
-- Phase 16 follow-up now resolves the immediate Linux portability blocker by making the current `linux-amd64-clang` managed artifact explicitly Debian-scoped in generated release metadata, toolchain manifests, component inventories, and artifact selection. Ubuntu `amd64/clang` is now a separate planned target (`linux-ubuntu2404-amd64-clang`) because ICU and other runtime SONAMEs differ from Debian; Fedora and Arch remain validated GCC/libobjc interoperability targets, and future managed Clang support there requires dependency closure or per-distro artifacts rather than reusing the Debian-scoped artifact.
+- Phase 16 follow-up resolves the immediate Linux portability blocker by making the current `linux-amd64-clang` managed artifact explicitly Debian-scoped in generated release metadata, toolchain manifests, component inventories, and artifact selection. Ubuntu `amd64/clang` is now a separate distro-scoped target (`linux-ubuntu2404-amd64-clang`) with Docker-built managed CLI/toolchain artifacts published to the `v0.1.0-dev` prerelease and April 20, 2026 setup/doctor/package dogfood evidence. Fedora and Arch remain validated GCC/libobjc interoperability targets, and future managed Clang support there requires dependency closure or per-distro artifacts rather than reusing the Debian-scoped artifact.
 - Phase 16.B2 is implemented at metadata/planning level: the build matrix, source lock, toolchain manifest, component inventory, generated build script, package target metadata, and regression coverage now exist for `linux-arm64-clang`. Publication remains disabled until a Debian/aarch64 host-backed build and install/remove validation pass. Interim validation can use the new `../OracleTestVMs` `ubuntu-24.04-aarch64` profile because Ubuntu is close enough to exercise the Debian-family apt/prerequisite and Linux arm64 managed-build path. Blocker for final 16.B2 closeout: `../OracleTestVMs` must provide the in-progress Debian/aarch64 image/profile or we must explicitly revise 16.B2 from Debian/aarch64 to Ubuntu/aarch64.
 
 ## Phase 17. Remaining Tier 1 Toolchain Builds
@@ -852,7 +852,11 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
   `windows-2022` libvirt lease rebuilt the full Objective-C CLI under the
   checked-in MSYS2 assembly path, passed `--version` / `--help`, installed a
   staged Windows package artifact with native SHA-256 verification, and removed
-  it successfully.
+  it successfully. Phase 14/18 are complete for the current command surface and
+  staged cross-platform artifacts; remaining work is production-lane artifact
+  builds for every Tier 1 target, automated live smoke lanes, continued native
+  Objective-C migration for future shipped behavior, and native `doctor` deep
+  detection parity.
 
 ## Phase 19. GitHub Release Publication And End-To-End Consumption
 
@@ -1236,7 +1240,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Run explicit OpenBSD qualification against the packaged GNUstep path and record whether that path is supported and preferred versus managed installation.
 - Fedora qualification against the packaged GNUstep path has live evidence from April 16, 2026 and is classified as GCC interoperability-only; do not mark it preferred for modern-runtime workflows without a validated Clang/libobjc2 stack.
 - Debian and Arch qualification have live evidence and are classified as GCC interoperability-oriented unless a validated packaged Clang/libobjc2 path is later proven.
-- Ubuntu `amd64/clang` managed support is now represented by the planned `linux-ubuntu2404-amd64-clang` target and should be built in a base Ubuntu Docker image before any Ubuntu installability claim. Fedora and Arch managed Clang/libobjc2 support remains blocked pending dependency closure or per-distro artifact work. The current `linux-amd64-clang` managed artifact is explicitly Debian-scoped in metadata and artifact selection so setup does not claim Ubuntu/Fedora/Arch portability from the Debian-built artifact.
+- Ubuntu `amd64/clang` managed support is now represented by the distro-scoped `linux-ubuntu2404-amd64-clang` target, built in a base Ubuntu Docker image, published to the `v0.1.0-dev` prerelease, and dogfooded for setup/doctor plus `tools-xctest` install/help/minimal-bundle/remove on April 20, 2026. Fedora and Arch managed Clang/libobjc2 support remains blocked pending dependency closure or per-distro artifact work. The current `linux-amd64-clang` managed artifact is explicitly Debian-scoped in metadata and artifact selection so setup does not claim Ubuntu/Fedora/Arch portability from the Debian-built artifact.
 
 ### E. Exit Criteria
 - The project has a defensible v1 release candidate with accurate docs, passing release gates, and validated support claims.
@@ -1253,7 +1257,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Apply declared package patches after verified source fetch and before invoking the selected build backend.
 - Verify patch file digests, safe relative paths, target applicability, and upstream status before a package artifact can be published.
 - Add regression coverage for successful patch application, failed patch application, patch digest mismatch, and target-specific patch selection.
-- Current `tools-xctest` package state: PR `https://github.com/gnustep/tools-xctest/pull/5` is recorded as downstream patch `add-apple-style-xctest-cli-filters`; existing dogfood artifacts are marked pending rebuild because they predate this patch.
+- Current `tools-xctest` package state: PR `https://github.com/gnustep/tools-xctest/pull/5` is recorded as downstream patch `add-apple-style-xctest-cli-filters`; Debian amd64, Ubuntu amd64, and OpenBSD amd64 artifacts have now been rebuilt from that patch and validated with package lifecycle dogfood evidence.
 
 ### C. `tools-xctest` Build-With-Our-CLI Flow
 - Teach package build tooling to build `tools-xctest` through our own CLI/package workflow rather than only through ad hoc shell commands.
@@ -1268,15 +1272,15 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 
 ### Phase 24 Execution Status
 - Phase 24.A-D are implemented at repository-tooling level: the `tools-xctest` package manifest records upstream source policy, update cadence, channel policy, submitted PR #5 as a verified downstream patch, and a `gnustep build`-oriented build workflow. Package tooling can now validate and apply declared patches to a source checkout, package build planning exposes build backend/invocation metadata, and generated package indexes/provenance carry package and per-artifact source/patch identity.
-- Phase 24.E-G now have a repository release gate through `scripts/internal/build_infra.py --json tools-xctest-release-gate --packages-dir packages --evidence-dir <evidence-dir>`. The gate is intentionally blocked until all `tools-xctest` artifacts are rebuilt from the declared upstream revision plus PR #5 patch, published through a signed package index, and validated with native install/smoke/remove evidence on the target hosts.
-- Current blockers: Debian Linux and OpenBSD amd64 dogfood artifacts predate the declared patch; Ubuntu Linux amd64, Linux arm64/Debian, OpenBSD arm64, and Windows/MSYS2 artifacts are planned but not built; host-backed native install/remove dogfood evidence is not yet recorded for the patched package set.
+- Phase 24.E-G now have a repository release gate through `scripts/internal/build_infra.py --json tools-xctest-release-gate --packages-dir packages --evidence-dir <evidence-dir>`. The gate now passes with OpenBSD arm64 explicitly deferred as a documented non-release blocker; validated targets have rebuilt `tools-xctest` artifacts from the declared upstream revision plus PR #5 patch with native install/smoke/minimal-bundle/remove evidence.
+- Current blockers: OpenBSD arm64 remains a documented non-release blocker pending an OTVM profile or equivalent scripted access to the OpenBSD arm64 host. Debian Linux amd64, Ubuntu Linux amd64, Linux arm64 on the OTVM Ubuntu/aarch64 managed Clang/libobjc2 path, OpenBSD amd64, and Windows/MSYS2 are rebuilt from the declared upstream revision plus PR #5 patch, published in package metadata, and validated with install/help/minimal-bundle/remove evidence.
 
 ### E. Native CLI Install/Remove Dogfood
 - Use the native full CLI to install `org.gnustep.tools-xctest` from the generated package index on a clean managed root.
 - Verify `xctest` is on the expected installed path, can execute `--help` or equivalent smoke behavior, and can run at least one minimal XCTest bundle.
 - Remove the package through the CLI and verify owned-file cleanup, state updates, and dependency behavior.
 - Run this flow on Debian Linux amd64, Ubuntu Linux amd64, Linux arm64/Debian, OpenBSD, and Windows/MSYS2 as target artifacts become available.
-- Status: gate defined and enforced at repository level; blocked on rebuilt patched artifacts and recorded host evidence.
+- Status: gate defined and enforced at repository level; Debian Linux amd64, Ubuntu Linux amd64, Linux arm64 on OTVM Ubuntu/aarch64 with a managed Clang/libobjc2 toolchain, OpenBSD amd64, and Windows/MSYS2 now pass the gate with accepted dogfood evidence. OpenBSD arm64 remains host-access blocked and is recorded as a documented non-release blocker. The `tools-xctest-release-gate` now passes with that explicit deferral.
 
 ### F. Release Gate Integration
 - Add `tools-xctest` package install/remove smoke to release qualification so Objective-C unit-test infrastructure is validated as a real package, not only as a developer prerequisite.
@@ -1288,7 +1292,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - `gnustep install org.gnustep.tools-xctest --package-index <signed-index>` works on the validated Linux target.
 - `gnustep remove org.gnustep.tools-xctest` restores package state cleanly.
 - Ubuntu Linux amd64, Linux arm64/Debian, OpenBSD, and Windows/MSYS2 have either the same install/remove proof or explicitly documented non-release blockers.
-- Published `tools-xctest` artifacts are rebuilt from the declared upstream source plus PR #5 patch, with recorded source/patch/artifact digests and host-backed validation evidence.
+- Published `tools-xctest` artifacts are rebuilt from the declared upstream source plus PR #5 patch, with recorded source/patch/artifact digests and host-backed validation evidence; targets without host access must be represented as explicit documented non-release blockers rather than implicit release failures.
 
 ## Testing Principles For All Phases
 

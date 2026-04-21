@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "package_id": "org.gnustep.tools-xctest",
+  "artifact_id": "tools-xctest-linux-arm64-clang",
+  "target": "linux-arm64-clang",
+  "host_profile": "ubuntu-24.04-aarch64",
+  "checks": [
+    "install",
+    "xctest-smoke",
+    "minimal-bundle",
+    "remove"
+  ],
+  "details": {
+    "toolchain_build": "Phase 16.B2 managed Clang/libobjc2 source build completed on OTVM ubuntu-24.04-aarch64 lease lease-20260421175256-dh2gej",
+    "toolchain_prefix": "/tmp/gnustep-cli-linux-arm64-toolchain/install",
+    "install": "native full CLI install --json selected tools-xctest-linux-arm64-clang",
+    "xctest_help": "xctest --help passed under package launcher",
+    "minimal_bundle_build": "FilterFixture.bundle built with installed package headers/libraries",
+    "minimal_bundle_run": "FilterFixture.bundle passed with -only-testing:FilterFixture/AlphaTests/testOne",
+    "remove": "remove --json removed all package-owned files",
+    "artifact": "dist/dogfood/packages/tools-xctest-linux-arm64-clang-0.1.0.tar.gz",
+    "sha256": "0de76047878737cb78642cba60034651a194fc1c70d05a1a220e2c758bc68285",
+    "dependency_note": "libgnutls28-dev was required for libs-base TLS support during the managed source build."
+  }
+}

@@ -1249,6 +1249,49 @@ def release_candidate_qualification_status() -> dict[str, Any]:
         "ok": True,
         "status": "ok",
         "summary": "Release-candidate qualification status snapshot generated.",
+        "phase_status": [
+            {
+                "phase": "12",
+                "name": "Official build infrastructure",
+                "status": "completed_for_local_release_tooling",
+                "remaining": [
+                    "Provision CI-owned production release and package-index signing keys or a signing service.",
+                    "Move host-backed qualification from operator-run lanes to release automation.",
+                    "Promote package artifact build plans into controlled CI build jobs that emit signed artifacts.",
+                    "Run production-channel expiry, rollback, revocation, and key-rotation drills with production-like trust roots.",
+                ],
+            },
+            {
+                "phase": "13",
+                "name": "Upgrade, repair, and lifecycle operations",
+                "status": "completed_for_native_dogfood",
+                "remaining": [
+                    "Dogfood old-to-new updates against two real published update-capable releases.",
+                    "Run update-all application against a release containing both CLI/toolchain and package updates.",
+                    "Exercise final key-mismatch and signed-metadata failure cases with production-like trust roots.",
+                ],
+            },
+            {
+                "phase": "14",
+                "name": "Cross-platform integration polish",
+                "status": "completed_for_current_command_surface",
+                "remaining": [
+                    "Continue replacing transitional repository Python helpers where they still define future shipped behavior.",
+                    "Expand native Objective-C command tests as command behavior moves out of shared tooling.",
+                    "Automate live Windows and Unix release smoke lanes instead of relying on manual evidence capture.",
+                ],
+            },
+            {
+                "phase": "18",
+                "name": "Full GNUstep CLI implementation and build",
+                "status": "completed_for_linux_amd64_and_staged_cross_platform_artifacts",
+                "remaining": [
+                    "Build and qualify every final Tier 1 full-CLI artifact from the production build lanes.",
+                    "Keep the no-bundled-Python release gate mandatory for every shipped full-CLI artifact.",
+                    "Complete native doctor deep-detection parity before claiming full native diagnostic replacement.",
+                ],
+            },
+        ],
         "artifact_checks": [
             {
                 "id": "regression-gate",
@@ -2706,6 +2749,8 @@ def controlled_release_gate(
     release_trust_root: str | Path | None = None,
     package_index_trust_root: str | Path | None = None,
     allow_unsigned_package_index: bool = False,
+    tools_xctest_packages_dir: str | Path | None = None,
+    tools_xctest_evidence_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     if release_trust_root is None:
@@ -2743,6 +2788,14 @@ def controlled_release_gate(
             "summary": package_gate["summary"],
             "payload": package_gate,
         })
+    if tools_xctest_packages_dir is not None:
+        xctest_gate = tools_xctest_release_gate(tools_xctest_packages_dir, evidence_dir=tools_xctest_evidence_dir)
+        checks.append({
+            "id": "tools-xctest-release-gate",
+            "ok": xctest_gate["ok"],
+            "summary": xctest_gate["summary"],
+            "payload": xctest_gate,
+        })
     ok = all(check["ok"] for check in checks)
     return {
         "schema_version": 1,
@@ -2752,6 +2805,8 @@ def controlled_release_gate(
         "summary": "Controlled release gate passed." if ok else "Controlled release gate failed.",
         "release_dir": str(Path(release_dir).resolve()),
         "package_index_path": str(Path(package_index_path).resolve()) if package_index_path else None,
+        "tools_xctest_packages_dir": str(Path(tools_xctest_packages_dir).resolve()) if tools_xctest_packages_dir else None,
+        "tools_xctest_evidence_dir": str(Path(tools_xctest_evidence_dir).resolve()) if tools_xctest_evidence_dir else None,
         "checks": checks,
     }
 
@@ -3753,6 +3808,21 @@ def tools_xctest_release_gate(packages_dir: str | Path, *, evidence_dir: str | P
         if evidence_blocker is not None:
             artifact_blockers.append(evidence_blocker)
 
+        documented_non_release_blocker = isinstance(evidence_payload, dict) and evidence_payload.get("non_release_blocker") is True
+        if documented_non_release_blocker:
+            deferrable_codes = {
+                "artifact_not_publishable",
+                "artifact_digest_missing",
+                "artifact_not_built",
+                "dogfood_evidence_missing",
+                "dogfood_evidence_failed",
+            }
+            artifact_blockers = [
+                blocker for blocker in artifact_blockers
+                if blocker.get("code") not in deferrable_codes
+            ]
+            evidence_status = "deferred"
+
         blockers.extend(artifact_blockers)
         targets.append(
             {
@@ -3770,7 +3840,8 @@ def tools_xctest_release_gate(packages_dir: str | Path, *, evidence_dir: str | P
                 "dogfood_evidence": evidence_status,
                 "dogfood_evidence_payload": evidence_payload,
                 "required_dogfood_checks": dogfood_checks,
-                "release_ready": len(artifact_blockers) == 0,
+                "deferred_non_release_blocker": documented_non_release_blocker,
+                "release_ready": len(artifact_blockers) == 0 and not documented_non_release_blocker,
                 "blockers": artifact_blockers,
             }
         )

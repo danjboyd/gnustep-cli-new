@@ -494,9 +494,11 @@ switch ($command) {
                 Write-TraceEvent "artifact.toolchain.fetch.complete" $toolchainFile
                 Write-SetupProgress "verifying artifact checksums"
                 Write-TraceEvent "artifact.checksum.start" $cliFile
-                if ((Get-Sha256 $cliFile) -ne $cliArtifact.sha256.ToLowerInvariant()) { throw "CLI checksum verification failed." }
+                $expectedCliSha = ([string]$cliArtifact.sha256).ToLowerInvariant()
+                if ((Get-Sha256 $cliFile) -ne $expectedCliSha) { throw "CLI checksum verification failed." }
                 Write-TraceEvent "artifact.checksum.cli.complete" $cliFile
-                if ((Get-Sha256 $toolchainFile) -ne $toolchainArtifact.sha256.ToLowerInvariant()) { throw "Toolchain checksum verification failed." }
+                $expectedToolchainSha = ([string]$toolchainArtifact.sha256).ToLowerInvariant()
+                if ((Get-Sha256 $toolchainFile) -ne $expectedToolchainSha) { throw "Toolchain checksum verification failed." }
                 Write-TraceEvent "artifact.checksum.complete" $toolchainFile
                 $cliExtract = Join-Path $tempRoot "c"
                 $toolchainExtract = Join-Path $tempRoot "t"

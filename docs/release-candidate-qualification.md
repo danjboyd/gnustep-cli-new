@@ -78,7 +78,7 @@ candidate.
   portable across those distro families: Fedora fails to launch on missing
   `libcurl-gnutls.so.4`, and Arch fails to launch on missing `libxml2.so.2`.
   The current `linux-amd64-clang` artifact is Debian-scoped in metadata and
-  selection policy; Ubuntu now has its own planned `linux-ubuntu2404-amd64-clang`
+  selection policy; Ubuntu now has its own Docker-built and dogfooded `linux-ubuntu2404-amd64-clang`
   target because Ubuntu base images can have different ICU/runtime SONAMEs.
 - The Debian managed Linux release gap for normal project workflows is now
   closed for the current staged artifact: `gnustep new`, `gnustep build`, and
@@ -119,8 +119,12 @@ candidate.
   and `gmake`, and then passed a native packaged GNUstep Foundation
   compile-link-run probe. A fresh April 17, 2026 lease also built the current
   full CLI, ran version/help/doctor, and passed package install/remove smoke
-  after fixing native OpenBSD OS detection; see the evidence in
-  [openbsd-debian-libvirt-refresh.md](/home/danboyd/gnustep-cli-new/docs/validation/openbsd-debian-libvirt-refresh.md)
+  after fixing native OpenBSD OS detection; on April 20, 2026 a fresh OpenBSD
+  7.8 amd64 lease rebuilt patched `tools-xctest`, installed it through the native
+  full CLI, ran `xctest --help`, ran a minimal XCTest bundle, removed the
+  package, and destroyed the lease. See the evidence in
+  [openbsd-debian-libvirt-refresh.md](/home/danboyd/gnustep-cli-new/docs/validation/openbsd-debian-libvirt-refresh.md) and
+  [tools-xctest-openbsd-78-20260420](/home/danboyd/gnustep-cli-new/docs/validation/tools-xctest-openbsd-78-20260420/tools-xctest-openbsd-amd64-clang.json)
 - Debian:
   preflight and live libvirt refresh passed on April 14, 2026 using the same
   `~/.ssh/otvm` operator keypair; see the same libvirt refresh evidence
@@ -241,7 +245,8 @@ The remaining external follow-up is:
 
 - artifact-level qualification remains green
 - OpenBSD and Debian release-candidate acceptance remains repeatable against
-  the current farm images and `~/.ssh/otvm` operator key material
+  the current farm images and `~/.ssh/otvm` operator key material; Debian amd64
+  and OpenBSD amd64 `tools-xctest` package dogfood evidence is now recorded
 - Windows libvirt host validation should use the same release-generated
   `otvm` plan rather than a separate OCI-oriented workflow
 - Windows libvirt validation currently requires local `mtools` support for the
@@ -253,3 +258,23 @@ The remaining external follow-up is:
   interoperability-only
 - the recorded support claims in [support-matrix.md](/home/danboyd/gnustep-cli-new/docs/support-matrix.md)
   match the collected evidence
+
+## April 21 Phase 12/13/14/18 Execution Update
+
+Local execution for Phases 12, 13, 14, and 18 is now represented in the machine-readable release-candidate qualification snapshot returned by `release_candidate_qualification_status()`.
+
+Completed or locally enforced:
+
+- Phase 12: release trust gates, package-index trust gates, package artifact publication gates, `tools-xctest` release gates, no-bundled-Python handoff qualification, and key-rotation drill helpers are implemented and regression covered.
+- Phase 13: native `gnustep update` owns CLI, package, and default all-scope update planning/application; rollback, stale transaction recovery, downgrade rejection, expired metadata rejection, revoked artifact rejection, and package-update rollback are covered.
+- Phase 14: the current command surface runs through the native Objective-C CLI with aligned help, JSON envelopes, command dispatch, and staged cross-platform smoke evidence.
+- Phase 18: Linux amd64 managed native CLI execution is validated, staged cross-platform artifacts have host-backed smoke evidence, and release qualification fails if bundled Python runtime trees reappear in the installed full CLI bundle.
+
+Remaining external production blockers:
+
+- Provision CI-owned production signing keys or a signing service for release and package-index metadata.
+- Move host-backed qualification from operator-run lanes into automated release jobs.
+- Promote package artifact build plans into controlled build jobs that produce signed artifacts.
+- Run old-to-new update dogfood against two real published update-capable releases, including one `update all --yes` run that covers both CLI/toolchain and package updates.
+- Finish native `doctor` deep-detection parity before claiming full native diagnostic replacement.
+- Build every final Tier 1 full-CLI artifact from production build lanes rather than reusing staged or prerelease evidence.

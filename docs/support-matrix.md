@@ -58,14 +58,14 @@ targets the project is actively discussing.
   or installability claim exists until the managed toolchain, full CLI, and
   `tools-xctest` package artifacts are built and host-validated.
 - `ubuntu2404-amd64-managed-clang`
-  status: `planned_build_target`
-  notes: planned Ubuntu 24.04/amd64 managed target for the full CLI, managed
-  toolchain, and official package artifacts. This target exists because the
-  Debian-built artifact can require runtime SONAMEs such as `libicui18n.so.76`
-  that are not guaranteed in Ubuntu base images. Initial builds should use a
-  base Ubuntu Docker image so the artifact records and validates Ubuntu's actual
-  runtime dependency closure. No release or installability claim exists until
-  Docker build evidence, runtime-library audit, and setup smoke validation pass.
+  status: `dogfood_ready_partial`
+  notes: Ubuntu 24.04/amd64 now has distro-scoped managed CLI and toolchain
+  artifacts built in a base Ubuntu Docker environment and published to the
+  `v0.1.0-dev` prerelease. April 20, 2026 evidence covers setup from the local
+  release manifest, runtime dependency closure, full `doctor --json`, and
+  `tools-xctest` package install/help/minimal-bundle/remove dogfood. Production
+  signing/trust-root qualification and repeatable CI/farm automation remain
+  pending before a public support claim.
 - `arch-amd64-gcc`
   status: `interoperability_only`
   notes: Arch libvirt preflight and acceptance passed on April 16, 2026 using
@@ -81,8 +81,9 @@ targets the project is actively discussing.
 - `openbsd-arm64-clang`
   status: `planned_build_target`
   notes: planned OpenBSD/arm64 target for the full CLI and official package
-  artifacts. Initial evidence should come from the available OpenBSD arm64
-  server before publication is enabled.
+  artifacts. Initial evidence should come from an OTVM OpenBSD arm64 profile
+  or scripted access to the available OpenBSD arm64 server before publication
+  is enabled; this remains blocked as of April 21, 2026.
 - `windows-amd64-msys2-clang64`
   status: `managed_target_staged_artifacts_validated`
   notes: planned Tier 1 managed target with live host and staged release-artifact

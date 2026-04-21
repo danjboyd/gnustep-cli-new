@@ -1,0 +1,6 @@
+Usage: xctest [options] <test bundle path>
+
+Options:
+  -only-testing:<identifier>  Run only tests matching TestTarget[/TestClass[/TestMethod]]
+  -skip-testing:<identifier>  Skip tests matching TestTarget[/TestClass[/TestMethod]]
+  -h, --help                  Show this help message

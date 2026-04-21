@@ -182,6 +182,8 @@ def main() -> int:
     controlled_gate.add_argument("--release-trust-root")
     controlled_gate.add_argument("--package-index-trust-root")
     controlled_gate.add_argument("--allow-unsigned-package-index", action="store_true")
+    controlled_gate.add_argument("--tools-xctest-packages-dir")
+    controlled_gate.add_argument("--tools-xctest-evidence-dir")
 
     toolchain_audit = subparsers.add_parser("toolchain-archive-audit", add_help=False)
     toolchain_audit.add_argument("--archive", required=True)
@@ -371,6 +373,8 @@ def main() -> int:
             release_trust_root=args.release_trust_root,
             package_index_trust_root=args.package_index_trust_root,
             allow_unsigned_package_index=args.allow_unsigned_package_index,
+            tools_xctest_packages_dir=args.tools_xctest_packages_dir,
+            tools_xctest_evidence_dir=args.tools_xctest_evidence_dir,
         )
     elif args.subcommand == "toolchain-archive-audit":
         payload = toolchain_archive_audit(args.archive, target_id=args.target)

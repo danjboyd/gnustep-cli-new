@@ -1,0 +1,5 @@
+2026-04-20 17:06:05.384 xctest[877575:877575] XCTest: Running Unit Tests
+2026-04-20 17:06:05.385 xctest[877575:877575] XCTest:   Running SampleTests
+2026-04-20 17:06:05.385 xctest[877575:877575] XCTest:     testTruth...
+2026-04-20 17:06:05.385 xctest[877575:877575] XCTest:   SampleTests: 1 tests PASSED
+2026-04-20 17:06:05.385 xctest[877575:877575] XCTest: 1 tests PASSED
