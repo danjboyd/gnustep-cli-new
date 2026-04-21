@@ -43,6 +43,7 @@
 - (BOOL)writeString:(NSString *)content toPath:(NSString *)path;
 - (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory;
 - (NSString *)firstAvailableExecutable:(NSArray *)names;
+- (NSArray *)toolRunInvocationForProject:(NSDictionary *)project;
 - (NSDictionary *)checkWithID:(NSString *)checkID
                          title:(NSString *)title
                         status:(NSString *)status
@@ -4767,7 +4768,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   if ([[project objectForKey: @"project_type"] isEqualToString: @"tool"])
     {
-      invocation = [NSArray arrayWithObjects: [NSString stringWithFormat: @"./obj/%@", [project objectForKey: @"target_name"]], nil];
+      invocation = [self toolRunInvocationForProject: project];
       backend = @"direct-exec";
     }
   else if ([[project objectForKey: @"project_type"] isEqualToString: @"app"])
@@ -4823,6 +4824,29 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         [result objectForKey: @"stderr"], @"stderr",
                         [result objectForKey: @"exit_status"], @"exit_status",
                         nil];
+}
+
+- (NSArray *)toolRunInvocationForProject:(NSDictionary *)project
+{
+  NSString *targetName = [project objectForKey: @"target_name"];
+  NSString *projectDir = [project objectForKey: @"project_dir"];
+  NSString *extensionlessRelative = [NSString stringWithFormat: @"./obj/%@", targetName];
+  NSString *windowsRelative = [NSString stringWithFormat: @"./obj/%@.exe", targetName];
+  NSString *extensionlessPath = [[projectDir stringByAppendingPathComponent: @"obj"] stringByAppendingPathComponent: targetName];
+  NSString *windowsPath = [[projectDir stringByAppendingPathComponent: @"obj"] stringByAppendingPathComponent: [targetName stringByAppendingString: @".exe"]];
+  NSFileManager *manager = [NSFileManager defaultManager];
+
+  if ([manager fileExistsAtPath: extensionlessPath] == NO && [manager fileExistsAtPath: windowsPath])
+    {
+      return [NSArray arrayWithObjects: windowsRelative, nil];
+    }
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  if ([manager fileExistsAtPath: extensionlessPath] == NO)
+    {
+      return [NSArray arrayWithObjects: windowsRelative, nil];
+    }
+#endif
+  return [NSArray arrayWithObjects: extensionlessRelative, nil];
 }
 
 - (NSString *)managedGNUmakefileFlags

@@ -98,6 +98,17 @@ class BuildRunEngineTests(unittest.TestCase):
             self.assertEqual(payload["backend"], "openapp")
             self.assertEqual(payload["invocation"], ["openapp", "HelloApp.app"])
 
+    def test_plan_run_uses_windows_tool_executable_when_present(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / "GNUmakefile").write_text("TOOL_NAME = hello\n")
+            (root / "obj").mkdir()
+            (root / "obj" / "hello.exe").write_text("")
+            payload = plan_run(tempdir)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["backend"], "direct-exec")
+            self.assertEqual(payload["invocation"], ["./obj/hello.exe"])
+
     def test_execute_run_handles_missing_binary(self):
         with tempfile.TemporaryDirectory() as tempdir:
             (Path(tempdir) / "GNUmakefile").write_text("TOOL_NAME = hello\n")

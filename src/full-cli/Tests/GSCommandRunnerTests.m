@@ -20,6 +20,7 @@
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
 - (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory;
 - (NSDictionary *)detectProjectAtPath:(NSString *)projectPath;
+- (NSArray *)toolRunInvocationForProject:(NSDictionary *)project;
 @end
 
 @interface GSCommandRunnerTests : XCTestCase
@@ -204,6 +205,35 @@
   XCTAssertTrue([[project objectForKey: @"supported"] boolValue]);
   XCTAssertEqualObjects([project objectForKey: @"project_type"], @"unknown");
   XCTAssertEqualObjects([project objectForKey: @"target_name"], [NSNull null]);
+  [manager removeItemAtPath: root error: NULL];
+}
+
+- (void)testToolRunInvocationUsesWindowsExecutableWhenPresent
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent: [[NSUUID UUID] UUIDString]];
+  NSString *obj = [root stringByAppendingPathComponent: @"obj"];
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSDictionary *project = nil;
+  NSArray *invocation = nil;
+  NSArray *expected = [NSArray arrayWithObjects: @"./obj/hello.exe", nil];
+
+  XCTAssertTrue([manager createDirectoryAtPath: obj withIntermediateDirectories: YES attributes: nil error: NULL]);
+  XCTAssertTrue([@"" writeToFile: [obj stringByAppendingPathComponent: @"hello.exe"]
+                       atomically: YES
+                         encoding: NSUTF8StringEncoding
+                            error: NULL]);
+
+  project = [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithBool: YES], @"supported",
+                            @"gnustep-make", @"build_system",
+                            @"tool", @"project_type",
+                            @"hello", @"target_name",
+                            root, @"project_dir",
+                            nil];
+  invocation = [runner toolRunInvocationForProject: project];
+
+  XCTAssertEqualObjects(invocation, expected);
   [manager removeItemAtPath: root error: NULL];
 }
 

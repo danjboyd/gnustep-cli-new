@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -135,7 +136,7 @@ def plan_run(project_dir: str | Path = ".") -> dict[str, Any]:
             "invocation": None,
         }
     if project["project_type"] == "tool":
-        invocation = [f"./obj/{project['target_name']}"]
+        invocation = [_tool_run_path(project)]
         backend = "direct-exec"
     elif project["project_type"] == "app":
         invocation = ["openapp", f"{project['target_name']}.app"]
@@ -161,6 +162,18 @@ def plan_run(project_dir: str | Path = ".") -> dict[str, Any]:
         "backend": backend,
         "invocation": invocation,
     }
+
+
+def _tool_run_path(project: dict[str, Any]) -> str:
+    target_name = project["target_name"]
+    project_dir = Path(project["project_dir"])
+    extensionless = project_dir / "obj" / target_name
+    windows_executable = project_dir / "obj" / f"{target_name}.exe"
+    if not extensionless.exists() and windows_executable.exists():
+        return f"./obj/{target_name}.exe"
+    if os.name == "nt" and not extensionless.exists():
+        return f"./obj/{target_name}.exe"
+    return f"./obj/{target_name}"
 
 
 def execute_run(project_dir: str | Path = ".") -> tuple[dict[str, Any], int]:
