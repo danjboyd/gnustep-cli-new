@@ -21,6 +21,70 @@ function Write-SetupProgress {
     }
 }
 
+function Format-ByteCount {
+    param([long]$Bytes)
+    if ($Bytes -ge 1073741824) {
+        return ("{0:N1} GB" -f ($Bytes / 1073741824.0))
+    }
+    if ($Bytes -ge 1048576) {
+        return ("{0:N1} MB" -f ($Bytes / 1048576.0))
+    }
+    if ($Bytes -ge 1024) {
+        return ("{0:N1} KB" -f ($Bytes / 1024.0))
+    }
+    return ("{0} bytes" -f $Bytes)
+}
+
+function Save-UrlToFile {
+    param(
+        [string]$Url,
+        [string]$OutFile,
+        [string]$Label
+    )
+    $request = [System.Net.HttpWebRequest]::Create($Url)
+    $response = $null
+    $inputStream = $null
+    $outputStream = $null
+    $downloaded = [int64]0
+    $lastProgress = [DateTime]::MinValue
+    $showProgress = -not $Script:JsonMode -and -not $Script:QuietMode
+
+    try {
+        $response = $request.GetResponse()
+        $total = [int64]$response.ContentLength
+        $inputStream = $response.GetResponseStream()
+        $outputStream = [System.IO.File]::Open($OutFile, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+        $buffer = New-Object byte[] 1048576
+
+        while (($read = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $outputStream.Write($buffer, 0, $read)
+            $downloaded += $read
+            if ($showProgress) {
+                $now = [DateTime]::UtcNow
+                if (($now - $lastProgress).TotalMilliseconds -ge 500) {
+                    if ($total -gt 0) {
+                        $percent = [Math]::Min(100, [Math]::Floor(($downloaded * 100.0) / $total))
+                        Write-Progress -Activity "Downloading $Label" -Status "$(Format-ByteCount $downloaded) of $(Format-ByteCount $total)" -PercentComplete $percent
+                    }
+                    else {
+                        Write-Progress -Activity "Downloading $Label" -Status "$(Format-ByteCount $downloaded) downloaded"
+                    }
+                    $lastProgress = $now
+                }
+            }
+        }
+    }
+    finally {
+        if ($outputStream) { $outputStream.Dispose() }
+        if ($inputStream) { $inputStream.Dispose() }
+        if ($response) { $response.Dispose() }
+        if ($showProgress) {
+            Write-Progress -Activity "Downloading $Label" -Completed
+        }
+    }
+    Write-SetupProgress "downloaded $Label ($(Format-ByteCount $downloaded))"
+}
+
 function Write-TraceEvent {
     param([string]$Step, [string]$Message = "")
     if (-not $Script:TracePath) {
@@ -58,7 +122,7 @@ function Get-ManifestObject {
     if ($ManifestSource -match '^https?://') {
         $manifestPath = Join-Path ([System.IO.Path]::GetTempPath()) ("gnustep-manifest-" + [guid]::NewGuid().ToString() + ".json")
         Write-TraceEvent "manifest.download" $ManifestSource
-        Invoke-WebRequest -UseBasicParsing -Uri $ManifestSource -OutFile $manifestPath
+        Save-UrlToFile -Url $ManifestSource -OutFile $manifestPath -Label "release manifest"
         Write-TraceEvent "manifest.downloaded" $manifestPath
     }
     else {
@@ -583,11 +647,11 @@ switch ($command) {
                 $localToolchain = Join-Path $manifest.dir ([System.IO.Path]::GetFileName($toolchainArtifact.url))
                 Write-SetupProgress "fetching CLI artifact $([System.IO.Path]::GetFileName($cliArtifact.url))"
                 Write-TraceEvent "artifact.cli.fetch.start" $cliArtifact.url
-                if (Test-Path $localCli) { Copy-Item -Force $localCli $cliFile } else { Invoke-WebRequest -UseBasicParsing -Uri $cliArtifact.url -OutFile $cliFile }
+                if (Test-Path $localCli) { Copy-Item -Force $localCli $cliFile } else { Save-UrlToFile -Url $cliArtifact.url -OutFile $cliFile -Label $([System.IO.Path]::GetFileName($cliArtifact.url)) }
                 Write-TraceEvent "artifact.cli.fetch.complete" $cliFile
                 Write-SetupProgress "fetching toolchain artifact $([System.IO.Path]::GetFileName($toolchainArtifact.url))"
                 Write-TraceEvent "artifact.toolchain.fetch.start" $toolchainArtifact.url
-                if (Test-Path $localToolchain) { Copy-Item -Force $localToolchain $toolchainFile } else { Invoke-WebRequest -UseBasicParsing -Uri $toolchainArtifact.url -OutFile $toolchainFile }
+                if (Test-Path $localToolchain) { Copy-Item -Force $localToolchain $toolchainFile } else { Save-UrlToFile -Url $toolchainArtifact.url -OutFile $toolchainFile -Label $([System.IO.Path]::GetFileName($toolchainArtifact.url)) }
                 Write-TraceEvent "artifact.toolchain.fetch.complete" $toolchainFile
                 Write-SetupProgress "verifying artifact checksums"
                 Write-TraceEvent "artifact.checksum.start" $cliFile

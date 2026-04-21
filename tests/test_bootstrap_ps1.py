@@ -38,6 +38,15 @@ class BootstrapPowerShellTests(unittest.TestCase):
         self.assertIn("shell", proc.stdout)
         self.assertIn("update", proc.stdout)
 
+    def test_remote_artifact_downloads_use_progress_downloader(self):
+        script = BOOTSTRAP.read_text()
+        self.assertIn("function Save-UrlToFile", script)
+        self.assertIn('Write-Progress -Activity "Downloading $Label"', script)
+        self.assertIn("Save-UrlToFile -Url $cliArtifact.url", script)
+        self.assertIn("Save-UrlToFile -Url $toolchainArtifact.url", script)
+        self.assertNotIn("Invoke-WebRequest -UseBasicParsing -Uri $cliArtifact.url", script)
+        self.assertNotIn("Invoke-WebRequest -UseBasicParsing -Uri $toolchainArtifact.url", script)
+
     def test_doctor_json_shape(self):
         proc = self.run_script("--json", "doctor")
         self.assertIn(proc.returncode, (0, 3))
@@ -230,4 +239,3 @@ class BootstrapPowerShellTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
