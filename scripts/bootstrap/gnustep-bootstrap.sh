@@ -570,7 +570,9 @@ Commands:
   setup      Install the full GNUstep CLI and its dependencies.
   doctor     Inspect this machine and report GNUstep/toolchain readiness.
   build      Unavailable in bootstrap. Install the full interface first.
+  clean      Unavailable in bootstrap. Install the full interface first.
   run        Unavailable in bootstrap. Install the full interface first.
+  shell      Unavailable in bootstrap. Install the full interface first.
   new        Unavailable in bootstrap. Install the full interface first.
   install    Unavailable in bootstrap. Install the full interface first.
   remove     Unavailable in bootstrap. Install the full interface first.
@@ -836,7 +838,7 @@ case "$COMMAND" in
     perform_setup
     exit $?
     ;;
-  build|run|new|install|remove|update)
+  build|clean|run|shell|new|install|remove|update)
     unsupported_command "$COMMAND"
     exit $?
     ;;

@@ -9,6 +9,23 @@
   },
   "strategy": "msys2-assembly",
   "repository_snapshot": "TBD",
+  "installer": {
+    "name": "msys2-x86_64",
+    "version": "latest",
+    "url": "https://github.com/msys2/msys2-installer/releases/latest/download/msys2-x86_64-latest.exe",
+    "sha256": "TBD",
+    "source_channel": "msys2-installer"
+  },
+  "root_layout": {
+    "install_root": "private-msys2-root",
+    "preserve": [
+      "clang64",
+      "usr",
+      "etc",
+      "var/lib/pacman/local"
+    ],
+    "path_policy": "Expose only <install-root>/bin by default; use private MSYS2 paths internally."
+  },
   "host_packages": [
     {
       "name": "make",
@@ -56,6 +73,66 @@
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-back",
+      "version": "TBD",
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-cairo",
+      "version": "TBD",
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-fontconfig",
+      "version": "TBD",
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-freetype",
+      "version": "TBD",
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-harfbuzz",
+      "version": "TBD",
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-icu",
+      "version": "TBD",
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libjpeg-turbo",
+      "version": "TBD",
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libpng",
+      "version": "TBD",
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libtiff",
+      "version": "TBD",
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-pixman",
+      "version": "TBD",
+      "sha256": "TBD",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-pkgconf",
       "version": "TBD",
       "sha256": "TBD",
       "source_channel": "msys2-mingw-clang64"

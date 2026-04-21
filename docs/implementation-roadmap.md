@@ -283,10 +283,10 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 ### H. Exit Criteria
 - The full CLI exists as the primary installed command surface with working `doctor` and `setup`.
 
-## Phase 7. Build And Run Commands
+## Phase 7. Build, Clean, And Run Commands
 
 ### A. Build Backend Model
-- Model `build` and `run` as GNUstep project commands with explicit build backend candidates.
+- Model `build`, `clean`, and `run` as GNUstep project commands with explicit build backend candidates.
 - Treat GNUstep Make as the first implemented backend, not as the only product concept.
 - Track CMake and libs-xcode/buildtool as core backend targets from the start.
 - Use stable backend IDs:
@@ -329,7 +329,13 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Planned clean invocation: `buildtool clean <project.xcodeproj>` when validated.
 - Track buildtool generation support separately from build execution.
 
-### F. Run Command
+### F. Clean Command
+- Implement `gnustep clean` as the canonical clean-only UX.
+- Do not make `gnustep build --clean` the primary documented clean command because it is ambiguous as clean-then-build.
+- Route clean through the selected backend clean operation and report selected backend, invocation, and exit status in JSON.
+- For GNUstep Make, delegate to GNUstep Make clean targets rather than deleting build outputs directly.
+
+### G. Run Command
 - Implement `run` as a thin wrapper over the selected backend's runnable artifact model and GNUstep execution conventions such as `openapp`.
 - Resolve and execute the primary run target only when it can be identified unambiguously.
 - For aggregate or unknown GNUstep Make projects, fail with a targeted run-specific message rather than claiming the project is unsupported for build.

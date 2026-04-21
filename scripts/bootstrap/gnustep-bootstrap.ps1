@@ -11,6 +11,7 @@ $Script:SetupScope = "user"
 $Script:SetupRoot = $null
 $Script:SetupManifest = $env:SETUP_MANIFEST
 $Script:TracePath = $env:GNUSTEP_BOOTSTRAP_TRACE
+$Script:IsWindowsHost = $env:OS -eq "Windows_NT"
 
 
 function Write-SetupProgress {
@@ -92,7 +93,7 @@ function Expand-Artifact {
     Write-TraceEvent "extract.start" "$ArchivePath -> $Destination"
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
     if ($ArchivePath.ToLowerInvariant().EndsWith(".zip")) {
-        if ($IsWindows) {
+        if ($Script:IsWindowsHost) {
             tar -xf $ArchivePath -C $Destination
             if ($LASTEXITCODE -ne 0) {
                 throw "Failed to extract $ArchivePath"
@@ -150,7 +151,15 @@ function Copy-TreeContents {
     param([string]$Source, [string]$Destination)
     Write-TraceEvent "copy.start" "$Source -> $Destination"
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
-    Copy-Item -Recurse -Force (Join-Path $Source '*') $Destination
+    if ($Script:IsWindowsHost) {
+        robocopy $Source $Destination /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
+        if ($LASTEXITCODE -gt 7) {
+            throw "Failed to copy $Source to $Destination with robocopy exit code $LASTEXITCODE."
+        }
+    }
+    else {
+        Copy-Item -Recurse -Force -ErrorAction Stop (Join-Path $Source '*') $Destination
+    }
     Write-TraceEvent "copy.complete" "$Source -> $Destination"
 }
 
@@ -164,7 +173,7 @@ function Remove-TempTree {
         return
     }
     Write-TraceEvent "cleanup.start" $Path
-    if ($IsWindows) {
+    if ($Script:IsWindowsHost) {
         $quoted = '"' + $Path.Replace('"', '""') + '"'
         Start-Process -FilePath "cmd.exe" -ArgumentList "/d", "/c", "rmdir /s /q $quoted" -WindowStyle Hidden | Out-Null
         Write-TraceEvent "cleanup.deferred" $Path
@@ -186,6 +195,92 @@ function Install-CliBundle {
     }
 }
 
+function Get-PathSetupCommand {
+    param([string]$InstallRoot)
+    return '. "' + (Join-Path $InstallRoot 'GNUstep.ps1') + '"'
+}
+
+function Ensure-GNUstepActivationScripts {
+    param([string]$InstallRoot)
+
+    $ps1Path = Join-Path $InstallRoot "GNUstep.ps1"
+    $batPath = Join-Path $InstallRoot "GNUstep.bat"
+    $tmpPath = Join-Path $InstallRoot "tmp"
+    $etcPath = Join-Path $InstallRoot "etc"
+    $fstabPath = Join-Path $etcPath "fstab"
+    New-Item -ItemType Directory -Force -Path $tmpPath, $etcPath | Out-Null
+    Set-Content -Encoding ASCII -Path $fstabPath -Value (($tmpPath.Replace('\', '/')) + " /tmp ntfs binary,noacl,posix=0,user 0 0")
+    $ps1Content = @"
+`$prefix = Split-Path -Parent `$MyInvocation.MyCommand.Path
+`$env:GNUSTEP_MAKEFILES = Join-Path `$prefix 'clang64\share\GNUstep\Makefiles'
+`$env:GNUSTEP_CONFIG_FILE = Join-Path `$prefix 'clang64\etc\GNUstep\GNUstep.conf'
+`$env:TMPDIR = Join-Path `$prefix 'tmp'
+`$env:TEMP = `$env:TMPDIR
+`$env:TMP = `$env:TMPDIR
+`$env:PATH = (Join-Path `$prefix 'clang64\bin') + ';' + (Join-Path `$prefix 'bin') + ';' + (Join-Path `$prefix 'usr\bin') + ';' + `$env:PATH
+"@
+    $batContent = @"
+@echo off
+set "GNUSTEP_MAKEFILES=%~dp0clang64\share\GNUstep\Makefiles"
+set "GNUSTEP_CONFIG_FILE=%~dp0clang64\etc\GNUstep\GNUstep.conf"
+set "TMPDIR=%~dp0tmp"
+set "TEMP=%~dp0tmp"
+set "TMP=%~dp0tmp"
+set "PATH=%~dp0clang64\bin;%~dp0bin;%~dp0usr\bin;%PATH%"
+"@
+
+    Set-Content -Encoding UTF8 -Path $ps1Path -Value $ps1Content
+    Set-Content -Encoding ASCII -Path $batPath -Value $batContent
+    Write-TraceEvent "activation.write.complete" $InstallRoot
+}
+
+function Add-PathEntry {
+    param(
+        [string[]]$Entries,
+        [string]$Target
+    )
+
+    $existing = [Environment]::GetEnvironmentVariable("Path", $Target)
+    $parts = @()
+    if ($existing) {
+        $parts = @($existing -split ';' | Where-Object { $_ -and $_.Trim() })
+    }
+    for ($i = $Entries.Count - 1; $i -ge 0; $i--) {
+        $entry = $Entries[$i]
+        $alreadyPresent = $false
+        foreach ($part in $parts) {
+            if ([string]::Equals($part.TrimEnd('\'), $entry.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+                $alreadyPresent = $true
+                break
+            }
+        }
+        if (-not $alreadyPresent) {
+            $parts = @($entry) + $parts
+        }
+    }
+    [Environment]::SetEnvironmentVariable("Path", ($parts -join ';'), $Target)
+}
+
+function Set-GNUstepUserEnvironment {
+    param(
+        [string]$InstallRoot,
+        [string]$Scope
+    )
+
+    if ($env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE -eq "1") {
+        Write-TraceEvent "path.update.skipped" "GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE=1"
+        return $false
+    }
+
+    $target = if ($Scope -eq "system") { "Machine" } else { "User" }
+    $binPath = Join-Path $InstallRoot "bin"
+    Add-PathEntry -Entries @($binPath) -Target $target
+    [Environment]::SetEnvironmentVariable("GNUSTEP_MAKEFILES", (Join-Path $InstallRoot "clang64\share\GNUstep\Makefiles"), $target)
+    [Environment]::SetEnvironmentVariable("GNUSTEP_CONFIG_FILE", (Join-Path $InstallRoot "clang64\etc\GNUstep\GNUstep.conf"), $target)
+    Write-TraceEvent "path.update.complete" "$target $InstallRoot"
+    return $true
+}
+
 function Show-Help {
     @"
 GNUstep CLI bootstrap interface
@@ -197,7 +292,9 @@ Commands:
   setup      Install the full GNUstep CLI and its dependencies.
   doctor     Inspect this machine and report GNUstep/toolchain readiness.
   build      Unavailable in bootstrap. Install the full interface first.
+  clean      Unavailable in bootstrap. Install the full interface first.
   run        Unavailable in bootstrap. Install the full interface first.
+  shell      Unavailable in bootstrap. Install the full interface first.
   new        Unavailable in bootstrap. Install the full interface first.
   install    Unavailable in bootstrap. Install the full interface first.
   remove     Unavailable in bootstrap. Install the full interface first.
@@ -528,7 +625,9 @@ switch ($command) {
                     status = "healthy"
                 } | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $selectedRoot "state\\cli-state.json")
                 Write-TraceEvent "install.state.complete" (Join-Path $selectedRoot "state\\cli-state.json")
-                $pathHint = '$env:Path = "' + (Join-Path $selectedRoot 'bin') + ';' + (Join-Path $selectedRoot 'System\\Tools') + ';$env:Path"'
+                Ensure-GNUstepActivationScripts -InstallRoot $selectedRoot
+                $pathPersisted = Set-GNUstepUserEnvironment -InstallRoot $selectedRoot -Scope $Script:SetupScope
+                $pathHint = Get-PathSetupCommand -InstallRoot $selectedRoot
                 if ($Script:JsonMode) {
                     Write-TraceEvent "setup.success" $selectedRoot
                     Write-JsonObject @{
@@ -554,18 +653,25 @@ switch ($command) {
                             system_privileges_ok = $true
                         }
                         actions = @(
-                            @{ kind = "add_path"; priority = 1; message = "Add $selectedRoot\\bin and $selectedRoot\\System\\Tools to PATH for future shells." },
+                            @{ kind = "add_path"; priority = 1; message = "Add $selectedRoot\bin to PATH for future shells. The CLI uses its private MSYS2 runtime internally." },
                             @{ kind = "delete_bootstrap"; priority = 2; message = "The bootstrap script is no longer required and may be deleted." }
                         )
                         install = @{
                             install_root = $selectedRoot
                             path_hint = $pathHint
+                            path_persisted = $pathPersisted
                         }
                     }
                 }
                 else {
                     Write-Output "setup: managed installation completed"
                     Write-Output "setup: scope=$($Script:SetupScope) root=$selectedRoot"
+                    if ($pathPersisted) {
+                        Write-Output "setup: updated $($Script:SetupScope) PATH for future PowerShell sessions"
+                    }
+                    else {
+                        Write-Output "setup: PATH update skipped for future PowerShell sessions"
+                    }
                     Write-Output "next: Run this in the current shell:"
                     Write-Output "  $pathHint"
                     Write-Output "next: The bootstrap script is no longer required and may be deleted."
@@ -618,7 +724,9 @@ switch ($command) {
         }
     }
     "build" { Invoke-UnsupportedCommand "build" }
+    "clean" { Invoke-UnsupportedCommand "clean" }
     "run" { Invoke-UnsupportedCommand "run" }
+    "shell" { Invoke-UnsupportedCommand "shell" }
     "new" { Invoke-UnsupportedCommand "new" }
     "install" { Invoke-UnsupportedCommand "install" }
     "remove" { Invoke-UnsupportedCommand "remove" }

@@ -25,6 +25,7 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("setup", proc.stdout)
         self.assertIn("doctor", proc.stdout)
         self.assertIn("build", proc.stdout)
+        self.assertIn("shell", proc.stdout)
         self.assertIn("remove", proc.stdout)
         self.assertIn("update", proc.stdout)
 

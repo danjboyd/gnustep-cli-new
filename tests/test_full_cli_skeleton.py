@@ -20,7 +20,7 @@ class FullCliSkeletonTests(unittest.TestCase):
 
     def test_runner_lists_expected_commands(self):
         content = (FULL_CLI / "GSCommandRunner.m").read_text()
-        for command in ("setup", "doctor", "build", "run", "new", "install", "remove"):
+        for command in ("setup", "doctor", "build", "clean", "run", "new", "install", "remove"):
             with self.subTest(command=command):
                 self.assertIn(command, content)
 
@@ -36,6 +36,7 @@ class FullCliSkeletonTests(unittest.TestCase):
         self.assertIn("executeDoctorForContext", content)
         self.assertIn("executeSetupForContext", content)
         self.assertIn("executeBuildForContext", content)
+        self.assertIn("executeCleanForContext", content)
         self.assertIn("executeRunForContext", content)
         self.assertIn("executeNewForContext", content)
         self.assertIn("executeInstallForContext", content)

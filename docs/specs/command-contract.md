@@ -13,6 +13,7 @@ gnustep <command> [options] [args]
 - `setup`
 - `doctor`
 - `build`
+- `clean`
 - `run`
 - `new`
 - `install`
@@ -66,7 +67,7 @@ gnustep <command> [options] [args]
 - `gnustep setup --rollback` should restore the preserved previous managed release when an upgrade has completed but must be backed out; it may remain the explicit rollback command until a separate rollback UX is designed.
 - `gnustep setup --repair` should recover interrupted installs/upgrades and normalize managed state before another update is attempted.
 
-## Build And Run Contract
+## Build, Clean, And Run Contract
 
 - `gnustep build` and `gnustep run` are GNUstep project commands, not GNUstep-Make-only commands.
 - `gnustep build --help` should describe "Build the current GNUstep project."
@@ -78,6 +79,9 @@ gnustep <command> [options] [args]
 - Ambiguous backend detection should fail with exit code `2` and structured JSON explaining the candidate backends.
 - Backend unavailability, such as missing `cmake` or `buildtool`, should fail with exit code `3` when the project marker is otherwise supported.
 - GNUstep Make aggregate projects are valid build projects and must not be rejected because the top-level `GNUmakefile` lacks direct `TOOL_NAME`, `APP_NAME`, or `LIBRARY_NAME` assignments.
+- `gnustep clean` is the canonical clean-only command. `gnustep build --clean` should not be the primary documented UX because users reasonably read it as "clean, then build".
+- `gnustep clean` should use the selected backend clean operation and should report backend, invocation, and exit status in JSON.
+- `gnustep shell` is a Windows-only full-CLI escape hatch for opening the managed private MSYS2 `CLANG64` environment; it is not part of the portable core workflow.
 - `run` may apply stricter target detection than `build`, but run-specific ambiguity must not be reported as an unsupported build project.
 
 ## Exit Codes

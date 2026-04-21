@@ -4,5 +4,6 @@
 
 - (int)runWithArguments:(NSArray *)arguments;
 - (NSArray *)knownCommands;
+- (NSDictionary *)executeDoctorForContext:(id)context exitCode:(int *)exitCode;
 
 @end
