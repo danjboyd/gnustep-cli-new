@@ -33,6 +33,9 @@
 - (NSData *)downloadURLData:(NSString *)urlString error:(NSString **)errorMessage;
 - (BOOL)writeJSONStringObject:(id)object toPath:(NSString *)path error:(NSString **)errorMessage;
 - (NSString *)resolvedExecutablePathForCommand:(NSString *)command;
+- (NSString *)resolvedExecutablePathForCommand:(NSString *)command environment:(NSDictionary *)environment;
+- (NSDictionary *)managedChildProcessEnvironment;
+- (NSString *)stringByAppendingToken:(NSString *)token toString:(NSString *)string;
 - (BOOL)packageRequirements:(NSDictionary *)requirements matchEnvironment:(NSDictionary *)environment reason:(NSString **)reason;
 - (NSDictionary *)selectedPackageArtifactForPackage:(NSDictionary *)packageRecord environment:(NSDictionary *)environment selectionError:(NSString **)selectionError;
 - (NSDictionary *)packageRecordFromIndexPath:(NSString *)indexPath packageID:(NSString *)packageID error:(NSString **)errorMessage;
@@ -41,8 +44,30 @@
 - (NSString *)resolvedArtifactPathFromURLString:(NSString *)urlString;
 - (void)appendInstallTrace:(NSString *)message;
 - (BOOL)writeString:(NSString *)content toPath:(NSString *)path;
+- (NSData *)dataFromFileAtPath:(NSString *)path offset:(unsigned long long *)offset;
 - (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory;
+- (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory timeout:(NSTimeInterval)timeout;
+- (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory timeout:(NSTimeInterval)timeout additionalPathEntries:(NSArray *)additionalPathEntries;
+- (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory timeout:(NSTimeInterval)timeout additionalPathEntries:(NSArray *)additionalPathEntries streamOutput:(BOOL)streamOutput;
+- (NSDictionary *)launchCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory additionalPathEntries:(NSArray *)additionalPathEntries;
+- (NSDictionary *)interactiveCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory;
 - (NSString *)firstAvailableExecutable:(NSArray *)names;
+- (NSArray *)projectRuntimePathEntriesUnderPath:(NSString *)projectPath;
+- (NSString *)windowsOpenAppLaunchCommandForProject:(NSDictionary *)runProject runtimePathEntries:(NSArray *)runtimePathEntries;
+- (NSString *)singleQuotedPowerShellString:(NSString *)string;
+- (NSString *)windowsStartBashCommandForBash:(NSString *)bash command:(NSString *)command;
+- (NSString *)windowsStartBashScriptCommandForBash:(NSString *)bash scriptPath:(NSString *)scriptPath;
+- (NSString *)writeWindowsOpenAppLaunchScriptForCommand:(NSString *)command;
+- (NSString *)singleQuotedShellString:(NSString *)string;
+- (NSString *)projectPathFromCommandArguments:(NSArray *)arguments;
+- (NSString *)buildSystemFromCommandArguments:(NSArray *)arguments;
+- (NSDictionary *)projectOperationPhaseWithName:(NSString *)name
+                                        backend:(NSString *)backend
+                                     invocation:(NSArray *)invocation
+                                        project:(NSDictionary *)project
+                                   streamOutput:(BOOL)streamOutput;
+- (NSDictionary *)runnableProjectForProject:(NSDictionary *)project;
+- (NSArray *)runnableProjectsUnderPath:(NSString *)projectPath;
 - (NSDictionary *)checkWithID:(NSString *)checkID
                          title:(NSString *)title
                         status:(NSString *)status
@@ -59,10 +84,13 @@
 - (NSDictionary *)compilerInfoForExecutable:(NSString *)compilerExecutable;
 - (NSString *)gnustepMakeCompilerPathWithConfig:(NSString *)gnustepConfig;
 - (NSDictionary *)toolchainFactsForInterface:(NSString *)interface;
+- (NSDictionary *)toolchainFactsForInterface:(NSString *)interface quick:(BOOL)quick;
+- (BOOL)isDeferredProbe:(NSDictionary *)probe;
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface;
 - (NSDictionary *)nativeToolchainAssessmentForEnvironment:(NSDictionary *)environment compatibility:(NSDictionary *)compatibility;
 - (NSDictionary *)currentEnvironmentForInterface:(NSString *)interface;
+- (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath quick:(BOOL)quick;
 - (NSString *)setupTransactionStatePathForInstallRoot:(NSString *)installRoot;
 - (NSString *)setupBackupPathForInstallRoot:(NSString *)installRoot;
 - (void)recoverSetupTransactionForInstallRoot:(NSString *)installRoot;
@@ -103,7 +131,9 @@
 - (NSDictionary *)rollbackManagedInstallRoot:(NSString *)installRoot exitCode:(int *)exitCode;
 - (NSDictionary *)repairManagedInstallRoot:(NSString *)installRoot;
 - (NSDictionary *)executeBuildForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
+- (NSDictionary *)executeCleanForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSDictionary *)executeRunForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
+- (NSDictionary *)executeShellForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSDictionary *)executeNewForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSDictionary *)executeInstallForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSDictionary *)executeRemoveForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
@@ -287,7 +317,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                     @"setup",
                     @"doctor",
                     @"build",
+                    @"clean",
                     @"run",
+                    @"shell",
                     @"new",
                     @"install",
                     @"remove",
@@ -314,9 +346,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       return @"Build the current GNUstep project.";
     }
+  if ([command isEqualToString: @"clean"])
+    {
+      return @"Clean build outputs for the current GNUstep project.";
+    }
   if ([command isEqualToString: @"run"])
     {
       return @"Run the current GNUstep project.";
+    }
+  if ([command isEqualToString: @"shell"])
+    {
+      return @"Open the managed MSYS2 CLANG64 GNUstep shell on Windows.";
     }
   if ([command isEqualToString: @"new"])
     {
@@ -342,7 +382,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   printf("Usage:\n");
   if ([command isEqualToString: @"doctor"])
     {
-      printf("  gnustep doctor [--json] [--manifest <path>] [--interface bootstrap|full]\n\n");
+      printf("  gnustep doctor [--json] [--quick|--full] [--manifest <path>] [--interface bootstrap|full]\n\n");
     }
   else if ([command isEqualToString: @"setup"])
     {
@@ -350,11 +390,19 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
   else if ([command isEqualToString: @"build"])
     {
-      printf("  gnustep build [--json] [--build-system <id>] [project-dir]\n\n");
+      printf("  gnustep build [--json] [--clean] [--build-system <id>] [project-dir]\n\n");
+    }
+  else if ([command isEqualToString: @"clean"])
+    {
+      printf("  gnustep clean [--json] [--build-system <id>] [project-dir]\n\n");
     }
   else if ([command isEqualToString: @"run"])
     {
       printf("  gnustep run [--json] [--build-system <id>] [project-dir]\n\n");
+    }
+  else if ([command isEqualToString: @"shell"])
+    {
+      printf("  gnustep shell [--json] [--print-command]\n\n");
     }
   else if ([command isEqualToString: @"new"])
     {
@@ -564,17 +612,18 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
 - (NSData *)downloadURLData:(NSString *)urlString error:(NSString **)errorMessage
 {
-  NSString *downloader = [self firstAvailableExecutable: [NSArray arrayWithObjects: @"curl", @"wget", nil]];
+  NSString *downloader = [self firstAvailableExecutable: [NSArray arrayWithObjects: @"curl", @"wget", @"powershell.exe", @"powershell", nil]];
   NSTask *task = nil;
   NSPipe *output = nil;
   NSPipe *errors = nil;
   NSData *data = nil;
+  NSString *downloaderName = nil;
 
   if (downloader == nil)
     {
       if (errorMessage != NULL)
         {
-          *errorMessage = @"Could not read JSON URL because neither curl nor wget is available.";
+          *errorMessage = @"Could not read JSON URL because no downloader is available.";
         }
       return nil;
     }
@@ -583,13 +632,22 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   output = [NSPipe pipe];
   errors = [NSPipe pipe];
   [task setLaunchPath: downloader];
-  if ([[downloader lastPathComponent] isEqualToString: @"curl"])
+  downloaderName = [[downloader lastPathComponent] lowercaseString];
+  if ([downloaderName isEqualToString: @"curl"] || [downloaderName isEqualToString: @"curl.exe"])
     {
       [task setArguments: [NSArray arrayWithObjects: @"-fsSL", urlString, nil]];
     }
-  else
+  else if ([downloaderName isEqualToString: @"wget"] || [downloaderName isEqualToString: @"wget.exe"])
     {
       [task setArguments: [NSArray arrayWithObjects: @"-qO-", urlString, nil]];
+    }
+  else
+    {
+      NSString *escapedURL = [urlString stringByReplacingOccurrencesOfString: @"'" withString: @"''"];
+      NSString *command = [NSString stringWithFormat:
+                                      @"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (Invoke-WebRequest -UseBasicParsing -Uri '%@').Content",
+                                      escapedURL];
+      [task setArguments: [NSArray arrayWithObjects: @"-NoProfile", @"-ExecutionPolicy", @"Bypass", @"-Command", command, nil]];
     }
   [task setStandardOutput: output];
   [task setStandardError: errors];
@@ -652,8 +710,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
 - (NSString *)resolvedExecutablePathForCommand:(NSString *)command
 {
+  return [self resolvedExecutablePathForCommand: command
+                                    environment: [[NSProcessInfo processInfo] environment]];
+}
+
+- (NSString *)resolvedExecutablePathForCommand:(NSString *)command environment:(NSDictionary *)environment
+{
   NSFileManager *manager = [NSFileManager defaultManager];
-  NSString *pathVariable = [[[NSProcessInfo processInfo] environment] objectForKey: @"PATH"];
+  NSString *pathVariable = [environment objectForKey: @"PATH"];
   NSArray *pathEntries = nil;
   NSMutableArray *candidateNames = [NSMutableArray array];
   NSUInteger i = 0;
@@ -666,7 +730,11 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   if ([command rangeOfString: @"/"].location != NSNotFound ||
       [command rangeOfString: @"\\"].location != NSNotFound)
     {
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+      return [manager fileExistsAtPath: command] ? command : nil;
+#else
       return [manager isExecutableFileAtPath: command] ? command : nil;
+#endif
     }
 
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
@@ -694,14 +762,84 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       for (j = 0; j < [candidateNames count]; j++)
         {
           NSString *candidate = [entry stringByAppendingPathComponent: [candidateNames objectAtIndex: j]];
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+          if ([manager fileExistsAtPath: candidate])
+            {
+              return candidate;
+            }
+#else
           if ([manager isExecutableFileAtPath: candidate])
             {
               return candidate;
             }
+#endif
         }
     }
 
   return nil;
+}
+
+- (NSDictionary *)managedChildProcessEnvironment
+{
+  NSMutableDictionary *environment = [NSMutableDictionary dictionaryWithDictionary: [[NSProcessInfo processInfo] environment]];
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  NSString *binaryPath = [[[NSProcessInfo processInfo] arguments] objectAtIndex: 0];
+  NSString *resolvedPath = [binaryPath stringByResolvingSymlinksInPath];
+  NSString *binDir = [resolvedPath stringByDeletingLastPathComponent];
+  NSString *installRoot = [binDir stringByDeletingLastPathComponent];
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *makefiles = [[[installRoot stringByAppendingPathComponent: @"clang64"] stringByAppendingPathComponent: @"share"] stringByAppendingPathComponent: @"GNUstep\\Makefiles"];
+  NSString *configFile = [[[installRoot stringByAppendingPathComponent: @"clang64"] stringByAppendingPathComponent: @"etc"] stringByAppendingPathComponent: @"GNUstep\\GNUstep.conf"];
+  NSString *tmpDir = [installRoot stringByAppendingPathComponent: @"tmp"];
+  NSMutableArray *pathEntries = [NSMutableArray array];
+  NSString *existingPath = [environment objectForKey: @"PATH"];
+
+  if ([manager fileExistsAtPath: makefiles] == NO)
+    {
+      makefiles = [[installRoot stringByAppendingPathComponent: @"share"] stringByAppendingPathComponent: @"GNUstep\\Makefiles"];
+      configFile = [[installRoot stringByAppendingPathComponent: @"etc"] stringByAppendingPathComponent: @"GNUstep\\GNUstep.conf"];
+    }
+
+  if ([manager fileExistsAtPath: makefiles])
+    {
+      [manager createDirectoryAtPath: tmpDir withIntermediateDirectories: YES attributes: nil error: NULL];
+      [pathEntries addObject: [installRoot stringByAppendingPathComponent: @"clang64\\bin"]];
+      [pathEntries addObject: [installRoot stringByAppendingPathComponent: @"bin"]];
+      [pathEntries addObject: [installRoot stringByAppendingPathComponent: @"usr\\bin"]];
+      if ([existingPath length] > 0)
+        {
+          [pathEntries addObject: existingPath];
+        }
+      [environment setObject: [pathEntries componentsJoinedByString: @";"] forKey: @"PATH"];
+      [environment setObject: makefiles forKey: @"GNUSTEP_MAKEFILES"];
+      [environment setObject: configFile forKey: @"GNUSTEP_CONFIG_FILE"];
+      [environment setObject: @"CLANG64" forKey: @"MSYSTEM"];
+      [environment setObject: @"1" forKey: @"CHERE_INVOKING"];
+      [environment setObject: tmpDir forKey: @"TMPDIR"];
+      [environment setObject: tmpDir forKey: @"TEMP"];
+      [environment setObject: tmpDir forKey: @"TMP"];
+      [environment setObject: [self stringByAppendingToken: @"-DHAVE_MODE_T"
+                                                  toString: [environment objectForKey: @"ADDITIONAL_OBJCFLAGS"]]
+                    forKey: @"ADDITIONAL_OBJCFLAGS"];
+      [environment setObject: [self stringByAppendingToken: @"-DHAVE_MODE_T"
+                                                  toString: [environment objectForKey: @"ADDITIONAL_CPPFLAGS"]]
+                    forKey: @"ADDITIONAL_CPPFLAGS"];
+    }
+#endif
+  return environment;
+}
+
+- (NSString *)stringByAppendingToken:(NSString *)token toString:(NSString *)string
+{
+  if ([string length] == 0)
+    {
+      return token;
+    }
+  if ([string rangeOfString: token].location != NSNotFound)
+    {
+      return string;
+    }
+  return [NSString stringWithFormat: @"%@ %@", string, token];
 }
 
 - (void)appendInstallTrace:(NSString *)message
@@ -743,7 +881,48 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
 }
 
+- (NSData *)dataFromFileAtPath:(NSString *)path offset:(unsigned long long *)offset
+{
+  NSFileHandle *handle = [NSFileHandle fileHandleForReadingAtPath: path];
+  NSData *data = nil;
+
+  if (handle == nil || offset == NULL)
+    {
+      return nil;
+    }
+  [handle seekToEndOfFile];
+  if ([handle offsetInFile] <= *offset)
+    {
+      [handle closeFile];
+      return nil;
+    }
+  [handle seekToFileOffset: *offset];
+  data = [handle readDataToEndOfFile];
+  *offset = [handle offsetInFile];
+  [handle closeFile];
+  return data;
+}
+
 - (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory
+{
+  return [self runCommand: arguments currentDirectory: currentDirectory timeout: 15.0];
+}
+
+- (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory timeout:(NSTimeInterval)timeout
+{
+  return [self runCommand: arguments currentDirectory: currentDirectory timeout: timeout additionalPathEntries: nil];
+}
+
+- (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory timeout:(NSTimeInterval)timeout additionalPathEntries:(NSArray *)additionalPathEntries
+{
+  return [self runCommand: arguments
+         currentDirectory: currentDirectory
+                  timeout: timeout
+    additionalPathEntries: additionalPathEntries
+             streamOutput: NO];
+}
+
+- (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory timeout:(NSTimeInterval)timeout additionalPathEntries:(NSArray *)additionalPathEntries streamOutput:(BOOL)streamOutput
 {
   NSString *command = nil;
   NSString *launchPath = nil;
@@ -759,10 +938,12 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSData *stderrData = nil;
   NSString *stdoutString = @"";
   NSString *stderrString = @"";
+  unsigned long long stdoutReadOffset = 0;
+  unsigned long long stderrReadOffset = 0;
   BOOL timedOut = NO;
-  NSTimeInterval timeout = 15.0;
   const char *timeoutRaw = getenv("GNUSTEP_CLI_COMMAND_TIMEOUT_SECONDS");
   NSDate *deadline = nil;
+  NSDictionary *taskEnvironment = nil;
 
   if (timeoutRaw != NULL && atof(timeoutRaw) > 0)
     {
@@ -781,7 +962,35 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
 
   command = [arguments objectAtIndex: 0];
-  launchPath = [self resolvedExecutablePathForCommand: command];
+  taskEnvironment = [self managedChildProcessEnvironment];
+  if ([additionalPathEntries count] > 0)
+    {
+      NSMutableDictionary *mutableEnvironment = [NSMutableDictionary dictionaryWithDictionary: taskEnvironment];
+      NSMutableArray *pathEntries = [NSMutableArray arrayWithArray: additionalPathEntries];
+      NSString *existingPath = [mutableEnvironment objectForKey: @"PATH"];
+      if ([existingPath length] > 0)
+        {
+          [pathEntries addObject: existingPath];
+        }
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+      [mutableEnvironment setObject: [pathEntries componentsJoinedByString: @";"] forKey: @"PATH"];
+#else
+      [mutableEnvironment setObject: [pathEntries componentsJoinedByString: @":"] forKey: @"PATH"];
+#endif
+      taskEnvironment = mutableEnvironment;
+    }
+  if (currentDirectory != nil
+      && ([command rangeOfString: @"/"].location != NSNotFound
+          || [command rangeOfString: @"\\"].location != NSNotFound)
+      && [command isAbsolutePath] == NO)
+    {
+      launchPath = [self resolvedExecutablePathForCommand: [currentDirectory stringByAppendingPathComponent: command]
+                                              environment: taskEnvironment];
+    }
+  else
+    {
+      launchPath = [self resolvedExecutablePathForCommand: command environment: taskEnvironment];
+    }
   taskArguments = [arguments count] > 1 ?
     [arguments subarrayWithRange: NSMakeRange(1, [arguments count] - 1)] :
     [NSArray array];
@@ -803,6 +1012,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   stderrHandle = [NSFileHandle fileHandleForWritingAtPath: stderrPath];
   [task setLaunchPath: launchPath];
   [task setArguments: taskArguments];
+  [task setEnvironment: taskEnvironment];
+  [task setStandardInput: [NSFileHandle fileHandleWithNullDevice]];
+  [task setStandardOutput: [NSPipe pipe]];
+  [task setStandardError: [NSPipe pipe]];
   if (currentDirectory != nil)
     {
       [task setCurrentDirectoryPath: currentDirectory];
@@ -816,6 +1029,25 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       deadline = [NSDate dateWithTimeIntervalSinceNow: timeout];
       while ([task isRunning])
         {
+          if (streamOutput)
+            {
+              NSData *chunk = nil;
+
+              [stdoutHandle synchronizeFile];
+              [stderrHandle synchronizeFile];
+              chunk = [self dataFromFileAtPath: stdoutPath offset: &stdoutReadOffset];
+              if (chunk != nil && [chunk length] > 0)
+                {
+                  [[NSFileHandle fileHandleWithStandardOutput] writeData: chunk];
+                  fflush(stdout);
+                }
+              chunk = [self dataFromFileAtPath: stderrPath offset: &stderrReadOffset];
+              if (chunk != nil && [chunk length] > 0)
+                {
+                  [[NSFileHandle fileHandleWithStandardError] writeData: chunk];
+                  fflush(stderr);
+                }
+            }
           if ([[NSDate date] compare: deadline] != NSOrderedAscending)
             {
               timedOut = YES;
@@ -825,6 +1057,25 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
           [NSThread sleepForTimeInterval: 0.05];
         }
       [task waitUntilExit];
+      if (streamOutput)
+        {
+          NSData *chunk = nil;
+
+          [stdoutHandle synchronizeFile];
+          [stderrHandle synchronizeFile];
+          chunk = [self dataFromFileAtPath: stdoutPath offset: &stdoutReadOffset];
+          if (chunk != nil && [chunk length] > 0)
+            {
+              [[NSFileHandle fileHandleWithStandardOutput] writeData: chunk];
+              fflush(stdout);
+            }
+          chunk = [self dataFromFileAtPath: stderrPath offset: &stderrReadOffset];
+          if (chunk != nil && [chunk length] > 0)
+            {
+              [[NSFileHandle fileHandleWithStandardError] writeData: chunk];
+              fflush(stderr);
+            }
+        }
     }
   @catch (NSException *exception)
     {
@@ -876,6 +1127,404 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         stdoutString, @"stdout",
                         stderrString, @"stderr",
                         nil];
+}
+
+- (NSDictionary *)launchCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory additionalPathEntries:(NSArray *)additionalPathEntries
+{
+  NSString *command = nil;
+  NSString *launchPath = nil;
+  NSArray *taskArguments = nil;
+  NSMutableDictionary *taskEnvironment = nil;
+  NSTask *task = [[[NSTask alloc] init] autorelease];
+  NSMutableArray *pathEntries = [NSMutableArray array];
+  NSString *existingPath = nil;
+
+  if (arguments == nil || [arguments count] == 0)
+    {
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithBool: NO], @"launched",
+                            [NSNumber numberWithInt: 1], @"exit_status",
+                            @"", @"stdout",
+                            @"No command arguments were provided.", @"stderr",
+                            nil];
+    }
+
+  taskEnvironment = [NSMutableDictionary dictionaryWithDictionary: [self managedChildProcessEnvironment]];
+  existingPath = [taskEnvironment objectForKey: @"PATH"];
+  if ([additionalPathEntries count] > 0)
+    {
+      [pathEntries addObjectsFromArray: additionalPathEntries];
+      if ([existingPath length] > 0)
+        {
+          [pathEntries addObject: existingPath];
+        }
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+      [taskEnvironment setObject: [pathEntries componentsJoinedByString: @";"] forKey: @"PATH"];
+#else
+      [taskEnvironment setObject: [pathEntries componentsJoinedByString: @":"] forKey: @"PATH"];
+#endif
+    }
+
+  command = [arguments objectAtIndex: 0];
+  launchPath = [self resolvedExecutablePathForCommand: command environment: taskEnvironment];
+  taskArguments = [arguments count] > 1 ?
+    [arguments subarrayWithRange: NSMakeRange(1, [arguments count] - 1)] :
+    [NSArray array];
+
+  if (launchPath == nil)
+    {
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithBool: NO], @"launched",
+                            [NSNumber numberWithInt: 1], @"exit_status",
+                            @"", @"stdout",
+                            [NSString stringWithFormat: @"Executable not found: %@", command], @"stderr",
+                            nil];
+    }
+
+  [task setLaunchPath: launchPath];
+  [task setArguments: taskArguments];
+  [task setEnvironment: taskEnvironment];
+  [task setStandardInput: [NSFileHandle fileHandleWithStandardInput]];
+  [task setStandardOutput: [NSFileHandle fileHandleWithStandardOutput]];
+  [task setStandardError: [NSFileHandle fileHandleWithStandardError]];
+  if (currentDirectory != nil)
+    {
+      [task setCurrentDirectoryPath: currentDirectory];
+    }
+
+  @try
+    {
+      [task launch];
+    }
+  @catch (NSException *exception)
+    {
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithBool: NO], @"launched",
+                            [NSNumber numberWithInt: 1], @"exit_status",
+                            @"", @"stdout",
+                            [exception reason], @"stderr",
+                            nil];
+    }
+
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+                        [NSNumber numberWithBool: YES], @"launched",
+                        [NSNumber numberWithInt: 0], @"exit_status",
+                        @"", @"stdout",
+                        @"", @"stderr",
+                        nil];
+}
+
+- (NSDictionary *)interactiveCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory
+{
+  NSString *command = nil;
+  NSString *launchPath = nil;
+  NSArray *taskArguments = nil;
+  NSDictionary *taskEnvironment = nil;
+  NSTask *task = [[[NSTask alloc] init] autorelease];
+
+  if (arguments == nil || [arguments count] == 0)
+    {
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithBool: NO], @"launched",
+                            [NSNumber numberWithInt: 1], @"exit_status",
+                            @"No command arguments were provided.", @"stderr",
+                            nil];
+    }
+
+  command = [arguments objectAtIndex: 0];
+  taskEnvironment = [self managedChildProcessEnvironment];
+  launchPath = [self resolvedExecutablePathForCommand: command environment: taskEnvironment];
+  taskArguments = [arguments count] > 1 ?
+    [arguments subarrayWithRange: NSMakeRange(1, [arguments count] - 1)] :
+    [NSArray array];
+
+  if (launchPath == nil)
+    {
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithBool: NO], @"launched",
+                            [NSNumber numberWithInt: 1], @"exit_status",
+                            [NSString stringWithFormat: @"Executable not found: %@", command], @"stderr",
+                            nil];
+    }
+
+  [task setLaunchPath: launchPath];
+  [task setArguments: taskArguments];
+  [task setEnvironment: taskEnvironment];
+  if (currentDirectory != nil)
+    {
+      [task setCurrentDirectoryPath: currentDirectory];
+    }
+
+  @try
+    {
+      [task launch];
+      [task waitUntilExit];
+    }
+  @catch (NSException *exception)
+    {
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithBool: NO], @"launched",
+                            [NSNumber numberWithInt: 1], @"exit_status",
+                            [exception reason], @"stderr",
+                            nil];
+    }
+
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+                        [NSNumber numberWithBool: YES], @"launched",
+                        [NSNumber numberWithInt: [task terminationStatus]], @"exit_status",
+                        @"", @"stderr",
+                        nil];
+}
+
+- (NSString *)projectPathFromCommandArguments:(NSArray *)arguments
+{
+  NSUInteger i = 0;
+
+  for (i = 0; i < [arguments count]; i++)
+    {
+      NSString *argument = [arguments objectAtIndex: i];
+      if ([argument isEqualToString: @"--clean"])
+        {
+          continue;
+        }
+      if ([argument isEqualToString: @"--build-system"])
+        {
+          i++;
+          continue;
+        }
+      if ([argument hasPrefix: @"-"])
+        {
+          continue;
+        }
+      return argument;
+    }
+  return [[NSFileManager defaultManager] currentDirectoryPath];
+}
+
+- (NSString *)buildSystemFromCommandArguments:(NSArray *)arguments
+{
+  NSUInteger i = 0;
+
+  for (i = 0; i < [arguments count]; i++)
+    {
+      NSString *argument = [arguments objectAtIndex: i];
+      if ([argument isEqualToString: @"--build-system"] && i + 1 < [arguments count])
+        {
+          return [arguments objectAtIndex: i + 1];
+        }
+    }
+  return @"auto";
+}
+
+- (NSDictionary *)projectOperationPhaseWithName:(NSString *)name
+                                        backend:(NSString *)backend
+                                     invocation:(NSArray *)invocation
+                                        project:(NSDictionary *)project
+                                   streamOutput:(BOOL)streamOutput
+{
+  NSDictionary *result = [self runCommand: invocation
+                         currentDirectory: [project objectForKey: @"project_dir"]
+                                  timeout: 3600.0
+                    additionalPathEntries: nil
+                             streamOutput: streamOutput];
+  BOOL ok = [[result objectForKey: @"exit_status"] intValue] == 0;
+
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+                        name, @"name",
+                        [NSNumber numberWithBool: ok], @"ok",
+                        ok ? @"ok" : @"error", @"status",
+                        backend, @"backend",
+                        invocation, @"invocation",
+                        [result objectForKey: @"stdout"], @"stdout",
+                        [result objectForKey: @"stderr"], @"stderr",
+                        [result objectForKey: @"exit_status"], @"exit_status",
+                        nil];
+}
+
+- (NSArray *)runnableProjectsUnderPath:(NSString *)projectPath
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *gnumakefile = [projectPath stringByAppendingPathComponent: @"GNUmakefile"];
+  NSDictionary *values = [self parseGNUmakefile: gnumakefile];
+  NSString *subprojects = [values objectForKey: @"SUBPROJECTS"];
+  NSMutableArray *apps = [NSMutableArray array];
+  NSMutableArray *tools = [NSMutableArray array];
+  NSArray *subprojectNames = [subprojects componentsSeparatedByCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  NSUInteger i = 0;
+
+  for (i = 0; i < [subprojectNames count]; i++)
+    {
+      NSString *name = [[subprojectNames objectAtIndex: i] stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+      NSString *directory = [projectPath stringByAppendingPathComponent: name];
+      NSDictionary *project = nil;
+      NSString *projectType = nil;
+      NSArray *nested = nil;
+      NSUInteger nestedIndex = 0;
+
+      if ([name length] == 0 || [name hasPrefix: @"#"])
+        {
+          continue;
+        }
+
+      if ([manager fileExistsAtPath: [directory stringByAppendingPathComponent: @"GNUmakefile"]] == NO)
+        {
+          continue;
+        }
+
+      project = [self detectProjectAtPath: directory];
+      if ([[project objectForKey: @"supported"] boolValue] == NO)
+        {
+          continue;
+        }
+
+      projectType = [project objectForKey: @"project_type"];
+      if ([projectType isEqualToString: @"app"])
+        {
+          [apps addObject: project];
+        }
+      else if ([projectType isEqualToString: @"tool"])
+        {
+          [tools addObject: project];
+        }
+      nested = [self runnableProjectsUnderPath: directory];
+      for (nestedIndex = 0; nestedIndex < [nested count]; nestedIndex++)
+        {
+          NSDictionary *nestedProject = [nested objectAtIndex: nestedIndex];
+          NSString *nestedType = [nestedProject objectForKey: @"project_type"];
+          if ([nestedType isEqualToString: @"app"])
+            {
+              [apps addObject: nestedProject];
+            }
+          else if ([nestedType isEqualToString: @"tool"])
+            {
+              [tools addObject: nestedProject];
+            }
+        }
+    }
+
+  if ([apps count] > 0)
+    {
+      return apps;
+    }
+  return tools;
+}
+
+- (NSArray *)projectRuntimePathEntriesUnderPath:(NSString *)projectPath
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSDirectoryEnumerator *enumerator = [manager enumeratorAtPath: projectPath];
+  NSMutableArray *entries = [NSMutableArray array];
+  NSMutableSet *seen = [NSMutableSet set];
+  NSString *relativePath = nil;
+
+  while ((relativePath = [enumerator nextObject]) != nil)
+    {
+      NSString *name = [relativePath lastPathComponent];
+      NSString *directory = nil;
+      if ([name isEqualToString: @"obj"] == NO
+          && [name hasSuffix: @".framework"] == NO
+          && [name hasSuffix: @".app"] == NO
+          && [name hasSuffix: @".plugin"] == NO
+          && [name hasSuffix: @".palette"] == NO
+          && [[name pathExtension] isEqualToString: @"dll"] == NO)
+        {
+          continue;
+        }
+      if ([[name pathExtension] isEqualToString: @"dll"] == NO)
+        {
+          continue;
+        }
+      directory = [[projectPath stringByAppendingPathComponent: relativePath] stringByDeletingLastPathComponent];
+      if ([seen containsObject: directory] == NO)
+        {
+          [seen addObject: directory];
+          [entries addObject: directory];
+        }
+    }
+
+  return entries;
+}
+
+- (NSString *)singleQuotedShellString:(NSString *)string
+{
+  return [NSString stringWithFormat: @"'%@'",
+                   [string stringByReplacingOccurrencesOfString: @"'"
+                                                     withString: @"'\"'\"'"]];
+}
+
+- (NSString *)singleQuotedPowerShellString:(NSString *)string
+{
+  return [NSString stringWithFormat: @"'%@'",
+                   [string stringByReplacingOccurrencesOfString: @"'"
+                                                     withString: @"''"]];
+}
+
+- (NSString *)windowsStartBashCommandForBash:(NSString *)bash command:(NSString *)command
+{
+  return [NSString stringWithFormat: @"Start-Process -WindowStyle Hidden -FilePath %@ -ArgumentList '-lc', %@",
+                   [self singleQuotedPowerShellString: bash],
+                   [self singleQuotedPowerShellString: command]];
+}
+
+- (NSString *)windowsStartBashScriptCommandForBash:(NSString *)bash scriptPath:(NSString *)scriptPath
+{
+  return [NSString stringWithFormat: @"Start-Process -WindowStyle Hidden -FilePath %@ -ArgumentList %@",
+                   [self singleQuotedPowerShellString: bash],
+                   [self singleQuotedPowerShellString: scriptPath]];
+}
+
+- (NSString *)writeWindowsOpenAppLaunchScriptForCommand:(NSString *)command
+{
+  NSString *scriptName = [NSString stringWithFormat: @"gnustep-run-%d-%u.sh",
+                                   (int)[[NSProcessInfo processInfo] processIdentifier],
+                                   (unsigned int)[[NSDate date] timeIntervalSince1970]];
+  NSString *scriptPath = [NSTemporaryDirectory() stringByAppendingPathComponent: scriptName];
+  NSString *content = [NSString stringWithFormat: @"#!/usr/bin/env bash\n%@\n", command];
+
+  if ([content writeToFile: scriptPath atomically: YES encoding: NSUTF8StringEncoding error: NULL] == NO)
+    {
+      return nil;
+    }
+  return scriptPath;
+}
+
+- (NSString *)windowsOpenAppLaunchCommandForProject:(NSDictionary *)runProject runtimePathEntries:(NSArray *)runtimePathEntries
+{
+  NSString *projectDir = [self singleQuotedShellString: [runProject objectForKey: @"project_dir"]];
+  NSString *targetName = [runProject objectForKey: @"target_name"];
+  NSString *appPath = [self singleQuotedShellString: [NSString stringWithFormat: @"./%@.app", targetName]];
+  NSMutableArray *pathEntries = [NSMutableArray arrayWithObjects: @"/clang64/bin", @"/usr/bin", nil];
+  NSUInteger i = 0;
+
+  for (i = 0; i < [runtimePathEntries count]; i++)
+    {
+      [pathEntries addObject: [NSString stringWithFormat: @"$(cygpath -u %@)",
+                                        [self singleQuotedShellString: [runtimePathEntries objectAtIndex: i]]]];
+    }
+  [pathEntries addObject: @"$PATH"];
+
+  return [NSString stringWithFormat: @"cd \"$(cygpath -u %@)\" && . /clang64/share/GNUstep/Makefiles/GNUstep.sh && export PATH=\"%@\" && /clang64/bin/openapp %@",
+                   projectDir,
+                   [pathEntries componentsJoinedByString: @":"],
+                   appPath];
+}
+
+- (NSDictionary *)runnableProjectForProject:(NSDictionary *)project
+{
+  NSString *projectType = [project objectForKey: @"project_type"];
+  NSArray *candidates = nil;
+
+  if ([projectType isEqualToString: @"app"] || [projectType isEqualToString: @"tool"])
+    {
+      return project;
+    }
+
+  candidates = [self runnableProjectsUnderPath: [project objectForKey: @"project_dir"]];
+  if ([candidates count] == 1)
+    {
+      return [candidates objectAtIndex: 0];
+    }
+  return nil;
 }
 
 - (NSDictionary *)checkWithID:(NSString *)checkID
@@ -985,6 +1634,23 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         }
       key = [[line substringToIndex: range.location] stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceCharacterSet]];
       value = [[line substringFromIndex: range.location + 1] stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceCharacterSet]];
+      while ([value hasSuffix: @"\\"] && i + 1 < [lines count])
+        {
+          NSString *next = [[lines objectAtIndex: ++i] stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+          BOOL continues = [next hasSuffix: @"\\"];
+          value = [[value substringToIndex: [value length] - 1] stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceCharacterSet]];
+          next = [next stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceCharacterSet]];
+          if (continues)
+            {
+              next = [[next substringToIndex: [next length] - 1] stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceCharacterSet]];
+            }
+          value = [[NSString stringWithFormat: @"%@ %@%@", value, next, continues ? @" \\" : @""]
+            stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceCharacterSet]];
+          if (continues == NO)
+            {
+              break;
+            }
+        }
       if (key != nil && value != nil)
         {
           [values setObject: value forKey: key];
@@ -1956,6 +2622,11 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
 - (NSDictionary *)toolchainFactsForInterface:(NSString *)interface
 {
+  return [self toolchainFactsForInterface: interface quick: NO];
+}
+
+- (NSDictionary *)toolchainFactsForInterface:(NSString *)interface quick:(BOOL)quick
+{
   NSString *gnustepConfig = [self firstAvailableExecutable: [NSArray arrayWithObjects: @"gnustep-config", nil]];
   NSString *gnustepMakefiles = [[[NSProcessInfo processInfo] environment] objectForKey: @"GNUSTEP_MAKEFILES"];
   BOOL windowsManagedHint = [self hasWindowsManagedToolchainHintWithMakefiles: gnustepMakefiles];
@@ -1984,9 +2655,22 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   else
 #endif
     {
-      gnustepMakeCompiler = [self gnustepMakeCompilerPathWithConfig: gnustepConfig];
+      gnustepMakeCompiler = quick ? nil : [self gnustepMakeCompilerPathWithConfig: gnustepConfig];
       compiler = [self compilerInfoForExecutable: gnustepMakeCompiler];
-      probe = [self probeCompiler: [compiler objectForKey: @"path"]];
+      if (quick)
+        {
+          probe = [NSDictionary dictionaryWithObjectsAndKeys:
+                                [NSNumber numberWithBool: NO], @"can_compile",
+                                [NSNumber numberWithBool: NO], @"can_link",
+                                [NSNumber numberWithBool: NO], @"can_run",
+                                @"not_run", @"status",
+                                @"doctor_quick_mode", @"reason",
+                                nil];
+        }
+      else
+        {
+          probe = [self probeCompiler: [compiler objectForKey: @"path"]];
+        }
     }
   compilerFamily = [compiler objectForKey: @"family"];
   NSString *toolchainFlavor = compilerFamily ? compilerFamily : @"unknown";
@@ -2038,7 +2722,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       gnustepBase = YES;
       gnustepGUI = YES;
     }
-  else if ([interface isEqualToString: @"full"] && gnustepConfig != nil)
+  else if ([interface isEqualToString: @"full"] && quick == NO && gnustepConfig != nil)
     {
       NSDictionary *baseLibs = [self runCommand: [NSArray arrayWithObjects: gnustepConfig, @"--base-libs", nil] currentDirectory: nil];
       NSDictionary *guiLibs = [self runCommand: [NSArray arrayWithObjects: gnustepConfig, @"--gui-libs", nil] currentDirectory: nil];
@@ -2066,8 +2750,21 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         gnustepConfig ? gnustepConfig : [NSNull null], @"gnustep_config_path",
                         gnustepMakefiles ? gnustepMakefiles : [NSNull null], @"gnustep_makefiles",
                         gnustepMakeCompiler ? gnustepMakeCompiler : [NSNull null], @"gnustep_make_compiler",
-                        [interface isEqualToString: @"bootstrap"] ? @"installer" : @"full", @"detection_depth",
+                        quick ? @"quick" : ([interface isEqualToString: @"bootstrap"] ? @"installer" : @"full"), @"detection_depth",
                         nil];
+}
+
+- (BOOL)isDeferredProbe:(NSDictionary *)probe
+{
+  NSString *reason = nil;
+  if ([probe isKindOfClass: [NSDictionary class]] == NO)
+    {
+      return NO;
+    }
+  reason = [probe objectForKey: @"reason"];
+  return [[probe objectForKey: @"status"] isEqualToString: @"not_run"] &&
+         ([reason isEqualToString: @"windows_subprocess_probe_deferred"] ||
+          [reason isEqualToString: @"doctor_quick_mode"]);
 }
 
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface
@@ -2165,8 +2862,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSString *objcRuntime = [toolchain objectForKey: @"objc_runtime"];
   NSString *objcABI = [toolchain objectForKey: @"objc_abi"];
   NSDictionary *probe = [toolchain objectForKey: @"probe"];
-  BOOL activeProbeDeferred = [[probe objectForKey: @"status"] isEqualToString: @"not_run"] &&
-                             [[probe objectForKey: @"reason"] isEqualToString: @"windows_subprocess_probe_deferred"];
+  BOOL activeProbeDeferred = [self isDeferredProbe: probe];
   BOOL modernClang = [compilerFamily isEqualToString: @"clang"] &&
                      [objcRuntime isEqualToString: @"libobjc2"] &&
                      [objcABI isEqualToString: @"modern"];
@@ -2405,8 +3101,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 {
   NSDictionary *toolchain = [environment objectForKey: @"toolchain"];
   NSDictionary *probe = [toolchain objectForKey: @"probe"];
-  BOOL activeProbeDeferred = [[probe objectForKey: @"status"] isEqualToString: @"not_run"] &&
-                             [[probe objectForKey: @"reason"] isEqualToString: @"windows_subprocess_probe_deferred"];
+  BOOL activeProbeDeferred = [self isDeferredProbe: probe];
   if ([[toolchain objectForKey: @"present"] boolValue] == NO)
     {
       return @"no_toolchain";
@@ -2427,11 +3122,16 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
 - (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath
 {
+  return [self buildDoctorPayloadWithInterface: interface manifestPath: manifestPath quick: NO];
+}
+
+- (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath quick:(BOOL)quick
+{
   NSString *osVersion = [self readOSReleaseIdentifier];
   NSString *distributionID = nil;
   NSString *osName = [self normalizeOSName];
   NSString *arch = [self normalizeArchName];
-  NSDictionary *toolchain = [self toolchainFactsForInterface: interface];
+  NSDictionary *toolchain = [self toolchainFactsForInterface: interface quick: quick];
   NSMutableDictionary *environment = [NSMutableDictionary dictionary];
   NSDictionary *manifest = nil;
   NSDictionary *release = nil;
@@ -2445,6 +3145,12 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSArray *selectionErrors = [NSArray array];
   NSString *summary = nil;
   NSString *manifestError = nil;
+  BOOL powershellDownloader = NO;
+  BOOL downloaderAvailable = NO;
+
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  powershellDownloader = YES;
+#endif
 
   [self appendInstallTrace: @"doctor.build.start"];
 
@@ -2466,9 +3172,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   [environment setObject: @"posix" forKey: @"shell_family"];
   [environment setObject: @"user" forKey: @"install_scope"];
   [environment setObject: toolchain forKey: @"toolchain"];
+  downloaderAvailable = ([self firstAvailableExecutable: [NSArray arrayWithObjects: @"curl", nil]] != nil ||
+                         [self firstAvailableExecutable: [NSArray arrayWithObjects: @"wget", nil]] != nil ||
+                         powershellDownloader);
   [environment setObject: [NSDictionary dictionaryWithObjectsAndKeys:
                                           [NSNumber numberWithBool: ([self firstAvailableExecutable: [NSArray arrayWithObjects: @"curl", nil]] != nil)], @"curl",
                                           [NSNumber numberWithBool: ([self firstAvailableExecutable: [NSArray arrayWithObjects: @"wget", nil]] != nil)], @"wget",
+                                          [NSNumber numberWithBool: powershellDownloader], @"powershell",
+                                          [NSNumber numberWithBool: downloaderAvailable], @"available",
                                           nil]
                  forKey: @"bootstrap_prerequisites"];
   [environment setObject: [NSArray array] forKey: @"detected_layouts"];
@@ -2502,6 +3213,20 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   [self appendInstallTrace: @"doctor.compatibility.start"];
   compatibility = [self evaluateCompatibilityForEnvironment: environment artifact: artifact];
+  if (manifestError != nil && artifact == nil)
+    {
+      compatibility = [NSDictionary dictionaryWithObjectsAndKeys:
+                                       [NSNumber numberWithBool: YES], @"compatible",
+                                       [NSNull null], @"target_kind",
+                                       [NSNull null], @"target_id",
+                                       [NSArray array], @"reasons",
+                                       [NSArray arrayWithObject:
+                                                [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                @"manifest_unavailable", @"code",
+                                                                manifestError, @"message",
+                                                                nil]], @"warnings",
+                                       nil];
+    }
   [self appendInstallTrace: @"doctor.native-assessment.start"];
   nativeToolchain = [self nativeToolchainAssessmentForEnvironment: environment compatibility: compatibility];
   [environment setObject: nativeToolchain forKey: @"native_toolchain"];
@@ -2532,11 +3257,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                                         nil]]];
   [checks addObject: [self checkWithID: @"bootstrap.downloader"
                                  title: @"Check for downloader"
-                                status: ([[[environment objectForKey: @"bootstrap_prerequisites"] objectForKey: @"curl"] boolValue] ||
-                                         [[[environment objectForKey: @"bootstrap_prerequisites"] objectForKey: @"wget"] boolValue]) ? @"ok" : @"error"
+                                status: [[[environment objectForKey: @"bootstrap_prerequisites"] objectForKey: @"available"] boolValue] ? @"ok" : @"error"
                               severity: @"error"
-                               message: ([[[environment objectForKey: @"bootstrap_prerequisites"] objectForKey: @"curl"] boolValue] ||
-                                         [[[environment objectForKey: @"bootstrap_prerequisites"] objectForKey: @"wget"] boolValue]) ? @"Found curl or wget." : @"Neither curl nor wget is available."
+                               message: [[[environment objectForKey: @"bootstrap_prerequisites"] objectForKey: @"available"] boolValue] ? @"Found a downloader." : @"No downloader is available."
                              interface: ([interface isEqualToString: @"bootstrap"] ? @"bootstrap" : @"both")
                         executionTier: @"bootstrap_required"
                                details: nil]];
@@ -2571,17 +3294,18 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   if ([interface isEqualToString: @"full"])
     {
+      BOOL probeDeferred = [self isDeferredProbe: [toolchain objectForKey: @"probe"]];
       [checks addObject: [self checkWithID: @"toolchain.probe"
                                      title: @"Compile/link/run probe"
-                                    status: ([[toolchain objectForKey: @"can_compile"] boolValue] &&
+                                    status: probeDeferred ? @"not_run" : (([[toolchain objectForKey: @"can_compile"] boolValue] &&
                                              [[toolchain objectForKey: @"can_link"] boolValue] &&
-                                             [[toolchain objectForKey: @"can_run"] boolValue]) ? @"ok" : @"warning"
+                                             [[toolchain objectForKey: @"can_run"] boolValue]) ? @"ok" : @"warning")
                                   severity: @"error"
-                                   message: ([[toolchain objectForKey: @"can_compile"] boolValue] &&
+                                   message: probeDeferred ? @"Active compiler validation was skipped for this doctor run." : (([[toolchain objectForKey: @"can_compile"] boolValue] &&
                                              [[toolchain objectForKey: @"can_link"] boolValue] &&
                                              [[toolchain objectForKey: @"can_run"] boolValue]) ?
                                      @"The compiler can compile, link, and run a minimal Objective-C probe." :
-                                     @"A compiler probe did not fully succeed."
+                                     @"A compiler probe did not fully succeed.")
                                  interface: @"full"
                             executionTier: @"full_only"
                                    details: [NSDictionary dictionaryWithObjectsAndKeys:
@@ -2589,6 +3313,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                                           [toolchain objectForKey: @"can_link"], @"can_link",
                                                           [toolchain objectForKey: @"can_run"], @"can_run",
                                                           [toolchain objectForKey: @"gnustep_make_compiler"] ? [toolchain objectForKey: @"gnustep_make_compiler"] : [NSNull null], @"compiler",
+                                                          [[toolchain objectForKey: @"probe"] objectForKey: @"reason"] ? [[toolchain objectForKey: @"probe"] objectForKey: @"reason"] : [NSNull null], @"reason",
                                                           nil]]];
     }
   else
@@ -2622,11 +3347,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                details: nil]];
 
   [self appendInstallTrace: @"doctor.actions.start"];
-  if ([[[environment objectForKey: @"bootstrap_prerequisites"] objectForKey: @"curl"] boolValue] == NO &&
-      [[[environment objectForKey: @"bootstrap_prerequisites"] objectForKey: @"wget"] boolValue] == NO)
+  if ([[[environment objectForKey: @"bootstrap_prerequisites"] objectForKey: @"available"] boolValue] == NO)
     {
       [actions addObject: [self actionWithKind: @"install_downloader"
-                                       message: @"Install curl or wget, then rerun setup."
+                                       message: @"Install curl, wget, or a supported platform downloader, then rerun setup."
                                       priority: 1]];
     }
   if ([[nativeToolchain objectForKey: @"assessment"] isEqualToString: @"preferred"])
@@ -2693,28 +3417,13 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       summary = @"A GNUstep toolchain was detected, but it does not appear to be working correctly.";
     }
 
-  if (manifestError != nil && artifact == nil)
-    {
-      compatibility = [NSDictionary dictionaryWithObjectsAndKeys:
-                                       [NSNumber numberWithBool: NO], @"compatible",
-                                       [NSNull null], @"target_kind",
-                                       [NSNull null], @"target_id",
-                                       [NSArray arrayWithObject:
-                                                [NSDictionary dictionaryWithObjectsAndKeys:
-                                                                @"manifest_invalid", @"code",
-                                                                manifestError, @"message",
-                                                                nil]], @"reasons",
-                                       [NSArray array], @"warnings",
-                                       nil];
-    }
-
   [self appendInstallTrace: @"doctor.payload.return"];
   return [NSDictionary dictionaryWithObjectsAndKeys:
                         [NSNumber numberWithInt: 1], @"schema_version",
                         @"doctor", @"command",
                         @"0.1.0-dev", @"cli_version",
                         interface, @"interface",
-                        [interface isEqualToString: @"bootstrap"] ? @"installer" : @"full", @"diagnostic_depth",
+                        quick ? @"quick" : ([interface isEqualToString: @"bootstrap"] ? @"installer" : @"full"), @"diagnostic_depth",
                         [NSNumber numberWithBool: ![status isEqualToString: @"error"]], @"ok",
                         status, @"status",
                         classification, @"environment_classification",
@@ -3146,7 +3855,26 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSArray *arguments = [context commandArguments];
   NSString *manifestPath = nil;
   NSString *interface = @"full";
+  BOOL quick = YES;
   NSUInteger i = 0;
+  const char *quickEnv = getenv("GNUSTEP_CLI_DOCTOR_QUICK");
+
+  if (quickEnv != NULL)
+    {
+      NSString *quickValue = [[NSString stringWithUTF8String: quickEnv] lowercaseString];
+      if ([quickValue isEqualToString: @"0"] ||
+          [quickValue isEqualToString: @"false"] ||
+          [quickValue isEqualToString: @"no"])
+        {
+          quick = NO;
+        }
+      else if ([quickValue isEqualToString: @"1"] ||
+               [quickValue isEqualToString: @"true"] ||
+               [quickValue isEqualToString: @"yes"])
+        {
+          quick = YES;
+        }
+    }
 
   for (i = 0; i < [arguments count]; i++)
     {
@@ -3171,6 +3899,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
           interface = [arguments objectAtIndex: i + 1];
           i++;
         }
+      else if ([argument isEqualToString: @"--quick"])
+        {
+          quick = YES;
+        }
+      else if ([argument isEqualToString: @"--full"] || [argument isEqualToString: @"--deep"])
+        {
+          quick = NO;
+        }
       else if ([argument hasPrefix: @"--"])
         {
           *exitCode = 2;
@@ -3189,7 +3925,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
 
   {
-    NSDictionary *payload = [self buildDoctorPayloadWithInterface: interface manifestPath: manifestPath];
+    NSDictionary *payload = [self buildDoctorPayloadWithInterface: interface manifestPath: manifestPath quick: quick];
     *exitCode = [[payload objectForKey: @"ok"] boolValue] ? 0 : 3;
     return payload;
   }
@@ -4667,9 +5403,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 - (NSDictionary *)executeBuildForContext:(GSCommandContext *)context exitCode:(int *)exitCode
 {
   NSArray *arguments = [context commandArguments];
-  NSString *projectPath = ([arguments count] > 0 && [[[arguments objectAtIndex: 0] substringToIndex: 1] isEqualToString: @"-"] == NO) ? [arguments objectAtIndex: 0] : [[NSFileManager defaultManager] currentDirectoryPath];
+  NSString *projectPath = [self projectPathFromCommandArguments: arguments];
+  NSString *requestedBuildSystem = [self buildSystemFromCommandArguments: arguments];
   NSDictionary *project = [self detectProjectAtPath: projectPath];
-  NSDictionary *result = nil;
+  NSString *backend = [project objectForKey: @"build_system"];
+  NSArray *buildInvocation = [NSArray arrayWithObjects: @"make", nil];
+  NSArray *cleanInvocation = [NSArray arrayWithObjects: @"make", @"distclean", nil];
+  NSDictionary *cleanPhase = nil;
+  NSDictionary *buildPhase = nil;
+  NSMutableArray *phases = nil;
+  BOOL cleanFirst = [self arguments: arguments containOption: @"--clean"];
+  BOOL streamOutput = ([context jsonOutput] == NO && [context quiet] == NO);
 
   if ([[project objectForKey: @"supported"] boolValue] == NO)
     {
@@ -4686,32 +5430,170 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                             nil];
     }
 
-  result = [self runCommand: [NSArray arrayWithObjects: @"make", nil]
-            currentDirectory: [project objectForKey: @"project_dir"]];
-  *exitCode = [[result objectForKey: @"exit_status"] intValue] == 0 ? 0 : 1;
+  if (([requestedBuildSystem isEqualToString: @"auto"] == NO)
+      && ([requestedBuildSystem isEqualToString: backend] == NO))
+    {
+      *exitCode = 3;
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithInt: 1], @"schema_version",
+                            @"build", @"command",
+                            [NSNumber numberWithBool: NO], @"ok",
+                            @"error", @"status",
+                            [NSString stringWithFormat: @"The requested build system '%@' is not available for this project.", requestedBuildSystem], @"summary",
+                            project, @"project",
+                            backend, @"backend",
+                            [NSNull null], @"invocation",
+                            nil];
+    }
+
+  if (cleanFirst)
+    {
+      phases = [NSMutableArray array];
+      cleanPhase = [self projectOperationPhaseWithName: @"clean"
+                                               backend: backend
+                                            invocation: cleanInvocation
+                                               project: project
+                                          streamOutput: streamOutput];
+      [phases addObject: cleanPhase];
+      if ([[cleanPhase objectForKey: @"ok"] boolValue] == NO)
+        {
+          *exitCode = 1;
+          return [NSDictionary dictionaryWithObjectsAndKeys:
+                                [NSNumber numberWithInt: 1], @"schema_version",
+                                @"build", @"command",
+                                [NSNumber numberWithBool: NO], @"ok",
+                                @"error", @"status",
+                                @"GNUstep project clean failed.", @"summary",
+                                project, @"project",
+                                backend, @"backend",
+                                @"clean_build", @"operation",
+                                phases, @"phases",
+                                [NSNull null], @"invocation",
+                                [cleanPhase objectForKey: @"stdout"], @"stdout",
+                                [cleanPhase objectForKey: @"stderr"], @"stderr",
+                                [cleanPhase objectForKey: @"exit_status"], @"exit_status",
+                                nil];
+        }
+      buildPhase = [self projectOperationPhaseWithName: @"build"
+                                               backend: backend
+                                            invocation: buildInvocation
+                                               project: project
+                                          streamOutput: streamOutput];
+      [phases addObject: buildPhase];
+      *exitCode = [[buildPhase objectForKey: @"ok"] boolValue] ? 0 : 1;
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithInt: 1], @"schema_version",
+                            @"build", @"command",
+                            [NSNumber numberWithBool: (*exitCode == 0)], @"ok",
+                            (*exitCode == 0) ? @"ok" : @"error", @"status",
+                            (*exitCode == 0) ? @"GNUstep project clean build completed." : @"GNUstep project build failed.", @"summary",
+                            project, @"project",
+                            backend, @"backend",
+                            @"clean_build", @"operation",
+                            phases, @"phases",
+                            [NSNull null], @"invocation",
+                            [buildPhase objectForKey: @"stdout"], @"stdout",
+                            [buildPhase objectForKey: @"stderr"], @"stderr",
+                            [buildPhase objectForKey: @"exit_status"], @"exit_status",
+                            nil];
+    }
+
+  buildPhase = [self projectOperationPhaseWithName: @"build"
+                                           backend: backend
+                                        invocation: buildInvocation
+                                           project: project
+                                      streamOutput: streamOutput];
+  *exitCode = [[buildPhase objectForKey: @"ok"] boolValue] ? 0 : 1;
   return [NSDictionary dictionaryWithObjectsAndKeys:
                         [NSNumber numberWithInt: 1], @"schema_version",
                         @"build", @"command",
-                        [NSNumber numberWithBool: ([[result objectForKey: @"exit_status"] intValue] == 0)], @"ok",
-                        ([[result objectForKey: @"exit_status"] intValue] == 0) ? @"ok" : @"error", @"status",
-                        ([[result objectForKey: @"exit_status"] intValue] == 0) ? @"GNUstep project build completed." : @"GNUstep project build failed.", @"summary",
+                        [NSNumber numberWithBool: (*exitCode == 0)], @"ok",
+                        (*exitCode == 0) ? @"ok" : @"error", @"status",
+                        (*exitCode == 0) ? @"GNUstep project build completed." : @"GNUstep project build failed.", @"summary",
                         project, @"project",
-                        @"gnustep-make", @"backend",
-                        [NSArray arrayWithObjects: @"make", nil], @"invocation",
-                        [result objectForKey: @"stdout"], @"stdout",
-                        [result objectForKey: @"stderr"], @"stderr",
-                        [result objectForKey: @"exit_status"], @"exit_status",
+                        backend, @"backend",
+                        @"build", @"operation",
+                        buildInvocation, @"invocation",
+                        [buildPhase objectForKey: @"stdout"], @"stdout",
+                        [buildPhase objectForKey: @"stderr"], @"stderr",
+                        [buildPhase objectForKey: @"exit_status"], @"exit_status",
+                        nil];
+}
+
+- (NSDictionary *)executeCleanForContext:(GSCommandContext *)context exitCode:(int *)exitCode
+{
+  NSArray *arguments = [context commandArguments];
+  NSString *projectPath = [self projectPathFromCommandArguments: arguments];
+  NSString *requestedBuildSystem = [self buildSystemFromCommandArguments: arguments];
+  NSDictionary *project = [self detectProjectAtPath: projectPath];
+  NSString *backend = [project objectForKey: @"build_system"];
+  NSArray *invocation = [NSArray arrayWithObjects: @"make", @"distclean", nil];
+  NSDictionary *phase = nil;
+  BOOL streamOutput = ([context jsonOutput] == NO && [context quiet] == NO);
+
+  if ([[project objectForKey: @"supported"] boolValue] == NO)
+    {
+      *exitCode = 3;
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithInt: 1], @"schema_version",
+                            @"clean", @"command",
+                            [NSNumber numberWithBool: NO], @"ok",
+                            @"error", @"status",
+                            @"The current directory is not a supported GNUstep project.", @"summary",
+                            project, @"project",
+                            [NSNull null], @"backend",
+                            [NSNull null], @"invocation",
+                            nil];
+    }
+
+  if (([requestedBuildSystem isEqualToString: @"auto"] == NO)
+      && ([requestedBuildSystem isEqualToString: backend] == NO))
+    {
+      *exitCode = 3;
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithInt: 1], @"schema_version",
+                            @"clean", @"command",
+                            [NSNumber numberWithBool: NO], @"ok",
+                            @"error", @"status",
+                            [NSString stringWithFormat: @"The requested build system '%@' is not available for this project.", requestedBuildSystem], @"summary",
+                            project, @"project",
+                            backend, @"backend",
+                            [NSNull null], @"invocation",
+                            nil];
+    }
+
+  phase = [self projectOperationPhaseWithName: @"clean"
+                                      backend: backend
+                                   invocation: invocation
+                                      project: project
+                                 streamOutput: streamOutput];
+  *exitCode = [[phase objectForKey: @"ok"] boolValue] ? 0 : 1;
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+                        [NSNumber numberWithInt: 1], @"schema_version",
+                        @"clean", @"command",
+                        [NSNumber numberWithBool: (*exitCode == 0)], @"ok",
+                        (*exitCode == 0) ? @"ok" : @"error", @"status",
+                        (*exitCode == 0) ? @"GNUstep project clean completed." : @"GNUstep project clean failed.", @"summary",
+                        project, @"project",
+                        backend, @"backend",
+                        @"clean", @"operation",
+                        invocation, @"invocation",
+                        [phase objectForKey: @"stdout"], @"stdout",
+                        [phase objectForKey: @"stderr"], @"stderr",
+                        [phase objectForKey: @"exit_status"], @"exit_status",
                         nil];
 }
 
 - (NSDictionary *)executeRunForContext:(GSCommandContext *)context exitCode:(int *)exitCode
 {
   NSArray *arguments = [context commandArguments];
-  NSString *projectPath = ([arguments count] > 0 && [[[arguments objectAtIndex: 0] substringToIndex: 1] isEqualToString: @"-"] == NO) ? [arguments objectAtIndex: 0] : [[NSFileManager defaultManager] currentDirectoryPath];
+  NSString *projectPath = [self projectPathFromCommandArguments: arguments];
   NSDictionary *project = [self detectProjectAtPath: projectPath];
+  NSDictionary *runProject = nil;
   NSArray *invocation = nil;
   NSString *backend = nil;
   NSDictionary *result = nil;
+  BOOL launchOnly = NO;
 
   if ([[project objectForKey: @"supported"] boolValue] == NO)
     {
@@ -4728,15 +5610,70 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                             nil];
     }
 
-  if ([[project objectForKey: @"project_type"] isEqualToString: @"tool"])
+  runProject = [self runnableProjectForProject: project];
+  if (runProject == nil)
     {
-      invocation = [NSArray arrayWithObjects: [NSString stringWithFormat: @"./obj/%@", [project objectForKey: @"target_name"]], nil];
+      NSArray *candidates = [self runnableProjectsUnderPath: [project objectForKey: @"project_dir"]];
+      *exitCode = 3;
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithInt: 1], @"schema_version",
+                            @"run", @"command",
+                            [NSNumber numberWithBool: NO], @"ok",
+                            @"error", @"status",
+                            ([candidates count] > 1) ? @"Multiple runnable targets were detected. Run from a specific app or tool directory." : @"This GNUstep project can be built, but no runnable target was detected.", @"summary",
+                            project, @"project",
+                            candidates, @"runnable_targets",
+                            [NSNull null], @"backend",
+                            [NSNull null], @"invocation",
+                            nil];
+    }
+
+  if ([[runProject objectForKey: @"project_type"] isEqualToString: @"tool"])
+    {
+      invocation = [NSArray arrayWithObjects: [NSString stringWithFormat: @"./obj/%@", [runProject objectForKey: @"target_name"]], nil];
       backend = @"direct-exec";
     }
-  else if ([[project objectForKey: @"project_type"] isEqualToString: @"app"])
+  else if ([[runProject objectForKey: @"project_type"] isEqualToString: @"app"])
     {
-      invocation = [NSArray arrayWithObjects: @"openapp", [NSString stringWithFormat: @"%@.app", [project objectForKey: @"target_name"]], nil];
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+      NSArray *runtimePathEntries = [self projectRuntimePathEntriesUnderPath: [project objectForKey: @"project_dir"]];
+      NSString *binaryPath = [[[NSProcessInfo processInfo] arguments] objectAtIndex: 0];
+      NSString *resolvedPath = [binaryPath stringByResolvingSymlinksInPath];
+      NSString *binDir = [resolvedPath stringByDeletingLastPathComponent];
+      NSString *installRoot = [binDir stringByDeletingLastPathComponent];
+      NSString *bash = [[installRoot stringByAppendingPathComponent: @"usr"] stringByAppendingPathComponent: @"bin\\bash.exe"];
+      NSString *bashCommand = [self windowsOpenAppLaunchCommandForProject: runProject runtimePathEntries: runtimePathEntries];
+      NSString *scriptPath = [self writeWindowsOpenAppLaunchScriptForCommand: bashCommand];
+      if (scriptPath == nil)
+        {
+          *exitCode = 1;
+          return [NSDictionary dictionaryWithObjectsAndKeys:
+                                [NSNumber numberWithInt: 1], @"schema_version",
+                                @"run", @"command",
+                                [NSNumber numberWithBool: NO], @"ok",
+                                @"error", @"status",
+                                @"Run launcher failed: could not create a temporary launch script.", @"summary",
+                                project, @"project",
+                                runProject, @"run_project",
+                                @"openapp", @"backend",
+                                [NSNull null], @"invocation",
+                                @"", @"stdout",
+                                @"could not create a temporary launch script", @"stderr",
+                                [NSNumber numberWithInt: 1], @"exit_status",
+                                nil];
+        }
+      invocation = [NSArray arrayWithObjects:
+                              @"powershell.exe",
+                              @"-NoProfile",
+                              @"-Command",
+                              [self windowsStartBashScriptCommandForBash: bash scriptPath: scriptPath],
+                              nil];
       backend = @"openapp";
+#else
+      invocation = [NSArray arrayWithObjects: @"openapp", [NSString stringWithFormat: @"%@.app", [runProject objectForKey: @"target_name"]], nil];
+      backend = @"openapp";
+#endif
+      launchOnly = YES;
     }
   else
     {
@@ -4753,17 +5690,31 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                             nil];
     }
 
-  result = [self runCommand: invocation currentDirectory: [project objectForKey: @"project_dir"]];
+  if (launchOnly)
+    {
+      result = [self runCommand: invocation
+               currentDirectory: [runProject objectForKey: @"project_dir"]
+                        timeout: 15.0
+          additionalPathEntries: [self projectRuntimePathEntriesUnderPath: [project objectForKey: @"project_dir"]]];
+    }
+  else
+    {
+      result = [self runCommand: invocation currentDirectory: [runProject objectForKey: @"project_dir"]];
+    }
   if ([[result objectForKey: @"launched"] boolValue] == NO)
     {
+      NSString *errorSummary = [[result objectForKey: @"stderr"] length] > 0 ?
+        [NSString stringWithFormat: @"Run launcher failed: %@", [result objectForKey: @"stderr"]] :
+        @"Run launcher failed.";
       *exitCode = 1;
       return [NSDictionary dictionaryWithObjectsAndKeys:
                             [NSNumber numberWithInt: 1], @"schema_version",
                             @"run", @"command",
                             [NSNumber numberWithBool: NO], @"ok",
                             @"error", @"status",
-                            @"Run target was not found. Build the project before running it.", @"summary",
+                            errorSummary, @"summary",
                             project, @"project",
+                            runProject, @"run_project",
                             backend, @"backend",
                             invocation, @"invocation",
                             @"", @"stdout",
@@ -4778,14 +5729,143 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         @"run", @"command",
                         [NSNumber numberWithBool: ([[result objectForKey: @"exit_status"] intValue] == 0)], @"ok",
                         ([[result objectForKey: @"exit_status"] intValue] == 0) ? @"ok" : @"error", @"status",
-                        ([[result objectForKey: @"exit_status"] intValue] == 0) ? @"Run completed." : @"Run failed.", @"summary",
+                        launchOnly ? @"Run launched." : (([[result objectForKey: @"exit_status"] intValue] == 0) ? @"Run completed." : @"Run failed."), @"summary",
                         project, @"project",
+                        runProject, @"run_project",
                         backend, @"backend",
                         invocation, @"invocation",
                         [result objectForKey: @"stdout"], @"stdout",
                         [result objectForKey: @"stderr"], @"stderr",
                         [result objectForKey: @"exit_status"], @"exit_status",
                         nil];
+}
+
+- (NSDictionary *)executeShellForContext:(GSCommandContext *)context exitCode:(int *)exitCode
+{
+  NSArray *arguments = [context commandArguments];
+  BOOL printCommand = [self arguments: arguments containOption: @"--print-command"];
+  NSUInteger i = 0;
+
+  for (i = 0; i < [arguments count]; i++)
+    {
+      NSString *argument = [arguments objectAtIndex: i];
+      if ([argument isEqualToString: @"--print-command"])
+        {
+          continue;
+        }
+      if ([argument hasPrefix: @"--"])
+        {
+          *exitCode = 2;
+          return [self payloadWithCommand: @"shell"
+                                       ok: NO
+                                   status: @"error"
+                                  summary: [NSString stringWithFormat: @"Unknown shell option: %@", argument]
+                                     data: nil];
+        }
+      *exitCode = 2;
+      return [self payloadWithCommand: @"shell"
+                                   ok: NO
+                               status: @"error"
+                              summary: @"shell does not accept positional arguments yet."
+                                 data: nil];
+    }
+
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  {
+    NSString *binaryPath = [[[NSProcessInfo processInfo] arguments] objectAtIndex: 0];
+    NSString *resolvedPath = [binaryPath stringByResolvingSymlinksInPath];
+    NSString *binDir = [resolvedPath stringByDeletingLastPathComponent];
+    NSString *installRoot = [binDir stringByDeletingLastPathComponent];
+    NSString *bash = [[installRoot stringByAppendingPathComponent: @"usr"] stringByAppendingPathComponent: @"bin\\bash.exe"];
+    NSString *bashCommand = @"if [ -r /clang64/share/GNUstep/Makefiles/GNUstep.sh ]; then . /clang64/share/GNUstep/Makefiles/GNUstep.sh; fi; exec bash --noprofile -i";
+    NSArray *invocation = [NSArray arrayWithObjects: bash, @"-c", bashCommand, nil];
+    NSDictionary *environment = [self managedChildProcessEnvironment];
+    NSFileManager *manager = [NSFileManager defaultManager];
+    NSString *systemCommand = nil;
+    NSEnumerator *environmentKeyEnumerator = nil;
+    NSString *environmentKey = nil;
+    int shellExit = 0;
+
+    if ([manager fileExistsAtPath: bash] == NO)
+      {
+        *exitCode = 3;
+        return [NSDictionary dictionaryWithObjectsAndKeys:
+                              [NSNumber numberWithInt: 1], @"schema_version",
+                              @"shell", @"command",
+                              [NSNumber numberWithBool: NO], @"ok",
+                              @"error", @"status",
+                              @"The managed MSYS2 shell was not found. Reinstall or repair the managed GNUstep environment.", @"summary",
+                              @"windows", @"platform",
+                              installRoot, @"install_root",
+                              invocation, @"invocation",
+                              nil];
+      }
+
+    if (printCommand)
+      {
+        *exitCode = 0;
+        return [NSDictionary dictionaryWithObjectsAndKeys:
+                              [NSNumber numberWithInt: 1], @"schema_version",
+                              @"shell", @"command",
+                              [NSNumber numberWithBool: YES], @"ok",
+                              @"ok", @"status",
+                              @"Managed MSYS2 CLANG64 shell command prepared.", @"summary",
+                              @"windows", @"platform",
+                              @"msys2-clang64", @"toolchain_flavor",
+                              installRoot, @"install_root",
+                              invocation, @"invocation",
+                              [environment objectForKey: @"MSYSTEM"] ? [environment objectForKey: @"MSYSTEM"] : @"CLANG64", @"msystem",
+                              [environment objectForKey: @"GNUSTEP_MAKEFILES"] ? [environment objectForKey: @"GNUSTEP_MAKEFILES"] : @"", @"gnustep_makefiles",
+                              nil];
+      }
+
+    environmentKeyEnumerator = [environment keyEnumerator];
+    while ((environmentKey = [environmentKeyEnumerator nextObject]) != nil)
+      {
+        NSString *environmentValue = [environment objectForKey: environmentKey];
+        if ([environmentValue isKindOfClass: [NSString class]])
+          {
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+            _putenv_s([environmentKey UTF8String], [environmentValue UTF8String]);
+#else
+            setenv([environmentKey UTF8String], [environmentValue UTF8String], 1);
+#endif
+          }
+      }
+
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+    systemCommand = [NSString stringWithFormat: @"\"\"%@\" -c \"%@\"\"", bash, bashCommand];
+#else
+    systemCommand = [NSString stringWithFormat: @"\"%@\" -c \"%@\"", bash, bashCommand];
+#endif
+    shellExit = system([systemCommand UTF8String]);
+    *exitCode = (shellExit == 0) ? 0 : 1;
+    return [NSDictionary dictionaryWithObjectsAndKeys:
+                          [NSNumber numberWithInt: 1], @"schema_version",
+                          @"shell", @"command",
+                          [NSNumber numberWithBool: (*exitCode == 0)], @"ok",
+                          (*exitCode == 0) ? @"ok" : @"error", @"status",
+                          (*exitCode == 0) ? @"Managed MSYS2 CLANG64 shell exited." : @"Managed MSYS2 CLANG64 shell failed.",
+                          @"summary",
+                          @"windows", @"platform",
+                          @"msys2-clang64", @"toolchain_flavor",
+                          installRoot, @"install_root",
+                          invocation, @"invocation",
+                          [NSNumber numberWithInt: shellExit], @"exit_status",
+                          @"", @"stderr",
+                          nil];
+  }
+#else
+  *exitCode = 3;
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+                        [NSNumber numberWithInt: 1], @"schema_version",
+                        @"shell", @"command",
+                        [NSNumber numberWithBool: NO], @"ok",
+                        @"error", @"status",
+                        @"gnustep shell is currently only supported on Windows managed MSYS2 CLANG64 installs.", @"summary",
+                        @"unsupported", @"platform",
+                        nil];
+#endif
 }
 
 - (NSString *)managedGNUmakefileFlags
@@ -4797,9 +5877,11 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
          @"ADDITIONAL_OBJCFLAGS += -I$(GNUSTEP_MAKEFILES)/../../../include\n"
          @"ADDITIONAL_CPPFLAGS += -I$(GNUSTEP_MAKEFILES)/../../../include\n"
          @"ADDITIONAL_LDFLAGS += -L$(GNUSTEP_MAKEFILES)/../../../lib -L$(GNUSTEP_MAKEFILES)/../../../lib64\n"
+         @"ifneq ($(OS),Windows_NT)\n"
          @"ADDITIONAL_LDFLAGS += -Wl,-rpath,$(GNUSTEP_LOCAL_LIB_DIR)\n"
          @"ADDITIONAL_LDFLAGS += -Wl,-rpath,$(GNUSTEP_SYSTEM_LIB_DIR)\n"
          @"ADDITIONAL_LDFLAGS += -Wl,-rpath,$(GNUSTEP_RUNTIME_LIB_DIR)\n"
+         @"endif\n"
          @"GNUSTEP_CLI_DISPATCH_LIB := $(firstword $(wildcard $(GNUSTEP_MAKEFILES)/../../../lib/libdispatch.so) $(wildcard $(GNUSTEP_MAKEFILES)/../../../lib64/libdispatch.so) $(wildcard /usr/local/lib/libdispatch.so) $(wildcard /usr/lib/x86_64-linux-gnu/libdispatch.so) $(wildcard /usr/lib/libdispatch.so))\n"
          @"GNUSTEP_CLI_BLOCKS_RUNTIME_LIB := $(firstword $(wildcard $(GNUSTEP_MAKEFILES)/../../../lib/libBlocksRuntime.so) $(wildcard $(GNUSTEP_MAKEFILES)/../../../lib64/libBlocksRuntime.so) $(wildcard /usr/local/lib/libBlocksRuntime.so) $(wildcard /usr/lib/x86_64-linux-gnu/libBlocksRuntime.so) $(wildcard /usr/lib/libBlocksRuntime.so))\n"
          @"ifneq ($(GNUSTEP_CLI_DISPATCH_LIB),)\n"
@@ -5549,6 +6631,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       [lines addObject: [NSString stringWithFormat: @"doctor: %@", [payload objectForKey: @"summary"]]];
       [lines addObject: [NSString stringWithFormat: @"doctor: status=%@ classification=%@", [payload objectForKey: @"status"], [payload objectForKey: @"environment_classification"]]];
       [lines addObject: [NSString stringWithFormat: @"doctor: interface=%@ depth=%@", [payload objectForKey: @"interface"], [payload objectForKey: @"diagnostic_depth"]]];
+      if ([[payload objectForKey: @"diagnostic_depth"] isEqualToString: @"quick"])
+        {
+          [lines addObject: @"doctor: lightweight mode skipped active compiler validation; run `gnustep doctor --full` for compile/link/run probes."];
+        }
       [lines addObject: [NSString stringWithFormat: @"doctor: host=%@/%@", [environment objectForKey: @"os"], [environment objectForKey: @"arch"]]];
       if ([[toolchain objectForKey: @"present"] boolValue])
         {
@@ -5594,28 +6680,154 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
   if ([command isEqualToString: @"build"])
     {
+      NSMutableArray *lines = [NSMutableArray array];
+      NSArray *phases = [payload objectForKey: @"phases"];
       if ([[payload objectForKey: @"ok"] boolValue] == NO && [payload objectForKey: @"backend"] == [NSNull null])
         {
           return [payload objectForKey: @"summary"];
         }
-      return [NSString stringWithFormat: @"build: %@\nbuild: backend=%@\nbuild: project_type=%@ target=%@\nbuild: invocation=make",
-                [payload objectForKey: @"summary"],
-                [payload objectForKey: @"backend"],
-                [[payload objectForKey: @"project"] objectForKey: @"project_type"],
-                [[payload objectForKey: @"project"] objectForKey: @"target_name"]];
+      [lines addObject: [NSString stringWithFormat: @"build: %@", [payload objectForKey: @"summary"]]];
+      [lines addObject: [NSString stringWithFormat: @"build: backend=%@", [payload objectForKey: @"backend"]]];
+      [lines addObject: [NSString stringWithFormat: @"build: project_type=%@ target=%@",
+                                  [[payload objectForKey: @"project"] objectForKey: @"project_type"],
+                                  [[payload objectForKey: @"project"] objectForKey: @"target_name"]]];
+      if ([payload objectForKey: @"operation"] != nil)
+        {
+          [lines addObject: [NSString stringWithFormat: @"build: operation=%@", [payload objectForKey: @"operation"]]];
+        }
+      if (phases != nil && [phases count] > 0)
+        {
+          NSUInteger i = 0;
+          for (i = 0; i < [phases count]; i++)
+            {
+              NSDictionary *phase = [phases objectAtIndex: i];
+              [lines addObject: [NSString stringWithFormat: @"build: phase=%@ invocation=%@ exit_status=%@",
+                                          [phase objectForKey: @"name"],
+                                          [[phase objectForKey: @"invocation"] componentsJoinedByString: @" "],
+                                          [phase objectForKey: @"exit_status"]]];
+            }
+        }
+      else
+        {
+          [lines addObject: [NSString stringWithFormat: @"build: invocation=%@",
+                                      [[payload objectForKey: @"invocation"] componentsJoinedByString: @" "]]];
+        }
+      if ([[payload objectForKey: @"ok"] boolValue] == NO)
+        {
+          [lines addObject: [NSString stringWithFormat: @"build: exit_status=%@", [payload objectForKey: @"exit_status"]]];
+          if ([[payload objectForKey: @"stderr"] length] > 0)
+            {
+              [lines addObject: [NSString stringWithFormat: @"build: stderr=%@", [payload objectForKey: @"stderr"]]];
+            }
+          if ([[payload objectForKey: @"stdout"] length] > 0)
+            {
+              [lines addObject: [NSString stringWithFormat: @"build: stdout=%@", [payload objectForKey: @"stdout"]]];
+            }
+        }
+      return [lines componentsJoinedByString: @"\n"];
+    }
+  if ([command isEqualToString: @"clean"])
+    {
+      NSMutableArray *lines = [NSMutableArray array];
+      if ([[payload objectForKey: @"ok"] boolValue] == NO && [payload objectForKey: @"backend"] == [NSNull null])
+        {
+          return [payload objectForKey: @"summary"];
+        }
+      [lines addObject: [NSString stringWithFormat: @"clean: %@", [payload objectForKey: @"summary"]]];
+      [lines addObject: [NSString stringWithFormat: @"clean: backend=%@", [payload objectForKey: @"backend"]]];
+      [lines addObject: [NSString stringWithFormat: @"clean: project_type=%@ target=%@",
+                                  [[payload objectForKey: @"project"] objectForKey: @"project_type"],
+                                  [[payload objectForKey: @"project"] objectForKey: @"target_name"]]];
+      if ([payload objectForKey: @"operation"] != nil)
+        {
+          [lines addObject: [NSString stringWithFormat: @"clean: operation=%@", [payload objectForKey: @"operation"]]];
+        }
+      [lines addObject: [NSString stringWithFormat: @"clean: invocation=%@",
+                                  [[payload objectForKey: @"invocation"] componentsJoinedByString: @" "]]];
+      if ([[payload objectForKey: @"ok"] boolValue] == NO)
+        {
+          [lines addObject: [NSString stringWithFormat: @"clean: exit_status=%@", [payload objectForKey: @"exit_status"]]];
+          if ([[payload objectForKey: @"stderr"] length] > 0)
+            {
+              [lines addObject: [NSString stringWithFormat: @"clean: stderr=%@", [payload objectForKey: @"stderr"]]];
+            }
+          if ([[payload objectForKey: @"stdout"] length] > 0)
+            {
+              [lines addObject: [NSString stringWithFormat: @"clean: stdout=%@", [payload objectForKey: @"stdout"]]];
+            }
+        }
+      return [lines componentsJoinedByString: @"\n"];
     }
   if ([command isEqualToString: @"run"])
     {
       if ([[payload objectForKey: @"ok"] boolValue] == NO && [payload objectForKey: @"backend"] == [NSNull null])
         {
-          return [payload objectForKey: @"summary"];
+          NSMutableArray *lines = [NSMutableArray array];
+          NSArray *targets = [payload objectForKey: @"runnable_targets"];
+          NSUInteger i = 0;
+
+          [lines addObject: [payload objectForKey: @"summary"]];
+          for (i = 0; i < [targets count]; i++)
+            {
+              NSDictionary *target = [targets objectAtIndex: i];
+              [lines addObject: [NSString stringWithFormat: @"run: target=%@ type=%@ path=%@",
+                                          [target objectForKey: @"target_name"],
+                                          [target objectForKey: @"project_type"],
+                                          [target objectForKey: @"project_dir"]]];
+            }
+          return [lines componentsJoinedByString: @"\n"];
         }
-      return [NSString stringWithFormat: @"run: %@\nrun: backend=%@\nrun: project_type=%@ target=%@\nrun: invocation=%@",
+      NSDictionary *runProject = [payload objectForKey: @"run_project"];
+      NSString *invocation = [[payload objectForKey: @"invocation"] componentsJoinedByString: @" "];
+
+      if ([[payload objectForKey: @"backend"] isEqualToString: @"openapp"]
+          && [[runProject objectForKey: @"project_type"] isEqualToString: @"app"])
+        {
+          invocation = [NSString stringWithFormat: @"bash -lc openapp ./%@.app",
+                                  [runProject objectForKey: @"target_name"]];
+        }
+
+      return [NSString stringWithFormat: @"run: %@\nrun: backend=%@\nrun: project_type=%@ target=%@\nrun: selected_project=%@\nrun: invocation=%@",
                 [payload objectForKey: @"summary"],
                 [payload objectForKey: @"backend"],
-                [[payload objectForKey: @"project"] objectForKey: @"project_type"],
-                [[payload objectForKey: @"project"] objectForKey: @"target_name"],
-                [[payload objectForKey: @"invocation"] componentsJoinedByString: @" "]];
+                [runProject objectForKey: @"project_type"],
+                [runProject objectForKey: @"target_name"],
+                [runProject objectForKey: @"project_dir"],
+                invocation];
+    }
+  if ([command isEqualToString: @"shell"])
+    {
+      NSMutableArray *lines = [NSMutableArray array];
+      [lines addObject: [NSString stringWithFormat: @"shell: %@", [payload objectForKey: @"summary"]]];
+      if ([payload objectForKey: @"platform"] != nil)
+        {
+          [lines addObject: [NSString stringWithFormat: @"shell: platform=%@", [payload objectForKey: @"platform"]]];
+        }
+      if ([payload objectForKey: @"toolchain_flavor"] != nil)
+        {
+          [lines addObject: [NSString stringWithFormat: @"shell: toolchain=%@", [payload objectForKey: @"toolchain_flavor"]]];
+        }
+      if ([payload objectForKey: @"install_root"] != nil)
+        {
+          [lines addObject: [NSString stringWithFormat: @"shell: root=%@", [payload objectForKey: @"install_root"]]];
+        }
+      if ([payload objectForKey: @"msystem"] != nil)
+        {
+          [lines addObject: [NSString stringWithFormat: @"shell: msystem=%@", [payload objectForKey: @"msystem"]]];
+        }
+      if ([payload objectForKey: @"gnustep_makefiles"] != nil)
+        {
+          [lines addObject: [NSString stringWithFormat: @"shell: makefiles=%@", [payload objectForKey: @"gnustep_makefiles"]]];
+        }
+      if ([payload objectForKey: @"invocation"] != nil)
+        {
+          [lines addObject: [NSString stringWithFormat: @"shell: invocation=%@", [[payload objectForKey: @"invocation"] componentsJoinedByString: @" "]]];
+        }
+      if ([[payload objectForKey: @"ok"] boolValue] == NO && [[payload objectForKey: @"stderr"] length] > 0)
+        {
+          [lines addObject: [NSString stringWithFormat: @"shell: stderr=%@", [payload objectForKey: @"stderr"]]];
+        }
+      return [lines componentsJoinedByString: @"\n"];
     }
   if ([command isEqualToString: @"new"])
     {
@@ -5738,9 +6950,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       payload = [self executeBuildForContext: context exitCode: &exitCode];
     }
+  else if ([command isEqualToString: @"clean"])
+    {
+      payload = [self executeCleanForContext: context exitCode: &exitCode];
+    }
   else if ([command isEqualToString: @"run"])
     {
       payload = [self executeRunForContext: context exitCode: &exitCode];
+    }
+  else if ([command isEqualToString: @"shell"])
+    {
+      payload = [self executeShellForContext: context exitCode: &exitCode];
     }
   else if ([command isEqualToString: @"new"])
     {

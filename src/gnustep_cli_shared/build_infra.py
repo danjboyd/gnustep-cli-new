@@ -115,7 +115,25 @@ MSYS2_PACKAGE_INPUTS = [
     "mingw-w64-clang-x86_64-gnustep-base",
     "mingw-w64-clang-x86_64-gnustep-gui",
     "mingw-w64-clang-x86_64-gnustep-back",
+    "mingw-w64-clang-x86_64-cairo",
+    "mingw-w64-clang-x86_64-fontconfig",
+    "mingw-w64-clang-x86_64-freetype",
+    "mingw-w64-clang-x86_64-harfbuzz",
+    "mingw-w64-clang-x86_64-icu",
+    "mingw-w64-clang-x86_64-libjpeg-turbo",
+    "mingw-w64-clang-x86_64-libpng",
+    "mingw-w64-clang-x86_64-libtiff",
+    "mingw-w64-clang-x86_64-pixman",
+    "mingw-w64-clang-x86_64-pkgconf",
 ]
+
+MSYS2_INSTALLER_INPUT = {
+    "name": "msys2-x86_64",
+    "version": "latest",
+    "url": "https://github.com/msys2/msys2-installer/releases/latest/download/msys2-x86_64-latest.exe",
+    "sha256": "TBD",
+    "source_channel": "msys2-installer",
+}
 
 MSYS2_HOST_PACKAGES = [
     "make",
@@ -292,6 +310,12 @@ def msys2_input_manifest_template() -> dict[str, Any]:
         },
         "strategy": "msys2-assembly",
         "repository_snapshot": "TBD",
+        "installer": dict(MSYS2_INSTALLER_INPUT),
+        "root_layout": {
+            "install_root": "private-msys2-root",
+            "preserve": ["clang64", "usr", "etc", "var/lib/pacman/local"],
+            "path_policy": "Expose only <install-root>/bin by default; use private MSYS2 paths internally.",
+        },
         "host_packages": [
             {
                 "name": name,
@@ -359,12 +383,16 @@ def toolchain_manifest(target_id: str, toolchain_version: str) -> dict[str, Any]
         },
     }
     if target["id"] == "windows-amd64-msys2-clang64":
+        payload["source_policy"]["assembly_input"] = "official-msys2-installer"
+        payload["source_policy"]["private_root_required"] = True
         payload["developer_entrypoints"] = {
-            "compiler": ["bin/clang.exe"],
+            "compiler": ["clang64/bin/clang.exe"],
             "build_shell": ["usr/bin/bash.exe", "usr/bin/sh.exe"],
             "build_driver": ["usr/bin/make.exe"],
             "checksum_tool": ["usr/bin/sha256sum.exe"],
-            "gnustep_makefiles": ["share/GNUstep/Makefiles/common.make", "share/GNUstep/Makefiles/tool.make"],
+            "gnustep_makefiles": ["clang64/share/GNUstep/Makefiles/common.make", "clang64/share/GNUstep/Makefiles/tool.make"],
+            "app_launcher": ["clang64/bin/openapp"],
+            "activation": ["GNUstep.ps1", "GNUstep.bat"],
         }
     return payload
 
@@ -488,6 +516,19 @@ def validate_input_manifest(payload: dict[str, Any], *, target_id: str | None = 
     if payload.get("target", {}).get("id") != expected_target["id"]:
         add_error("target.id", f"input manifest target must be {expected_target['id']}")
     if expected_target["id"] == "windows-amd64-msys2-clang64":
+        installer = payload.get("installer", {})
+        if not isinstance(installer, dict):
+            add_error("installer", "MSYS2 installer input must be recorded")
+        else:
+            for key in ("name", "version", "url", "sha256", "source_channel"):
+                if key not in installer:
+                    add_error(f"installer.{key}", f"{key} is required")
+            if installer.get("source_channel") != "msys2-installer":
+                add_error("installer.source_channel", "installer source_channel must be msys2-installer")
+        preserve = payload.get("root_layout", {}).get("preserve", [])
+        for required_path in ("clang64", "usr", "etc", "var/lib/pacman/local"):
+            if required_path not in preserve:
+                add_error("root_layout.preserve", f"private MSYS2 root must preserve {required_path}")
         package_names = [item.get("name") for item in payload.get("packages", []) if isinstance(item, dict)]
         host_names = [item.get("name") for item in payload.get("host_packages", []) if isinstance(item, dict)]
         if package_names != MSYS2_PACKAGE_INPUTS:
@@ -807,8 +848,8 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "param(",
         f'  [string]$Prefix = "{prefix}",',
         f'  [string]$CacheDir = "{cache_dir}",',
-        '  [string]$MsysRoot = "C:\\msys64",',
-        '  [string]$InstallerUrl = "https://github.com/msys2/msys2-installer/releases/latest/download/msys2-x86_64-latest.exe"',
+        "  [string]$MsysRoot = '',",
+        f'  [string]$InstallerUrl = "{MSYS2_INSTALLER_INPUT["url"]}"',
         ")",
         "",
         "$ErrorActionPreference = 'Stop'",
@@ -816,6 +857,12 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "",
         "New-Item -ItemType Directory -Force -Path $Prefix | Out-Null",
         "New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null",
+        "if (-not $MsysRoot) {",
+        "  $MsysRoot = $Prefix",
+        "}",
+        "$prefixFull = [System.IO.Path]::GetFullPath($Prefix).TrimEnd('\\')",
+        "$msysRootFull = [System.IO.Path]::GetFullPath($MsysRoot).TrimEnd('\\')",
+        "$installingIntoManagedRoot = [string]::Equals($prefixFull, $msysRootFull, [System.StringComparison]::OrdinalIgnoreCase)",
         "",
         "$bash = Join-Path $MsysRoot 'usr\\bin\\bash.exe'",
         "$installer = Join-Path $CacheDir 'msys2-x86_64-latest.exe'",
@@ -843,6 +890,8 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 host-package installation failed.' }",
         f'& $bash -lc "pacman -S --overwrite /clang64/include/Block.h --noconfirm --needed {packages}"',
         "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 GNUstep package installation failed.' }",
+        '& $bash -lc "pacman -Qkk"',
+        "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 local package database integrity check failed.' }",
         "",
         "$clangRoot = Join-Path $MsysRoot 'clang64'",
         "if (-not (Test-Path $clangRoot)) {",
@@ -850,18 +899,35 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "}",
         "",
         "$toolDirs = @('bin','etc','include','lib','libexec','share')",
-        "foreach ($entry in $toolDirs) {",
-        "  $source = Join-Path $clangRoot $entry",
-        "  if (Test-Path $source) {",
-        "    Copy-Item -Recurse -Force $source (Join-Path $Prefix $entry)",
+        "if (-not $installingIntoManagedRoot) {",
+        "  $clangPrefix = Join-Path $Prefix 'clang64'",
+        "  New-Item -ItemType Directory -Force -Path $clangPrefix | Out-Null",
+        "  foreach ($entry in $toolDirs) {",
+        "    $source = Join-Path $clangRoot $entry",
+        "    if (Test-Path $source) {",
+        "      Copy-Item -Recurse -Force $source (Join-Path $clangPrefix $entry)",
+        "    }",
+        "  }",
+        "",
+        "  $msysRootDirs = @('usr','etc','var')",
+        "  foreach ($entry in $msysRootDirs) {",
+        "    $source = Join-Path $MsysRoot $entry",
+        "    if (Test-Path $source) {",
+        "      Copy-Item -Recurse -Force $source (Join-Path $Prefix $entry)",
+        "    }",
         "  }",
         "}",
-        "$clangPrefix = Join-Path $Prefix 'clang64'",
-        "New-Item -ItemType Directory -Force -Path $clangPrefix | Out-Null",
+        "",
+        "# Compatibility links for older activation code. The canonical MSYS2 layout is",
+        "# <prefix>\\clang64 plus <prefix>\\usr, but these root-level directories keep",
+        "# existing release smoke scripts working while callers move to clang64 paths.",
         "foreach ($entry in $toolDirs) {",
         "  $source = Join-Path $clangRoot $entry",
         "  if (Test-Path $source) {",
-        "    Copy-Item -Recurse -Force $source (Join-Path $clangPrefix $entry)",
+        "    $destination = Join-Path $Prefix $entry",
+        "    if (-not [string]::Equals([System.IO.Path]::GetFullPath($source).TrimEnd('\\'), [System.IO.Path]::GetFullPath($destination).TrimEnd('\\'), [System.StringComparison]::OrdinalIgnoreCase)) {",
+        "      Copy-Item -Recurse -Force $source $destination",
+        "    }",
         "  }",
         "}",
         "",
@@ -873,28 +939,34 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "  if (-not (Test-Path $source)) {",
         "    throw ('Required MSYS2 developer tool is missing: ' + $source)",
         "  }",
-        "  Copy-Item -Force $source (Join-Path $developerBin $tool)",
+        "  $destination = Join-Path $developerBin $tool",
+        "  if (-not [string]::Equals([System.IO.Path]::GetFullPath($source), [System.IO.Path]::GetFullPath($destination), [System.StringComparison]::OrdinalIgnoreCase)) {",
+        "    Copy-Item -Force $source $destination",
+        "  }",
         "}",
-        "$developerRuntimeFiles = Get-ChildItem -Path (Join-Path $MsysRoot 'usr\\bin') -Include '*.exe','*.dll' -File",
+        "$developerRuntimeFiles = Get-ChildItem -Path (Join-Path $MsysRoot 'usr\\bin') -File | Where-Object { $_.Extension -in @('.exe', '.dll') }",
         "if ($developerRuntimeFiles.Count -eq 0) {",
         "  throw 'No MSYS2 usr\\bin executable/DLL runtime files were found for developer tools.'",
         "}",
         "foreach ($runtimeFile in $developerRuntimeFiles) {",
-        "  Copy-Item -Force $runtimeFile.FullName (Join-Path $developerBin $runtimeFile.Name)",
+        "  $destination = Join-Path $developerBin $runtimeFile.Name",
+        "  if (-not [string]::Equals([System.IO.Path]::GetFullPath($runtimeFile.FullName), [System.IO.Path]::GetFullPath($destination), [System.StringComparison]::OrdinalIgnoreCase)) {",
+        "    Copy-Item -Force $runtimeFile.FullName $destination",
+        "  }",
         "}",
         "",
         "$activateBat = @(",
         "  '@echo off',",
-        "  'set GNUSTEP_MAKEFILES=%~dp0share\\GNUstep\\Makefiles',",
-        "  'set GNUSTEP_CONFIG_FILE=%~dp0etc\\GNUstep\\GNUstep.conf',",
+        "  'set GNUSTEP_MAKEFILES=%~dp0clang64\\share\\GNUstep\\Makefiles',",
+        "  'set GNUSTEP_CONFIG_FILE=%~dp0clang64\\etc\\GNUstep\\GNUstep.conf',",
         "  'set PATH=%~dp0clang64\\bin;%~dp0bin;%~dp0usr\\bin;%PATH%'",
         ")",
         "Set-Content -Path (Join-Path $Prefix 'GNUstep.bat') -Value $activateBat -Encoding ASCII",
         "",
         "$activatePs1 = @(",
         "  '$prefix = Split-Path -Parent $MyInvocation.MyCommand.Path',",
-        "  '$env:GNUSTEP_MAKEFILES = Join-Path $prefix ''share\\GNUstep\\Makefiles''',",
-        "  '$env:GNUSTEP_CONFIG_FILE = Join-Path $prefix ''etc\\GNUstep\\GNUstep.conf''',",
+        "  '$env:GNUSTEP_MAKEFILES = Join-Path $prefix ''clang64\\share\\GNUstep\\Makefiles''',",
+        "  '$env:GNUSTEP_CONFIG_FILE = Join-Path $prefix ''clang64\\etc\\GNUstep\\GNUstep.conf''',",
         "  '$env:PATH = (Join-Path $prefix ''clang64\\bin'') + '';'' + (Join-Path $prefix ''bin'') + '';'' + (Join-Path $prefix ''usr\\bin'') + '';'' + $env:PATH'",
         ")",
         "Set-Content -Path (Join-Path $Prefix 'GNUstep.ps1') -Value $activatePs1 -Encoding ASCII",
@@ -962,6 +1034,13 @@ def toolchain_plan(target_id: str) -> dict[str, Any]:
     ]
     if target["os"] == "windows":
         plan["validation"].append({"id": "otvm-smoke", "title": "Validate bootstrap and install smoke path on an otvm Windows lease"})
+        plan["validation"].extend(
+            [
+                {"id": "gui-smoke", "title": "Launch a minimal AppKit window and verify a nonblank screenshot"},
+                {"id": "gorm-build", "title": "Build Gorm with the managed MSYS2 clang64 toolchain"},
+                {"id": "gorm-run", "title": "Launch Gorm through managed GNUstep.sh/openapp and verify menu, inspector, and palette windows by screenshot"},
+            ]
+        )
     return plan
 
 
@@ -2679,6 +2758,16 @@ def _archive_has_any(normalized_names: list[str], patterns: list[str]) -> bool:
     return False
 
 
+def _pacman_local_db_missing_desc(normalized_names: list[str]) -> list[str]:
+    packages: dict[str, set[str]] = {}
+    for name in normalized_names:
+        match = re.search(r"/var/lib/pacman/local/([^/]+)/([^/]+)$", name)
+        if match is None:
+            continue
+        packages.setdefault(match.group(1), set()).add(match.group(2))
+    return sorted(package for package, files in packages.items() if "desc" not in files)
+
+
 def toolchain_archive_audit(archive_path: str | Path, *, target_id: str | None = None) -> dict[str, Any]:
     root = Path(archive_path).resolve()
     if not root.exists():
@@ -2723,8 +2812,22 @@ def toolchain_archive_audit(archive_path: str | Path, *, target_id: str | None =
         add_check("make", "Managed make entrypoint is present.", [r"/bin/(g?make)(\.exe)?$", r"/usr/bin/(g?make)(\.exe)?$"])
         add_check("sha256sum", "Managed checksum utility is present.", [r"/usr/bin/sha256sum(\.exe)?$"])
         add_check("msys_runtime", "MSYS2 runtime DLL for usr/bin developer tools is present.", [r"/usr/bin/msys-2\.0\.dll$"])
-        add_check("common_make", "GNUstep Make common.make is present.", [r"/common\.make$"])
-        add_check("tool_make", "GNUstep Make tool.make is present.", [r"/tool\.make$"])
+        add_check("openapp", "GNUstep openapp launcher is present.", [r"/clang64/bin/openapp$"])
+        add_check("common_make", "GNUstep Make common.make is present.", [r"/clang64/share/GNUstep/Makefiles/common\.make$", r"/common\.make$"])
+        add_check("tool_make", "GNUstep Make tool.make is present.", [r"/clang64/share/GNUstep/Makefiles/tool\.make$", r"/tool\.make$"])
+        add_check("msys_profile", "MSYS root profile configuration is present.", [r"/etc/profile$"])
+        add_check("pacman_local_db", "MSYS2 local package metadata is present for provenance/debugging.", [r"/var/lib/pacman/local/"])
+        missing_desc = _pacman_local_db_missing_desc(normalized_names)
+        checks.append(
+            {
+                "id": "pacman_local_db_integrity",
+                "title": "Every MSYS2 local package database entry includes a desc file.",
+                "required": True,
+                "ok": len(missing_desc) == 0,
+                "patterns": [r"/var/lib/pacman/local/<package>/desc"],
+                "missing_desc_packages": missing_desc,
+            }
+        )
         add_check("gnustep_env", "GNUstep environment activation script is present.", [r"/gnustep\.(sh|bat|ps1)$"], required=False)
     elif inferred_target in {"linux-amd64-clang", "openbsd-amd64-clang"}:
         add_check("runtime_tools", "Managed tool directory is present.", [r"/system/tools/", r"/tools/"])
@@ -3228,6 +3331,8 @@ def published_url_qualification_plan(
                 "installed gnustep.exe doctor --json with managed msys2-clang64 classification",
                 "package install/remove smoke",
                 "extracted toolchain rebuild smoke using GNUstep.ps1/GNUstep.bat activation",
+                "managed AppKit GUI smoke with screenshot verification",
+                "managed Gorm build and launch with screenshot verification",
             ],
         },
     ]
@@ -3317,6 +3422,8 @@ def otvm_release_host_validation_plan(
                 "stage the release directory onto the Windows lease",
                 "assemble or activate the MSYS2 clang64 managed toolchain from the staged release",
                 "run bootstrap/full CLI smoke against the staged release artifacts",
+                "build and screenshot-launch a minimal AppKit app",
+                "build and screenshot-launch Gorm through managed openapp",
             ],
             "notes": "Windows now uses the libvirt-backed otvm path rather than OCI-oriented assumptions.",
         },

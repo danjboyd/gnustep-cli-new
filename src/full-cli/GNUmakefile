@@ -10,12 +10,14 @@ GNUSTEP_RUNTIME_LIB_DIR := $(GNUSTEP_PREFIX)/lib
 ADDITIONAL_OBJCFLAGS += -I$(GNUSTEP_MAKEFILES)/../../../include
 ADDITIONAL_CPPFLAGS += -I$(GNUSTEP_MAKEFILES)/../../../include
 ADDITIONAL_LDFLAGS += -L$(GNUSTEP_MAKEFILES)/../../../lib -L$(GNUSTEP_MAKEFILES)/../../../lib64
+ifneq ($(OS),Windows_NT)
 # Keep release binaries relocatable: the installed launcher also sets
 # LD_LIBRARY_PATH, but relative RPATH keeps direct binary smoke tests portable.
 ADDITIONAL_LDFLAGS += -Wl,-rpath,'$$ORIGIN/../../../Local/Library/Libraries'
 ADDITIONAL_LDFLAGS += -Wl,-rpath,'$$ORIGIN/../../../System/Library/Libraries'
 ADDITIONAL_LDFLAGS += -Wl,-rpath,'$$ORIGIN/../../../lib'
 ADDITIONAL_LDFLAGS += -Wl,-rpath,'$$ORIGIN/../../../lib64'
+endif
 GNUSTEP_CLI_DISPATCH_LIB := $(firstword \
   $(wildcard $(GNUSTEP_MAKEFILES)/../../../lib/libdispatch.so) \
   $(wildcard $(GNUSTEP_MAKEFILES)/../../../lib64/libdispatch.so) \

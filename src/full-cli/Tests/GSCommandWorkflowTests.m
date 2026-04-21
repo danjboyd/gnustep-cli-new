@@ -8,6 +8,7 @@
 @interface GSCommandRunner (WorkflowTesting)
 - (NSString *)resolvedArtifactPathFromURLString:(NSString *)urlString;
 - (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath;
+- (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath quick:(BOOL)quick;
 - (NSDictionary *)buildSetupPayloadForScope:(NSString *)scope
                                    manifest:(NSString *)manifestPath
                                 installRoot:(NSString *)installRoot
@@ -260,6 +261,77 @@
   XCTAssertNotNil([[probeCheck objectForKey: @"details"] objectForKey: @"can_compile"]);
   XCTAssertNotNil([[probeCheck objectForKey: @"details"] objectForKey: @"can_link"]);
   XCTAssertNotNil([[probeCheck objectForKey: @"details"] objectForKey: @"can_run"]);
+}
+
+- (void)testQuickDoctorSkipsActiveProbeButKeepsCheckShape
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *payload = [runner buildDoctorPayloadWithInterface: @"full" manifestPath: nil quick: YES];
+  NSArray *checks = [payload objectForKey: @"checks"];
+  NSDictionary *toolchain = [[payload objectForKey: @"environment"] objectForKey: @"toolchain"];
+  NSDictionary *probeCheck = nil;
+  NSUInteger i = 0;
+
+  for (i = 0; i < [checks count]; i++)
+    {
+      NSDictionary *check = [checks objectAtIndex: i];
+      if ([[check objectForKey: @"id"] isEqualToString: @"toolchain.probe"])
+        {
+          probeCheck = check;
+          break;
+        }
+    }
+
+  XCTAssertEqualObjects([payload objectForKey: @"diagnostic_depth"], @"quick");
+  XCTAssertEqualObjects([toolchain objectForKey: @"detection_depth"], @"quick");
+  XCTAssertEqualObjects([[toolchain objectForKey: @"probe"] objectForKey: @"status"], @"not_run");
+  XCTAssertEqualObjects([[toolchain objectForKey: @"probe"] objectForKey: @"reason"], @"doctor_quick_mode");
+  XCTAssertNotNil(probeCheck);
+  XCTAssertEqualObjects([probeCheck objectForKey: @"status"], @"not_run");
+  XCTAssertEqualObjects([[probeCheck objectForKey: @"details"] objectForKey: @"reason"], @"doctor_quick_mode");
+}
+
+- (void)testQuickDoctorHumanOutputPointsToFullDoctor
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *payload = [runner buildDoctorPayloadWithInterface: @"full" manifestPath: nil quick: YES];
+  NSString *human = [runner renderHumanForPayload: payload];
+
+  XCTAssertTrue([human rangeOfString: @"lightweight mode skipped active compiler validation"].location != NSNotFound);
+  XCTAssertTrue([human rangeOfString: @"gnustep doctor --full"].location != NSNotFound);
+}
+
+- (void)testExecuteDoctorDefaultsToQuickAndFullOptIn
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *root = [self temporaryPathComponent: @"doctor-depth"];
+  NSString *manifestPath = [self releaseManifestPathInDirectory: root
+                                                     cliSHA256: @"deadbeef"
+                                               toolchainSHA256: @"feedface"
+                                                        cliURL: @"file:///tmp/cli.tar.gz"
+                                                  toolchainURL: @"file:///tmp/toolchain.tar.gz"];
+  GSCommandContext *quickContext = [GSCommandContext contextWithArguments:
+                                                     [NSArray arrayWithObjects:
+                                                                @"doctor",
+                                                                @"--manifest",
+                                                                manifestPath,
+                                                                nil]];
+  GSCommandContext *fullContext = [GSCommandContext contextWithArguments:
+                                                    [NSArray arrayWithObjects:
+                                                               @"doctor",
+                                                               @"--manifest",
+                                                               manifestPath,
+                                                               @"--full",
+                                                               nil]];
+  NSDictionary *quickPayload = nil;
+  NSDictionary *fullPayload = nil;
+  int exitCode = 0;
+
+  quickPayload = [runner executeDoctorForContext: quickContext exitCode: &exitCode];
+  XCTAssertEqualObjects([quickPayload objectForKey: @"diagnostic_depth"], @"quick");
+
+  fullPayload = [runner executeDoctorForContext: fullContext exitCode: &exitCode];
+  XCTAssertEqualObjects([fullPayload objectForKey: @"diagnostic_depth"], @"full");
 }
 
 - (void)testFullDoctorPayloadExposesDetectionDepthAndNativeAssessment

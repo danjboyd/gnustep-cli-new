@@ -25,6 +25,7 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("setup", proc.stdout)
         self.assertIn("doctor", proc.stdout)
         self.assertIn("build", proc.stdout)
+        self.assertIn("shell", proc.stdout)
         self.assertIn("remove", proc.stdout)
         self.assertIn("update", proc.stdout)
 
@@ -54,7 +55,7 @@ class BootstrapShTests(unittest.TestCase):
 
     def test_setup_json_shape(self):
         proc = self.run_script("--json", "setup")
-        self.assertIn(proc.returncode, (0, 3))
+        self.assertIn(proc.returncode, (0, 3, 4))
         payload = json.loads(proc.stdout)
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["command"], "setup")

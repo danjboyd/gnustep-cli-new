@@ -168,9 +168,17 @@ class BuildInfraTests(unittest.TestCase):
         host_package_names = [package["name"] for package in payload["host_packages"]]
         package_names = [package["name"] for package in payload["packages"]]
         self.assertEqual(payload["strategy"], "msys2-assembly")
+        self.assertEqual(payload["installer"]["source_channel"], "msys2-installer")
+        self.assertIn("msys2-installer/releases/latest/download/msys2-x86_64-latest.exe", payload["installer"]["url"])
+        self.assertEqual(payload["root_layout"]["install_root"], "private-msys2-root")
+        self.assertIn("var/lib/pacman/local", payload["root_layout"]["preserve"])
         self.assertIn("make", host_package_names)
         self.assertIn("mingw-w64-clang-x86_64-clang", package_names)
         self.assertIn("mingw-w64-clang-x86_64-libdispatch", package_names)
+        self.assertIn("mingw-w64-clang-x86_64-cairo", package_names)
+        self.assertIn("mingw-w64-clang-x86_64-fontconfig", package_names)
+        self.assertIn("mingw-w64-clang-x86_64-freetype", package_names)
+        self.assertIn("mingw-w64-clang-x86_64-pixman", package_names)
         conflict_paths = [rule["path"] for rule in payload["conflict_rules"]]
         self.assertIn("clang64/include/Block.h", conflict_paths)
 
@@ -180,8 +188,12 @@ class BuildInfraTests(unittest.TestCase):
         self.assertIn("libs-corebase", payload["components"])
         windows_payload = toolchain_manifest("windows-amd64-msys2-clang64", "2026.04.0")
         self.assertIn("developer_entrypoints", windows_payload)
+        self.assertEqual(windows_payload["source_policy"]["assembly_input"], "official-msys2-installer")
+        self.assertTrue(windows_payload["source_policy"]["private_root_required"])
+        self.assertIn("clang64/bin/clang.exe", windows_payload["developer_entrypoints"]["compiler"])
         self.assertIn("usr/bin/bash.exe", windows_payload["developer_entrypoints"]["build_shell"])
         self.assertIn("usr/bin/sha256sum.exe", windows_payload["developer_entrypoints"]["checksum_tool"])
+        self.assertIn("clang64/bin/openapp", windows_payload["developer_entrypoints"]["app_launcher"])
 
     def test_release_manifest_includes_trust_and_provenance_metadata(self):
         payload = release_manifest_from_matrix("0.1.0", "https://example.invalid/releases")
@@ -206,6 +218,9 @@ class BuildInfraTests(unittest.TestCase):
         payload = toolchain_plan("windows-amd64-msys2-clang64")
         validation_ids = [step["id"] for step in payload["validation"]]
         self.assertIn("otvm-smoke", validation_ids)
+        self.assertIn("gui-smoke", validation_ids)
+        self.assertIn("gorm-build", validation_ids)
+        self.assertIn("gorm-run", validation_ids)
 
     def test_linux_build_script_contains_pinned_components(self):
         script = linux_build_script(
@@ -236,19 +251,28 @@ class BuildInfraTests(unittest.TestCase):
         script = msys2_assembly_script("C:\\managed", "C:\\cache")
         self.assertIn("msys2-installer/releases/latest/download/msys2-x86_64-latest.exe", script)
         self.assertIn("Invoke-WebRequest", script)
+        self.assertIn("[string]$MsysRoot = ''", script)
+        self.assertIn("$MsysRoot = $Prefix", script)
+        self.assertIn("$installingIntoManagedRoot", script)
         self.assertIn("$ProgressPreference = 'SilentlyContinue'", script)
         self.assertIn("pacman -Syuu", script)
         self.assertIn("pacman -S --noconfirm --needed make", script)
+        self.assertIn("pacman -Qkk", script)
+        self.assertIn("MSYS2 local package database integrity check failed.", script)
         self.assertIn("mingw-w64-clang-x86_64-clang", script)
         self.assertIn("--overwrite /clang64/include/Block.h", script)
         self.assertIn("mingw-w64-clang-x86_64-libdispatch", script)
+        self.assertIn("mingw-w64-clang-x86_64-cairo", script)
+        self.assertIn("$msysRootDirs = @('usr','etc','var')", script)
+        self.assertIn("if (-not $installingIntoManagedRoot)", script)
         self.assertIn('& $bash -lc "true"', script)
         self.assertNotIn('\\"true\\"', script)
         self.assertIn("usr\\bin", script)
         self.assertIn("sha256sum.exe", script)
-        self.assertIn("Get-ChildItem -Path (Join-Path $MsysRoot 'usr\\bin') -Include '*.exe','*.dll'", script)
+        self.assertIn("Get-ChildItem -Path (Join-Path $MsysRoot 'usr\\bin') -File", script)
         self.assertIn("No MSYS2 usr\\bin executable/DLL runtime files", script)
         self.assertIn("Copy-Item -Force $runtimeFile.FullName", script)
+        self.assertIn("clang64\\share\\GNUstep\\Makefiles", script)
         self.assertIn("GNUstep.bat", script)
         self.assertIn("GNUstep.ps1", script)
         self.assertIn("MSYS2 managed toolchain assembly completed", script)
@@ -841,6 +865,9 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("sha256sum", failed)
             self.assertIn("msys_runtime", failed)
             self.assertIn("common_make", failed)
+            self.assertIn("openapp", failed)
+            self.assertIn("msys_profile", failed)
+            self.assertIn("pacman_local_db", failed)
 
     def test_toolchain_archive_audit_accepts_complete_windows_layout(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -850,15 +877,45 @@ class BuildInfraTests(unittest.TestCase):
                 zf.writestr(root + "/bin/gnustep-config", "tool")
                 zf.writestr(root + "/bin/clang.exe", "clang")
                 zf.writestr(root + "/clang64/bin/clang.exe", "clang")
+                zf.writestr(root + "/clang64/bin/openapp", "openapp")
                 zf.writestr(root + "/usr/bin/bash.exe", "bash")
                 zf.writestr(root + "/usr/bin/make.exe", "make")
                 zf.writestr(root + "/usr/bin/sha256sum.exe", "sha256sum")
                 zf.writestr(root + "/usr/bin/msys-2.0.dll", "runtime")
-                zf.writestr(root + "/share/GNUstep/Makefiles/common.make", "common")
-                zf.writestr(root + "/share/GNUstep/Makefiles/tool.make", "tool")
+                zf.writestr(root + "/clang64/share/GNUstep/Makefiles/common.make", "common")
+                zf.writestr(root + "/clang64/share/GNUstep/Makefiles/tool.make", "tool")
+                zf.writestr(root + "/etc/profile", "profile")
+                zf.writestr(root + "/var/lib/pacman/local/mingw-w64-clang-x86_64-gnustep-gui-0/desc", "desc")
                 zf.writestr(root + "/GNUstep.bat", "@echo off")
             payload = toolchain_archive_audit(archive, target_id="windows-amd64-msys2-clang64")
             self.assertTrue(payload["ok"])
+
+    def test_toolchain_archive_audit_flags_broken_pacman_local_db_entry(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            archive = Path(tempdir) / "gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev.zip"
+            with __import__("zipfile").ZipFile(archive, "w") as zf:
+                root = "gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev"
+                zf.writestr(root + "/bin/gnustep-config", "tool")
+                zf.writestr(root + "/bin/clang.exe", "clang")
+                zf.writestr(root + "/clang64/bin/clang.exe", "clang")
+                zf.writestr(root + "/clang64/bin/openapp", "openapp")
+                zf.writestr(root + "/usr/bin/bash.exe", "bash")
+                zf.writestr(root + "/usr/bin/make.exe", "make")
+                zf.writestr(root + "/usr/bin/sha256sum.exe", "sha256sum")
+                zf.writestr(root + "/usr/bin/msys-2.0.dll", "runtime")
+                zf.writestr(root + "/clang64/share/GNUstep/Makefiles/common.make", "common")
+                zf.writestr(root + "/clang64/share/GNUstep/Makefiles/tool.make", "tool")
+                zf.writestr(root + "/etc/profile", "profile")
+                zf.writestr(root + "/var/lib/pacman/local/mingw-w64-clang-x86_64-gnustep-gui-0/desc", "desc")
+                zf.writestr(root + "/var/lib/pacman/local/mingw-w64-clang-x86_64-tcl-8.6.17-1/files", "files")
+            payload = toolchain_archive_audit(archive, target_id="windows-amd64-msys2-clang64")
+            self.assertFalse(payload["ok"])
+            check_map = {check["id"]: check for check in payload["checks"]}
+            self.assertFalse(check_map["pacman_local_db_integrity"]["ok"])
+            self.assertIn(
+                "mingw-w64-clang-x86_64-tcl-8.6.17-1",
+                check_map["pacman_local_db_integrity"]["missing_desc_packages"],
+            )
 
 
     def test_verify_and_qualify_release(self):

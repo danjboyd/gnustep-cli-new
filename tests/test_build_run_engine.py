@@ -10,7 +10,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from gnustep_cli_shared.build_run_engine import detect_project, execute_build, execute_run, plan_build, plan_run
+from gnustep_cli_shared.build_run_engine import detect_project, execute_build, execute_clean, execute_run, plan_build, plan_clean, plan_run
 
 
 class BuildRunEngineTests(unittest.TestCase):
@@ -74,13 +74,93 @@ class BuildRunEngineTests(unittest.TestCase):
             self.assertTrue(marker.exists())
             self.assertIn("fake make ran", payload["stdout"])
 
-    def test_plan_run_rejects_aggregate_with_run_specific_message(self):
+    def test_plan_clean_uses_backend_clean_operation(self):
         with tempfile.TemporaryDirectory() as tempdir:
             (Path(tempdir) / "GNUmakefile").write_text("SUBPROJECTS = Tools\ninclude $(GNUSTEP_MAKEFILES)/aggregate.make\n")
+            payload = plan_clean(tempdir)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["command"], "clean")
+            self.assertEqual(payload["backend"], "gnustep-make")
+            self.assertEqual(payload["operation"], "clean")
+            self.assertEqual(payload["invocation"], ["make", "distclean"])
+
+    def test_execute_clean_invokes_distclean_for_gnustep_make_project(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / "GNUmakefile").write_text("SUBPROJECTS = Tools\ninclude $(GNUSTEP_MAKEFILES)/aggregate.make\n")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            marker = root / "make-clean-invoked"
+            fake_make = fake_bin / "make"
+            fake_make.write_text(f"#!/bin/sh\ntest \"$1\" = distclean\ntouch '{marker}'\necho fake clean ran\n")
+            fake_make.chmod(0o755)
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = f"{fake_bin}:{old_path}"
+            try:
+                payload, exit_code = execute_clean(root)
+            finally:
+                os.environ["PATH"] = old_path
+            self.assertEqual(exit_code, 0)
+            self.assertTrue(payload["ok"])
+            self.assertTrue(marker.exists())
+            self.assertIn("fake clean ran", payload["stdout"])
+
+    def test_plan_clean_build_has_clean_and_build_phases(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            (Path(tempdir) / "GNUmakefile").write_text("SUBPROJECTS = Tools\ninclude $(GNUSTEP_MAKEFILES)/aggregate.make\n")
+            payload = plan_build(tempdir, clean_first=True)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["operation"], "clean_build")
+            self.assertEqual([phase["name"] for phase in payload["phases"]], ["clean", "build"])
+            self.assertEqual(payload["phases"][0]["invocation"], ["make", "distclean"])
+            self.assertEqual(payload["phases"][1]["invocation"], ["make"])
+
+    def test_plan_run_rejects_aggregate_without_runnable_targets(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            (Path(tempdir) / "GNUmakefile").write_text("SUBPROJECTS = Libraries\ninclude $(GNUSTEP_MAKEFILES)/aggregate.make\n")
+            library = Path(tempdir) / "Libraries"
+            library.mkdir()
+            (library / "GNUmakefile").write_text("LIBRARY_NAME = Stuff\ninclude $(GNUSTEP_MAKEFILES)/library.make\n")
             payload = plan_run(tempdir)
             self.assertFalse(payload["ok"])
             self.assertEqual(payload["project"]["project_type"], "aggregate")
             self.assertEqual(payload["summary"], "This GNUstep project can be built, but no runnable target was detected.")
+
+    def test_plan_run_discovers_single_app_under_aggregate_project(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / "GNUmakefile").write_text("SUBPROJECTS = Applications\ninclude $(GNUSTEP_MAKEFILES)/aggregate.make\n")
+            (root / "Applications").mkdir()
+            (root / "Applications" / "GNUmakefile").write_text("SUBPROJECTS = Gorm\ninclude $(GNUSTEP_MAKEFILES)/aggregate.make\n")
+            app_dir = root / "Applications" / "Gorm"
+            app_dir.mkdir()
+            (app_dir / "GNUmakefile").write_text("APP_NAME = Gorm\ninclude $(GNUSTEP_MAKEFILES)/application.make\n")
+            payload = plan_run(root)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["backend"], "openapp")
+            if os.name == "nt":
+                self.assertEqual(payload["invocation"][:2], ["bash.exe", "-lc"])
+                self.assertIn("/clang64/share/GNUstep/Makefiles/GNUstep.sh", payload["invocation"][2])
+                self.assertIn('export PATH="/clang64/bin:/usr/bin:', payload["invocation"][2])
+                self.assertIn("/clang64/bin/openapp './Gorm.app'", payload["invocation"][2])
+            else:
+                self.assertEqual(payload["invocation"], ["openapp", "Gorm.app"])
+            self.assertEqual(payload["run_project"]["project_dir"], str(app_dir.resolve()))
+
+    def test_plan_run_reports_multiple_runnable_targets(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            (root / "GNUmakefile").write_text("SUBPROJECTS = Applications\ninclude $(GNUSTEP_MAKEFILES)/aggregate.make\n")
+            (root / "Applications").mkdir()
+            (root / "Applications" / "GNUmakefile").write_text("SUBPROJECTS = One Two\ninclude $(GNUSTEP_MAKEFILES)/aggregate.make\n")
+            for name in ("One", "Two"):
+                app_dir = root / "Applications" / name
+                app_dir.mkdir()
+                (app_dir / "GNUmakefile").write_text(f"APP_NAME = {name}\ninclude $(GNUSTEP_MAKEFILES)/application.make\n")
+            payload = plan_run(root)
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["summary"], "Multiple runnable targets were detected. Run from a specific app or tool directory.")
+            self.assertEqual(len(payload["runnable_targets"]), 2)
 
     def test_plan_build_for_tool(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -96,7 +176,13 @@ class BuildRunEngineTests(unittest.TestCase):
             payload = plan_run(tempdir)
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["backend"], "openapp")
-            self.assertEqual(payload["invocation"], ["openapp", "HelloApp.app"])
+            if os.name == "nt":
+                self.assertEqual(payload["invocation"][:2], ["bash.exe", "-lc"])
+                self.assertIn("/clang64/share/GNUstep/Makefiles/GNUstep.sh", payload["invocation"][2])
+                self.assertIn('export PATH="/clang64/bin:/usr/bin:', payload["invocation"][2])
+                self.assertIn("/clang64/bin/openapp './HelloApp.app'", payload["invocation"][2])
+            else:
+                self.assertEqual(payload["invocation"], ["openapp", "HelloApp.app"])
 
     def test_execute_run_handles_missing_binary(self):
         with tempfile.TemporaryDirectory() as tempdir:

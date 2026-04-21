@@ -101,8 +101,46 @@ def _select_release(manifest_file: Path, doctor: dict[str, Any]) -> tuple[dict[s
 
 def _path_export_hint(root: Path, os_name: str) -> str:
     if os_name == "windows":
-        return rf"$env:Path = '{root}\bin;{root}\Tools;{root}\System\Tools;' + $env:Path"
+        return f'. "{root / "GNUstep.ps1"}"'
     return f'export PATH="{root}/bin:{root}/Tools:{root}/System/Tools:$PATH"'
+
+
+def _write_windows_activation_scripts(root: Path) -> None:
+    tmp = root / "tmp"
+    etc = root / "etc"
+    tmp.mkdir(parents=True, exist_ok=True)
+    etc.mkdir(parents=True, exist_ok=True)
+    (etc / "fstab").write_text(f"{str(tmp).replace(chr(92), '/')} /tmp ntfs binary,noacl,posix=0,user 0 0\n", encoding="ascii")
+    (root / "GNUstep.ps1").write_text(
+        "\n".join(
+            [
+                "$prefix = Split-Path -Parent $MyInvocation.MyCommand.Path",
+                "$env:GNUSTEP_MAKEFILES = Join-Path $prefix 'clang64\\share\\GNUstep\\Makefiles'",
+                "$env:GNUSTEP_CONFIG_FILE = Join-Path $prefix 'clang64\\etc\\GNUstep\\GNUstep.conf'",
+                "$env:TMPDIR = Join-Path $prefix 'tmp'",
+                "$env:TEMP = $env:TMPDIR",
+                "$env:TMP = $env:TMPDIR",
+                "$env:PATH = (Join-Path $prefix 'clang64\\bin') + ';' + (Join-Path $prefix 'bin') + ';' + (Join-Path $prefix 'usr\\bin') + ';' + $env:PATH",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (root / "GNUstep.bat").write_text(
+        "\n".join(
+            [
+                "@echo off",
+                'set "GNUSTEP_MAKEFILES=%~dp0clang64\\share\\GNUstep\\Makefiles"',
+                'set "GNUSTEP_CONFIG_FILE=%~dp0clang64\\etc\\GNUstep\\GNUstep.conf"',
+                'set "TMPDIR=%~dp0tmp"',
+                'set "TEMP=%~dp0tmp"',
+                'set "TMP=%~dp0tmp"',
+                'set "PATH=%~dp0clang64\\bin;%~dp0bin;%~dp0usr\\bin;%PATH%"',
+            ]
+        )
+        + "\n",
+        encoding="ascii",
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -246,6 +284,8 @@ def execute_setup(
             installed_items.append({"artifact_id": artifact["id"], "paths": installed_paths})
 
         _relocate_managed_toolchain(install_path)
+        if payload["doctor"]["os"] == "windows":
+            _write_windows_activation_scripts(install_path)
 
         save_cli_state(
             install_path,
@@ -267,10 +307,10 @@ def execute_setup(
         {
             "kind": "add_path",
             "priority": 1,
-                "message": (
-                    f"Add {install_path / 'bin'}, {install_path / 'Tools'}, and "
-                    f"{install_path / 'System/Tools'} to PATH for future shells."
-                ),
+            "message": (
+                f"Add {install_path / 'bin'} to PATH for future shells. "
+                "The CLI uses its private MSYS2 runtime internally."
+            ),
         },
         {
             "kind": "delete_bootstrap",
