@@ -5057,6 +5057,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     NSString *activeReleasePath = nil;
     NSDictionary *cliArtifact = nil;
     NSDictionary *toolchainArtifact = nil;
+    NSDictionary *installedState = nil;
     NSUInteger j = 0;
 
     if ([self manifest: manifest revokesArtifacts: artifacts error: &policyError])
@@ -5067,9 +5068,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
     if (upgradeMode)
       {
-        NSDictionary *installedState = [self installedLifecycleStateForInstallRoot: installPath];
         NSString *installedVersion = [installedState objectForKey: @"cli_version"];
         NSString *targetVersion = [release objectForKey: @"version"];
+        installedState = [self installedLifecycleStateForInstallRoot: installPath];
+        installedVersion = [installedState objectForKey: @"cli_version"];
         if ([self manifest: manifest isOlderThanInstalledState: installedState error: &policyError])
           {
             *exitCode = 3;
@@ -5114,6 +5116,19 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         else if ([[artifact objectForKey: @"kind"] isEqualToString: @"toolchain"])
           {
             toolchainArtifact = artifact;
+          }
+
+        if (upgradeMode
+            && [[artifact objectForKey: @"reused"] boolValue]
+            && [[artifact objectForKey: @"kind"] isEqualToString: @"toolchain"]
+            && [[installedState objectForKey: @"toolchain_artifact_sha256"] isEqualToString: [artifact objectForKey: @"sha256"]])
+          {
+            [installedArtifacts addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                            [artifact objectForKey: @"id"], @"artifact_id",
+                                                            [NSArray arrayWithObject: installPath], @"paths",
+                                                            [NSNumber numberWithBool: YES], @"reused_existing_layer",
+                                                            nil]];
+            continue;
           }
 
         if ([artifact objectForKey: @"filename"] != nil)
@@ -5205,7 +5220,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
                                                    [NSNumber numberWithInt: 1], @"schema_version",
                                                    [release objectForKey: @"version"], @"cli_version",
-                                                   [release objectForKey: @"version"], @"toolchain_version",
+                                                   (toolchainArtifact && [toolchainArtifact objectForKey: @"version"]) ? [toolchainArtifact objectForKey: @"version"] : [release objectForKey: @"version"], @"toolchain_version",
                                                    (cliArtifact && [cliArtifact objectForKey: @"id"]) ? [cliArtifact objectForKey: @"id"] : [NSNull null], @"cli_artifact_id",
                                                    (cliArtifact && [cliArtifact objectForKey: @"sha256"]) ? [cliArtifact objectForKey: @"sha256"] : [NSNull null], @"cli_artifact_sha256",
                                                    (toolchainArtifact && [toolchainArtifact objectForKey: @"id"]) ? [toolchainArtifact objectForKey: @"id"] : [NSNull null], @"toolchain_artifact_id",
