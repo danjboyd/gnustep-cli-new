@@ -2,6 +2,7 @@
 #import <stdlib.h>
 
 #import "../GSCommandRunner.h"
+#import "../GSCommandContext.h"
 
 @interface GSCommandRunner (Testing)
 - (NSString *)commandSummary:(NSString *)command;
@@ -21,6 +22,7 @@
 - (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory;
 - (NSDictionary *)detectProjectAtPath:(NSString *)projectPath;
 - (NSArray *)toolRunInvocationForProject:(NSDictionary *)project;
+- (NSDictionary *)executeRunForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 @end
 
 @interface GSCommandRunnerTests : XCTestCase
@@ -236,6 +238,35 @@
   invocation = [runner toolRunInvocationForProject: project];
 
   XCTAssertEqualObjects(invocation, expected);
+  [manager removeItemAtPath: root error: NULL];
+}
+
+- (void)testRunReportsMissingAppBundleBeforeLaunching
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent: [[NSUUID UUID] UUIDString]];
+  NSString *gnumakefile = [root stringByAppendingPathComponent: @"GNUmakefile"];
+  NSFileManager *manager = [NSFileManager defaultManager];
+  GSCommandContext *context = nil;
+  NSDictionary *payload = nil;
+  int exitCode = 0;
+
+  XCTAssertTrue([manager createDirectoryAtPath: root withIntermediateDirectories: YES attributes: nil error: NULL]);
+  XCTAssertTrue([@"APP_NAME = Gorm\ninclude $(GNUSTEP_MAKEFILES)/application.make\n"
+    writeToFile: gnumakefile
+      atomically: YES
+        encoding: NSUTF8StringEncoding
+           error: NULL]);
+
+  context = [GSCommandContext contextWithArguments: [NSArray arrayWithObjects: @"run", root, nil]];
+  payload = [runner executeRunForContext: context exitCode: &exitCode];
+
+  XCTAssertEqual(exitCode, 1);
+  XCTAssertFalse([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([payload objectForKey: @"backend"], @"openapp");
+  XCTAssertEqualObjects([payload objectForKey: @"invocation"], [NSNull null]);
+  XCTAssertTrue([[payload objectForKey: @"summary"] rangeOfString: @"Gorm.app was not found"].location != NSNotFound);
+
   [manager removeItemAtPath: root error: NULL];
 }
 

@@ -96,7 +96,11 @@ class BootstrapShTests(unittest.TestCase):
 
     def test_openbsd_prerequisites_include_native_gnustep_runtime(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")
-        self.assertIn("gnustep-make gnustep-base gnustep-libobjc2", content)
+        self.assertIn("gnustep-make gnustep-base gnustep-gui gnustep-back gnustep-libobjc2", content)
+        self.assertIn("doas \"$@\"", content)
+        self.assertIn("bootstrap_user_home", content)
+        self.assertIn("bootstrap_user_name", content)
+        self.assertIn("chown -R \"$owner_user\" \"$selected_root\"", content)
 
     def test_bootstrap_script_does_not_depend_on_python(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")

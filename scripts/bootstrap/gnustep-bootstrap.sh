@@ -88,7 +88,7 @@ host_prerequisite_packages() {
       printf '%s\n' "ca-certificates curl tar gzip xz zstd git make cmake ninja pkgconf clang lld libxml2 libxslt icu avahi gnutls libffi libjpeg-turbo libtiff libpng cairo libxft libxt libx11 libxext"
       ;;
     openbsd)
-      printf '%s\n' "curl gmake cmake ninja pkgconf clang libxml libxslt icu4c avahi gnutls libffi jpeg tiff png cairo libXft gnustep-make gnustep-base gnustep-libobjc2"
+      printf '%s\n' "curl git gmake cmake ninja libxml libxslt icu4c avahi gnutls libffi jpeg tiff png cairo gnustep-make gnustep-base gnustep-gui gnustep-back gnustep-libobjc2"
       ;;
     *)
       printf '%s\n' ""
@@ -137,11 +137,50 @@ run_as_root_command() {
     "$@"
     return $?
   fi
+  if command -v doas >/dev/null 2>&1; then
+    doas "$@"
+    return $?
+  fi
   if command -v sudo >/dev/null 2>&1; then
     sudo "$@"
     return $?
   fi
   return 127
+}
+
+bootstrap_user_home() {
+  if [ "$(id -u)" -ne 0 ]; then
+    printf '%s\n' "$HOME"
+    return 0
+  fi
+  original_user="${SUDO_USER:-${DOAS_USER:-}}"
+  if [ -z "$original_user" ]; then
+    original_user=$(logname 2>/dev/null || true)
+  fi
+  if [ -n "$original_user" ] && [ "$original_user" != "root" ]; then
+    user_home=$(awk -F: -v user="$original_user" '$1 == user {print $6; exit}' /etc/passwd 2>/dev/null || true)
+    if [ -n "$user_home" ]; then
+      printf '%s\n' "$user_home"
+      return 0
+    fi
+  fi
+  printf '%s\n' "$HOME"
+}
+
+bootstrap_user_name() {
+  if [ "$(id -u)" -ne 0 ]; then
+    id -un
+    return 0
+  fi
+  original_user="${SUDO_USER:-${DOAS_USER:-}}"
+  if [ -z "$original_user" ]; then
+    original_user=$(logname 2>/dev/null || true)
+  fi
+  if [ -n "$original_user" ] && [ "$original_user" != "root" ]; then
+    printf '%s\n' "$original_user"
+    return 0
+  fi
+  printf '%s\n' "root"
 }
 
 install_host_prerequisites() {
@@ -416,7 +455,7 @@ EOF
     if [ "$selected_scope" = "system" ]; then
       selected_root="/opt/gnustep-cli"
     else
-      selected_root="$HOME/.local/share/gnustep-cli"
+      selected_root="$(bootstrap_user_home)/.local/share/gnustep-cli"
     fi
   fi
 
@@ -532,11 +571,17 @@ EOF
   "schema_version": 1,
   "cli_version": "$release_version",
   "toolchain_version": "$release_version",
+  "channel": "$([ "$DOGFOOD_MODE" = "1" ] && printf dogfood || printf stable)",
+  "manifest_path": "$manifest_source",
   "packages_version": 1,
   "last_action": "setup",
   "status": "healthy"
 }
 EOF
+  owner_user=$(bootstrap_user_name)
+  if [ "$(id -u)" -eq 0 ] && [ "$selected_scope" = "user" ] && [ "$owner_user" != "root" ]; then
+    chown -R "$owner_user" "$selected_root" 2>/dev/null || true
+  fi
   path_command=$(path_hint "$selected_root")
   path_command_json=$(json_escape "$path_command")
   manifest_source_json=$(json_escape "$manifest_source")

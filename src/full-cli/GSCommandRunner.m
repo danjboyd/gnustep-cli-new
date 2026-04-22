@@ -27,6 +27,8 @@
 - (NSDictionary *)versionPayload;
 - (NSString *)repositoryRoot;
 - (NSString *)defaultManifestPath;
+- (NSString *)dogfoodManifestURL;
+- (NSString *)resolvedManifestPathForInstallRoot:(NSString *)installRoot preferredManifest:(NSString *)manifestPath;
 - (NSString *)defaultManagedRoot;
 - (BOOL)arguments:(NSArray *)arguments containOption:(NSString *)option;
 - (NSDictionary *)readJSONFile:(NSString *)path error:(NSString **)errorMessage;
@@ -54,6 +56,7 @@
 - (NSString *)firstAvailableExecutable:(NSArray *)names;
 - (NSArray *)toolRunInvocationForProject:(NSDictionary *)project;
 - (NSArray *)projectRuntimePathEntriesUnderPath:(NSString *)projectPath;
+- (NSUInteger)createUnversionedSharedLibraryLinksUnderPath:(NSString *)projectPath;
 - (NSString *)windowsOpenAppLaunchCommandForProject:(NSDictionary *)runProject runtimePathEntries:(NSArray *)runtimePathEntries;
 - (NSString *)singleQuotedPowerShellString:(NSString *)string;
 - (NSString *)windowsStartBashCommandForBash:(NSString *)bash command:(NSString *)command;
@@ -563,6 +566,36 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0-dev/release-manifest.json";
 }
 
+- (NSString *)dogfoodManifestURL
+{
+  return @"https://github.com/danjboyd/gnustep-cli-new/releases/download/dogfood/release-manifest.json";
+}
+
+- (NSString *)resolvedManifestPathForInstallRoot:(NSString *)installRoot preferredManifest:(NSString *)manifestPath
+{
+  NSDictionary *state = nil;
+  NSString *stateManifest = nil;
+  NSString *channel = nil;
+
+  if (manifestPath != nil && [manifestPath length] > 0)
+    {
+      return manifestPath;
+    }
+
+  state = [self installedLifecycleStateForInstallRoot: installRoot ? installRoot : [self defaultManagedRoot]];
+  stateManifest = [state objectForKey: @"manifest_path"];
+  channel = [state objectForKey: @"channel"];
+  if ([stateManifest isKindOfClass: [NSString class]] && [stateManifest length] > 0)
+    {
+      return stateManifest;
+    }
+  if ([channel isEqualToString: @"dogfood"])
+    {
+      return [self dogfoodManifestURL];
+    }
+  return [self defaultManifestPath];
+}
+
 - (NSString *)defaultManagedRoot
 {
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
@@ -979,6 +1012,15 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       [mutableEnvironment setObject: [pathEntries componentsJoinedByString: @";"] forKey: @"PATH"];
 #else
       [mutableEnvironment setObject: [pathEntries componentsJoinedByString: @":"] forKey: @"PATH"];
+      {
+        NSMutableArray *libraryEntries = [NSMutableArray arrayWithArray: additionalPathEntries];
+        NSString *existingLibraryPath = [mutableEnvironment objectForKey: @"LD_LIBRARY_PATH"];
+        if ([existingLibraryPath length] > 0)
+          {
+            [libraryEntries addObject: existingLibraryPath];
+          }
+        [mutableEnvironment setObject: [libraryEntries componentsJoinedByString: @":"] forKey: @"LD_LIBRARY_PATH"];
+      }
 #endif
       taskEnvironment = mutableEnvironment;
     }
@@ -1165,6 +1207,15 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       [taskEnvironment setObject: [pathEntries componentsJoinedByString: @";"] forKey: @"PATH"];
 #else
       [taskEnvironment setObject: [pathEntries componentsJoinedByString: @":"] forKey: @"PATH"];
+      {
+        NSMutableArray *libraryEntries = [NSMutableArray arrayWithArray: additionalPathEntries];
+        NSString *existingLibraryPath = [taskEnvironment objectForKey: @"LD_LIBRARY_PATH"];
+        if ([existingLibraryPath length] > 0)
+          {
+            [libraryEntries addObject: existingLibraryPath];
+          }
+        [taskEnvironment setObject: [libraryEntries componentsJoinedByString: @":"] forKey: @"LD_LIBRARY_PATH"];
+      }
 #endif
     }
 
@@ -1458,16 +1509,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       NSString *name = [relativePath lastPathComponent];
       NSString *directory = nil;
-      if ([name isEqualToString: @"obj"] == NO
-          && [name hasSuffix: @".framework"] == NO
-          && [name hasSuffix: @".app"] == NO
-          && [name hasSuffix: @".plugin"] == NO
-          && [name hasSuffix: @".palette"] == NO
-          && [[name pathExtension] isEqualToString: @"dll"] == NO)
-        {
-          continue;
-        }
-      if ([[name pathExtension] isEqualToString: @"dll"] == NO)
+      BOOL isRuntimeLibrary = ([[name pathExtension] isEqualToString: @"dll"]
+                               || [name rangeOfString: @".so"].location != NSNotFound
+                               || [name hasSuffix: @".dylib"]);
+      if (isRuntimeLibrary == NO)
         {
           continue;
         }
@@ -1480,6 +1525,41 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
 
   return entries;
+}
+
+- (NSUInteger)createUnversionedSharedLibraryLinksUnderPath:(NSString *)projectPath
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSDirectoryEnumerator *enumerator = [manager enumeratorAtPath: projectPath];
+  NSString *relativePath = nil;
+  NSUInteger created = 0;
+
+  while ((relativePath = [enumerator nextObject]) != nil)
+    {
+      NSString *name = [relativePath lastPathComponent];
+      NSRange soRange = [name rangeOfString: @".so."];
+      NSString *directory = nil;
+      NSString *linkName = nil;
+      NSString *linkPath = nil;
+
+      if (soRange.location == NSNotFound)
+        {
+          continue;
+        }
+      linkName = [[name substringToIndex: soRange.location] stringByAppendingString: @".so"];
+      directory = [[projectPath stringByAppendingPathComponent: relativePath] stringByDeletingLastPathComponent];
+      linkPath = [directory stringByAppendingPathComponent: linkName];
+      if ([manager fileExistsAtPath: linkPath])
+        {
+          continue;
+        }
+      if ([manager createSymbolicLinkAtPath: linkPath withDestinationPath: name error: NULL])
+        {
+          created++;
+        }
+    }
+
+  return created;
 }
 
 - (NSString *)singleQuotedShellString:(NSString *)string
@@ -4241,7 +4321,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         }
       return NO;
     }
-  data = [NSData dataWithContentsOfURL: url];
+  data = [self downloadURLData: urlString error: errorMessage];
   if (data == nil || [data writeToFile: destination atomically: YES] == NO)
     {
       if (errorMessage != NULL)
@@ -4618,8 +4698,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 {
   NSString *root = (installRoot != nil ? installRoot : ([scope isEqualToString: @"system"] ? @"/opt/gnustep-cli" : [self defaultManagedRoot]));
   NSString *expandedRoot = [root stringByExpandingTildeInPath];
-  NSString *resolvedManifest = manifestPath ? manifestPath : [self defaultManifestPath];
   NSDictionary *installedState = [self installedLifecycleStateForInstallRoot: expandedRoot];
+  NSString *resolvedManifest = [self resolvedManifestPathForInstallRoot: expandedRoot preferredManifest: manifestPath];
   NSDictionary *manifest = nil;
   NSDictionary *release = nil;
   NSDictionary *doctor = nil;
@@ -4898,6 +4978,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       NSString *upgradeRoot = (installRoot != nil ? installRoot : ([scope isEqualToString: @"system"] ? @"/opt/gnustep-cli" : [self defaultManagedRoot]));
       NSDictionary *state = [self installedLifecycleStateForInstallRoot: upgradeRoot];
+      if (manifestPath == nil)
+        {
+          manifestPath = [self resolvedManifestPathForInstallRoot: upgradeRoot preferredManifest: nil];
+        }
       if ([[state objectForKey: @"status"] isEqualToString: @"needs_repair"])
         {
           *exitCode = 3;
@@ -5094,7 +5178,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                                    [release objectForKey: @"version"], @"active_release",
                                                    activeReleasePath ? activeReleasePath : installPath, @"active_release_path",
                                                    backupPath ? backupPath : [NSNull null], @"previous_release_path",
-                                                   @"stable", @"channel",
+                                                   ([[[payload objectForKey: @"plan"] objectForKey: @"manifest_path"] rangeOfString: @"/dogfood/"].location != NSNotFound) ? @"dogfood" : @"stable", @"channel",
                                                    [[payload objectForKey: @"plan"] objectForKey: @"manifest_path"], @"manifest_path",
                                                    [manifest objectForKey: @"metadata_version"] ? [manifest objectForKey: @"metadata_version"] : [NSNull null], @"last_manifest_metadata_version",
                                                    [manifest objectForKey: @"generated_at"] ? [manifest objectForKey: @"generated_at"] : [NSNull null], @"last_manifest_generated_at",
@@ -5488,13 +5572,15 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         {
           NSMutableArray *setupArguments = [NSMutableArray arrayWithObjects: @"setup", @"--upgrade", nil];
           NSDictionary *setupPayload = nil;
+          NSString *resolvedManifest = [self resolvedManifestPathForInstallRoot: installRoot ? installRoot : [self defaultManagedRoot]
+                                                              preferredManifest: manifestPath];
           if (installRoot != nil)
             {
               [setupArguments addObjectsFromArray: [NSArray arrayWithObjects: @"--root", installRoot, nil]];
             }
-          if (manifestPath != nil)
+          if (resolvedManifest != nil)
             {
-              [setupArguments addObjectsFromArray: [NSArray arrayWithObjects: @"--manifest", manifestPath, nil]];
+              [setupArguments addObjectsFromArray: [NSArray arrayWithObjects: @"--manifest", resolvedManifest, nil]];
             }
           setupPayload = [self executeSetupForContext: [GSCommandContext contextWithArguments: setupArguments] exitCode: exitCode];
           return [self updatePayloadFromSetupPayload: setupPayload
@@ -5561,6 +5647,15 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
             if (manifestPath != nil)
               {
                 [cliArguments addObjectsFromArray: [NSArray arrayWithObjects: @"--manifest", manifestPath, nil]];
+              }
+            else
+              {
+                NSString *resolvedManifest = [self resolvedManifestPathForInstallRoot: installRoot ? installRoot : [self defaultManagedRoot]
+                                                                    preferredManifest: nil];
+                if (resolvedManifest != nil)
+                  {
+                    [cliArguments addObjectsFromArray: [NSArray arrayWithObjects: @"--manifest", resolvedManifest, nil]];
+                  }
               }
             cliApply = [self executeUpdateForContext: [GSCommandContext contextWithArguments: cliArguments] exitCode: &applyExit];
             if (applyExit != 0)
@@ -5666,6 +5761,15 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                             invocation: buildInvocation
                                                project: project
                                           streamOutput: streamOutput];
+      if ([[buildPhase objectForKey: @"ok"] boolValue] == NO
+          && [self createUnversionedSharedLibraryLinksUnderPath: [project objectForKey: @"project_dir"]] > 0)
+        {
+          buildPhase = [self projectOperationPhaseWithName: @"build"
+                                                   backend: backend
+                                                invocation: buildInvocation
+                                                   project: project
+                                              streamOutput: streamOutput];
+        }
       [phases addObject: buildPhase];
       *exitCode = [[buildPhase objectForKey: @"ok"] boolValue] ? 0 : 1;
       return [NSDictionary dictionaryWithObjectsAndKeys:
@@ -5690,6 +5794,15 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                         invocation: buildInvocation
                                            project: project
                                       streamOutput: streamOutput];
+  if ([[buildPhase objectForKey: @"ok"] boolValue] == NO
+      && [self createUnversionedSharedLibraryLinksUnderPath: [project objectForKey: @"project_dir"]] > 0)
+    {
+      buildPhase = [self projectOperationPhaseWithName: @"build"
+                                               backend: backend
+                                            invocation: buildInvocation
+                                               project: project
+                                          streamOutput: streamOutput];
+    }
   *exitCode = [[buildPhase objectForKey: @"ok"] boolValue] ? 0 : 1;
   return [NSDictionary dictionaryWithObjectsAndKeys:
                         [NSNumber numberWithInt: 1], @"schema_version",
@@ -5822,6 +5935,26 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
   else if ([[runProject objectForKey: @"project_type"] isEqualToString: @"app"])
     {
+      NSString *appName = [NSString stringWithFormat: @"%@.app", [runProject objectForKey: @"target_name"]];
+      NSString *appPath = [[runProject objectForKey: @"project_dir"] stringByAppendingPathComponent: appName];
+      if ([[NSFileManager defaultManager] fileExistsAtPath: appPath] == NO)
+        {
+          *exitCode = 1;
+          return [NSDictionary dictionaryWithObjectsAndKeys:
+                                [NSNumber numberWithInt: 1], @"schema_version",
+                                @"run", @"command",
+                                [NSNumber numberWithBool: NO], @"ok",
+                                @"error", @"status",
+                                [NSString stringWithFormat: @"Run failed: %@ was not found. Build the app before running it.", appName], @"summary",
+                                project, @"project",
+                                runProject, @"run_project",
+                                @"openapp", @"backend",
+                                [NSNull null], @"invocation",
+                                @"", @"stdout",
+                                [NSString stringWithFormat: @"missing app bundle: %@", appPath], @"stderr",
+                                [NSNumber numberWithInt: 1], @"exit_status",
+                                nil];
+        }
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
       NSArray *runtimePathEntries = [self projectRuntimePathEntriesUnderPath: [project objectForKey: @"project_dir"]];
       NSString *binaryPath = [[[NSProcessInfo processInfo] arguments] objectAtIndex: 0];
@@ -5857,7 +5990,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                               nil];
       backend = @"openapp";
 #else
-      invocation = [NSArray arrayWithObjects: @"openapp", [NSString stringWithFormat: @"%@.app", [runProject objectForKey: @"target_name"]], nil];
+      invocation = [NSArray arrayWithObjects: @"openapp", appName, nil];
       backend = @"openapp";
 #endif
       launchOnly = YES;
