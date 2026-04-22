@@ -1697,27 +1697,15 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 - (NSString *)firstAvailableExecutable:(NSArray *)names
 {
   NSUInteger i = 0;
-  NSFileManager *manager = [NSFileManager defaultManager];
-  NSString *pathVariable = [[[NSProcessInfo processInfo] environment] objectForKey: @"PATH"];
-  NSArray *pathEntries = pathVariable ?
-#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
-    [pathVariable componentsSeparatedByString: @";"] :
-#else
-    [pathVariable componentsSeparatedByString: @":"] :
-#endif
-    [NSArray array];
+  NSDictionary *environment = [self managedChildProcessEnvironment];
 
   for (i = 0; i < [names count]; i++)
     {
-      NSString *name = [names objectAtIndex: i];
-      NSUInteger j = 0;
-      for (j = 0; j < [pathEntries count]; j++)
+      NSString *candidate = [self resolvedExecutablePathForCommand: [names objectAtIndex: i]
+                                                       environment: environment];
+      if (candidate != nil)
         {
-          NSString *candidate = [[pathEntries objectAtIndex: j] stringByAppendingPathComponent: name];
-          if ([manager isExecutableFileAtPath: candidate])
-            {
-              return candidate;
-            }
+          return candidate;
         }
     }
   return nil;
