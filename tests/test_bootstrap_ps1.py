@@ -47,6 +47,12 @@ class BootstrapPowerShellTests(unittest.TestCase):
         self.assertNotIn("Invoke-WebRequest -UseBasicParsing -Uri $cliArtifact.url", script)
         self.assertNotIn("Invoke-WebRequest -UseBasicParsing -Uri $toolchainArtifact.url", script)
 
+    def test_bootstrap_has_temporary_dogfood_manifest_option(self):
+        script = BOOTSTRAP.read_text()
+        self.assertIn("--dogfood", script)
+        self.assertIn("$Script:DogfoodManifestUrl", script)
+        self.assertIn("/releases/download/dogfood/release-manifest.json", script)
+
     def test_doctor_json_shape(self):
         proc = self.run_script("--json", "doctor")
         self.assertIn(proc.returncode, (0, 3))

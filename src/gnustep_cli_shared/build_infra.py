@@ -304,6 +304,246 @@ def release_manifest_from_matrix(version: str, base_url: str) -> dict[str, Any]:
     }
 
 
+def _artifact_target_id(artifact: dict[str, Any]) -> str | None:
+    artifact_id = artifact.get("id")
+    if not isinstance(artifact_id, str):
+        return None
+    for prefix in ("cli-", "toolchain-", "package-", "delta-"):
+        if artifact_id.startswith(prefix):
+            return artifact_id.removeprefix(prefix)
+    return None
+
+
+def _artifact_immutable_reference_errors(artifact: dict[str, Any], *, expected_kind: str | None = None, expected_target_id: str | None = None) -> list[str]:
+    errors: list[str] = []
+    required = ("id", "kind", "version", "os", "arch", "url", "sha256", "size")
+    for field in required:
+        if artifact.get(field) in (None, ""):
+            errors.append(f"artifact is missing immutable reference field: {field}")
+    if expected_kind and artifact.get("kind") != expected_kind:
+        errors.append(f"artifact kind must be {expected_kind}")
+    if expected_target_id and _artifact_target_id(artifact) != expected_target_id:
+        errors.append(f"artifact target must be {expected_target_id}")
+    sha256 = artifact.get("sha256")
+    if isinstance(sha256, str) and sha256 == "TBD":
+        errors.append("artifact sha256 must be concrete for reuse")
+    integrity = artifact.get("integrity")
+    if isinstance(integrity, dict) and integrity.get("sha256") not in (None, sha256):
+        errors.append("artifact integrity.sha256 must match sha256")
+    return errors
+
+
+def reusable_artifact_reference(
+    artifact: dict[str, Any],
+    *,
+    expected_kind: str | None = None,
+    expected_target_id: str | None = None,
+) -> dict[str, Any]:
+    errors = _artifact_immutable_reference_errors(
+        artifact,
+        expected_kind=expected_kind,
+        expected_target_id=expected_target_id,
+    )
+    if errors:
+        raise ValueError("; ".join(errors))
+    reference = deepcopy(artifact)
+    reference["reused"] = True
+    reference["published"] = True
+    reference.setdefault("integrity", {"sha256": reference["sha256"]})
+    reference["reuse_policy"] = {
+        "kind": "immutable-artifact-reference",
+        "requires_url": True,
+        "requires_sha256": True,
+        "requires_size": True,
+        "local_reupload_required": False,
+    }
+    reference.setdefault("layer", "managed-toolchain" if reference.get("kind") == "toolchain" else reference.get("kind"))
+    return reference
+
+
+def dogfood_snapshot_version(
+    base_version: str,
+    *,
+    source_revision: str | None = None,
+    timestamp: datetime | str | None = None,
+    sequence: int = 0,
+) -> str:
+    if timestamp is None:
+        timestamp_value = datetime.now(UTC)
+    elif isinstance(timestamp, datetime):
+        timestamp_value = timestamp.astimezone(UTC) if timestamp.tzinfo is not None else timestamp.replace(tzinfo=UTC)
+    else:
+        normalized = timestamp.replace("Z", "+00:00")
+        timestamp_value = datetime.fromisoformat(normalized)
+        if timestamp_value.tzinfo is None:
+            timestamp_value = timestamp_value.replace(tzinfo=UTC)
+        timestamp_value = timestamp_value.astimezone(UTC)
+    stamp = timestamp_value.strftime("%Y%m%dT%H%M%SZ")
+    revision = (source_revision or _git_revision() or "unknown").strip()
+    revision_part = re.sub(r"[^A-Za-z0-9]+", "", revision)[:12] or "unknown"
+    return f"{base_version}-dogfood.{stamp}.g{revision_part}.{sequence}"
+
+
+def dogfood_snapshot_manifest(
+    base_version: str,
+    base_url: str,
+    *,
+    source_revision: str | None = None,
+    timestamp: datetime | str | None = None,
+    sequence: int = 0,
+    cli_artifacts: list[dict[str, Any]] | None = None,
+    reused_toolchain_artifacts: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    version = dogfood_snapshot_version(
+        base_version,
+        source_revision=source_revision,
+        timestamp=timestamp,
+        sequence=sequence,
+    )
+    artifacts: list[dict[str, Any]] = []
+    toolchain_by_target = {
+        _artifact_target_id(artifact): reusable_artifact_reference(artifact, expected_kind="toolchain")
+        for artifact in (reused_toolchain_artifacts or [])
+    }
+    for artifact in cli_artifacts or []:
+        cli = deepcopy(artifact)
+        cli["version"] = version
+        target_id = _artifact_target_id(cli)
+        toolchain = toolchain_by_target.get(target_id)
+        if toolchain is not None:
+            cli["requires_toolchain"] = {
+                "artifact_id": toolchain["id"],
+                "version": toolchain.get("version"),
+                "sha256": toolchain.get("sha256"),
+                "reused": True,
+            }
+            cli["layer_update_policy"] = {
+                "kind": "cli-layer",
+                "toolchain_rebuild_required": False,
+                "toolchain_reuse_allowed": True,
+            }
+        artifacts.append(cli)
+    artifacts.extend(toolchain_by_target.values())
+    return {
+        "schema_version": 1,
+        "channel": "dogfood",
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "metadata_version": 1,
+        "expires_at": (datetime.now(UTC).replace(microsecond=0) + timedelta(days=7)).isoformat().replace("+00:00", "Z"),
+        "trust": {
+            "root_version": 1,
+            "signature_policy": "single-role-v1",
+            "signatures": [],
+            "revoked_artifacts": [],
+        },
+        "releases": [
+            {
+                "version": version,
+                "status": "active",
+                "snapshot": {
+                    "kind": "dogfood",
+                    "base_version": base_version,
+                    "source_revision": source_revision or _git_revision(),
+                    "sequence": sequence,
+                },
+                "artifacts": artifacts,
+            }
+        ],
+        "retention": {
+            "policy": "dogfood-snapshot-window",
+            "keep_latest": 12,
+            "max_age_days": 14,
+        },
+    }
+
+
+def delta_artifact_record(
+    *,
+    delta_id: str,
+    from_artifact: dict[str, Any],
+    to_artifact: dict[str, Any],
+    url: str,
+    sha256: str,
+    size: int,
+    delta_format: str = "gnustep-delta-v1",
+    algorithm: str = "metadata-only",
+) -> dict[str, Any]:
+    target_id = _artifact_target_id(to_artifact)
+    if target_id is None:
+        raise ValueError("target artifact id is not target-scoped")
+    if from_artifact.get("kind") != to_artifact.get("kind"):
+        raise ValueError("delta source and target artifacts must have the same kind")
+    if _artifact_target_id(from_artifact) != target_id:
+        raise ValueError("delta source and target artifacts must have the same target")
+    record = {
+        "id": delta_id,
+        "kind": f"{to_artifact.get('kind')}-delta",
+        "version": to_artifact.get("version"),
+        "os": to_artifact.get("os"),
+        "arch": to_artifact.get("arch"),
+        "compiler_family": to_artifact.get("compiler_family"),
+        "toolchain_flavor": to_artifact.get("toolchain_flavor"),
+        "objc_runtime": to_artifact.get("objc_runtime"),
+        "objc_abi": to_artifact.get("objc_abi"),
+        "required_features": to_artifact.get("required_features", []),
+        "format": delta_format,
+        "delta_format": delta_format,
+        "delta_algorithm": algorithm,
+        "from_artifact": from_artifact.get("id"),
+        "to_artifact": to_artifact.get("id"),
+        "from_sha256": from_artifact.get("sha256"),
+        "to_sha256": to_artifact.get("sha256"),
+        "url": url,
+        "sha256": sha256,
+        "integrity": {"sha256": sha256},
+        "size": size,
+        "target_artifact": {
+            "id": to_artifact.get("id"),
+            "sha256": to_artifact.get("sha256"),
+            "url": to_artifact.get("url"),
+            "size": to_artifact.get("size"),
+        },
+    }
+    errors = validate_delta_artifact_record(record)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return record
+
+
+def validate_delta_artifact_record(artifact: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    required = ("id", "kind", "from_artifact", "to_artifact", "from_sha256", "to_sha256", "url", "sha256", "size", "delta_format")
+    for field in required:
+        if artifact.get(field) in (None, ""):
+            errors.append(f"delta artifact is missing required field: {field}")
+    if artifact.get("delta_format") != "gnustep-delta-v1":
+        errors.append("delta artifact format must be gnustep-delta-v1")
+    for field in ("from_sha256", "to_sha256", "sha256"):
+        value = artifact.get(field)
+        if value == "TBD":
+            errors.append(f"delta artifact {field} must be concrete")
+    if artifact.get("kind") not in {"cli-delta", "toolchain-delta", "package-delta", "delta"}:
+        errors.append("delta artifact kind must identify a delta layer")
+    return errors
+
+
+def _load_reusable_artifact(path: str | Path, *, expected_kind: str, expected_target_id: str) -> dict[str, Any]:
+    payload = json.loads(Path(path).read_text())
+    if isinstance(payload, dict) and "releases" in payload:
+        for release in payload.get("releases", []):
+            for artifact in release.get("artifacts", []):
+                if artifact.get("kind") == expected_kind and _artifact_target_id(artifact) == expected_target_id:
+                    return reusable_artifact_reference(
+                        artifact,
+                        expected_kind=expected_kind,
+                        expected_target_id=expected_target_id,
+                    )
+        raise ValueError(f"no {expected_kind} artifact for {expected_target_id} found in {path}")
+    if not isinstance(payload, dict):
+        raise ValueError(f"reusable artifact reference must be a JSON object: {path}")
+    return reusable_artifact_reference(payload, expected_kind=expected_kind, expected_target_id=expected_target_id)
+
+
 def source_lock_template(target_id: str) -> dict[str, Any]:
     target = target_by_id(target_id)
     if target["strategy"] != "source-build":
@@ -484,6 +724,79 @@ def component_inventory(target_id: str, toolchain_version: str) -> dict[str, Any
             "notes": target.get("portability_notes"),
         },
         "components": components,
+    }
+
+
+def windows_msys2_component_inventory(
+    *,
+    toolchain_version: str,
+    packages: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    target = target_by_id("windows-amd64-msys2-clang64")
+    package_records = packages or [
+        {
+            "name": name,
+            "version": "TBD",
+            "package_sha256": "TBD",
+            "installed_files_sha256": "TBD",
+            "layer": "base",
+        }
+        for name in [*MSYS2_HOST_PACKAGES, *MSYS2_PACKAGE_INPUTS]
+    ]
+    return {
+        "schema_version": 1,
+        "target": {
+            "id": target["id"],
+            "os": target["os"],
+            "arch": target["arch"],
+            "compiler_family": target["compiler_family"],
+            "toolchain_flavor": target["toolchain_flavor"],
+        },
+        "toolchain_version": toolchain_version,
+        "strategy": "msys2-package-inventory",
+        "packages": package_records,
+    }
+
+
+def compare_windows_msys2_inventories(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
+    old_packages = {package.get("name"): package for package in old.get("packages", []) if isinstance(package, dict)}
+    new_packages = {package.get("name"): package for package in new.get("packages", []) if isinstance(package, dict)}
+    added = sorted(name for name in new_packages if name not in old_packages)
+    removed = sorted(name for name in old_packages if name not in new_packages)
+    changed: list[dict[str, Any]] = []
+    for name in sorted(set(old_packages) & set(new_packages)):
+        before = old_packages[name]
+        after = new_packages[name]
+        if (
+            before.get("version") != after.get("version")
+            or before.get("package_sha256") != after.get("package_sha256")
+            or before.get("installed_files_sha256") != after.get("installed_files_sha256")
+        ):
+            changed.append(
+                {
+                    "name": name,
+                    "old_version": before.get("version"),
+                    "new_version": after.get("version"),
+                    "old_package_sha256": before.get("package_sha256"),
+                    "new_package_sha256": after.get("package_sha256"),
+                    "old_installed_files_sha256": before.get("installed_files_sha256"),
+                    "new_installed_files_sha256": after.get("installed_files_sha256"),
+                }
+            )
+    destructive_change = bool(removed)
+    action = "reuse_existing_toolchain" if not added and not removed and not changed else ("full_toolchain_checkpoint" if destructive_change else "component_update")
+    return {
+        "schema_version": 1,
+        "command": "compare-windows-msys2-inventories",
+        "ok": True,
+        "status": "ok",
+        "summary": "Windows MSYS2 inventory comparison completed.",
+        "action": action,
+        "added_packages": added,
+        "removed_packages": removed,
+        "changed_packages": changed,
+        "requires_full_toolchain_artifact": action == "full_toolchain_checkpoint",
+        "component_replacement_sufficient": action == "component_update",
     }
 
 
@@ -2429,13 +2742,19 @@ def release_provenance_document(release_dir: str | Path, *, builder_identity: st
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     artifacts = []
     for artifact in manifest["releases"][0]["artifacts"]:
-        artifact_path = root / artifact["filename"]
+        filename = artifact.get("filename")
+        artifact_path = root / filename if filename else None
         artifacts.append({
             "id": artifact["id"],
             "kind": artifact["kind"],
-            "filename": artifact["filename"],
+            "version": artifact.get("version"),
+            "os": artifact.get("os"),
+            "arch": artifact.get("arch"),
+            "filename": filename,
+            "url": artifact.get("url"),
+            "reused": bool(artifact.get("reused")),
             "sha256": artifact["sha256"],
-            "size": artifact_path.stat().st_size if artifact_path.exists() else artifact.get("size"),
+            "size": artifact_path.stat().st_size if artifact_path and artifact_path.exists() else artifact.get("size"),
             "source_policy": artifact.get("metadata", {}).get("source_policy"),
             "lock_file": artifact.get("metadata", {}).get("lock_file"),
             "component_inventory": artifact.get("metadata", {}).get("component_inventory"),
@@ -2569,6 +2888,9 @@ def release_trust_gate(release_dir: str | Path, *, require_signatures: bool = Tr
             provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
             add("provenance-manifest-digest", provenance.get("manifest", {}).get("sha256") == _sha256(manifest_path), "provenance records the release manifest digest")
             for artifact in provenance.get("artifacts", []):
+                if artifact.get("reused") and not artifact.get("filename"):
+                    add(f"artifact-reference:{artifact.get('id')}", not _artifact_immutable_reference_errors(artifact), f"reused artifact reference is immutable for {artifact.get('id')}")
+                    continue
                 artifact_path = root / artifact.get("filename", "")
                 add(f"artifact-digest:{artifact.get('filename')}", artifact_path.exists() and artifact.get("sha256") == _sha256(artifact_path), f"artifact digest matches for {artifact.get('filename')}")
         except Exception as exc:
@@ -2897,6 +3219,7 @@ def stage_release_assets(
     *,
     cli_inputs: dict[str, str | Path] | None = None,
     toolchain_inputs: dict[str, str | Path] | None = None,
+    reused_toolchain_artifacts: dict[str, dict[str, Any] | str | Path] | None = None,
     channel: str = "stable",
 ) -> dict[str, Any]:
     output_root = Path(output_dir).resolve()
@@ -2906,12 +3229,14 @@ def stage_release_assets(
 
     cli_inputs = cli_inputs or {}
     toolchain_inputs = toolchain_inputs or {}
+    reused_toolchain_artifacts = reused_toolchain_artifacts or {}
     artifacts: list[dict[str, Any]] = []
     checksums: list[dict[str, str]] = []
 
     for target in tier1_targets():
         if not target["publish"]:
             continue
+        target_artifacts: list[dict[str, Any]] = []
         for kind, inputs in (("cli", cli_inputs), ("toolchain", toolchain_inputs)):
             input_value = inputs.get(target["id"])
             if input_value is None:
@@ -2958,8 +3283,43 @@ def stage_release_assets(
                     "assembly_metadata": "toolchain-assembly.json" if (source / "toolchain-assembly.json").exists() else None,
                     "source_policy": "source-build" if target["strategy"] == "source-build" else target["strategy"],
                 }
-            artifacts.append(artifact)
+            target_artifacts.append(artifact)
             checksums.append({"filename": filename, "sha256": artifact["sha256"]})
+
+        reused_toolchain = reused_toolchain_artifacts.get(target["id"])
+        if reused_toolchain is not None and target["id"] not in toolchain_inputs:
+            if isinstance(reused_toolchain, dict):
+                reused = reusable_artifact_reference(
+                    reused_toolchain,
+                    expected_kind="toolchain",
+                    expected_target_id=target["id"],
+                )
+            else:
+                reused = _load_reusable_artifact(
+                    reused_toolchain,
+                    expected_kind="toolchain",
+                    expected_target_id=target["id"],
+                )
+            reused.setdefault("supported_distributions", target.get("supported_distributions", []))
+            reused.setdefault("supported_os_versions", target.get("supported_os_versions", []))
+            reused.setdefault("portability_policy", target.get("portability_policy", "platform-wide"))
+            target_artifacts.append(reused)
+
+        toolchain_artifact = next((artifact for artifact in target_artifacts if artifact.get("kind") == "toolchain"), None)
+        for artifact in target_artifacts:
+            if artifact.get("kind") == "cli" and toolchain_artifact is not None:
+                artifact["requires_toolchain"] = {
+                    "artifact_id": toolchain_artifact["id"],
+                    "version": toolchain_artifact.get("version"),
+                    "sha256": toolchain_artifact.get("sha256"),
+                    "reused": bool(toolchain_artifact.get("reused")),
+                }
+                artifact["layer_update_policy"] = {
+                    "kind": "cli-layer",
+                    "toolchain_rebuild_required": False,
+                    "toolchain_reuse_allowed": True,
+                }
+        artifacts.extend(target_artifacts)
 
     manifest = {
         "schema_version": 1,
@@ -3040,7 +3400,34 @@ def verify_release_directory(release_dir: str | Path) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     ok = True
     for artifact in artifacts:
-        filename = artifact["filename"]
+        filename = artifact.get("filename")
+        if artifact.get("reused") and not filename:
+            reference_errors = _artifact_immutable_reference_errors(artifact)
+            reference_ok = not reference_errors
+            results.append(
+                {
+                    "id": artifact.get("id"),
+                    "reused": True,
+                    "local_file_required": False,
+                    "immutable_reference_ok": reference_ok,
+                    "errors": reference_errors,
+                }
+            )
+            ok = ok and reference_ok
+            continue
+        if not filename:
+            results.append(
+                {
+                    "id": artifact.get("id"),
+                    "reused": bool(artifact.get("reused")),
+                    "local_file_required": True,
+                    "exists": False,
+                    "sha256_matches": False,
+                    "errors": ["artifact is missing filename"],
+                }
+            )
+            ok = False
+            continue
         asset_path = root / filename
         exists = asset_path.exists()
         actual_sha = _sha256(asset_path) if exists else None
@@ -3209,7 +3596,26 @@ def qualify_release_install(release_dir: str | Path, install_root: str | Path) -
     manifest = json.loads((root / "release-manifest.json").read_text())
     installs: list[dict[str, Any]] = []
     for artifact in manifest["releases"][0]["artifacts"]:
-        filename = artifact["filename"]
+        filename = artifact.get("filename")
+        if artifact.get("reused") and not filename:
+            installs.append(
+                {
+                    "artifact_id": artifact["id"],
+                    "reused": True,
+                    "install_path": None,
+                    "summary": "Reused immutable artifact reference is not extracted from the current release directory.",
+                }
+            )
+            continue
+        if not filename:
+            return {
+                "schema_version": 1,
+                "command": "qualify-release",
+                "ok": False,
+                "status": "error",
+                "summary": "Release artifact is missing filename for local qualification.",
+                "artifact_id": artifact.get("id"),
+            }
         asset_path = root / filename
         extract_root = destination / artifact["id"]
         if extract_root.exists():
@@ -4168,6 +4574,7 @@ def prepare_github_release(
     *,
     cli_inputs: dict[str, str | Path] | None = None,
     toolchain_inputs: dict[str, str | Path] | None = None,
+    reused_toolchain_artifacts: dict[str, dict[str, Any] | str | Path] | None = None,
     install_root: str | Path | None = None,
     handoff_install_root: str | Path | None = None,
     channel: str = "stable",
@@ -4179,6 +4586,7 @@ def prepare_github_release(
         base_url,
         cli_inputs=cli_inputs,
         toolchain_inputs=toolchain_inputs,
+        reused_toolchain_artifacts=reused_toolchain_artifacts,
         channel=channel,
     )
     release_dir = staged["release_dir"]
@@ -4188,6 +4596,19 @@ def prepare_github_release(
     manifest = json.loads((Path(release_dir) / "release-manifest.json").read_text())
     for artifact in manifest["releases"][0]["artifacts"]:
         if artifact["kind"] != "toolchain":
+            continue
+        if artifact.get("reused") and not artifact.get("filename"):
+            toolchain_audits.append(
+                {
+                    "schema_version": 1,
+                    "command": "toolchain-archive-audit",
+                    "ok": True,
+                    "status": "ok",
+                    "summary": "Reused immutable toolchain artifact reference is not re-audited from the current release directory.",
+                    "artifact_id": artifact.get("id"),
+                    "reused": True,
+                }
+            )
             continue
         audit = toolchain_archive_audit(Path(release_dir) / artifact["filename"], target_id=artifact["id"].removeprefix("toolchain-"))
         toolchain_audits.append(audit)
@@ -4231,6 +4652,86 @@ def prepare_github_release(
         "otvm_host_validation_plan": host_validation_plan,
         "otvm_host_validation_plan_path": str(host_validation_plan_path),
         "github_release_plan": publish_plan,
+    }
+
+
+def session_build_box_plan(
+    *,
+    targets: list[str] | None = None,
+    ttl_hours: int = 8,
+    channel: str = "dogfood",
+    repo_root: str | Path = ".",
+    otvm_config: str = "~/oracletestvms-libvirt.toml",
+) -> dict[str, Any]:
+    selected_targets = targets or [target["id"] for target in TIER1_TARGETS if target["publish"]]
+    known_targets = {target["id"]: target for target in TIER1_TARGETS}
+    unknown = [target for target in selected_targets if target not in known_targets]
+    if unknown:
+        return {
+            "schema_version": 1,
+            "command": "session-build-box-plan",
+            "ok": False,
+            "status": "error",
+            "summary": "Unknown build targets requested.",
+            "unknown_targets": unknown,
+        }
+
+    builders: list[dict[str, Any]] = []
+    for target_id in selected_targets:
+        target = known_targets[target_id]
+        profile = {
+            "linux": "debian-13-gnome-wayland" if target_id == "linux-amd64-clang" else "ubuntu-24.04-aarch64" if target["arch"] == "arm64" else "ubuntu-24.04-amd64",
+            "openbsd": "openbsd-7.8-fvwm",
+            "windows": "windows-2022",
+        }.get(target["os"], target_id)
+        builders.append(
+            {
+                "target_id": target_id,
+                "os": target["os"],
+                "arch": target["arch"],
+                "toolchain_flavor": target["toolchain_flavor"],
+                "otvm_profile": profile,
+                "ttl_hours": ttl_hours,
+                "state": "planned",
+                "source_sync": {
+                    "mode": "incremental",
+                    "repo_root": str(Path(repo_root)),
+                    "include": ["src/full-cli", "src/gnustep_cli_shared", "scripts", "schemas", "GNUmakefile"],
+                    "exclude": ["dist", "vendor", ".git", "__pycache__"],
+                },
+                "artifact": {
+                    "kind": "cli",
+                    "target_id": target_id,
+                    "channel": channel,
+                    "toolchain_layer": "reuse-installed-compatible",
+                },
+            }
+        )
+
+    return {
+        "schema_version": 1,
+        "command": "session-build-box-plan",
+        "ok": True,
+        "status": "ok",
+        "summary": "Session-scoped warm build box plan generated.",
+        "channel": channel,
+        "ttl_hours": ttl_hours,
+        "otvm_config": otvm_config,
+        "targets": selected_targets,
+        "builders": builders,
+        "steps": [
+            {"id": "provision", "title": "Create or reuse one warm otvm build box per selected target."},
+            {"id": "sync-source", "title": "Incrementally sync changed source and build metadata to each warm builder."},
+            {"id": "build-cli", "title": "Build target-specific full CLI artifacts without rebuilding unchanged toolchain layers."},
+            {"id": "collect-artifacts", "title": "Collect small CLI artifacts and build provenance from each builder."},
+            {"id": "publish-dogfood-manifest", "title": "Publish or stage a dogfood manifest that references reused toolchain layers."},
+            {"id": "cleanup", "title": "Destroy or extend warm builders explicitly before TTL expiry."},
+        ],
+        "cost_controls": {
+            "default_ttl_hours": ttl_hours,
+            "requires_explicit_cleanup": True,
+            "list_active_leases_before_provisioning": True,
+        },
     }
 
 

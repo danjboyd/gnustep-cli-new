@@ -44,6 +44,14 @@ class BootstrapShTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 3)
         self.assertIn("unavailable in bootstrap", proc.stdout)
 
+    def test_dogfood_option_is_recognized_before_and_after_command(self):
+        proc = self.run_script("--dogfood", "build")
+        self.assertEqual(proc.returncode, 3)
+        self.assertIn("unavailable in bootstrap", proc.stdout)
+        proc = self.run_script("build", "--dogfood")
+        self.assertEqual(proc.returncode, 3)
+        self.assertIn("unavailable in bootstrap", proc.stdout)
+
     def test_doctor_json_shape(self):
         proc = self.run_script("--json", "doctor")
         self.assertIn(proc.returncode, (0, 3))
@@ -80,6 +88,12 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("json_file_bool", content)
         self.assertIn("published", content)
 
+    def test_bootstrap_has_temporary_dogfood_manifest_option(self):
+        content = BOOTSTRAP.read_text(encoding="utf-8")
+        self.assertIn("--dogfood", content)
+        self.assertIn("DOGFOOD_MANIFEST_URL", content)
+        self.assertIn("/releases/download/dogfood/release-manifest.json", content)
+
     def test_bootstrap_script_does_not_depend_on_python(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")
         self.assertNotIn("python3", content)
@@ -89,4 +103,3 @@ class BootstrapShTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

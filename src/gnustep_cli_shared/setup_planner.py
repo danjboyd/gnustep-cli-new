@@ -77,6 +77,16 @@ def _validate_manifest_payload(manifest: dict[str, Any]) -> list[str]:
             for field in ("id", "kind", "os", "arch", "url", "sha256"):
                 if field not in artifact:
                     errors.append(f"Artifact {artifact.get('id', 'unknown')} is missing required field '{field}'.")
+            if artifact.get("reused"):
+                for field in ("version", "size"):
+                    if field not in artifact:
+                        errors.append(f"Reused artifact {artifact.get('id', 'unknown')} is missing required field '{field}'.")
+                if artifact.get("sha256") == "TBD":
+                    errors.append(f"Reused artifact {artifact.get('id', 'unknown')} must have a concrete sha256.")
+            if artifact.get("kind") == "delta":
+                for field in ("from_artifact", "to_artifact", "from_sha256", "to_sha256"):
+                    if field not in artifact:
+                        errors.append(f"Delta artifact {artifact.get('id', 'unknown')} is missing required field '{field}'.")
     return errors
 
 
@@ -287,12 +297,18 @@ def execute_setup(
         if payload["doctor"]["os"] == "windows":
             _write_windows_activation_scripts(install_path)
 
+        cli_artifact = next((artifact for artifact in selected_artifacts if artifact["kind"] == "cli"), None)
+        toolchain_artifact = next((artifact for artifact in selected_artifacts if artifact["kind"] == "toolchain"), None)
         save_cli_state(
             install_path,
             {
                 "schema_version": 1,
                 "cli_version": payload["plan"]["selected_release"],
                 "toolchain_version": payload["plan"]["selected_release"],
+                "cli_artifact_id": cli_artifact.get("id") if cli_artifact else None,
+                "cli_artifact_sha256": cli_artifact.get("sha256") if cli_artifact else None,
+                "toolchain_artifact_id": toolchain_artifact.get("id") if toolchain_artifact else None,
+                "toolchain_artifact_sha256": toolchain_artifact.get("sha256") if toolchain_artifact else None,
                 "packages_version": 1,
                 "last_action": "setup",
                 "status": "healthy",

@@ -17,11 +17,16 @@ from gnustep_cli_shared.compatibility import artifact_matches_host, evaluate_env
 from gnustep_cli_shared.build_infra import (
     assemble_linux_toolchain_artifact,
     build_matrix,
+    compare_windows_msys2_inventories,
+    delta_artifact_record,
     bundle_full_cli,
     component_inventory,
     current_support_matrix,
     debian_gcc_interop_plan,
     github_release_plan,
+    dogfood_snapshot_manifest,
+    dogfood_snapshot_version,
+    validate_delta_artifact_record,
     linux_build_script,
     linux_cli_abi_audit,
     refresh_local_release_metadata,
@@ -43,7 +48,9 @@ from gnustep_cli_shared.build_infra import (
     qualify_full_cli_handoff,
     toolchain_manifest,
     release_manifest_from_matrix,
+    reusable_artifact_reference,
     qualify_release_install,
+    session_build_box_plan,
     stage_release_assets,
     source_lock_template,
     toolchain_tree_host_origin_audit,
@@ -63,6 +70,7 @@ from gnustep_cli_shared.build_infra import (
     write_release_evidence_bundle,
     release_key_rotation_drill,
     windows_extracted_toolchain_rebuild_plan,
+    windows_msys2_component_inventory,
 )
 
 
@@ -556,6 +564,217 @@ class BuildInfraTests(unittest.TestCase):
                 names = archive.getnames()
             self.assertIn("prebuilt-cli/bin/gnustep", names)
             self.assertNotIn("prebuilt-cli.tar.gz", "\n".join(names))
+
+    def test_stage_release_assets_can_reuse_immutable_toolchain_artifact(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_binary = temp / "gnustep"
+            cli_binary.write_text("binary")
+            cli_bundle = temp / "cli-bundle"
+            bundle_full_cli(cli_binary, cli_bundle, repo_root=ROOT)
+            reused_toolchain = {
+                "id": "toolchain-linux-amd64-clang",
+                "kind": "toolchain",
+                "version": "2026.04.0",
+                "os": "linux",
+                "arch": "amd64",
+                "compiler_family": "clang",
+                "toolchain_flavor": "clang",
+                "objc_runtime": "libobjc2",
+                "objc_abi": "modern",
+                "required_features": ["blocks"],
+                "format": "tar.gz",
+                "url": "https://github.com/example/old/gnustep-toolchain-linux-amd64-clang-2026.04.0.tar.gz",
+                "sha256": "a" * 64,
+                "integrity": {"sha256": "a" * 64},
+                "size": 123456,
+            }
+            payload = stage_release_assets(
+                "0.1.1",
+                temp / "dist",
+                "https://github.com/danjboyd/gnustep-cli/releases",
+                cli_inputs={"linux-amd64-clang": cli_bundle},
+                reused_toolchain_artifacts={"linux-amd64-clang": reused_toolchain},
+            )
+            self.assertTrue(payload["ok"])
+            release_dir = Path(payload["release_dir"])
+            manifest = json.loads((release_dir / "release-manifest.json").read_text())
+            artifacts = manifest["releases"][0]["artifacts"]
+            self.assertEqual(len(artifacts), 2)
+            cli_artifact = next(artifact for artifact in artifacts if artifact["kind"] == "cli")
+            toolchain_artifact = next(artifact for artifact in artifacts if artifact["kind"] == "toolchain")
+            self.assertTrue(toolchain_artifact["reused"])
+            self.assertNotIn("filename", toolchain_artifact)
+            self.assertEqual(cli_artifact["requires_toolchain"]["artifact_id"], "toolchain-linux-amd64-clang")
+            self.assertTrue(cli_artifact["requires_toolchain"]["reused"])
+            verification = verify_release_directory(release_dir)
+            self.assertTrue(verification["ok"])
+            reused_result = next(result for result in verification["results"] if result.get("reused"))
+            self.assertTrue(reused_result["immutable_reference_ok"])
+            self.assertTrue(release_trust_gate(release_dir, require_signatures=False)["ok"])
+
+    def test_reusable_artifact_reference_rejects_ambiguous_or_mutable_reference(self):
+        artifact = {
+            "id": "toolchain-linux-amd64-clang",
+            "kind": "toolchain",
+            "version": "2026.04.0",
+            "os": "linux",
+            "arch": "amd64",
+            "url": "https://example.invalid/toolchain.tar.gz",
+            "sha256": "TBD",
+            "size": 10,
+        }
+        with self.assertRaises(ValueError):
+            reusable_artifact_reference(artifact, expected_kind="toolchain", expected_target_id="linux-amd64-clang")
+
+    def test_session_build_box_plan_covers_warm_builder_iteration(self):
+        payload = session_build_box_plan(targets=["linux-amd64-clang", "windows-amd64-msys2-clang64"], ttl_hours=6)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["channel"], "dogfood")
+        self.assertEqual(payload["ttl_hours"], 6)
+        builder_by_target = {builder["target_id"]: builder for builder in payload["builders"]}
+        self.assertEqual(builder_by_target["windows-amd64-msys2-clang64"]["otvm_profile"], "windows-2022")
+        self.assertEqual(builder_by_target["windows-amd64-msys2-clang64"]["artifact"]["toolchain_layer"], "reuse-installed-compatible")
+        step_ids = [step["id"] for step in payload["steps"]]
+        self.assertIn("sync-source", step_ids)
+        self.assertIn("publish-dogfood-manifest", step_ids)
+
+    def test_dogfood_snapshot_version_orders_multiple_same_day_builds(self):
+        first = dogfood_snapshot_version(
+            "0.1.0",
+            source_revision="abcdef1234567890",
+            timestamp="2026-04-22T10:00:00Z",
+            sequence=0,
+        )
+        second = dogfood_snapshot_version(
+            "0.1.0",
+            source_revision="abcdef1234567890",
+            timestamp="2026-04-22T10:05:00Z",
+            sequence=0,
+        )
+        third = dogfood_snapshot_version(
+            "0.1.0",
+            source_revision="abcdef1234567890",
+            timestamp="2026-04-22T10:05:00Z",
+            sequence=1,
+        )
+        self.assertLess(first, second)
+        self.assertLess(second, third)
+        self.assertEqual(first, "0.1.0-dogfood.20260422T100000Z.gabcdef123456.0")
+
+    def test_dogfood_snapshot_manifest_reuses_toolchain_layer(self):
+        cli = {
+            "id": "cli-linux-amd64-clang",
+            "kind": "cli",
+            "version": "placeholder",
+            "os": "linux",
+            "arch": "amd64",
+            "compiler_family": "clang",
+            "toolchain_flavor": "clang",
+            "objc_runtime": "libobjc2",
+            "objc_abi": "modern",
+            "format": "tar.gz",
+            "url": "https://example.invalid/cli.tar.gz",
+            "sha256": "c" * 64,
+            "size": 11,
+        }
+        toolchain = {
+            "id": "toolchain-linux-amd64-clang",
+            "kind": "toolchain",
+            "version": "2026.04.0",
+            "os": "linux",
+            "arch": "amd64",
+            "compiler_family": "clang",
+            "toolchain_flavor": "clang",
+            "objc_runtime": "libobjc2",
+            "objc_abi": "modern",
+            "format": "tar.gz",
+            "url": "https://example.invalid/toolchain.tar.gz",
+            "sha256": "d" * 64,
+            "size": 1000,
+        }
+        manifest = dogfood_snapshot_manifest(
+            "0.1.0",
+            "https://example.invalid/releases",
+            source_revision="abcdef",
+            timestamp="2026-04-22T11:00:00Z",
+            cli_artifacts=[cli],
+            reused_toolchain_artifacts=[toolchain],
+        )
+        release = manifest["releases"][0]
+        self.assertEqual(manifest["channel"], "dogfood")
+        self.assertIn("dogfood.20260422T110000Z", release["version"])
+        cli_record = next(artifact for artifact in release["artifacts"] if artifact["kind"] == "cli")
+        toolchain_record = next(artifact for artifact in release["artifacts"] if artifact["kind"] == "toolchain")
+        self.assertEqual(cli_record["requires_toolchain"]["artifact_id"], "toolchain-linux-amd64-clang")
+        self.assertTrue(toolchain_record["reused"])
+        self.assertEqual(manifest["retention"]["keep_latest"], 12)
+
+    def test_delta_artifact_record_uses_project_delta_envelope(self):
+        source = {
+            "id": "toolchain-linux-amd64-clang",
+            "kind": "toolchain",
+            "version": "2026.04.0",
+            "os": "linux",
+            "arch": "amd64",
+            "compiler_family": "clang",
+            "toolchain_flavor": "clang",
+            "objc_runtime": "libobjc2",
+            "objc_abi": "modern",
+            "required_features": ["blocks"],
+            "sha256": "a" * 64,
+        }
+        target = dict(source)
+        target["version"] = "2026.04.1"
+        target["sha256"] = "b" * 64
+        target["url"] = "https://example.invalid/full.tar.gz"
+        target["size"] = 1000
+        delta = delta_artifact_record(
+            delta_id="delta-toolchain-linux-amd64-clang-2026040-to-2026041",
+            from_artifact=source,
+            to_artifact=target,
+            url="https://example.invalid/delta.bin",
+            sha256="c" * 64,
+            size=12,
+        )
+        self.assertEqual(delta["kind"], "toolchain-delta")
+        self.assertEqual(delta["delta_format"], "gnustep-delta-v1")
+        self.assertEqual(delta["from_sha256"], "a" * 64)
+        self.assertEqual(delta["to_sha256"], "b" * 64)
+        self.assertFalse(validate_delta_artifact_record(delta))
+
+    def test_delta_artifact_record_rejects_target_mismatch(self):
+        source = {"id": "toolchain-linux-amd64-clang", "kind": "toolchain", "sha256": "a" * 64}
+        target = {"id": "toolchain-windows-amd64-msys2-clang64", "kind": "toolchain", "sha256": "b" * 64}
+        with self.assertRaises(ValueError):
+            delta_artifact_record(
+                delta_id="bad-delta",
+                from_artifact=source,
+                to_artifact=target,
+                url="https://example.invalid/delta.bin",
+                sha256="c" * 64,
+                size=12,
+            )
+
+    def test_windows_msys2_inventory_compare_detects_component_update(self):
+        old = windows_msys2_component_inventory(
+            toolchain_version="2026.04.0",
+            packages=[
+                {"name": "mingw-w64-clang-x86_64-gnustep-base", "version": "1", "package_sha256": "a", "installed_files_sha256": "aa", "layer": "base"},
+                {"name": "make", "version": "1", "package_sha256": "b", "installed_files_sha256": "bb", "layer": "base"},
+            ],
+        )
+        new = windows_msys2_component_inventory(
+            toolchain_version="2026.04.1",
+            packages=[
+                {"name": "mingw-w64-clang-x86_64-gnustep-base", "version": "2", "package_sha256": "c", "installed_files_sha256": "cc", "layer": "base"},
+                {"name": "make", "version": "1", "package_sha256": "b", "installed_files_sha256": "bb", "layer": "base"},
+            ],
+        )
+        comparison = compare_windows_msys2_inventories(old, new)
+        self.assertEqual(comparison["action"], "component_update")
+        self.assertTrue(comparison["component_replacement_sufficient"])
+        self.assertEqual(comparison["changed_packages"][0]["name"], "mingw-w64-clang-x86_64-gnustep-base")
 
 
     def test_release_metadata_signing_and_trust_gate(self):

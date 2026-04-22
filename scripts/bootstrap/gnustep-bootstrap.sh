@@ -7,6 +7,8 @@ CLI_VERSION="0.1.0-dev"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 ROOT_DIR=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 SETUP_MANIFEST="${SETUP_MANIFEST:-}"
+DOGFOOD_MANIFEST_URL="${DOGFOOD_MANIFEST_URL:-https://github.com/danjboyd/gnustep-cli-new/releases/download/dogfood/release-manifest.json}"
+DOGFOOD_MODE=0
 
 YES_MODE=0
 HOST_PREREQUISITE_SOURCE="https://github.com/gnustep/tools-scripts"
@@ -585,6 +587,7 @@ Global options:
   --verbose
   --quiet
   --yes
+  --dogfood
 EOF
 }
 
@@ -740,6 +743,10 @@ while [ "$#" -gt 0 ]; do
       YES_MODE=1
       shift
       ;;
+    --dogfood)
+      DOGFOOD_MODE=1
+      shift
+      ;;
     --system)
       SETUP_SCOPE="system"
       shift
@@ -764,6 +771,7 @@ while [ "$#" -gt 0 ]; do
         exit 2
       fi
       SETUP_MANIFEST="$1"
+      DOGFOOD_MODE=0
       shift
       ;;
     --*)
@@ -810,6 +818,7 @@ while [ "$#" -gt 0 ]; do
         exit 2
       fi
       SETUP_MANIFEST="$1"
+      DOGFOOD_MODE=0
       shift
       ;;
     --verbose|--quiet)
@@ -817,6 +826,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --yes)
       YES_MODE=1
+      shift
+      ;;
+    --dogfood)
+      DOGFOOD_MODE=1
       shift
       ;;
     *)
@@ -835,6 +848,9 @@ case "$COMMAND" in
     exit $?
     ;;
   setup)
+    if [ "$DOGFOOD_MODE" = "1" ] && [ -z "$SETUP_MANIFEST" ]; then
+      SETUP_MANIFEST="$DOGFOOD_MANIFEST_URL"
+    fi
     perform_setup
     exit $?
     ;;

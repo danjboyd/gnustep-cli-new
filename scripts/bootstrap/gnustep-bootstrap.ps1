@@ -10,6 +10,8 @@ $Script:RootDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PS
 $Script:SetupScope = "user"
 $Script:SetupRoot = $null
 $Script:SetupManifest = $env:SETUP_MANIFEST
+$Script:DogfoodManifestUrl = if ($env:DOGFOOD_MANIFEST_URL) { $env:DOGFOOD_MANIFEST_URL } else { "https://github.com/danjboyd/gnustep-cli-new/releases/download/dogfood/release-manifest.json" }
+$Script:DogfoodMode = $false
 $Script:TracePath = $env:GNUSTEP_BOOTSTRAP_TRACE
 $Script:IsWindowsHost = $env:OS -eq "Windows_NT"
 
@@ -371,6 +373,7 @@ Global options:
   --verbose
   --quiet
   --yes
+  --dogfood
 "@
 }
 
@@ -426,6 +429,7 @@ foreach ($arg in $ArgsList) {
         "--verbose" { }
         "--quiet" { $Script:QuietMode = $true }
         "--yes" { }
+        "--dogfood" { $Script:DogfoodMode = $true }
         "--trace" { }
         "--system" { $Script:SetupScope = "system" }
         "--user" { $Script:SetupScope = "user" }
@@ -464,6 +468,7 @@ for ($i = 0; $i -lt $ArgsList.Count; $i++) {
             exit 2
         }
         $Script:SetupManifest = $ArgsList[$i + 1]
+        $Script:DogfoodMode = $false
     }
 }
 
@@ -507,6 +512,10 @@ for ($i = 0; $i -lt $commandArgs.Count; $i++) {
             exit 2
         }
         $Script:SetupManifest = $commandArgs[$i + 1]
+        $Script:DogfoodMode = $false
+    }
+    if ($commandArgs[$i] -eq "--dogfood") {
+        $Script:DogfoodMode = $true
     }
 }
 
@@ -623,6 +632,9 @@ switch ($command) {
         try {
             Write-SetupProgress "starting managed installation into $selectedRoot"
             Write-TraceEvent "setup.start" $selectedRoot
+            if ($Script:DogfoodMode -and -not $Script:SetupManifest) {
+                $Script:SetupManifest = $Script:DogfoodManifestUrl
+            }
             if (-not $Script:SetupManifest) {
                 $Script:SetupManifest = "https://github.com/danjboyd/gnustep-cli-new/releases/download/v$($Script:CliVersion)/release-manifest.json"
             }

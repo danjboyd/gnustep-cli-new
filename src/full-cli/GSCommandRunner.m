@@ -4611,11 +4611,20 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSArray *selectionErrors = nil;
   NSMutableArray *effectiveSelectionErrors = [NSMutableArray array];
   NSMutableArray *artifactIDs = [NSMutableArray array];
+  NSMutableArray *layers = [NSMutableArray array];
   NSString *policyError = nil;
   BOOL downgradeDetected = NO;
   NSString *manifestError = nil;
   NSString *installedVersion = [installedState objectForKey: @"cli_version"];
   NSString *latestVersion = nil;
+  NSString *installedCliSHA256 = [installedState objectForKey: @"cli_artifact_sha256"];
+  NSString *installedToolchainSHA256 = [installedState objectForKey: @"toolchain_artifact_sha256"];
+  NSDictionary *cliArtifact = nil;
+  NSDictionary *toolchainArtifact = nil;
+  BOOL cliLayerChanged = NO;
+  BOOL toolchainLayerChanged = NO;
+  unsigned long long plannedDownloadSize = 0;
+  NSString *layerUpdateKind = @"none";
   BOOL updateAvailable = NO;
   NSUInteger i = 0;
 
@@ -4660,7 +4669,16 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   for (i = 0; i < [artifacts count]; i++)
     {
-      [artifactIDs addObject: [[artifacts objectAtIndex: i] objectForKey: @"id"]];
+      NSDictionary *artifact = [artifacts objectAtIndex: i];
+      [artifactIDs addObject: [artifact objectForKey: @"id"]];
+      if ([[artifact objectForKey: @"kind"] isEqualToString: @"cli"])
+        {
+          cliArtifact = artifact;
+        }
+      else if ([[artifact objectForKey: @"kind"] isEqualToString: @"toolchain"])
+        {
+          toolchainArtifact = artifact;
+        }
     }
   if (selectionErrors != nil)
     {
@@ -4680,6 +4698,68 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       [effectiveSelectionErrors addObject: @"Selected release is older than the installed CLI version."];
     }
   updateAvailable = (latestVersion != nil && downgradeDetected == NO && (installedVersion == nil || [installedVersion isEqualToString: latestVersion] == NO));
+  if (cliArtifact != nil)
+    {
+      NSString *artifactSHA256 = [cliArtifact objectForKey: @"sha256"];
+      NSNumber *size = [cliArtifact objectForKey: @"size"];
+      if (installedCliSHA256 != nil && artifactSHA256 != nil && (id)installedCliSHA256 != [NSNull null])
+        {
+          cliLayerChanged = [installedCliSHA256 isEqualToString: artifactSHA256] == NO;
+        }
+      else
+        {
+          cliLayerChanged = updateAvailable;
+        }
+      if (cliLayerChanged && size != nil && (id)size != [NSNull null])
+        {
+          plannedDownloadSize += [size unsignedLongLongValue];
+        }
+      [layers addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                         @"cli", @"name",
+                                         [cliArtifact objectForKey: @"id"] ? [cliArtifact objectForKey: @"id"] : [NSNull null], @"artifact_id",
+                                         artifactSHA256 ? artifactSHA256 : [NSNull null], @"sha256",
+                                         installedCliSHA256 ? installedCliSHA256 : [NSNull null], @"current_sha256",
+                                         cliLayerChanged ? @"update" : @"reuse", @"action",
+                                         [NSNumber numberWithBool: cliLayerChanged], @"download_required",
+                                         size ? size : [NSNull null], @"size",
+                                         nil]];
+    }
+  if (toolchainArtifact != nil)
+    {
+      NSString *artifactSHA256 = [toolchainArtifact objectForKey: @"sha256"];
+      NSNumber *size = [toolchainArtifact objectForKey: @"size"];
+      BOOL reusedReference = [[toolchainArtifact objectForKey: @"reused"] boolValue];
+      if (installedToolchainSHA256 != nil && artifactSHA256 != nil && (id)installedToolchainSHA256 != [NSNull null])
+        {
+          toolchainLayerChanged = [installedToolchainSHA256 isEqualToString: artifactSHA256] == NO;
+        }
+      else
+        {
+          toolchainLayerChanged = updateAvailable && reusedReference == NO;
+        }
+      if (toolchainLayerChanged && reusedReference == NO && size != nil && (id)size != [NSNull null])
+        {
+          plannedDownloadSize += [size unsignedLongLongValue];
+        }
+      [layers addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                         @"toolchain", @"name",
+                                         [toolchainArtifact objectForKey: @"id"] ? [toolchainArtifact objectForKey: @"id"] : [NSNull null], @"artifact_id",
+                                         artifactSHA256 ? artifactSHA256 : [NSNull null], @"sha256",
+                                         installedToolchainSHA256 ? installedToolchainSHA256 : [NSNull null], @"current_sha256",
+                                         toolchainLayerChanged ? @"update" : @"reuse", @"action",
+                                         [NSNumber numberWithBool: (toolchainLayerChanged && reusedReference == NO)], @"download_required",
+                                         [NSNumber numberWithBool: reusedReference], @"reused_manifest_reference",
+                                         size ? size : [NSNull null], @"size",
+                                         nil]];
+    }
+  if (cliLayerChanged && toolchainLayerChanged == NO)
+    {
+      layerUpdateKind = @"cli_only";
+    }
+  else if (toolchainLayerChanged)
+    {
+      layerUpdateKind = @"toolchain_required";
+    }
 
   *exitCode = (manifest != nil && [effectiveSelectionErrors count] == 0) ? 0 : 3;
   return [NSDictionary dictionaryWithObjectsAndKeys:
@@ -4698,6 +4778,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                       [NSNumber numberWithBool: updateAvailable], @"update_available",
                                       [NSNumber numberWithBool: downgradeDetected], @"downgrade_detected",
                                       artifactIDs, @"selected_artifacts",
+                                      layerUpdateKind, @"layer_update_kind",
+                                      [NSNumber numberWithUnsignedLongLong: plannedDownloadSize], @"planned_download_size",
+                                      layers, @"layers",
                                       effectiveSelectionErrors, @"selection_errors",
                                       nil], @"update_plan",
                         nil];
@@ -4836,6 +4919,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     NSString *backupPath = nil;
     NSString *policyError = nil;
     NSString *activeReleasePath = nil;
+    NSDictionary *cliArtifact = nil;
+    NSDictionary *toolchainArtifact = nil;
     NSUInteger j = 0;
 
     if ([self manifest: manifest revokesArtifacts: artifacts error: &policyError])
@@ -4885,6 +4970,15 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         NSString *copyError = nil;
         NSString *checksum = nil;
         NSString *sourceRoot = nil;
+
+        if ([[artifact objectForKey: @"kind"] isEqualToString: @"cli"])
+          {
+            cliArtifact = artifact;
+          }
+        else if ([[artifact objectForKey: @"kind"] isEqualToString: @"toolchain"])
+          {
+            toolchainArtifact = artifact;
+          }
 
         if ([artifact objectForKey: @"filename"] != nil)
           {
@@ -4976,6 +5070,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                                    [NSNumber numberWithInt: 1], @"schema_version",
                                                    [release objectForKey: @"version"], @"cli_version",
                                                    [release objectForKey: @"version"], @"toolchain_version",
+                                                   (cliArtifact && [cliArtifact objectForKey: @"id"]) ? [cliArtifact objectForKey: @"id"] : [NSNull null], @"cli_artifact_id",
+                                                   (cliArtifact && [cliArtifact objectForKey: @"sha256"]) ? [cliArtifact objectForKey: @"sha256"] : [NSNull null], @"cli_artifact_sha256",
+                                                   (toolchainArtifact && [toolchainArtifact objectForKey: @"id"]) ? [toolchainArtifact objectForKey: @"id"] : [NSNull null], @"toolchain_artifact_id",
+                                                   (toolchainArtifact && [toolchainArtifact objectForKey: @"sha256"]) ? [toolchainArtifact objectForKey: @"sha256"] : [NSNull null], @"toolchain_artifact_sha256",
                                                    [NSNumber numberWithInt: 1], @"packages_version",
                                                    [release objectForKey: @"version"], @"active_release",
                                                    activeReleasePath ? activeReleasePath : installPath, @"active_release_path",

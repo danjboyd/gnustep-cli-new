@@ -1300,6 +1300,125 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Ubuntu Linux amd64, Linux arm64/Debian, OpenBSD, and Windows/MSYS2 have either the same install/remove proof or explicitly documented non-release blockers.
 - Published `tools-xctest` artifacts are rebuilt from the declared upstream source plus PR #5 patch, with recorded source/patch/artifact digests and host-backed validation evidence; targets without host access must be represented as explicit documented non-release blockers rather than implicit release failures.
 
+## Phase 25. Layered Artifacts And Delta Update Delivery
+
+### A. Product Goal And Update Policy
+- Treat small CLI changes as small updates: a CLI-only code change must not require rebuilding, re-uploading, or redownloading the managed MSYS2 toolchain.
+- Make managed installation and update behavior layer-aware across three independently versioned product layers:
+  - full CLI
+  - managed toolchain
+  - installable packages
+- Prefer manifest-level artifact reuse and component-level replacement before introducing byte-level binary patching.
+- Keep full artifacts available as recovery checkpoints; deltas are an optimization path, not the only path to a working update.
+- Preserve the existing transactional lifecycle model: stage, verify, smoke-test, activate by pointer switch, and retain rollback state.
+
+### B. Release Manifest And Schema Extensions
+- Extend release manifests so a release can reference immutable artifacts published by an earlier release when those artifacts remain compatible.
+- Add explicit relationships between artifacts, including CLI-to-toolchain requirements, compatible toolchain version ranges, selected base artifact IDs, and selected base artifact digests.
+- Add first-class delta artifact records for future use, with fields for source artifact, target artifact, source digest, target digest, format, URL, size, integrity metadata, and applicability rules.
+- Require every reusable artifact reference to include immutable URL, SHA-256, size, signing/provenance metadata, artifact kind, target ID, and compatibility requirements.
+- Ensure manifest validation rejects mutable or ambiguous artifact references, missing base digests, stale metadata, revoked base artifacts, and downgrade paths except through explicit rollback UX.
+
+### C. Build And Publication Pipeline
+- Change release preparation so CLI-only releases publish only new CLI artifacts and reuse the previous compatible managed toolchain artifact by manifest reference.
+- Make Windows MSYS2 toolchain assembly conditional on the MSYS2 input manifest digest, not on every CLI release.
+- Record a stable toolchain input identity derived from MSYS2 installer metadata, package names, package versions, package digests, repository snapshot identity, assembly rules, and post-assembly normalization.
+- Teach release gates that a reused toolchain artifact is valid when its manifest reference, digest, provenance, source/input lock, component inventory, and qualification evidence satisfy policy.
+- Keep GitHub Releases as the initial storage layer, but do not require every referenced artifact to be physically uploaded to the newest release when the manifest points to an older immutable asset.
+
+### D. Session-Scoped Build Boxes And Fast Iteration
+- Add a development workflow that can provision one warm build box per supported target through `../OracleTestVMs` / `otvm` and keep those boxes online for the duration of an active coding session.
+- Allow dogfood sessions to declare an explicit active target subset, such as `windows-amd64-msys2-clang64` and `openbsd-amd64-clang`, so rapid iteration only builds, publishes, and validates the platforms currently under test.
+- Keep scoped dogfood publication separate from release qualification: a partial dogfood manifest may intentionally omit untouched or untested targets, but stable and RC release claims must still be expanded back to the full supported platform/architecture matrix before publication.
+- Treat warm build boxes as session-scoped infrastructure: quick to create, reusable for repeated full-CLI rebuilds during the session, and explicitly destroyable at the end of the session.
+- Sync only the changed source and required build metadata to warm builders rather than re-provisioning toolchains or rebuilding large managed roots for every CLI edit.
+- Build small target-specific full-CLI artifacts on the warm builders and publish or stage them into a dogfood channel without rebuilding unchanged managed toolchain artifacts.
+- Add commands or scripts to list warm builders, refresh source, build selected or all supported CLI artifacts, collect artifacts, publish/update the dogfood manifest, and tear down the session cleanly.
+- Preserve cost-control rules: default to short TTLs, show active lease state, support explicit cleanup, and avoid leaving long-lived idle Windows VMs running unintentionally.
+
+### E. Dogfood Versioning And Update Visibility
+- Add a dogfood/snapshot versioning scheme granular enough to publish multiple update-visible CLI builds per day.
+- Record the dogfood target scope in every snapshot manifest so bootstrap, `setup`, and `update --check` can distinguish "no update for this platform in this scoped dogfood run" from "the project forgot to publish a required release artifact."
+- Use monotonically ordered build identifiers that include enough information for humans and automation, such as base semantic version, UTC timestamp, source revision, and build sequence when needed.
+- Ensure `gnustep update --check` sees newer dogfood builds from the selected channel even when several have been published on the same day.
+- Keep stable release versioning separate from dogfood snapshot versioning so rapid iteration does not weaken production rollback, freshness, or compatibility policy.
+- Record dogfood manifest identity, source revision, builder identity, build timestamp, artifact digests, and reused toolchain layer identity for every published snapshot.
+- Add cleanup or retention policy for dogfood artifacts and manifests so rapid iteration does not leave an unbounded artifact history in GitHub Releases or any later artifact store.
+
+### F. Installed State And Content Store
+- Extend managed state to record active CLI artifact ID/digest, active toolchain artifact ID/digest, active package-index digest, active component inventory digest, selected release manifest digest, and previous activation metadata.
+- Add a content-addressed local store for downloaded or extracted artifacts keyed by digest so repeated updates can reuse already verified payloads.
+- Keep version strings as human-facing metadata, but drive update correctness from artifact IDs, digests, manifest identities, and compatibility records.
+- Record pending transaction metadata with enough detail to resume, rollback, or repair interrupted delta and layered-artifact updates.
+- Ensure repair can distinguish missing active pointer, missing store payload, stale staging root, interrupted activation, and incompatible installed base.
+
+### G. Update Planning And User Experience
+- Teach `gnustep update --check` to report whether an update is CLI-only, toolchain-required, package-only, or coordinated across layers.
+- Include planned download size, reused installed layers, selected new artifacts, selected base artifacts, fallback choices, and next actions in both human output and JSON.
+- Make `gnustep update cli --yes` choose the smallest valid plan in this order:
+  - no-op when installed artifact digests already match
+  - CLI-only artifact update when the installed toolchain remains compatible
+  - component or toolchain delta when available and the installed base digest matches
+  - full toolchain artifact fallback when no valid delta exists
+  - clear failure when neither delta nor full artifact can be verified
+- Never patch the active toolchain in place; all delta or component updates must materialize a verified candidate root before activation.
+- Preserve clear messaging when a user has a stale binary but the manifest contains a newer CLI-only update that reuses the same toolchain layer.
+
+### H. Windows MSYS2 Toolchain Layering
+- Model the Windows `msys2-clang64` managed toolchain as a stable base layer plus explicit component/package records.
+- Preserve the private MSYS2 root layout required by the Windows integration contract while making the published artifact inventory granular enough to identify changed MSYS2 packages.
+- Add a Windows component inventory that records each curated MSYS2 package, installed version, package digest, installed file set digest, and owning layer.
+- Add tooling to compare two Windows toolchain inventories and identify whether a new full toolchain artifact is required, whether package/component replacement is sufficient, or whether the existing toolchain can be reused unchanged.
+- Keep `pacman -Qkk`, archive audit, extracted-toolchain rebuild, package-flow smoke, GUI smoke, and Gorm qualification gates mandatory for any newly published Windows toolchain base or component update.
+
+### I. Delta Format And Fallback Strategy
+- Introduce a project-owned `gnustep-delta-v1` metadata envelope before choosing a concrete binary patch algorithm.
+- Require every delta application to verify the installed source digest before applying, verify the materialized target digest after applying, and fall back to a full artifact when verification fails or the source base does not match.
+- Limit published delta chains to a small supported window such as the last N toolchain versions or the last stable checkpoint.
+- Publish full artifacts for every CLI release and every changed toolchain checkpoint even when deltas are also available.
+- Treat binary diff algorithms as replaceable implementation details behind the manifest delta contract; do not expose algorithm-specific assumptions in user-facing compatibility policy.
+
+### J. Security, Freshness, And Failure Handling
+- Keep signed release manifests and trusted metadata as the only source of update truth; do not infer update relationships from filenames or GitHub release page layout.
+- Reject rollback, freeze, expired metadata, revoked artifact, revoked base artifact, digest mismatch, and signature mismatch cases before staging mutable filesystem changes.
+- If delta application, extraction, smoke validation, or activation fails, leave the previous active release untouched and mark transaction state for repair.
+- Ensure `setup --repair` and lifecycle repair can recover from interrupted layered updates without requiring manual deletion of the managed root.
+- Add structured JSON failure reasons for invalid base artifact, missing reusable artifact, missing delta, corrupt delta, target digest mismatch, stale metadata, and full-artifact fallback failure.
+
+### K. Testing And Validation
+- Add unit and contract tests for layered manifest validation, reusable artifact references, delta artifact records, compatibility selection, download-size planning, and artifact fallback ordering.
+- Add lifecycle tests for CLI-only update, toolchain-required update, no-op digest match, invalid base digest, missing reused artifact, revoked reused artifact, failed delta with full fallback, failed full fallback, interrupted staging, activation rollback, and repair.
+- Add scoped-dogfood tests proving a manifest can intentionally publish only the active validation targets while preserving clear unsupported/unavailable diagnostics for platforms outside the current dogfood scope.
+- Add Windows-specific tests or host-backed validation for installing an old release, publishing a new CLI-only release against the same MSYS2 toolchain, running `gnustep update`, and proving only the CLI artifact is downloaded.
+- Add dogfood-channel tests proving multiple same-day CLI snapshots are ordered correctly and visible to `gnustep update --check`.
+- Add warm-builder workflow tests or scripted dry runs for provision, source refresh, rebuild, artifact collection, dogfood manifest publication, and cleanup.
+- Add release-gate tests that prevent stale Windows CLI artifacts from being published while still allowing unchanged MSYS2 toolchain artifacts to be reused.
+- Extend dogfood validation to report transferred bytes and selected update layers so regressions in update size are visible.
+
+### L. Exit Criteria
+- A CLI-only change on Windows produces and publishes only a small CLI artifact while reusing the existing compatible MSYS2 toolchain artifact by signed manifest reference.
+- A clean Windows VM can install an older release, run `gnustep update --check`, see a CLI-only update plan, apply it, and end with the new CLI plus the unchanged verified toolchain layer.
+- During active development, one command can provision or reuse warm build boxes for supported targets, rebuild changed full-CLI artifacts, publish a new dogfood manifest, and make the new build visible to `gnustep update --check` without rebuilding unchanged toolchain layers.
+- During a scoped dogfood session, the same workflow can limit warm builders, artifact collection, publication, manifest contents, and validation to the declared active target subset, then later expand back to all Tier 1 release targets without changing the update model.
+- Multiple dogfood CLI builds published on the same day are versioned, ordered, and update-visible without confusing stable release ordering or rollback policy.
+- A changed Windows MSYS2 input manifest produces a new toolchain identity and either a full toolchain checkpoint or a verified component/delta update with automatic full-artifact fallback.
+- Update, rollback, and repair behavior remains transactional across CLI-only, toolchain, package, and coordinated update plans.
+- Release qualification proves that stale binaries cannot be silently served as current and that unchanged large toolchain layers are not rebuilt, re-uploaded, or redownloaded for routine CLI iteration.
+
+### Phase 25 Execution Status
+- Phase 25.A-C now have repository-tooling support for immutable reused artifact references: release staging can publish a small CLI artifact while carrying a manifest reference to an older compatible toolchain artifact, verification/provenance/trust checks understand reused references, and manifest validation rejects reused artifacts without concrete digest/size metadata.
+- Phase 25.B schema work has begun: release-manifest schema v1 now documents reused artifact references, CLI-to-toolchain relationships, and future delta artifact fields.
+- Phase 25.D has an executable planning surface through `scripts/internal/build_infra.py --json session-build-box-plan`, which emits the session-scoped warm-builder plan, target/profile mapping, source-sync policy, artifact intent, dogfood channel, TTL, and cleanup controls. Live provisioning/sync/build orchestration remains the next implementation step.
+- Phase 25.D now explicitly supports scoped dogfood target sets: active validation sessions may build and publish only the platforms currently under test, while stable/RC release qualification remains responsible for expanding back to the full supported matrix.
+- Phase 25.E now has dogfood snapshot version helpers that generate monotonically ordered same-day versions from base version, UTC timestamp, source revision, and sequence; dogfood snapshot manifests can carry new CLI artifacts plus reused toolchain layer references and retention policy metadata.
+- Phase 25.F now has shared lifecycle primitives for recording active CLI/toolchain artifact IDs and digests, manifest/component-inventory digests, and content-addressed artifact storage under `store/sha256`. Setup state records active artifact identities where the selected artifacts are available.
+- Phase 25.G has initial update-plan layer metadata: shared lifecycle planning reports `cli_only`, `toolchain_required`, or `none`, planned download size, layer actions, and reuse/download decisions; the native full CLI update-check path now emits layer metadata in `update_plan`.
+- Phase 25.H has a Windows `msys2-clang64` component inventory model and comparison helper that distinguishes unchanged toolchains, component/package replacement candidates, and destructive changes that require a full toolchain checkpoint.
+- Phase 25.I now has a project-owned `gnustep-delta-v1` metadata envelope and helper for generating delta artifact records. Lifecycle planning can select a matching delta when the installed base digest and target digest match, or fall back to the full artifact when the delta is unavailable or not applicable. Concrete byte-patch application remains behind this metadata contract and is intentionally not exposed as policy.
+- Phase 25.J now has structured layered-update preflight checks for revoked artifacts, invalid base artifacts, corrupt or unsupported deltas, target digest mismatches, and missing full-artifact fallback. These checks fail before mutable filesystem work and return machine-readable failure reasons.
+- Phase 25.K has focused regression coverage for layered manifest reuse, dogfood snapshot ordering, content-addressed storage, active artifact state recording, layered update planning, delta selection, full-artifact fallback, revoked-artifact preflight, Windows MSYS2 inventory comparison, and warm-builder planning.
+- Phase 25.L is complete at the repository-tooling contract level: the project can model small CLI-only releases, dogfood snapshots, reused toolchain layers, content-addressed state, delta/fallback update strategy, and Windows toolchain component comparison. Remaining implementation depth is live warm-builder orchestration, native byte-delta application, and host-backed Windows dogfood proving only the CLI artifact downloads for a CLI-only update.
+
 ## Testing Principles For All Phases
 
 ### A. Unit Testing Standard
