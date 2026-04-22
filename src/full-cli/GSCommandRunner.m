@@ -1183,6 +1183,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSTask *task = [[[NSTask alloc] init] autorelease];
   NSMutableArray *pathEntries = [NSMutableArray array];
   NSString *existingPath = nil;
+  NSFileHandle *nullHandle = [NSFileHandle fileHandleForWritingAtPath: @"/dev/null"];
 
   if (arguments == nil || [arguments count] == 0)
     {
@@ -1238,9 +1239,12 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   [task setLaunchPath: launchPath];
   [task setArguments: taskArguments];
   [task setEnvironment: taskEnvironment];
-  [task setStandardInput: [NSFileHandle fileHandleWithStandardInput]];
-  [task setStandardOutput: [NSFileHandle fileHandleWithStandardOutput]];
-  [task setStandardError: [NSFileHandle fileHandleWithStandardError]];
+  if (nullHandle != nil)
+    {
+      [task setStandardInput: [NSFileHandle fileHandleForReadingAtPath: @"/dev/null"]];
+      [task setStandardOutput: nullHandle];
+      [task setStandardError: nullHandle];
+    }
   if (currentDirectory != nil)
     {
       [task setCurrentDirectoryPath: currentDirectory];
