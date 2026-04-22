@@ -324,10 +324,10 @@ download_to() {
   url="$1"
   destination="$2"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$url" -o "$destination"
+    curl -fsSL -H "Cache-Control: no-cache" "$url" -o "$destination"
     return $?
   fi
-  wget -qO "$destination" "$url"
+  wget --header="Cache-Control: no-cache" -qO "$destination" "$url"
 }
 
 extract_tarball() {

@@ -671,11 +671,11 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   downloaderName = [[downloader lastPathComponent] lowercaseString];
   if ([downloaderName isEqualToString: @"curl"] || [downloaderName isEqualToString: @"curl.exe"])
     {
-      [task setArguments: [NSArray arrayWithObjects: @"-fsSL", urlString, nil]];
+      [task setArguments: [NSArray arrayWithObjects: @"-fsSL", @"-H", @"Cache-Control: no-cache", urlString, nil]];
     }
   else if ([downloaderName isEqualToString: @"wget"] || [downloaderName isEqualToString: @"wget.exe"])
     {
-      [task setArguments: [NSArray arrayWithObjects: @"-qO-", urlString, nil]];
+      [task setArguments: [NSArray arrayWithObjects: @"--header=Cache-Control: no-cache", @"-qO-", urlString, nil]];
     }
   else
     {
