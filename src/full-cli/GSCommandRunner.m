@@ -4590,12 +4590,12 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         @"set /p RELEASE=<\"%ROOT%\\current\\release.txt\"\r\n"
                         @"set \"GNUSTEP_CLI_MANAGED_ROOT=%ROOT%\"\r\n"
                         @"set \"GNUSTEP_CLI_NO_DELEGATE=1\"\r\n"
-                        @"set \"GNUSTEP_CLI_EXE=%ROOT%\\releases\\%RELEASE%\\bin\\gnustep.exe\"\r\n"
+                        @"set \"GNUSTEP_CLI_EXE=%ROOT%\\bin\\gnustep.exe\"\r\n"
                         @"\"%GNUSTEP_CLI_EXE%\" %*\r\n"
                         @"exit /b %ERRORLEVEL%\r\n";
   NSString *psScript = @"$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path\r\n"
                        @"$Release = (Get-Content -LiteralPath (Join-Path $Root 'current\\release.txt') -Raw).Trim()\r\n"
-                       @"$Exe = Join-Path $Root (Join-Path 'releases' (Join-Path $Release 'bin\\gnustep.exe'))\r\n"
+                       @"$Exe = Join-Path $Root 'bin\\gnustep.exe'\r\n"
                        @"$env:GNUSTEP_CLI_MANAGED_ROOT = $Root\r\n"
                        @"$env:GNUSTEP_CLI_NO_DELEGATE = '1'\r\n"
                        @"& $Exe @args\r\n"
@@ -7755,7 +7755,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       return -1;
     }
-  if (command != nil && ([command isEqualToString: @"update"] || [command isEqualToString: @"setup"]))
+  if (command != nil)
     {
       return -1;
     }
