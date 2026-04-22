@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "package_id": "org.gnustep.tools-xctest",
+  "artifact_id": "tools-xctest-linux-amd64-clang",
+  "target": "linux-amd64-clang",
+  "checks": [
+    "install",
+    "xctest-smoke",
+    "minimal-bundle",
+    "remove"
+  ],
+  "details": {
+    "setup": "setup.json",
+    "install": "install.json",
+    "xctest_help": "xctest-help.txt",
+    "minimal_bundle_build": "minimal-xctest-build.txt",
+    "minimal_bundle_run": "minimal-xctest-run.txt",
+    "remove": "remove.json",
+    "installed_files": "installed-files.txt"
+  }
+}

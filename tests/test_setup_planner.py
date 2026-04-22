@@ -428,6 +428,80 @@ class SetupPlannerTests(unittest.TestCase):
             self.assertIn("path_hint", payload["install"])
             self.assertIn("/Tools:", payload["install"]["path_hint"])
 
+    def test_windows_setup_writes_private_msys2_activation_helpers(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            release_dir = temp / "release"
+            release_dir.mkdir()
+            cli_zip = release_dir / "gnustep-cli-windows-amd64-msys2-clang64-0.1.0-dev.zip"
+            with __import__("zipfile").ZipFile(cli_zip, "w") as archive:
+                archive.writestr("cli/bin/gnustep.exe", "binary")
+            toolchain_zip = release_dir / "gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev.zip"
+            with __import__("zipfile").ZipFile(toolchain_zip, "w") as archive:
+                archive.writestr("toolchain/clang64/share/GNUstep/Makefiles/common.make", "common")
+                archive.writestr("toolchain/clang64/etc/GNUstep/GNUstep.conf", "conf")
+                archive.writestr("toolchain/usr/bin/bash.exe", "bash")
+                archive.writestr("toolchain/etc/profile", "profile")
+                archive.writestr("toolchain/var/lib/pacman/local/pkg/desc", "desc")
+
+            def sha256(path: Path) -> str:
+                import hashlib
+                return hashlib.sha256(path.read_bytes()).hexdigest()
+
+            manifest = {
+                "schema_version": 1,
+                "channel": "stable",
+                "generated_at": "2026-04-21T00:00:00Z",
+                "releases": [{"version": "0.1.0-dev", "status": "active", "artifacts": [
+                    {
+                        "id": "cli-windows-amd64-msys2-clang64",
+                        "kind": "cli",
+                        "os": "windows",
+                        "arch": "amd64",
+                        "compiler_family": "clang",
+                        "toolchain_flavor": "msys2-clang64",
+                        "url": "https://example.invalid/" + cli_zip.name,
+                        "filename": cli_zip.name,
+                        "sha256": sha256(cli_zip),
+                    },
+                    {
+                        "id": "toolchain-windows-amd64-msys2-clang64",
+                        "kind": "toolchain",
+                        "os": "windows",
+                        "arch": "amd64",
+                        "compiler_family": "clang",
+                        "toolchain_flavor": "msys2-clang64",
+                        "url": "https://example.invalid/" + toolchain_zip.name,
+                        "filename": toolchain_zip.name,
+                        "sha256": sha256(toolchain_zip),
+                    },
+                ]}],
+            }
+            manifest_path = release_dir / "release-manifest.json"
+            manifest_path.write_text(json.dumps(manifest))
+            fake_doctor = {
+                "environment": {
+                    "os": "windows",
+                    "arch": "amd64",
+                    "toolchain": {"toolchain_flavor": "msys2-clang64"},
+                    "bootstrap_prerequisites": {"curl": True, "wget": False},
+                },
+                "doctor": {"os": "windows"},
+                "status": "warning",
+                "environment_classification": "no_toolchain",
+                "summary": "No GNUstep toolchain detected.",
+            }
+            with patch("gnustep_cli_shared.setup_planner.build_doctor_payload", return_value=fake_doctor):
+                payload, exit_code = execute_setup(scope="user", manifest_path=manifest_path, install_root=temp / "install")
+            self.assertEqual(exit_code, 0)
+            install_root = Path(payload["install"]["install_root"])
+            self.assertTrue((install_root / "GNUstep.ps1").exists())
+            self.assertIn("clang64\\share\\GNUstep\\Makefiles", (install_root / "GNUstep.ps1").read_text())
+            self.assertIn("clang64\\etc\\GNUstep\\GNUstep.conf", (install_root / "GNUstep.bat").read_text())
+            self.assertTrue((install_root / "var" / "lib" / "pacman" / "local" / "pkg" / "desc").exists())
+            self.assertEqual(payload["install"]["path_hint"], f'. "{install_root / "GNUstep.ps1"}"')
+            self.assertIn("bin", payload["actions"][0]["message"])
+
 
 if __name__ == "__main__":
     unittest.main()

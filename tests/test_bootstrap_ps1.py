@@ -1,4 +1,6 @@
 import json
+import os
+import shutil
 import tempfile
 import zipfile
 import subprocess
@@ -12,12 +14,18 @@ BOOTSTRAP = ROOT / "scripts" / "bootstrap" / "gnustep-bootstrap.ps1"
 
 class BootstrapPowerShellTests(unittest.TestCase):
     def run_script(self, *args):
+        env = os.environ.copy()
+        env["GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE"] = "1"
+        shell = shutil.which("pwsh") or shutil.which("powershell.exe") or shutil.which("powershell")
+        if shell is None:
+            self.skipTest("PowerShell is not available")
         proc = subprocess.run(
-            ["pwsh", "-NoLogo", "-NoProfile", "-File", str(BOOTSTRAP), *args],
+            [shell, "-NoLogo", "-NoProfile", "-File", str(BOOTSTRAP), *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             check=False,
+            env=env,
         )
         return proc
 
@@ -27,7 +35,23 @@ class BootstrapPowerShellTests(unittest.TestCase):
         self.assertIn("setup", proc.stdout)
         self.assertIn("doctor", proc.stdout)
         self.assertIn("build", proc.stdout)
+        self.assertIn("shell", proc.stdout)
         self.assertIn("update", proc.stdout)
+
+    def test_remote_artifact_downloads_use_progress_downloader(self):
+        script = BOOTSTRAP.read_text()
+        self.assertIn("function Save-UrlToFile", script)
+        self.assertIn('Write-Progress -Activity "Downloading $Label"', script)
+        self.assertIn("Save-UrlToFile -Url $cliArtifact.url", script)
+        self.assertIn("Save-UrlToFile -Url $toolchainArtifact.url", script)
+        self.assertNotIn("Invoke-WebRequest -UseBasicParsing -Uri $cliArtifact.url", script)
+        self.assertNotIn("Invoke-WebRequest -UseBasicParsing -Uri $toolchainArtifact.url", script)
+
+    def test_bootstrap_has_temporary_dogfood_manifest_option(self):
+        script = BOOTSTRAP.read_text()
+        self.assertIn("--dogfood", script)
+        self.assertIn("$Script:DogfoodManifestUrl", script)
+        self.assertIn("/releases/download/dogfood/release-manifest.json", script)
 
     def test_doctor_json_shape(self):
         proc = self.run_script("--json", "doctor")
@@ -37,13 +61,16 @@ class BootstrapPowerShellTests(unittest.TestCase):
         self.assertIn("checks", payload)
 
     def test_setup_system_requires_elevation(self):
-        proc = self.run_script("--json", "--system", "setup")
-        payload = json.loads(proc.stdout)
-        self.assertEqual(payload["command"], "setup")
-        self.assertIn(payload["status"], {"ok", "error"})
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tempdir:
+            manifest = Path(tempdir) / "release-manifest.json"
+            manifest.write_text(json.dumps({"schema_version": 1, "releases": []}))
+            proc = self.run_script("--json", "--system", "setup", "--manifest", str(manifest))
+            payload = json.loads(proc.stdout)
+            self.assertEqual(payload["command"], "setup")
+            self.assertIn(payload["status"], {"ok", "error"})
 
     def test_setup_uses_local_manifest_and_zip_artifacts(self):
-        with tempfile.TemporaryDirectory() as tempdir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tempdir:
             temp = Path(tempdir)
             release_dir = temp / "release"
             release_dir.mkdir()
@@ -57,6 +84,11 @@ class BootstrapPowerShellTests(unittest.TestCase):
             long_name = "x" * 120
             with zipfile.ZipFile(toolchain_zip, "w") as archive:
                 archive.writestr(r"gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev\System\Tools\make.exe", "tool")
+                archive.writestr(r"gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev\clang64\share\GNUstep\Makefiles\common.make", "common")
+                archive.writestr(r"gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev\clang64\etc\GNUstep\GNUstep.conf", "conf")
+                archive.writestr(r"gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev\usr\bin\bash.exe", "bash")
+                archive.writestr(r"gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev\etc\profile", "profile")
+                archive.writestr(r"gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev\var\lib\pacman\local\pkg\desc", "desc")
                 archive.writestr(
                     f"gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev/lib/{long_name}/{long_name}/{long_name}/payload.txt",
                     "payload",
@@ -124,11 +156,20 @@ class BootstrapPowerShellTests(unittest.TestCase):
                 str(manifest_path),
             )
             payload = json.loads(proc.stdout)
-            self.assertEqual(proc.returncode, 0, msg=proc.stderr)
+            self.assertEqual(proc.returncode, 0, msg=proc.stdout + proc.stderr)
             self.assertTrue(payload["ok"], msg=proc.stdout + proc.stderr)
             self.assertTrue((install_root / "bin" / "gnustep.exe").exists())
             self.assertTrue((install_root / "System" / "Tools" / "make.exe").exists())
             self.assertTrue((install_root / "state" / "cli-state.json").exists())
+            self.assertTrue((install_root / "GNUstep.ps1").exists())
+            self.assertTrue((install_root / "GNUstep.bat").exists())
+            ps1 = (install_root / "GNUstep.ps1").read_text()
+            self.assertIn("clang64\\share\\GNUstep\\Makefiles", ps1)
+            self.assertIn("clang64\\etc\\GNUstep\\GNUstep.conf", ps1)
+            self.assertTrue((install_root / "var" / "lib" / "pacman" / "local" / "pkg" / "desc").exists())
+            self.assertEqual(payload["install"]["path_hint"], f'. "{install_root / "GNUstep.ps1"}"')
+            self.assertFalse(payload["install"]["path_persisted"])
+            self.assertIn("\\bin to PATH", payload["actions"][0]["message"])
 
 
     def test_setup_human_mode_reports_progress(self):
@@ -204,4 +245,3 @@ class BootstrapPowerShellTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

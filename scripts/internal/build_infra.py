@@ -51,11 +51,17 @@ from gnustep_cli_shared.build_infra import (
     release_trust_gate,
     release_claim_consistency_gate,
     controlled_release_gate,
+    compare_windows_msys2_inventories,
+    delta_artifact_record,
+    dogfood_snapshot_manifest,
+    dogfood_snapshot_version,
     sign_release_metadata,
+    windows_msys2_component_inventory,
     write_release_provenance,
     write_windows_current_source_marker,
     write_release_evidence_bundle,
     release_key_rotation_drill,
+    session_build_box_plan,
 )
 
 
@@ -78,6 +84,7 @@ def main() -> int:
     stage_release.add_argument("--channel", default="stable")
     stage_release.add_argument("--cli-input", action="append", default=[])
     stage_release.add_argument("--toolchain-input", action="append", default=[])
+    stage_release.add_argument("--reuse-toolchain-artifact", action="append", default=[])
 
     bundle_cli = subparsers.add_parser("bundle-cli", add_help=False)
     bundle_cli.add_argument("--binary", required=True)
@@ -139,6 +146,36 @@ def main() -> int:
     prepare_release.add_argument("--handoff-install-root")
     prepare_release.add_argument("--cli-input", action="append", default=[])
     prepare_release.add_argument("--toolchain-input", action="append", default=[])
+    prepare_release.add_argument("--reuse-toolchain-artifact", action="append", default=[])
+
+    session_builders = subparsers.add_parser("session-build-box-plan", add_help=False)
+    session_builders.add_argument("--target", action="append", default=[])
+    session_builders.add_argument("--ttl-hours", type=int, default=8)
+    session_builders.add_argument("--channel", default="dogfood")
+    session_builders.add_argument("--repo-root", default=".")
+    session_builders.add_argument("--otvm-config", default="~/oracletestvms-libvirt.toml")
+
+    dogfood_version = subparsers.add_parser("dogfood-snapshot-version", add_help=False)
+    dogfood_version.add_argument("--base-version", required=True)
+    dogfood_version.add_argument("--source-revision")
+    dogfood_version.add_argument("--timestamp")
+    dogfood_version.add_argument("--sequence", type=int, default=0)
+
+    delta_record = subparsers.add_parser("delta-artifact-record", add_help=False)
+    delta_record.add_argument("--id", required=True)
+    delta_record.add_argument("--from-artifact", required=True)
+    delta_record.add_argument("--to-artifact", required=True)
+    delta_record.add_argument("--url", required=True)
+    delta_record.add_argument("--sha256", required=True)
+    delta_record.add_argument("--size", type=int, required=True)
+    delta_record.add_argument("--algorithm", default="metadata-only")
+
+    windows_inventory = subparsers.add_parser("windows-msys2-component-inventory", add_help=False)
+    windows_inventory.add_argument("--toolchain-version", required=True)
+
+    compare_windows_inventory = subparsers.add_parser("compare-windows-msys2-inventories", add_help=False)
+    compare_windows_inventory.add_argument("--old", required=True)
+    compare_windows_inventory.add_argument("--new", required=True)
 
     verify_release = subparsers.add_parser("verify-release", add_help=False)
     verify_release.add_argument("--release-dir", required=True)
@@ -182,6 +219,8 @@ def main() -> int:
     controlled_gate.add_argument("--release-trust-root")
     controlled_gate.add_argument("--package-index-trust-root")
     controlled_gate.add_argument("--allow-unsigned-package-index", action="store_true")
+    controlled_gate.add_argument("--tools-xctest-packages-dir")
+    controlled_gate.add_argument("--tools-xctest-evidence-dir")
 
     toolchain_audit = subparsers.add_parser("toolchain-archive-audit", add_help=False)
     toolchain_audit.add_argument("--archive", required=True)
@@ -291,8 +330,41 @@ def main() -> int:
             args.base_url,
             cli_inputs=mapping(args.cli_input),
             toolchain_inputs=mapping(args.toolchain_input),
+            reused_toolchain_artifacts=mapping(args.reuse_toolchain_artifact),
             channel=args.channel,
         )
+    elif args.subcommand == "session-build-box-plan":
+        payload = session_build_box_plan(
+            targets=args.target or None,
+            ttl_hours=args.ttl_hours,
+            channel=args.channel,
+            repo_root=args.repo_root,
+            otvm_config=args.otvm_config,
+        )
+    elif args.subcommand == "dogfood-snapshot-version":
+        version = dogfood_snapshot_version(
+            args.base_version,
+            source_revision=args.source_revision,
+            timestamp=args.timestamp,
+            sequence=args.sequence,
+        )
+        payload = {"schema_version": 1, "command": "dogfood-snapshot-version", "ok": True, "status": "ok", "version": version}
+    elif args.subcommand == "delta-artifact-record":
+        payload = {
+            "schema_version": 1,
+            "command": "delta-artifact-record",
+            "ok": True,
+            "status": "ok",
+            "artifact": delta_artifact_record(
+                delta_id=args.id,
+                from_artifact=json.loads(Path(args.from_artifact).read_text()),
+                to_artifact=json.loads(Path(args.to_artifact).read_text()),
+                url=args.url,
+                sha256=args.sha256,
+                size=args.size,
+                algorithm=args.algorithm,
+            ),
+        }
     elif args.subcommand == "bundle-cli":
         payload = bundle_full_cli(args.binary, args.output_dir, repo_root=args.repo_root)
     elif args.subcommand == "assemble-linux-toolchain":
@@ -333,6 +405,7 @@ def main() -> int:
             args.base_url,
             cli_inputs=mapping(args.cli_input),
             toolchain_inputs=mapping(args.toolchain_input),
+            reused_toolchain_artifacts=mapping(args.reuse_toolchain_artifact),
             install_root=args.install_root,
             handoff_install_root=args.handoff_install_root,
             channel=args.channel,
@@ -371,6 +444,8 @@ def main() -> int:
             release_trust_root=args.release_trust_root,
             package_index_trust_root=args.package_index_trust_root,
             allow_unsigned_package_index=args.allow_unsigned_package_index,
+            tools_xctest_packages_dir=args.tools_xctest_packages_dir,
+            tools_xctest_evidence_dir=args.tools_xctest_evidence_dir,
         )
     elif args.subcommand == "toolchain-archive-audit":
         payload = toolchain_archive_audit(args.archive, target_id=args.target)
@@ -426,6 +501,13 @@ def main() -> int:
         payload = debian_gcc_interop_plan()
     elif args.subcommand == "component-inventory":
         payload = component_inventory(args.target, args.toolchain_version)
+    elif args.subcommand == "windows-msys2-component-inventory":
+        payload = windows_msys2_component_inventory(toolchain_version=args.toolchain_version)
+    elif args.subcommand == "compare-windows-msys2-inventories":
+        payload = compare_windows_msys2_inventories(
+            json.loads(Path(args.old).read_text()),
+            json.loads(Path(args.new).read_text()),
+        )
     elif args.subcommand == "toolchain-manifest":
         payload = toolchain_manifest(args.target, args.toolchain_version)
     elif args.subcommand == "toolchain-plan":
@@ -460,9 +542,9 @@ def main() -> int:
             "build-infra: expected 'matrix', 'manifest', 'bundle-cli', 'source-lock', "
             "'assemble-linux-toolchain', 'package-source-built-linux-toolchain', 'toolchain-host-origin-audit', "
             "'stage-release', 'github-release-plan', 'github-release-publish', "
-            "'prepare-github-release', 'package-artifact-publication-gate', 'tools-xctest-release-gate', 'package-tools-xctest-artifact', 'build-linux-cli-against-managed-toolchain', 'linux-cli-abi-audit', 'refresh-local-release-metadata', 'published-url-qualification-plan', "
+            "'prepare-github-release', 'session-build-box-plan', 'dogfood-snapshot-version', 'delta-artifact-record', 'package-artifact-publication-gate', 'tools-xctest-release-gate', 'package-tools-xctest-artifact', 'build-linux-cli-against-managed-toolchain', 'linux-cli-abi-audit', 'refresh-local-release-metadata', 'published-url-qualification-plan', "
             "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', 'windows-current-source-marker', 'release-evidence-bundle', 'release-key-rotation-drill', "
-            "'validate-source-lock', 'msys2-input-manifest', 'validate-input-manifest', 'component-inventory', 'toolchain-manifest', "
+            "'validate-source-lock', 'msys2-input-manifest', 'validate-input-manifest', 'component-inventory', 'windows-msys2-component-inventory', 'compare-windows-msys2-inventories', 'toolchain-manifest', "
             "'toolchain-plan', 'linux-build-script', 'openbsd-build-script', "
             "'msys2-assembly-script', 'toolchain-archive-audit', 'debian-gcc-interop-plan', 'windows-extracted-toolchain-rebuild-plan', or 'msvc-status'",
             file=sys.stderr,

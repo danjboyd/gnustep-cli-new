@@ -1,0 +1,9 @@
+/tmp/gnustep-cli-debian-xctest-install/packages/org.gnustep.tools-xctest/Library/Headers/XCTest/XCTest.h
+/tmp/gnustep-cli-debian-xctest-install/packages/org.gnustep.tools-xctest/Library/Headers/XCTest/XCTestAssertions.h
+/tmp/gnustep-cli-debian-xctest-install/packages/org.gnustep.tools-xctest/Library/Headers/XCTest/XCTestAssertionsImpl.h
+/tmp/gnustep-cli-debian-xctest-install/packages/org.gnustep.tools-xctest/Library/Headers/XCTest/XCTestCase.h
+/tmp/gnustep-cli-debian-xctest-install/packages/org.gnustep.tools-xctest/Library/Libraries/libXCTest.so
+/tmp/gnustep-cli-debian-xctest-install/packages/org.gnustep.tools-xctest/Library/Libraries/libXCTest.so.0
+/tmp/gnustep-cli-debian-xctest-install/packages/org.gnustep.tools-xctest/Library/Libraries/libXCTest.so.0.0.1
+/tmp/gnustep-cli-debian-xctest-install/packages/org.gnustep.tools-xctest/bin/xctest
+/tmp/gnustep-cli-debian-xctest-install/packages/org.gnustep.tools-xctest/libexec/xctest

@@ -147,9 +147,10 @@ lock and build plan rather than smuggled in through ambient host state.
 For Windows `amd64/msys2-clang64`, the recommended v1 strategy is not a full
 from-source GNUstep stack rebuild.
 
-Instead, the managed toolchain should initially be assembled from a curated set
-of project-approved MSYS2 packages, captured in project-controlled metadata and
-repacked into managed artifacts.
+Instead, the managed toolchain should initially be assembled by running the
+official MSYS2 installer into a private project-controlled root, installing a
+curated set of project-approved MSYS2 packages into that root, capturing the
+result in project-controlled metadata, and repacking it into managed artifacts.
 
 The expected component set includes equivalents of:
 
@@ -172,10 +173,41 @@ respecting the practical reality of the MSYS2 ecosystem.
 
 The package input manifest for this target should record:
 
+- the MSYS2 installer URL, version/channel, checksum, and source channel
 - package names
 - exact package versions
 - exact package repository snapshots or package digests
 - any file-overwrite or conflict-resolution rules required during assembly
+- the private-root layout policy, including preservation of `clang64`, `usr`,
+  `etc`, and `var\lib\pacman\local`
+
+The Windows managed artifact should initially preserve the MSYS2 package layout
+closely enough that applications behave like they do under a normal
+`C:\msys64\clang64` shell. In practical terms, the managed ZIP should contain a
+private MSYS2-style root with `clang64`, `usr`, `etc`, and pacman local package
+metadata under `var\lib\pacman\local`. A smaller hand-copied DLL subset is not
+a sufficient v1 runtime target for GUI support.
+
+Before publication, Windows `msys2-clang64` assembly must run `pacman -Qkk`
+against the private root and fail the artifact if pacman reports local package
+database or installed-file integrity errors. The archive audit must also reject
+`var\lib\pacman\local\<package>` entries that are missing their required `desc`
+metadata file.
+
+For GUI applications, managed launch should use GNUstep's own environment
+initialization and app launcher:
+
+- managed `usr\bin\bash.exe`
+- `/clang64/share/GNUstep/Makefiles/GNUstep.sh`
+- `/clang64/bin/openapp`
+
+Directly starting `Foo.app\Foo.exe` is only a fallback/debug path because it can
+skip runtime setup that GNUstep GUI applications depend on.
+
+Gorm is the release-qualification application for this target. A Windows
+`msys2-clang64` managed artifact is not GUI-ready until it can build Gorm,
+launch it through managed `openapp`, and produce a screenshot with the Gorm
+menu, Inspector, and at least one palette window visible.
 
 ### Windows MSVC
 

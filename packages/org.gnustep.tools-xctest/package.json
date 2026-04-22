@@ -64,16 +64,18 @@
         "blocks"
       ],
       "url": "dist/dogfood/packages/tools-xctest-linux-amd64-clang-0.1.0.tar.gz",
-      "sha256": "d322792dd6aab2db083c386218e54bd5510c0bcbb1f3715f4d04cda5296fe7d1",
+      "sha256": "8f1f2a7d224bb67f318fed31f21024a3eff7504bd3c82028834ee7589923e866",
       "format": "tar.gz",
-      "publish": false,
-      "status": "pending_rebuild_with_declared_patches",
-      "notes": "Existing dogfood artifact predates the declared downstream patch and must be rebuilt before publication or installability claims.",
+      "publish": true,
+      "status": "validated_debian13_amd64_with_declared_patch_and_launcher",
+      "notes": "Built on Debian 13 amd64 from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes a bin/xctest launcher that sets package-local and managed-root library paths before execing libexec/xctest.",
       "supported_distributions": [
         "debian"
       ],
       "portability_policy": "distribution-scoped",
-      "supported_os_versions": []
+      "supported_os_versions": [],
+      "build_evidence": "dist/dogfood/packages/build-linux-amd64-clang/package-result.json",
+      "validation_evidence": "docs/validation/tools-xctest-debian-13-20260420/tools-xctest-linux-amd64-clang.json"
     },
     {
       "id": "tools-xctest-linux-ubuntu2404-amd64-clang",
@@ -114,11 +116,13 @@
         "blocks"
       ],
       "url": "dist/dogfood/packages/tools-xctest-openbsd-amd64-clang-0.1.0.tar.gz",
-      "sha256": "854b0974fd936599789eda27e308ebaf695ca8c94eab69f84d9397ed7c5dfac4",
-      "publish": false,
+      "sha256": "2a5ddaf9571cab9860eeadc1dba5317e72c9c0db0b9d1cbdcd4731365390e473",
+      "publish": true,
       "format": "tar.gz",
-      "status": "pending_rebuild_with_declared_patches",
-      "notes": "Existing dogfood artifact predates the declared downstream patch and must be rebuilt before publication or installability claims."
+      "status": "validated_openbsd78_amd64_with_declared_patch_launcher_and_linker_workaround",
+      "notes": "Built on OpenBSD 7.8 amd64 with clang/libobjc2 from OpenBSD packages, upstream tools-xctest revision plus PR #5 patch, package-local launcher, and OpenBSD libXCTest linker-name workaround. Validated with native CLI install/remove, xctest --help, and a minimal XCTest bundle run.",
+      "build_evidence": "dist/dogfood/packages/tools-xctest-openbsd-amd64-clang-0.1.0.tar.gz",
+      "validation_evidence": "docs/validation/tools-xctest-openbsd-78-20260420/tools-xctest-openbsd-amd64-clang.json"
     },
     {
       "id": "tools-xctest-linux-arm64-clang",
@@ -132,15 +136,21 @@
         "blocks"
       ],
       "supported_distributions": [
-        "debian"
+        "debian",
+        "ubuntu"
       ],
-      "portability_policy": "distribution-scoped",
+      "portability_policy": "debian-family-interim-host-validated",
       "url": "dist/dogfood/packages/tools-xctest-linux-arm64-clang-0.1.0.tar.gz",
-      "sha256": "planned-artifact-checksum-tbd",
+      "sha256": "0de76047878737cb78642cba60034651a194fc1c70d05a1a220e2c758bc68285",
       "format": "tar.gz",
-      "publish": false,
-      "status": "planned_debian_aarch64_build",
-      "notes": "Planned target; artifact must be built from declared upstream source plus declared patches before publication or installability claims."
+      "publish": true,
+      "status": "validated_ubuntu2404_aarch64_managed_clang_with_declared_patch_and_launcher",
+      "notes": "Built on OTVM ubuntu-24.04-aarch64 against the Phase 16.B2 managed Clang/libobjc2 toolchain from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes a bin/xctest launcher that sets package-local and managed-root library paths before execing libexec/xctest.",
+      "build_evidence": "dist/dogfood/packages/tools-xctest-linux-arm64-clang-0.1.0.tar.gz",
+      "validation_evidence": "docs/validation/tools-xctest-linux-arm64-ubuntu-2404-20260421/tools-xctest-linux-arm64-clang.json",
+      "supported_os_versions": [
+        "ubuntu-24.04"
+      ]
     },
     {
       "id": "tools-xctest-windows-amd64-msys2-clang64",
@@ -154,11 +164,13 @@
         "blocks"
       ],
       "url": "dist/dogfood/packages/tools-xctest-windows-amd64-msys2-clang64-0.1.0.zip",
-      "sha256": "planned-artifact-checksum-tbd",
+      "sha256": "6c66cd60bf95006c2429bde211fb7aebe885e8cc635b2a206b6ec7f8b828d27d",
       "format": "zip",
-      "publish": false,
-      "status": "planned_windows_msys2_clang64_build",
-      "notes": "Planned target; artifact must be built from declared upstream source plus declared patches before publication or installability claims."
+      "publish": true,
+      "status": "validated_windows_msys2_clang64_with_declared_patch_and_launcher",
+      "notes": "Built on Windows Server 2022/MSYS2 clang64 from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes cmd.exe and MSYS shell launchers that put package-local XCTest DLLs and the managed MSYS2 clang64 toolchain on PATH before execing xctest.exe.",
+      "validation_evidence": "docs/validation/tools-xctest-windows-msys2-20260421/tools-xctest-windows-amd64-msys2-clang64.json",
+      "build_evidence": "dist/dogfood/packages/tools-xctest-windows-amd64-msys2-clang64-0.1.0.zip"
     },
     {
       "id": "tools-xctest-openbsd-arm64-clang",
@@ -175,8 +187,8 @@
       "sha256": "planned-artifact-checksum-tbd",
       "format": "tar.gz",
       "publish": false,
-      "status": "planned_openbsd_arm64_build",
-      "notes": "Planned target; artifact must be built from declared upstream source plus declared patches on OpenBSD arm64 before publication or installability claims."
+      "status": "blocked_no_openbsd_arm64_otvm_profile_or_host_access",
+      "notes": "OpenBSD arm64 remains blocked until OTVM provides an OpenBSD arm64 profile or equivalent scripted access to the available OpenBSD arm64 server."
     }
   ],
   "install": {

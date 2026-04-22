@@ -35,6 +35,7 @@
 - `setup`
 - `doctor`
 - `build`
+- `clean`
 - `run`
 - `new`
 - `install`
@@ -77,6 +78,7 @@
 - `setup`
 - `doctor`
 - `build`
+- `clean`
 - `run`
 - `new`
 - `install`
@@ -753,6 +755,8 @@
 - Aggregate GNUstep Make projects must be accepted by `build` and delegated to `make`.
 - If multiple supported build markers are present, `build` should fail clearly unless the user supplies `--build-system`.
 - `build --json` should report detected backend candidates, selected backend, project type/classification, invocation, exit status, and backend stdout/stderr without forcing consumers to parse human-readable text.
+- `gnustep clean` is the canonical clean-only user command. Do not rely on `gnustep build --clean` as the primary UX because it reads ambiguously as "clean, then build" rather than "clean only".
+- Backend-specific clean behavior should be modeled through the same backend abstraction as build. For GNUstep Make, clean-only should delegate to GNUstep Make; exact clean target selection may evolve by backend policy.
 
 ## Run Command Policy
 - `run` should be a thin wrapper over the selected backend's existing execution model and GNUstep conventions such as `openapp` where appropriate.

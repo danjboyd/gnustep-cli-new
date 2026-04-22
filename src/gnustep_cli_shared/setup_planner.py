@@ -77,6 +77,16 @@ def _validate_manifest_payload(manifest: dict[str, Any]) -> list[str]:
             for field in ("id", "kind", "os", "arch", "url", "sha256"):
                 if field not in artifact:
                     errors.append(f"Artifact {artifact.get('id', 'unknown')} is missing required field '{field}'.")
+            if artifact.get("reused"):
+                for field in ("version", "size"):
+                    if field not in artifact:
+                        errors.append(f"Reused artifact {artifact.get('id', 'unknown')} is missing required field '{field}'.")
+                if artifact.get("sha256") == "TBD":
+                    errors.append(f"Reused artifact {artifact.get('id', 'unknown')} must have a concrete sha256.")
+            if artifact.get("kind") == "delta":
+                for field in ("from_artifact", "to_artifact", "from_sha256", "to_sha256"):
+                    if field not in artifact:
+                        errors.append(f"Delta artifact {artifact.get('id', 'unknown')} is missing required field '{field}'.")
     return errors
 
 
@@ -101,8 +111,46 @@ def _select_release(manifest_file: Path, doctor: dict[str, Any]) -> tuple[dict[s
 
 def _path_export_hint(root: Path, os_name: str) -> str:
     if os_name == "windows":
-        return rf"$env:Path = '{root}\bin;{root}\Tools;{root}\System\Tools;' + $env:Path"
+        return f'. "{root / "GNUstep.ps1"}"'
     return f'export PATH="{root}/bin:{root}/Tools:{root}/System/Tools:$PATH"'
+
+
+def _write_windows_activation_scripts(root: Path) -> None:
+    tmp = root / "tmp"
+    etc = root / "etc"
+    tmp.mkdir(parents=True, exist_ok=True)
+    etc.mkdir(parents=True, exist_ok=True)
+    (etc / "fstab").write_text(f"{str(tmp).replace(chr(92), '/')} /tmp ntfs binary,noacl,posix=0,user 0 0\n", encoding="ascii")
+    (root / "GNUstep.ps1").write_text(
+        "\n".join(
+            [
+                "$prefix = Split-Path -Parent $MyInvocation.MyCommand.Path",
+                "$env:GNUSTEP_MAKEFILES = Join-Path $prefix 'clang64\\share\\GNUstep\\Makefiles'",
+                "$env:GNUSTEP_CONFIG_FILE = Join-Path $prefix 'clang64\\etc\\GNUstep\\GNUstep.conf'",
+                "$env:TMPDIR = Join-Path $prefix 'tmp'",
+                "$env:TEMP = $env:TMPDIR",
+                "$env:TMP = $env:TMPDIR",
+                "$env:PATH = (Join-Path $prefix 'clang64\\bin') + ';' + (Join-Path $prefix 'bin') + ';' + (Join-Path $prefix 'usr\\bin') + ';' + $env:PATH",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (root / "GNUstep.bat").write_text(
+        "\n".join(
+            [
+                "@echo off",
+                'set "GNUSTEP_MAKEFILES=%~dp0clang64\\share\\GNUstep\\Makefiles"',
+                'set "GNUSTEP_CONFIG_FILE=%~dp0clang64\\etc\\GNUstep\\GNUstep.conf"',
+                'set "TMPDIR=%~dp0tmp"',
+                'set "TEMP=%~dp0tmp"',
+                'set "TMP=%~dp0tmp"',
+                'set "PATH=%~dp0clang64\\bin;%~dp0bin;%~dp0usr\\bin;%PATH%"',
+            ]
+        )
+        + "\n",
+        encoding="ascii",
+    )
 
 
 def _sha256(path: Path) -> str:
@@ -246,13 +294,21 @@ def execute_setup(
             installed_items.append({"artifact_id": artifact["id"], "paths": installed_paths})
 
         _relocate_managed_toolchain(install_path)
+        if payload["doctor"]["os"] == "windows":
+            _write_windows_activation_scripts(install_path)
 
+        cli_artifact = next((artifact for artifact in selected_artifacts if artifact["kind"] == "cli"), None)
+        toolchain_artifact = next((artifact for artifact in selected_artifacts if artifact["kind"] == "toolchain"), None)
         save_cli_state(
             install_path,
             {
                 "schema_version": 1,
                 "cli_version": payload["plan"]["selected_release"],
                 "toolchain_version": payload["plan"]["selected_release"],
+                "cli_artifact_id": cli_artifact.get("id") if cli_artifact else None,
+                "cli_artifact_sha256": cli_artifact.get("sha256") if cli_artifact else None,
+                "toolchain_artifact_id": toolchain_artifact.get("id") if toolchain_artifact else None,
+                "toolchain_artifact_sha256": toolchain_artifact.get("sha256") if toolchain_artifact else None,
                 "packages_version": 1,
                 "last_action": "setup",
                 "status": "healthy",
@@ -267,10 +323,10 @@ def execute_setup(
         {
             "kind": "add_path",
             "priority": 1,
-                "message": (
-                    f"Add {install_path / 'bin'}, {install_path / 'Tools'}, and "
-                    f"{install_path / 'System/Tools'} to PATH for future shells."
-                ),
+            "message": (
+                f"Add {install_path / 'bin'} to PATH for future shells. "
+                "The CLI uses its private MSYS2 runtime internally."
+            ),
         },
         {
             "kind": "delete_bootstrap",

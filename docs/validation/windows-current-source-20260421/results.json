@@ -1,0 +1,21 @@
+﻿{
+    "stage":  "remove_package",
+    "error":  "",
+    "build_exit":  0,
+    "exe_exists":  true,
+    "version_stdout":  "0.1.0-dev\r\n",
+    "help_stdout":  "GNUstep CLI full interface\r\n\r\nUsage:\r\n  gnustep \u003ccommand\u003e [options] [args]\r\n\r\nGlobal options:\r\n  --help\r\n  --version\r\n  --json\r\n  --verbose\r\n  --quiet\r\n  --yes\r\n\r\nCommands:\r\n  setup   Install or repair the managed GNUstep CLI environment.\r\n  doctor  Inspect the local GNUstep environment and report readiness.\r\n  build   Build the current GNUstep project.\r\n  clean   Clean build outputs for the current GNUstep project.\r\n  run     Run the current GNUstep project.\r\n  shell   Open the managed MSYS2 CLANG64 GNUstep shell on Windows.\r\n  new     Create a new GNUstep project from a curated template.\r\n  install Install a GNUstep package into the managed environment.\r\n  remove  Remove a GNUstep package from the managed environment.\r\n  update  Check for and apply CLI, toolchain, and package updates.\r\n",
+    "version_exit":  0,
+    "version_stderr":  "",
+    "help_exit":  0,
+    "help_stderr":  "",
+    "install_exit":  0,
+    "install_stdout":  "install: Package installed.\r\ninstall: package=org.gnustep.demo-windows-smoke\r\ninstall: artifact=demo-windows-clang\r\ninstall: root=C:\\Users/otvmbootstrap/refresh-run/managed/packages/org.gnustep.demo-windows-smoke\r\ninstall: managed_root=C:\\Users\\otvmbootstrap\\refresh-run\\managed\r\ninstall: dependencies=0 files=1\r\n",
+    "install_stderr":  "",
+    "install_trace":  "enter install\nparsed arguments\nloading package record\nloading install state\npackage id org.gnustep.demo-windows-smoke\ndetecting environment\nchecking package requirements\nrequirements entry\nrequirements shape ok\nrequirements ok\nchecking dependencies\nchecking conflicts\nselecting artifact\nselected artifact demo-windows-clang\nresolving artifact path\nartifact path C:\\Users\\otvmbootstrap\\refresh-run\\demo-windows-package.zip\ndownload path C:\\Users/otvmbootstrap/refresh-run/managed/.staging/org.gnustep.demo-windows-smoke/demo-windows-package.zip\npreparing staging\nfetching artifact\nverifying artifact\nactual sha 9e3a3db276523784085e71d366ebab6b9b135c550a756f74bf3cfe64025bba13 expected 9e3a3db276523784085e71d366ebab6b9b135c550a756f74bf3cfe64025bba13\nextracting artifact\ncopying payload\nrecording installed files\nsaving install state\n",
+    "remove_exit":  0,
+    "remove_stdout":  "",
+    "remove_stderr":  "",
+    "state_path":  "C:\\Users\\otvmbootstrap\\refresh-run\\managed\\state\\installed-packages.json",
+    "state_text":  "{\n\"packages\": {\n\t},\n\"last_package_index_expires_at\": null,\n\"last_package_index_metadata_version\": null,\n\"last_package_index_generated_at\": null,\n\"schema_version\": 1,\n\"last_package_index_path\": \"C:\\\\Users\\\\otvmbootstrap\\\\refresh-run\\\\package-index.json\"\n}"
+}

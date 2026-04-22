@@ -1,0 +1,19 @@
+setup: starting managed installation into C:\gnustep-cli-public-refresh
+setup: loading release manifest from https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0-dev/release-manifest.json
+setup: selected release 0.1.0-dev artifacts: cli-windows-amd64-msys2-clang64, toolchain-windows-amd64-msys2-clang64
+setup: fetching CLI artifact gnustep-cli-windows-amd64-msys2-clang64-0.1.0-dev.zip
+setup: downloaded gnustep-cli-windows-amd64-msys2-clang64-0.1.0-dev.zip (167.9 KB)
+setup: fetching toolchain artifact gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev.zip
+setup: downloaded gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev.zip (945.1 MB)
+setup: verifying artifact checksums
+setup: extracting CLI artifact
+setup: extracting toolchain artifact; this can take several minutes
+setup: installing CLI files
+setup: installing GNUstep toolchain files
+setup: recording managed install state
+setup: managed installation completed
+setup: scope=user root=C:\gnustep-cli-public-refresh
+setup: updated user PATH for future PowerShell sessions
+next: Run this in the current shell:
+  . "C:\gnustep-cli-public-refresh\GNUstep.ps1"
+next: The bootstrap script is no longer required and may be deleted.

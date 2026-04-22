@@ -17,7 +17,7 @@ toolchain:
   [toolchains/linux-amd64-clang/toolchain-manifest.json](/home/danboyd/gnustep-cli-new/toolchains/linux-amd64-clang/toolchain-manifest.json)
 - a generated reference build script at
   [toolchains/linux-amd64-clang/build-toolchain.sh](/home/danboyd/gnustep-cli-new/toolchains/linux-amd64-clang/build-toolchain.sh)
-- a planned Ubuntu 24.04 Docker-oriented target at
+- an Ubuntu 24.04 Docker-oriented target at
   [toolchains/linux-ubuntu2404-amd64-clang/build-toolchain.sh](/home/danboyd/gnustep-cli-new/toolchains/linux-ubuntu2404-amd64-clang/build-toolchain.sh)
 - an Ubuntu 24.04 build container definition at
   [toolchains/linux-ubuntu2404-amd64-clang/Dockerfile](/home/danboyd/gnustep-cli-new/toolchains/linux-ubuntu2404-amd64-clang/Dockerfile)

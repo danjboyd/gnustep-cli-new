@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "ok": false,
+  "non_release_blocker": true,
+  "package_id": "org.gnustep.tools-xctest",
+  "artifact_id": "tools-xctest-openbsd-arm64-clang",
+  "target": "openbsd-arm64-clang",
+  "host_profile": null,
+  "checks": [
+    "host-access-blocker"
+  ],
+  "blocker": {
+    "code": "openbsd_arm64_host_access_unavailable",
+    "message": "No OTVM OpenBSD arm64 profile is currently available, and no scripted SSH access to the user-owned OpenBSD arm64 server has been configured for this repository. This is tracked as a documented non-release blocker rather than a package-pipeline failure."
+  },
+  "details": {
+    "otvm_catalog": "catalog-list exposes openbsd-7.8-fvwm but no OpenBSD arm64 profile as of April 21, 2026",
+    "required_next_step": "Add an OTVM OpenBSD arm64 profile or provide scripted host access, then build, install, smoke, and remove tools-xctest on that host."
+  }
+}

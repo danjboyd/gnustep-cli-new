@@ -14,6 +14,7 @@ $payloadDir = Join-Path $leaseRoot 'payload'
 $archivePath = Join-Path $leaseRoot 'demo-windows-package.zip'
 $managedRoot = Join-Path $leaseRoot 'managed'
 $exe = 'C:\Users\otvmbootstrap\refresh-run\src\full-cli\obj\gnustep.exe'
+$managedBash = Join-Path $toolchainRoot 'usr\bin\bash.exe'
 $installTracePath = Join-Path $leaseRoot 'install-trace.txt'
 
 $result = [ordered]@{
@@ -119,13 +120,13 @@ try {
   }
 
   Set-Stage 'build_cli'
-  & C:\msys64\usr\bin\bash.exe -lc "mkdir -p /c/Users/otvmbootstrap/refresh-run/src && tar -xzf /c/Users/otvmbootstrap/full-cli-src.tar.gz -C /c/Users/otvmbootstrap/refresh-run/src && cd /c/Users/otvmbootstrap/refresh-run/src/full-cli && export PATH=/c/managed-probe/bin:/c/managed-probe/usr/bin:`$PATH && export GNUSTEP_MAKEFILES=/c/managed-probe/share/GNUstep/Makefiles && make"
+  & $managedBash -lc "mkdir -p /c/Users/otvmbootstrap/refresh-run/src && tar -xzf /c/Users/otvmbootstrap/full-cli-src.tar.gz -C /c/Users/otvmbootstrap/refresh-run/src && cd /c/Users/otvmbootstrap/refresh-run/src/full-cli && export PATH=/c/managed-probe/clang64/bin:/c/managed-probe/usr/bin:`$PATH && export GNUSTEP_MAKEFILES=/c/managed-probe/clang64/share/GNUstep/Makefiles && make"
   $result.build_exit = $LASTEXITCODE
   $result.exe_exists = (Test-Path $exe)
 
   if (Test-Path $exe) {
-    $env:PATH = 'C:\managed-probe\bin;C:\managed-probe\usr\bin;' + $env:PATH
-    $env:GNUSTEP_MAKEFILES = '/c/managed-probe/share/GNUstep/Makefiles'
+    $env:PATH = 'C:\managed-probe\clang64\bin;C:\managed-probe\usr\bin;' + $env:PATH
+    $env:GNUSTEP_MAKEFILES = '/c/managed-probe/clang64/share/GNUstep/Makefiles'
 
     Set-Stage 'cli_smoke_version'
     $version = Invoke-Captured { & $exe --version }

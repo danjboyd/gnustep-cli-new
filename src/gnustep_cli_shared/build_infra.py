@@ -156,7 +156,25 @@ MSYS2_PACKAGE_INPUTS = [
     "mingw-w64-clang-x86_64-gnustep-base",
     "mingw-w64-clang-x86_64-gnustep-gui",
     "mingw-w64-clang-x86_64-gnustep-back",
+    "mingw-w64-clang-x86_64-cairo",
+    "mingw-w64-clang-x86_64-fontconfig",
+    "mingw-w64-clang-x86_64-freetype",
+    "mingw-w64-clang-x86_64-harfbuzz",
+    "mingw-w64-clang-x86_64-icu",
+    "mingw-w64-clang-x86_64-libjpeg-turbo",
+    "mingw-w64-clang-x86_64-libpng",
+    "mingw-w64-clang-x86_64-libtiff",
+    "mingw-w64-clang-x86_64-pixman",
+    "mingw-w64-clang-x86_64-pkgconf",
 ]
+
+MSYS2_INSTALLER_INPUT = {
+    "name": "msys2-x86_64",
+    "version": "latest",
+    "url": "https://github.com/msys2/msys2-installer/releases/latest/download/msys2-x86_64-latest.exe",
+    "sha256": "TBD",
+    "source_channel": "msys2-installer",
+}
 
 MSYS2_HOST_PACKAGES = [
     "make",
@@ -286,6 +304,246 @@ def release_manifest_from_matrix(version: str, base_url: str) -> dict[str, Any]:
     }
 
 
+def _artifact_target_id(artifact: dict[str, Any]) -> str | None:
+    artifact_id = artifact.get("id")
+    if not isinstance(artifact_id, str):
+        return None
+    for prefix in ("cli-", "toolchain-", "package-", "delta-"):
+        if artifact_id.startswith(prefix):
+            return artifact_id.removeprefix(prefix)
+    return None
+
+
+def _artifact_immutable_reference_errors(artifact: dict[str, Any], *, expected_kind: str | None = None, expected_target_id: str | None = None) -> list[str]:
+    errors: list[str] = []
+    required = ("id", "kind", "version", "os", "arch", "url", "sha256", "size")
+    for field in required:
+        if artifact.get(field) in (None, ""):
+            errors.append(f"artifact is missing immutable reference field: {field}")
+    if expected_kind and artifact.get("kind") != expected_kind:
+        errors.append(f"artifact kind must be {expected_kind}")
+    if expected_target_id and _artifact_target_id(artifact) != expected_target_id:
+        errors.append(f"artifact target must be {expected_target_id}")
+    sha256 = artifact.get("sha256")
+    if isinstance(sha256, str) and sha256 == "TBD":
+        errors.append("artifact sha256 must be concrete for reuse")
+    integrity = artifact.get("integrity")
+    if isinstance(integrity, dict) and integrity.get("sha256") not in (None, sha256):
+        errors.append("artifact integrity.sha256 must match sha256")
+    return errors
+
+
+def reusable_artifact_reference(
+    artifact: dict[str, Any],
+    *,
+    expected_kind: str | None = None,
+    expected_target_id: str | None = None,
+) -> dict[str, Any]:
+    errors = _artifact_immutable_reference_errors(
+        artifact,
+        expected_kind=expected_kind,
+        expected_target_id=expected_target_id,
+    )
+    if errors:
+        raise ValueError("; ".join(errors))
+    reference = deepcopy(artifact)
+    reference["reused"] = True
+    reference["published"] = True
+    reference.setdefault("integrity", {"sha256": reference["sha256"]})
+    reference["reuse_policy"] = {
+        "kind": "immutable-artifact-reference",
+        "requires_url": True,
+        "requires_sha256": True,
+        "requires_size": True,
+        "local_reupload_required": False,
+    }
+    reference.setdefault("layer", "managed-toolchain" if reference.get("kind") == "toolchain" else reference.get("kind"))
+    return reference
+
+
+def dogfood_snapshot_version(
+    base_version: str,
+    *,
+    source_revision: str | None = None,
+    timestamp: datetime | str | None = None,
+    sequence: int = 0,
+) -> str:
+    if timestamp is None:
+        timestamp_value = datetime.now(UTC)
+    elif isinstance(timestamp, datetime):
+        timestamp_value = timestamp.astimezone(UTC) if timestamp.tzinfo is not None else timestamp.replace(tzinfo=UTC)
+    else:
+        normalized = timestamp.replace("Z", "+00:00")
+        timestamp_value = datetime.fromisoformat(normalized)
+        if timestamp_value.tzinfo is None:
+            timestamp_value = timestamp_value.replace(tzinfo=UTC)
+        timestamp_value = timestamp_value.astimezone(UTC)
+    stamp = timestamp_value.strftime("%Y%m%dT%H%M%SZ")
+    revision = (source_revision or _git_revision() or "unknown").strip()
+    revision_part = re.sub(r"[^A-Za-z0-9]+", "", revision)[:12] or "unknown"
+    return f"{base_version}-dogfood.{stamp}.g{revision_part}.{sequence}"
+
+
+def dogfood_snapshot_manifest(
+    base_version: str,
+    base_url: str,
+    *,
+    source_revision: str | None = None,
+    timestamp: datetime | str | None = None,
+    sequence: int = 0,
+    cli_artifacts: list[dict[str, Any]] | None = None,
+    reused_toolchain_artifacts: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    version = dogfood_snapshot_version(
+        base_version,
+        source_revision=source_revision,
+        timestamp=timestamp,
+        sequence=sequence,
+    )
+    artifacts: list[dict[str, Any]] = []
+    toolchain_by_target = {
+        _artifact_target_id(artifact): reusable_artifact_reference(artifact, expected_kind="toolchain")
+        for artifact in (reused_toolchain_artifacts or [])
+    }
+    for artifact in cli_artifacts or []:
+        cli = deepcopy(artifact)
+        cli["version"] = version
+        target_id = _artifact_target_id(cli)
+        toolchain = toolchain_by_target.get(target_id)
+        if toolchain is not None:
+            cli["requires_toolchain"] = {
+                "artifact_id": toolchain["id"],
+                "version": toolchain.get("version"),
+                "sha256": toolchain.get("sha256"),
+                "reused": True,
+            }
+            cli["layer_update_policy"] = {
+                "kind": "cli-layer",
+                "toolchain_rebuild_required": False,
+                "toolchain_reuse_allowed": True,
+            }
+        artifacts.append(cli)
+    artifacts.extend(toolchain_by_target.values())
+    return {
+        "schema_version": 1,
+        "channel": "dogfood",
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "metadata_version": 1,
+        "expires_at": (datetime.now(UTC).replace(microsecond=0) + timedelta(days=7)).isoformat().replace("+00:00", "Z"),
+        "trust": {
+            "root_version": 1,
+            "signature_policy": "single-role-v1",
+            "signatures": [],
+            "revoked_artifacts": [],
+        },
+        "releases": [
+            {
+                "version": version,
+                "status": "active",
+                "snapshot": {
+                    "kind": "dogfood",
+                    "base_version": base_version,
+                    "source_revision": source_revision or _git_revision(),
+                    "sequence": sequence,
+                },
+                "artifacts": artifacts,
+            }
+        ],
+        "retention": {
+            "policy": "dogfood-snapshot-window",
+            "keep_latest": 12,
+            "max_age_days": 14,
+        },
+    }
+
+
+def delta_artifact_record(
+    *,
+    delta_id: str,
+    from_artifact: dict[str, Any],
+    to_artifact: dict[str, Any],
+    url: str,
+    sha256: str,
+    size: int,
+    delta_format: str = "gnustep-delta-v1",
+    algorithm: str = "metadata-only",
+) -> dict[str, Any]:
+    target_id = _artifact_target_id(to_artifact)
+    if target_id is None:
+        raise ValueError("target artifact id is not target-scoped")
+    if from_artifact.get("kind") != to_artifact.get("kind"):
+        raise ValueError("delta source and target artifacts must have the same kind")
+    if _artifact_target_id(from_artifact) != target_id:
+        raise ValueError("delta source and target artifacts must have the same target")
+    record = {
+        "id": delta_id,
+        "kind": f"{to_artifact.get('kind')}-delta",
+        "version": to_artifact.get("version"),
+        "os": to_artifact.get("os"),
+        "arch": to_artifact.get("arch"),
+        "compiler_family": to_artifact.get("compiler_family"),
+        "toolchain_flavor": to_artifact.get("toolchain_flavor"),
+        "objc_runtime": to_artifact.get("objc_runtime"),
+        "objc_abi": to_artifact.get("objc_abi"),
+        "required_features": to_artifact.get("required_features", []),
+        "format": delta_format,
+        "delta_format": delta_format,
+        "delta_algorithm": algorithm,
+        "from_artifact": from_artifact.get("id"),
+        "to_artifact": to_artifact.get("id"),
+        "from_sha256": from_artifact.get("sha256"),
+        "to_sha256": to_artifact.get("sha256"),
+        "url": url,
+        "sha256": sha256,
+        "integrity": {"sha256": sha256},
+        "size": size,
+        "target_artifact": {
+            "id": to_artifact.get("id"),
+            "sha256": to_artifact.get("sha256"),
+            "url": to_artifact.get("url"),
+            "size": to_artifact.get("size"),
+        },
+    }
+    errors = validate_delta_artifact_record(record)
+    if errors:
+        raise ValueError("; ".join(errors))
+    return record
+
+
+def validate_delta_artifact_record(artifact: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    required = ("id", "kind", "from_artifact", "to_artifact", "from_sha256", "to_sha256", "url", "sha256", "size", "delta_format")
+    for field in required:
+        if artifact.get(field) in (None, ""):
+            errors.append(f"delta artifact is missing required field: {field}")
+    if artifact.get("delta_format") != "gnustep-delta-v1":
+        errors.append("delta artifact format must be gnustep-delta-v1")
+    for field in ("from_sha256", "to_sha256", "sha256"):
+        value = artifact.get(field)
+        if value == "TBD":
+            errors.append(f"delta artifact {field} must be concrete")
+    if artifact.get("kind") not in {"cli-delta", "toolchain-delta", "package-delta", "delta"}:
+        errors.append("delta artifact kind must identify a delta layer")
+    return errors
+
+
+def _load_reusable_artifact(path: str | Path, *, expected_kind: str, expected_target_id: str) -> dict[str, Any]:
+    payload = json.loads(Path(path).read_text())
+    if isinstance(payload, dict) and "releases" in payload:
+        for release in payload.get("releases", []):
+            for artifact in release.get("artifacts", []):
+                if artifact.get("kind") == expected_kind and _artifact_target_id(artifact) == expected_target_id:
+                    return reusable_artifact_reference(
+                        artifact,
+                        expected_kind=expected_kind,
+                        expected_target_id=expected_target_id,
+                    )
+        raise ValueError(f"no {expected_kind} artifact for {expected_target_id} found in {path}")
+    if not isinstance(payload, dict):
+        raise ValueError(f"reusable artifact reference must be a JSON object: {path}")
+    return reusable_artifact_reference(payload, expected_kind=expected_kind, expected_target_id=expected_target_id)
+
+
 def source_lock_template(target_id: str) -> dict[str, Any]:
     target = target_by_id(target_id)
     if target["strategy"] != "source-build":
@@ -336,6 +594,12 @@ def msys2_input_manifest_template() -> dict[str, Any]:
         },
         "strategy": "msys2-assembly",
         "repository_snapshot": "TBD",
+        "installer": dict(MSYS2_INSTALLER_INPUT),
+        "root_layout": {
+            "install_root": "private-msys2-root",
+            "preserve": ["clang64", "usr", "etc", "var/lib/pacman/local"],
+            "path_policy": "Expose only <install-root>/bin by default; use private MSYS2 paths internally.",
+        },
         "host_packages": [
             {
                 "name": name,
@@ -404,12 +668,16 @@ def toolchain_manifest(target_id: str, toolchain_version: str) -> dict[str, Any]
         },
     }
     if target["id"] == "windows-amd64-msys2-clang64":
+        payload["source_policy"]["assembly_input"] = "official-msys2-installer"
+        payload["source_policy"]["private_root_required"] = True
         payload["developer_entrypoints"] = {
-            "compiler": ["bin/clang.exe"],
+            "compiler": ["clang64/bin/clang.exe"],
             "build_shell": ["usr/bin/bash.exe", "usr/bin/sh.exe"],
             "build_driver": ["usr/bin/make.exe"],
             "checksum_tool": ["usr/bin/sha256sum.exe"],
-            "gnustep_makefiles": ["share/GNUstep/Makefiles/common.make", "share/GNUstep/Makefiles/tool.make"],
+            "gnustep_makefiles": ["clang64/share/GNUstep/Makefiles/common.make", "clang64/share/GNUstep/Makefiles/tool.make"],
+            "app_launcher": ["clang64/bin/openapp"],
+            "activation": ["GNUstep.ps1", "GNUstep.bat"],
         }
     return payload
 
@@ -456,6 +724,79 @@ def component_inventory(target_id: str, toolchain_version: str) -> dict[str, Any
             "notes": target.get("portability_notes"),
         },
         "components": components,
+    }
+
+
+def windows_msys2_component_inventory(
+    *,
+    toolchain_version: str,
+    packages: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    target = target_by_id("windows-amd64-msys2-clang64")
+    package_records = packages or [
+        {
+            "name": name,
+            "version": "TBD",
+            "package_sha256": "TBD",
+            "installed_files_sha256": "TBD",
+            "layer": "base",
+        }
+        for name in [*MSYS2_HOST_PACKAGES, *MSYS2_PACKAGE_INPUTS]
+    ]
+    return {
+        "schema_version": 1,
+        "target": {
+            "id": target["id"],
+            "os": target["os"],
+            "arch": target["arch"],
+            "compiler_family": target["compiler_family"],
+            "toolchain_flavor": target["toolchain_flavor"],
+        },
+        "toolchain_version": toolchain_version,
+        "strategy": "msys2-package-inventory",
+        "packages": package_records,
+    }
+
+
+def compare_windows_msys2_inventories(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
+    old_packages = {package.get("name"): package for package in old.get("packages", []) if isinstance(package, dict)}
+    new_packages = {package.get("name"): package for package in new.get("packages", []) if isinstance(package, dict)}
+    added = sorted(name for name in new_packages if name not in old_packages)
+    removed = sorted(name for name in old_packages if name not in new_packages)
+    changed: list[dict[str, Any]] = []
+    for name in sorted(set(old_packages) & set(new_packages)):
+        before = old_packages[name]
+        after = new_packages[name]
+        if (
+            before.get("version") != after.get("version")
+            or before.get("package_sha256") != after.get("package_sha256")
+            or before.get("installed_files_sha256") != after.get("installed_files_sha256")
+        ):
+            changed.append(
+                {
+                    "name": name,
+                    "old_version": before.get("version"),
+                    "new_version": after.get("version"),
+                    "old_package_sha256": before.get("package_sha256"),
+                    "new_package_sha256": after.get("package_sha256"),
+                    "old_installed_files_sha256": before.get("installed_files_sha256"),
+                    "new_installed_files_sha256": after.get("installed_files_sha256"),
+                }
+            )
+    destructive_change = bool(removed)
+    action = "reuse_existing_toolchain" if not added and not removed and not changed else ("full_toolchain_checkpoint" if destructive_change else "component_update")
+    return {
+        "schema_version": 1,
+        "command": "compare-windows-msys2-inventories",
+        "ok": True,
+        "status": "ok",
+        "summary": "Windows MSYS2 inventory comparison completed.",
+        "action": action,
+        "added_packages": added,
+        "removed_packages": removed,
+        "changed_packages": changed,
+        "requires_full_toolchain_artifact": action == "full_toolchain_checkpoint",
+        "component_replacement_sufficient": action == "component_update",
     }
 
 
@@ -534,6 +875,19 @@ def validate_input_manifest(payload: dict[str, Any], *, target_id: str | None = 
     if payload.get("target", {}).get("id") != expected_target["id"]:
         add_error("target.id", f"input manifest target must be {expected_target['id']}")
     if expected_target["id"] == "windows-amd64-msys2-clang64":
+        installer = payload.get("installer", {})
+        if not isinstance(installer, dict):
+            add_error("installer", "MSYS2 installer input must be recorded")
+        else:
+            for key in ("name", "version", "url", "sha256", "source_channel"):
+                if key not in installer:
+                    add_error(f"installer.{key}", f"{key} is required")
+            if installer.get("source_channel") != "msys2-installer":
+                add_error("installer.source_channel", "installer source_channel must be msys2-installer")
+        preserve = payload.get("root_layout", {}).get("preserve", [])
+        for required_path in ("clang64", "usr", "etc", "var/lib/pacman/local"):
+            if required_path not in preserve:
+                add_error("root_layout.preserve", f"private MSYS2 root must preserve {required_path}")
         package_names = [item.get("name") for item in payload.get("packages", []) if isinstance(item, dict)]
         host_names = [item.get("name") for item in payload.get("host_packages", []) if isinstance(item, dict)]
         if package_names != MSYS2_PACKAGE_INPUTS:
@@ -853,8 +1207,8 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "param(",
         f'  [string]$Prefix = "{prefix}",',
         f'  [string]$CacheDir = "{cache_dir}",',
-        '  [string]$MsysRoot = "C:\\msys64",',
-        '  [string]$InstallerUrl = "https://github.com/msys2/msys2-installer/releases/latest/download/msys2-x86_64-latest.exe"',
+        "  [string]$MsysRoot = '',",
+        f'  [string]$InstallerUrl = "{MSYS2_INSTALLER_INPUT["url"]}"',
         ")",
         "",
         "$ErrorActionPreference = 'Stop'",
@@ -862,6 +1216,12 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "",
         "New-Item -ItemType Directory -Force -Path $Prefix | Out-Null",
         "New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null",
+        "if (-not $MsysRoot) {",
+        "  $MsysRoot = $Prefix",
+        "}",
+        "$prefixFull = [System.IO.Path]::GetFullPath($Prefix).TrimEnd('\\')",
+        "$msysRootFull = [System.IO.Path]::GetFullPath($MsysRoot).TrimEnd('\\')",
+        "$installingIntoManagedRoot = [string]::Equals($prefixFull, $msysRootFull, [System.StringComparison]::OrdinalIgnoreCase)",
         "",
         "$bash = Join-Path $MsysRoot 'usr\\bin\\bash.exe'",
         "$installer = Join-Path $CacheDir 'msys2-x86_64-latest.exe'",
@@ -889,6 +1249,8 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 host-package installation failed.' }",
         f'& $bash -lc "pacman -S --overwrite /clang64/include/Block.h --noconfirm --needed {packages}"',
         "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 GNUstep package installation failed.' }",
+        '& $bash -lc "pacman -Qkk"',
+        "if ($LASTEXITCODE -ne 0) { throw 'MSYS2 local package database integrity check failed.' }",
         "",
         "$clangRoot = Join-Path $MsysRoot 'clang64'",
         "if (-not (Test-Path $clangRoot)) {",
@@ -896,18 +1258,35 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "}",
         "",
         "$toolDirs = @('bin','etc','include','lib','libexec','share')",
-        "foreach ($entry in $toolDirs) {",
-        "  $source = Join-Path $clangRoot $entry",
-        "  if (Test-Path $source) {",
-        "    Copy-Item -Recurse -Force $source (Join-Path $Prefix $entry)",
+        "if (-not $installingIntoManagedRoot) {",
+        "  $clangPrefix = Join-Path $Prefix 'clang64'",
+        "  New-Item -ItemType Directory -Force -Path $clangPrefix | Out-Null",
+        "  foreach ($entry in $toolDirs) {",
+        "    $source = Join-Path $clangRoot $entry",
+        "    if (Test-Path $source) {",
+        "      Copy-Item -Recurse -Force $source (Join-Path $clangPrefix $entry)",
+        "    }",
+        "  }",
+        "",
+        "  $msysRootDirs = @('usr','etc','var')",
+        "  foreach ($entry in $msysRootDirs) {",
+        "    $source = Join-Path $MsysRoot $entry",
+        "    if (Test-Path $source) {",
+        "      Copy-Item -Recurse -Force $source (Join-Path $Prefix $entry)",
+        "    }",
         "  }",
         "}",
-        "$clangPrefix = Join-Path $Prefix 'clang64'",
-        "New-Item -ItemType Directory -Force -Path $clangPrefix | Out-Null",
+        "",
+        "# Compatibility links for older activation code. The canonical MSYS2 layout is",
+        "# <prefix>\\clang64 plus <prefix>\\usr, but these root-level directories keep",
+        "# existing release smoke scripts working while callers move to clang64 paths.",
         "foreach ($entry in $toolDirs) {",
         "  $source = Join-Path $clangRoot $entry",
         "  if (Test-Path $source) {",
-        "    Copy-Item -Recurse -Force $source (Join-Path $clangPrefix $entry)",
+        "    $destination = Join-Path $Prefix $entry",
+        "    if (-not [string]::Equals([System.IO.Path]::GetFullPath($source).TrimEnd('\\'), [System.IO.Path]::GetFullPath($destination).TrimEnd('\\'), [System.StringComparison]::OrdinalIgnoreCase)) {",
+        "      Copy-Item -Recurse -Force $source $destination",
+        "    }",
         "  }",
         "}",
         "",
@@ -919,28 +1298,34 @@ def msys2_assembly_script(prefix: str, cache_dir: str) -> str:
         "  if (-not (Test-Path $source)) {",
         "    throw ('Required MSYS2 developer tool is missing: ' + $source)",
         "  }",
-        "  Copy-Item -Force $source (Join-Path $developerBin $tool)",
+        "  $destination = Join-Path $developerBin $tool",
+        "  if (-not [string]::Equals([System.IO.Path]::GetFullPath($source), [System.IO.Path]::GetFullPath($destination), [System.StringComparison]::OrdinalIgnoreCase)) {",
+        "    Copy-Item -Force $source $destination",
+        "  }",
         "}",
-        "$developerRuntimeFiles = Get-ChildItem -Path (Join-Path $MsysRoot 'usr\\bin') -Include '*.exe','*.dll' -File",
+        "$developerRuntimeFiles = Get-ChildItem -Path (Join-Path $MsysRoot 'usr\\bin') -File | Where-Object { $_.Extension -in @('.exe', '.dll') }",
         "if ($developerRuntimeFiles.Count -eq 0) {",
         "  throw 'No MSYS2 usr\\bin executable/DLL runtime files were found for developer tools.'",
         "}",
         "foreach ($runtimeFile in $developerRuntimeFiles) {",
-        "  Copy-Item -Force $runtimeFile.FullName (Join-Path $developerBin $runtimeFile.Name)",
+        "  $destination = Join-Path $developerBin $runtimeFile.Name",
+        "  if (-not [string]::Equals([System.IO.Path]::GetFullPath($runtimeFile.FullName), [System.IO.Path]::GetFullPath($destination), [System.StringComparison]::OrdinalIgnoreCase)) {",
+        "    Copy-Item -Force $runtimeFile.FullName $destination",
+        "  }",
         "}",
         "",
         "$activateBat = @(",
         "  '@echo off',",
-        "  'set GNUSTEP_MAKEFILES=%~dp0share\\GNUstep\\Makefiles',",
-        "  'set GNUSTEP_CONFIG_FILE=%~dp0etc\\GNUstep\\GNUstep.conf',",
+        "  'set GNUSTEP_MAKEFILES=%~dp0clang64\\share\\GNUstep\\Makefiles',",
+        "  'set GNUSTEP_CONFIG_FILE=%~dp0clang64\\etc\\GNUstep\\GNUstep.conf',",
         "  'set PATH=%~dp0clang64\\bin;%~dp0bin;%~dp0usr\\bin;%PATH%'",
         ")",
         "Set-Content -Path (Join-Path $Prefix 'GNUstep.bat') -Value $activateBat -Encoding ASCII",
         "",
         "$activatePs1 = @(",
         "  '$prefix = Split-Path -Parent $MyInvocation.MyCommand.Path',",
-        "  '$env:GNUSTEP_MAKEFILES = Join-Path $prefix ''share\\GNUstep\\Makefiles''',",
-        "  '$env:GNUSTEP_CONFIG_FILE = Join-Path $prefix ''etc\\GNUstep\\GNUstep.conf''',",
+        "  '$env:GNUSTEP_MAKEFILES = Join-Path $prefix ''clang64\\share\\GNUstep\\Makefiles''',",
+        "  '$env:GNUSTEP_CONFIG_FILE = Join-Path $prefix ''clang64\\etc\\GNUstep\\GNUstep.conf''',",
         "  '$env:PATH = (Join-Path $prefix ''clang64\\bin'') + '';'' + (Join-Path $prefix ''bin'') + '';'' + (Join-Path $prefix ''usr\\bin'') + '';'' + $env:PATH'",
         ")",
         "Set-Content -Path (Join-Path $Prefix 'GNUstep.ps1') -Value $activatePs1 -Encoding ASCII",
@@ -1008,6 +1393,13 @@ def toolchain_plan(target_id: str) -> dict[str, Any]:
     ]
     if target["os"] == "windows":
         plan["validation"].append({"id": "otvm-smoke", "title": "Validate bootstrap and install smoke path on an otvm Windows lease"})
+        plan["validation"].extend(
+            [
+                {"id": "gui-smoke", "title": "Launch a minimal AppKit window and verify a nonblank screenshot"},
+                {"id": "gorm-build", "title": "Build Gorm with the managed MSYS2 clang64 toolchain"},
+                {"id": "gorm-run", "title": "Launch Gorm through managed GNUstep.sh/openapp and verify menu, inspector, and palette windows by screenshot"},
+            ]
+        )
     return plan
 
 
@@ -1249,6 +1641,49 @@ def release_candidate_qualification_status() -> dict[str, Any]:
         "ok": True,
         "status": "ok",
         "summary": "Release-candidate qualification status snapshot generated.",
+        "phase_status": [
+            {
+                "phase": "12",
+                "name": "Official build infrastructure",
+                "status": "completed_for_local_release_tooling",
+                "remaining": [
+                    "Provision CI-owned production release and package-index signing keys or a signing service.",
+                    "Move host-backed qualification from operator-run lanes to release automation.",
+                    "Promote package artifact build plans into controlled CI build jobs that emit signed artifacts.",
+                    "Run production-channel expiry, rollback, revocation, and key-rotation drills with production-like trust roots.",
+                ],
+            },
+            {
+                "phase": "13",
+                "name": "Upgrade, repair, and lifecycle operations",
+                "status": "completed_for_native_dogfood",
+                "remaining": [
+                    "Dogfood old-to-new updates against two real published update-capable releases.",
+                    "Run update-all application against a release containing both CLI/toolchain and package updates.",
+                    "Exercise final key-mismatch and signed-metadata failure cases with production-like trust roots.",
+                ],
+            },
+            {
+                "phase": "14",
+                "name": "Cross-platform integration polish",
+                "status": "completed_for_current_command_surface",
+                "remaining": [
+                    "Continue replacing transitional repository Python helpers where they still define future shipped behavior.",
+                    "Expand native Objective-C command tests as command behavior moves out of shared tooling.",
+                    "Automate live Windows and Unix release smoke lanes instead of relying on manual evidence capture.",
+                ],
+            },
+            {
+                "phase": "18",
+                "name": "Full GNUstep CLI implementation and build",
+                "status": "completed_for_linux_amd64_and_staged_cross_platform_artifacts",
+                "remaining": [
+                    "Build and qualify every final Tier 1 full-CLI artifact from the production build lanes.",
+                    "Keep the no-bundled-Python release gate mandatory for every shipped full-CLI artifact.",
+                    "Complete native doctor deep-detection parity before claiming full native diagnostic replacement.",
+                ],
+            },
+        ],
         "artifact_checks": [
             {
                 "id": "regression-gate",
@@ -2307,13 +2742,19 @@ def release_provenance_document(release_dir: str | Path, *, builder_identity: st
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     artifacts = []
     for artifact in manifest["releases"][0]["artifacts"]:
-        artifact_path = root / artifact["filename"]
+        filename = artifact.get("filename")
+        artifact_path = root / filename if filename else None
         artifacts.append({
             "id": artifact["id"],
             "kind": artifact["kind"],
-            "filename": artifact["filename"],
+            "version": artifact.get("version"),
+            "os": artifact.get("os"),
+            "arch": artifact.get("arch"),
+            "filename": filename,
+            "url": artifact.get("url"),
+            "reused": bool(artifact.get("reused")),
             "sha256": artifact["sha256"],
-            "size": artifact_path.stat().st_size if artifact_path.exists() else artifact.get("size"),
+            "size": artifact_path.stat().st_size if artifact_path and artifact_path.exists() else artifact.get("size"),
             "source_policy": artifact.get("metadata", {}).get("source_policy"),
             "lock_file": artifact.get("metadata", {}).get("lock_file"),
             "component_inventory": artifact.get("metadata", {}).get("component_inventory"),
@@ -2447,6 +2888,9 @@ def release_trust_gate(release_dir: str | Path, *, require_signatures: bool = Tr
             provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
             add("provenance-manifest-digest", provenance.get("manifest", {}).get("sha256") == _sha256(manifest_path), "provenance records the release manifest digest")
             for artifact in provenance.get("artifacts", []):
+                if artifact.get("reused") and not artifact.get("filename"):
+                    add(f"artifact-reference:{artifact.get('id')}", not _artifact_immutable_reference_errors(artifact), f"reused artifact reference is immutable for {artifact.get('id')}")
+                    continue
                 artifact_path = root / artifact.get("filename", "")
                 add(f"artifact-digest:{artifact.get('filename')}", artifact_path.exists() and artifact.get("sha256") == _sha256(artifact_path), f"artifact digest matches for {artifact.get('filename')}")
         except Exception as exc:
@@ -2706,6 +3150,8 @@ def controlled_release_gate(
     release_trust_root: str | Path | None = None,
     package_index_trust_root: str | Path | None = None,
     allow_unsigned_package_index: bool = False,
+    tools_xctest_packages_dir: str | Path | None = None,
+    tools_xctest_evidence_dir: str | Path | None = None,
 ) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     if release_trust_root is None:
@@ -2743,6 +3189,14 @@ def controlled_release_gate(
             "summary": package_gate["summary"],
             "payload": package_gate,
         })
+    if tools_xctest_packages_dir is not None:
+        xctest_gate = tools_xctest_release_gate(tools_xctest_packages_dir, evidence_dir=tools_xctest_evidence_dir)
+        checks.append({
+            "id": "tools-xctest-release-gate",
+            "ok": xctest_gate["ok"],
+            "summary": xctest_gate["summary"],
+            "payload": xctest_gate,
+        })
     ok = all(check["ok"] for check in checks)
     return {
         "schema_version": 1,
@@ -2752,6 +3206,8 @@ def controlled_release_gate(
         "summary": "Controlled release gate passed." if ok else "Controlled release gate failed.",
         "release_dir": str(Path(release_dir).resolve()),
         "package_index_path": str(Path(package_index_path).resolve()) if package_index_path else None,
+        "tools_xctest_packages_dir": str(Path(tools_xctest_packages_dir).resolve()) if tools_xctest_packages_dir else None,
+        "tools_xctest_evidence_dir": str(Path(tools_xctest_evidence_dir).resolve()) if tools_xctest_evidence_dir else None,
         "checks": checks,
     }
 
@@ -2763,6 +3219,7 @@ def stage_release_assets(
     *,
     cli_inputs: dict[str, str | Path] | None = None,
     toolchain_inputs: dict[str, str | Path] | None = None,
+    reused_toolchain_artifacts: dict[str, dict[str, Any] | str | Path] | None = None,
     channel: str = "stable",
 ) -> dict[str, Any]:
     output_root = Path(output_dir).resolve()
@@ -2772,12 +3229,14 @@ def stage_release_assets(
 
     cli_inputs = cli_inputs or {}
     toolchain_inputs = toolchain_inputs or {}
+    reused_toolchain_artifacts = reused_toolchain_artifacts or {}
     artifacts: list[dict[str, Any]] = []
     checksums: list[dict[str, str]] = []
 
     for target in tier1_targets():
         if not target["publish"]:
             continue
+        target_artifacts: list[dict[str, Any]] = []
         for kind, inputs in (("cli", cli_inputs), ("toolchain", toolchain_inputs)):
             input_value = inputs.get(target["id"])
             if input_value is None:
@@ -2824,8 +3283,43 @@ def stage_release_assets(
                     "assembly_metadata": "toolchain-assembly.json" if (source / "toolchain-assembly.json").exists() else None,
                     "source_policy": "source-build" if target["strategy"] == "source-build" else target["strategy"],
                 }
-            artifacts.append(artifact)
+            target_artifacts.append(artifact)
             checksums.append({"filename": filename, "sha256": artifact["sha256"]})
+
+        reused_toolchain = reused_toolchain_artifacts.get(target["id"])
+        if reused_toolchain is not None and target["id"] not in toolchain_inputs:
+            if isinstance(reused_toolchain, dict):
+                reused = reusable_artifact_reference(
+                    reused_toolchain,
+                    expected_kind="toolchain",
+                    expected_target_id=target["id"],
+                )
+            else:
+                reused = _load_reusable_artifact(
+                    reused_toolchain,
+                    expected_kind="toolchain",
+                    expected_target_id=target["id"],
+                )
+            reused.setdefault("supported_distributions", target.get("supported_distributions", []))
+            reused.setdefault("supported_os_versions", target.get("supported_os_versions", []))
+            reused.setdefault("portability_policy", target.get("portability_policy", "platform-wide"))
+            target_artifacts.append(reused)
+
+        toolchain_artifact = next((artifact for artifact in target_artifacts if artifact.get("kind") == "toolchain"), None)
+        for artifact in target_artifacts:
+            if artifact.get("kind") == "cli" and toolchain_artifact is not None:
+                artifact["requires_toolchain"] = {
+                    "artifact_id": toolchain_artifact["id"],
+                    "version": toolchain_artifact.get("version"),
+                    "sha256": toolchain_artifact.get("sha256"),
+                    "reused": bool(toolchain_artifact.get("reused")),
+                }
+                artifact["layer_update_policy"] = {
+                    "kind": "cli-layer",
+                    "toolchain_rebuild_required": False,
+                    "toolchain_reuse_allowed": True,
+                }
+        artifacts.extend(target_artifacts)
 
     manifest = {
         "schema_version": 1,
@@ -2906,7 +3400,34 @@ def verify_release_directory(release_dir: str | Path) -> dict[str, Any]:
     results: list[dict[str, Any]] = []
     ok = True
     for artifact in artifacts:
-        filename = artifact["filename"]
+        filename = artifact.get("filename")
+        if artifact.get("reused") and not filename:
+            reference_errors = _artifact_immutable_reference_errors(artifact)
+            reference_ok = not reference_errors
+            results.append(
+                {
+                    "id": artifact.get("id"),
+                    "reused": True,
+                    "local_file_required": False,
+                    "immutable_reference_ok": reference_ok,
+                    "errors": reference_errors,
+                }
+            )
+            ok = ok and reference_ok
+            continue
+        if not filename:
+            results.append(
+                {
+                    "id": artifact.get("id"),
+                    "reused": bool(artifact.get("reused")),
+                    "local_file_required": True,
+                    "exists": False,
+                    "sha256_matches": False,
+                    "errors": ["artifact is missing filename"],
+                }
+            )
+            ok = False
+            continue
         asset_path = root / filename
         exists = asset_path.exists()
         actual_sha = _sha256(asset_path) if exists else None
@@ -2959,6 +3480,16 @@ def _archive_has_any(normalized_names: list[str], patterns: list[str]) -> bool:
     return False
 
 
+def _pacman_local_db_missing_desc(normalized_names: list[str]) -> list[str]:
+    packages: dict[str, set[str]] = {}
+    for name in normalized_names:
+        match = re.search(r"/var/lib/pacman/local/([^/]+)/([^/]+)$", name)
+        if match is None:
+            continue
+        packages.setdefault(match.group(1), set()).add(match.group(2))
+    return sorted(package for package, files in packages.items() if "desc" not in files)
+
+
 def toolchain_archive_audit(archive_path: str | Path, *, target_id: str | None = None) -> dict[str, Any]:
     root = Path(archive_path).resolve()
     if not root.exists():
@@ -3003,8 +3534,22 @@ def toolchain_archive_audit(archive_path: str | Path, *, target_id: str | None =
         add_check("make", "Managed make entrypoint is present.", [r"/bin/(g?make)(\.exe)?$", r"/usr/bin/(g?make)(\.exe)?$"])
         add_check("sha256sum", "Managed checksum utility is present.", [r"/usr/bin/sha256sum(\.exe)?$"])
         add_check("msys_runtime", "MSYS2 runtime DLL for usr/bin developer tools is present.", [r"/usr/bin/msys-2\.0\.dll$"])
-        add_check("common_make", "GNUstep Make common.make is present.", [r"/common\.make$"])
-        add_check("tool_make", "GNUstep Make tool.make is present.", [r"/tool\.make$"])
+        add_check("openapp", "GNUstep openapp launcher is present.", [r"/clang64/bin/openapp$"])
+        add_check("common_make", "GNUstep Make common.make is present.", [r"/clang64/share/GNUstep/Makefiles/common\.make$", r"/common\.make$"])
+        add_check("tool_make", "GNUstep Make tool.make is present.", [r"/clang64/share/GNUstep/Makefiles/tool\.make$", r"/tool\.make$"])
+        add_check("msys_profile", "MSYS root profile configuration is present.", [r"/etc/profile$"])
+        add_check("pacman_local_db", "MSYS2 local package metadata is present for provenance/debugging.", [r"/var/lib/pacman/local/"])
+        missing_desc = _pacman_local_db_missing_desc(normalized_names)
+        checks.append(
+            {
+                "id": "pacman_local_db_integrity",
+                "title": "Every MSYS2 local package database entry includes a desc file.",
+                "required": True,
+                "ok": len(missing_desc) == 0,
+                "patterns": [r"/var/lib/pacman/local/<package>/desc"],
+                "missing_desc_packages": missing_desc,
+            }
+        )
         add_check("gnustep_env", "GNUstep environment activation script is present.", [r"/gnustep\.(sh|bat|ps1)$"], required=False)
     elif inferred_target in {"linux-amd64-clang", "linux-ubuntu2404-amd64-clang", "linux-arm64-clang", "openbsd-amd64-clang", "openbsd-arm64-clang"}:
         add_check("runtime_tools", "Managed tool directory is present.", [r"/system/tools/", r"/tools/"])
@@ -3051,7 +3596,26 @@ def qualify_release_install(release_dir: str | Path, install_root: str | Path) -
     manifest = json.loads((root / "release-manifest.json").read_text())
     installs: list[dict[str, Any]] = []
     for artifact in manifest["releases"][0]["artifacts"]:
-        filename = artifact["filename"]
+        filename = artifact.get("filename")
+        if artifact.get("reused") and not filename:
+            installs.append(
+                {
+                    "artifact_id": artifact["id"],
+                    "reused": True,
+                    "install_path": None,
+                    "summary": "Reused immutable artifact reference is not extracted from the current release directory.",
+                }
+            )
+            continue
+        if not filename:
+            return {
+                "schema_version": 1,
+                "command": "qualify-release",
+                "ok": False,
+                "status": "error",
+                "summary": "Release artifact is missing filename for local qualification.",
+                "artifact_id": artifact.get("id"),
+            }
         asset_path = root / filename
         extract_root = destination / artifact["id"]
         if extract_root.exists():
@@ -3753,6 +4317,21 @@ def tools_xctest_release_gate(packages_dir: str | Path, *, evidence_dir: str | P
         if evidence_blocker is not None:
             artifact_blockers.append(evidence_blocker)
 
+        documented_non_release_blocker = isinstance(evidence_payload, dict) and evidence_payload.get("non_release_blocker") is True
+        if documented_non_release_blocker:
+            deferrable_codes = {
+                "artifact_not_publishable",
+                "artifact_digest_missing",
+                "artifact_not_built",
+                "dogfood_evidence_missing",
+                "dogfood_evidence_failed",
+            }
+            artifact_blockers = [
+                blocker for blocker in artifact_blockers
+                if blocker.get("code") not in deferrable_codes
+            ]
+            evidence_status = "deferred"
+
         blockers.extend(artifact_blockers)
         targets.append(
             {
@@ -3770,7 +4349,8 @@ def tools_xctest_release_gate(packages_dir: str | Path, *, evidence_dir: str | P
                 "dogfood_evidence": evidence_status,
                 "dogfood_evidence_payload": evidence_payload,
                 "required_dogfood_checks": dogfood_checks,
-                "release_ready": len(artifact_blockers) == 0,
+                "deferred_non_release_blocker": documented_non_release_blocker,
+                "release_ready": len(artifact_blockers) == 0 and not documented_non_release_blocker,
                 "blockers": artifact_blockers,
             }
         )
@@ -3869,6 +4449,8 @@ def published_url_qualification_plan(
                 "installed gnustep.exe doctor --json with managed msys2-clang64 classification",
                 "package install/remove smoke",
                 "extracted toolchain rebuild smoke using GNUstep.ps1/GNUstep.bat activation",
+                "managed AppKit GUI smoke with screenshot verification",
+                "managed Gorm build and launch with screenshot verification",
             ],
         },
     ]
@@ -3958,6 +4540,8 @@ def otvm_release_host_validation_plan(
                 "stage the release directory onto the Windows lease",
                 "assemble or activate the MSYS2 clang64 managed toolchain from the staged release",
                 "run bootstrap/full CLI smoke against the staged release artifacts",
+                "build and screenshot-launch a minimal AppKit app",
+                "build and screenshot-launch Gorm through managed openapp",
             ],
             "notes": "Windows now uses the libvirt-backed otvm path rather than OCI-oriented assumptions.",
         },
@@ -3990,6 +4574,7 @@ def prepare_github_release(
     *,
     cli_inputs: dict[str, str | Path] | None = None,
     toolchain_inputs: dict[str, str | Path] | None = None,
+    reused_toolchain_artifacts: dict[str, dict[str, Any] | str | Path] | None = None,
     install_root: str | Path | None = None,
     handoff_install_root: str | Path | None = None,
     channel: str = "stable",
@@ -4001,6 +4586,7 @@ def prepare_github_release(
         base_url,
         cli_inputs=cli_inputs,
         toolchain_inputs=toolchain_inputs,
+        reused_toolchain_artifacts=reused_toolchain_artifacts,
         channel=channel,
     )
     release_dir = staged["release_dir"]
@@ -4010,6 +4596,19 @@ def prepare_github_release(
     manifest = json.loads((Path(release_dir) / "release-manifest.json").read_text())
     for artifact in manifest["releases"][0]["artifacts"]:
         if artifact["kind"] != "toolchain":
+            continue
+        if artifact.get("reused") and not artifact.get("filename"):
+            toolchain_audits.append(
+                {
+                    "schema_version": 1,
+                    "command": "toolchain-archive-audit",
+                    "ok": True,
+                    "status": "ok",
+                    "summary": "Reused immutable toolchain artifact reference is not re-audited from the current release directory.",
+                    "artifact_id": artifact.get("id"),
+                    "reused": True,
+                }
+            )
             continue
         audit = toolchain_archive_audit(Path(release_dir) / artifact["filename"], target_id=artifact["id"].removeprefix("toolchain-"))
         toolchain_audits.append(audit)
@@ -4053,6 +4652,86 @@ def prepare_github_release(
         "otvm_host_validation_plan": host_validation_plan,
         "otvm_host_validation_plan_path": str(host_validation_plan_path),
         "github_release_plan": publish_plan,
+    }
+
+
+def session_build_box_plan(
+    *,
+    targets: list[str] | None = None,
+    ttl_hours: int = 8,
+    channel: str = "dogfood",
+    repo_root: str | Path = ".",
+    otvm_config: str = "~/oracletestvms-libvirt.toml",
+) -> dict[str, Any]:
+    selected_targets = targets or [target["id"] for target in TIER1_TARGETS if target["publish"]]
+    known_targets = {target["id"]: target for target in TIER1_TARGETS}
+    unknown = [target for target in selected_targets if target not in known_targets]
+    if unknown:
+        return {
+            "schema_version": 1,
+            "command": "session-build-box-plan",
+            "ok": False,
+            "status": "error",
+            "summary": "Unknown build targets requested.",
+            "unknown_targets": unknown,
+        }
+
+    builders: list[dict[str, Any]] = []
+    for target_id in selected_targets:
+        target = known_targets[target_id]
+        profile = {
+            "linux": "debian-13-gnome-wayland" if target_id == "linux-amd64-clang" else "ubuntu-24.04-aarch64" if target["arch"] == "arm64" else "ubuntu-24.04-amd64",
+            "openbsd": "openbsd-7.8-fvwm",
+            "windows": "windows-2022",
+        }.get(target["os"], target_id)
+        builders.append(
+            {
+                "target_id": target_id,
+                "os": target["os"],
+                "arch": target["arch"],
+                "toolchain_flavor": target["toolchain_flavor"],
+                "otvm_profile": profile,
+                "ttl_hours": ttl_hours,
+                "state": "planned",
+                "source_sync": {
+                    "mode": "incremental",
+                    "repo_root": str(Path(repo_root)),
+                    "include": ["src/full-cli", "src/gnustep_cli_shared", "scripts", "schemas", "GNUmakefile"],
+                    "exclude": ["dist", "vendor", ".git", "__pycache__"],
+                },
+                "artifact": {
+                    "kind": "cli",
+                    "target_id": target_id,
+                    "channel": channel,
+                    "toolchain_layer": "reuse-installed-compatible",
+                },
+            }
+        )
+
+    return {
+        "schema_version": 1,
+        "command": "session-build-box-plan",
+        "ok": True,
+        "status": "ok",
+        "summary": "Session-scoped warm build box plan generated.",
+        "channel": channel,
+        "ttl_hours": ttl_hours,
+        "otvm_config": otvm_config,
+        "targets": selected_targets,
+        "builders": builders,
+        "steps": [
+            {"id": "provision", "title": "Create or reuse one warm otvm build box per selected target."},
+            {"id": "sync-source", "title": "Incrementally sync changed source and build metadata to each warm builder."},
+            {"id": "build-cli", "title": "Build target-specific full CLI artifacts without rebuilding unchanged toolchain layers."},
+            {"id": "collect-artifacts", "title": "Collect small CLI artifacts and build provenance from each builder."},
+            {"id": "publish-dogfood-manifest", "title": "Publish or stage a dogfood manifest that references reused toolchain layers."},
+            {"id": "cleanup", "title": "Destroy or extend warm builders explicitly before TTL expiry."},
+        ],
+        "cost_controls": {
+            "default_ttl_hours": ttl_hours,
+            "requires_explicit_cleanup": True,
+            "list_active_leases_before_provisioning": True,
+        },
     }
 
 

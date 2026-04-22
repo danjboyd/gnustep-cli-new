@@ -17,11 +17,16 @@ from gnustep_cli_shared.compatibility import artifact_matches_host, evaluate_env
 from gnustep_cli_shared.build_infra import (
     assemble_linux_toolchain_artifact,
     build_matrix,
+    compare_windows_msys2_inventories,
+    delta_artifact_record,
     bundle_full_cli,
     component_inventory,
     current_support_matrix,
     debian_gcc_interop_plan,
     github_release_plan,
+    dogfood_snapshot_manifest,
+    dogfood_snapshot_version,
+    validate_delta_artifact_record,
     linux_build_script,
     linux_cli_abi_audit,
     refresh_local_release_metadata,
@@ -43,7 +48,9 @@ from gnustep_cli_shared.build_infra import (
     qualify_full_cli_handoff,
     toolchain_manifest,
     release_manifest_from_matrix,
+    reusable_artifact_reference,
     qualify_release_install,
+    session_build_box_plan,
     stage_release_assets,
     source_lock_template,
     toolchain_tree_host_origin_audit,
@@ -63,6 +70,7 @@ from gnustep_cli_shared.build_infra import (
     write_release_evidence_bundle,
     release_key_rotation_drill,
     windows_extracted_toolchain_rebuild_plan,
+    windows_msys2_component_inventory,
 )
 
 
@@ -206,9 +214,17 @@ class BuildInfraTests(unittest.TestCase):
         host_package_names = [package["name"] for package in payload["host_packages"]]
         package_names = [package["name"] for package in payload["packages"]]
         self.assertEqual(payload["strategy"], "msys2-assembly")
+        self.assertEqual(payload["installer"]["source_channel"], "msys2-installer")
+        self.assertIn("msys2-installer/releases/latest/download/msys2-x86_64-latest.exe", payload["installer"]["url"])
+        self.assertEqual(payload["root_layout"]["install_root"], "private-msys2-root")
+        self.assertIn("var/lib/pacman/local", payload["root_layout"]["preserve"])
         self.assertIn("make", host_package_names)
         self.assertIn("mingw-w64-clang-x86_64-clang", package_names)
         self.assertIn("mingw-w64-clang-x86_64-libdispatch", package_names)
+        self.assertIn("mingw-w64-clang-x86_64-cairo", package_names)
+        self.assertIn("mingw-w64-clang-x86_64-fontconfig", package_names)
+        self.assertIn("mingw-w64-clang-x86_64-freetype", package_names)
+        self.assertIn("mingw-w64-clang-x86_64-pixman", package_names)
         conflict_paths = [rule["path"] for rule in payload["conflict_rules"]]
         self.assertIn("clang64/include/Block.h", conflict_paths)
 
@@ -218,8 +234,12 @@ class BuildInfraTests(unittest.TestCase):
         self.assertIn("libs-corebase", payload["components"])
         windows_payload = toolchain_manifest("windows-amd64-msys2-clang64", "2026.04.0")
         self.assertIn("developer_entrypoints", windows_payload)
+        self.assertEqual(windows_payload["source_policy"]["assembly_input"], "official-msys2-installer")
+        self.assertTrue(windows_payload["source_policy"]["private_root_required"])
+        self.assertIn("clang64/bin/clang.exe", windows_payload["developer_entrypoints"]["compiler"])
         self.assertIn("usr/bin/bash.exe", windows_payload["developer_entrypoints"]["build_shell"])
         self.assertIn("usr/bin/sha256sum.exe", windows_payload["developer_entrypoints"]["checksum_tool"])
+        self.assertIn("clang64/bin/openapp", windows_payload["developer_entrypoints"]["app_launcher"])
 
     def test_release_manifest_includes_trust_and_provenance_metadata(self):
         payload = release_manifest_from_matrix("0.1.0", "https://example.invalid/releases")
@@ -244,6 +264,9 @@ class BuildInfraTests(unittest.TestCase):
         payload = toolchain_plan("windows-amd64-msys2-clang64")
         validation_ids = [step["id"] for step in payload["validation"]]
         self.assertIn("otvm-smoke", validation_ids)
+        self.assertIn("gui-smoke", validation_ids)
+        self.assertIn("gorm-build", validation_ids)
+        self.assertIn("gorm-run", validation_ids)
 
     def test_linux_build_script_contains_pinned_components(self):
         script = linux_build_script(
@@ -274,19 +297,28 @@ class BuildInfraTests(unittest.TestCase):
         script = msys2_assembly_script("C:\\managed", "C:\\cache")
         self.assertIn("msys2-installer/releases/latest/download/msys2-x86_64-latest.exe", script)
         self.assertIn("Invoke-WebRequest", script)
+        self.assertIn("[string]$MsysRoot = ''", script)
+        self.assertIn("$MsysRoot = $Prefix", script)
+        self.assertIn("$installingIntoManagedRoot", script)
         self.assertIn("$ProgressPreference = 'SilentlyContinue'", script)
         self.assertIn("pacman -Syuu", script)
         self.assertIn("pacman -S --noconfirm --needed make", script)
+        self.assertIn("pacman -Qkk", script)
+        self.assertIn("MSYS2 local package database integrity check failed.", script)
         self.assertIn("mingw-w64-clang-x86_64-clang", script)
         self.assertIn("--overwrite /clang64/include/Block.h", script)
         self.assertIn("mingw-w64-clang-x86_64-libdispatch", script)
+        self.assertIn("mingw-w64-clang-x86_64-cairo", script)
+        self.assertIn("$msysRootDirs = @('usr','etc','var')", script)
+        self.assertIn("if (-not $installingIntoManagedRoot)", script)
         self.assertIn('& $bash -lc "true"', script)
         self.assertNotIn('\\"true\\"', script)
         self.assertIn("usr\\bin", script)
         self.assertIn("sha256sum.exe", script)
-        self.assertIn("Get-ChildItem -Path (Join-Path $MsysRoot 'usr\\bin') -Include '*.exe','*.dll'", script)
+        self.assertIn("Get-ChildItem -Path (Join-Path $MsysRoot 'usr\\bin') -File", script)
         self.assertIn("No MSYS2 usr\\bin executable/DLL runtime files", script)
         self.assertIn("Copy-Item -Force $runtimeFile.FullName", script)
+        self.assertIn("clang64\\share\\GNUstep\\Makefiles", script)
         self.assertIn("GNUstep.bat", script)
         self.assertIn("GNUstep.ps1", script)
         self.assertIn("MSYS2 managed toolchain assembly completed", script)
@@ -533,6 +565,217 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("prebuilt-cli/bin/gnustep", names)
             self.assertNotIn("prebuilt-cli.tar.gz", "\n".join(names))
 
+    def test_stage_release_assets_can_reuse_immutable_toolchain_artifact(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_binary = temp / "gnustep"
+            cli_binary.write_text("binary")
+            cli_bundle = temp / "cli-bundle"
+            bundle_full_cli(cli_binary, cli_bundle, repo_root=ROOT)
+            reused_toolchain = {
+                "id": "toolchain-linux-amd64-clang",
+                "kind": "toolchain",
+                "version": "2026.04.0",
+                "os": "linux",
+                "arch": "amd64",
+                "compiler_family": "clang",
+                "toolchain_flavor": "clang",
+                "objc_runtime": "libobjc2",
+                "objc_abi": "modern",
+                "required_features": ["blocks"],
+                "format": "tar.gz",
+                "url": "https://github.com/example/old/gnustep-toolchain-linux-amd64-clang-2026.04.0.tar.gz",
+                "sha256": "a" * 64,
+                "integrity": {"sha256": "a" * 64},
+                "size": 123456,
+            }
+            payload = stage_release_assets(
+                "0.1.1",
+                temp / "dist",
+                "https://github.com/danjboyd/gnustep-cli/releases",
+                cli_inputs={"linux-amd64-clang": cli_bundle},
+                reused_toolchain_artifacts={"linux-amd64-clang": reused_toolchain},
+            )
+            self.assertTrue(payload["ok"])
+            release_dir = Path(payload["release_dir"])
+            manifest = json.loads((release_dir / "release-manifest.json").read_text())
+            artifacts = manifest["releases"][0]["artifacts"]
+            self.assertEqual(len(artifacts), 2)
+            cli_artifact = next(artifact for artifact in artifacts if artifact["kind"] == "cli")
+            toolchain_artifact = next(artifact for artifact in artifacts if artifact["kind"] == "toolchain")
+            self.assertTrue(toolchain_artifact["reused"])
+            self.assertNotIn("filename", toolchain_artifact)
+            self.assertEqual(cli_artifact["requires_toolchain"]["artifact_id"], "toolchain-linux-amd64-clang")
+            self.assertTrue(cli_artifact["requires_toolchain"]["reused"])
+            verification = verify_release_directory(release_dir)
+            self.assertTrue(verification["ok"])
+            reused_result = next(result for result in verification["results"] if result.get("reused"))
+            self.assertTrue(reused_result["immutable_reference_ok"])
+            self.assertTrue(release_trust_gate(release_dir, require_signatures=False)["ok"])
+
+    def test_reusable_artifact_reference_rejects_ambiguous_or_mutable_reference(self):
+        artifact = {
+            "id": "toolchain-linux-amd64-clang",
+            "kind": "toolchain",
+            "version": "2026.04.0",
+            "os": "linux",
+            "arch": "amd64",
+            "url": "https://example.invalid/toolchain.tar.gz",
+            "sha256": "TBD",
+            "size": 10,
+        }
+        with self.assertRaises(ValueError):
+            reusable_artifact_reference(artifact, expected_kind="toolchain", expected_target_id="linux-amd64-clang")
+
+    def test_session_build_box_plan_covers_warm_builder_iteration(self):
+        payload = session_build_box_plan(targets=["linux-amd64-clang", "windows-amd64-msys2-clang64"], ttl_hours=6)
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["channel"], "dogfood")
+        self.assertEqual(payload["ttl_hours"], 6)
+        builder_by_target = {builder["target_id"]: builder for builder in payload["builders"]}
+        self.assertEqual(builder_by_target["windows-amd64-msys2-clang64"]["otvm_profile"], "windows-2022")
+        self.assertEqual(builder_by_target["windows-amd64-msys2-clang64"]["artifact"]["toolchain_layer"], "reuse-installed-compatible")
+        step_ids = [step["id"] for step in payload["steps"]]
+        self.assertIn("sync-source", step_ids)
+        self.assertIn("publish-dogfood-manifest", step_ids)
+
+    def test_dogfood_snapshot_version_orders_multiple_same_day_builds(self):
+        first = dogfood_snapshot_version(
+            "0.1.0",
+            source_revision="abcdef1234567890",
+            timestamp="2026-04-22T10:00:00Z",
+            sequence=0,
+        )
+        second = dogfood_snapshot_version(
+            "0.1.0",
+            source_revision="abcdef1234567890",
+            timestamp="2026-04-22T10:05:00Z",
+            sequence=0,
+        )
+        third = dogfood_snapshot_version(
+            "0.1.0",
+            source_revision="abcdef1234567890",
+            timestamp="2026-04-22T10:05:00Z",
+            sequence=1,
+        )
+        self.assertLess(first, second)
+        self.assertLess(second, third)
+        self.assertEqual(first, "0.1.0-dogfood.20260422T100000Z.gabcdef123456.0")
+
+    def test_dogfood_snapshot_manifest_reuses_toolchain_layer(self):
+        cli = {
+            "id": "cli-linux-amd64-clang",
+            "kind": "cli",
+            "version": "placeholder",
+            "os": "linux",
+            "arch": "amd64",
+            "compiler_family": "clang",
+            "toolchain_flavor": "clang",
+            "objc_runtime": "libobjc2",
+            "objc_abi": "modern",
+            "format": "tar.gz",
+            "url": "https://example.invalid/cli.tar.gz",
+            "sha256": "c" * 64,
+            "size": 11,
+        }
+        toolchain = {
+            "id": "toolchain-linux-amd64-clang",
+            "kind": "toolchain",
+            "version": "2026.04.0",
+            "os": "linux",
+            "arch": "amd64",
+            "compiler_family": "clang",
+            "toolchain_flavor": "clang",
+            "objc_runtime": "libobjc2",
+            "objc_abi": "modern",
+            "format": "tar.gz",
+            "url": "https://example.invalid/toolchain.tar.gz",
+            "sha256": "d" * 64,
+            "size": 1000,
+        }
+        manifest = dogfood_snapshot_manifest(
+            "0.1.0",
+            "https://example.invalid/releases",
+            source_revision="abcdef",
+            timestamp="2026-04-22T11:00:00Z",
+            cli_artifacts=[cli],
+            reused_toolchain_artifacts=[toolchain],
+        )
+        release = manifest["releases"][0]
+        self.assertEqual(manifest["channel"], "dogfood")
+        self.assertIn("dogfood.20260422T110000Z", release["version"])
+        cli_record = next(artifact for artifact in release["artifacts"] if artifact["kind"] == "cli")
+        toolchain_record = next(artifact for artifact in release["artifacts"] if artifact["kind"] == "toolchain")
+        self.assertEqual(cli_record["requires_toolchain"]["artifact_id"], "toolchain-linux-amd64-clang")
+        self.assertTrue(toolchain_record["reused"])
+        self.assertEqual(manifest["retention"]["keep_latest"], 12)
+
+    def test_delta_artifact_record_uses_project_delta_envelope(self):
+        source = {
+            "id": "toolchain-linux-amd64-clang",
+            "kind": "toolchain",
+            "version": "2026.04.0",
+            "os": "linux",
+            "arch": "amd64",
+            "compiler_family": "clang",
+            "toolchain_flavor": "clang",
+            "objc_runtime": "libobjc2",
+            "objc_abi": "modern",
+            "required_features": ["blocks"],
+            "sha256": "a" * 64,
+        }
+        target = dict(source)
+        target["version"] = "2026.04.1"
+        target["sha256"] = "b" * 64
+        target["url"] = "https://example.invalid/full.tar.gz"
+        target["size"] = 1000
+        delta = delta_artifact_record(
+            delta_id="delta-toolchain-linux-amd64-clang-2026040-to-2026041",
+            from_artifact=source,
+            to_artifact=target,
+            url="https://example.invalid/delta.bin",
+            sha256="c" * 64,
+            size=12,
+        )
+        self.assertEqual(delta["kind"], "toolchain-delta")
+        self.assertEqual(delta["delta_format"], "gnustep-delta-v1")
+        self.assertEqual(delta["from_sha256"], "a" * 64)
+        self.assertEqual(delta["to_sha256"], "b" * 64)
+        self.assertFalse(validate_delta_artifact_record(delta))
+
+    def test_delta_artifact_record_rejects_target_mismatch(self):
+        source = {"id": "toolchain-linux-amd64-clang", "kind": "toolchain", "sha256": "a" * 64}
+        target = {"id": "toolchain-windows-amd64-msys2-clang64", "kind": "toolchain", "sha256": "b" * 64}
+        with self.assertRaises(ValueError):
+            delta_artifact_record(
+                delta_id="bad-delta",
+                from_artifact=source,
+                to_artifact=target,
+                url="https://example.invalid/delta.bin",
+                sha256="c" * 64,
+                size=12,
+            )
+
+    def test_windows_msys2_inventory_compare_detects_component_update(self):
+        old = windows_msys2_component_inventory(
+            toolchain_version="2026.04.0",
+            packages=[
+                {"name": "mingw-w64-clang-x86_64-gnustep-base", "version": "1", "package_sha256": "a", "installed_files_sha256": "aa", "layer": "base"},
+                {"name": "make", "version": "1", "package_sha256": "b", "installed_files_sha256": "bb", "layer": "base"},
+            ],
+        )
+        new = windows_msys2_component_inventory(
+            toolchain_version="2026.04.1",
+            packages=[
+                {"name": "mingw-w64-clang-x86_64-gnustep-base", "version": "2", "package_sha256": "c", "installed_files_sha256": "cc", "layer": "base"},
+                {"name": "make", "version": "1", "package_sha256": "b", "installed_files_sha256": "bb", "layer": "base"},
+            ],
+        )
+        comparison = compare_windows_msys2_inventories(old, new)
+        self.assertEqual(comparison["action"], "component_update")
+        self.assertTrue(comparison["component_replacement_sufficient"])
+        self.assertEqual(comparison["changed_packages"][0]["name"], "mingw-w64-clang-x86_64-gnustep-base")
+
 
     def test_release_metadata_signing_and_trust_gate(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -643,6 +886,50 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("release-trust-gate", check_ids)
             self.assertIn("package-index-trust-gate", check_ids)
 
+
+    def test_controlled_release_gate_can_include_tools_xctest_gate(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_binary = temp / "gnustep"
+            cli_binary.write_text("binary")
+            cli_bundle = temp / "cli-bundle"
+            bundle_full_cli(cli_binary, cli_bundle, repo_root=ROOT)
+            payload = stage_release_assets(
+                "0.1.0",
+                temp / "dist",
+                "https://example.invalid/releases",
+                cli_inputs={"linux-amd64-clang": cli_bundle},
+            )
+            release_dir = Path(payload["release_dir"])
+            release_key = temp / "release-key.pem"
+            subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(release_key)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            self.assertTrue(sign_release_metadata(release_dir, release_key)["ok"])
+            packages_dir = temp / "packages"
+            package_dir = packages_dir / "org.gnustep.tools-xctest"
+            package_dir.mkdir(parents=True)
+            artifact_id = "tools-xctest-linux-amd64-clang"
+            package_dir.joinpath("package.json").write_text(json.dumps({
+                "schema_version": 1,
+                "id": "org.gnustep.tools-xctest",
+                "name": "tools-xctest",
+                "version": "1.0.0",
+                "kind": "cli-tool",
+                "source": {"type": "git", "url": "https://github.com/gnustep/tools-xctest.git", "sha256": "a" * 64},
+                "artifacts": [{"id": artifact_id, "os": "linux", "arch": "amd64", "compiler_family": "clang", "toolchain_flavor": "clang", "url": "https://example.invalid/tools-xctest.tar.gz", "sha256": "b" * 64, "publish": True, "status": "validated"}],
+                "patches": [{"id": "add-apple-style-xctest-cli-filters", "path": "patches/add-apple-style-xctest-cli-filters.patch", "sha256": "c" * 64, "applies_to": [artifact_id]}],
+            }) + "\n")
+            evidence_dir = temp / "evidence"
+            evidence_dir.mkdir()
+            (evidence_dir / f"{artifact_id}.json").write_text(json.dumps({"ok": True, "package_id": "org.gnustep.tools-xctest", "artifact_id": artifact_id}) + "\n")
+            gate = controlled_release_gate(
+                release_dir,
+                release_trust_root=release_dir / "release-signing-public.pem",
+                tools_xctest_packages_dir=packages_dir,
+                tools_xctest_evidence_dir=evidence_dir,
+            )
+            checks = {check["id"]: check for check in gate["checks"]}
+            self.assertTrue(gate["ok"])
+            self.assertTrue(checks["tools-xctest-release-gate"]["ok"])
 
     def test_controlled_release_gate_requires_explicit_trust_root(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -880,6 +1167,9 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("sha256sum", failed)
             self.assertIn("msys_runtime", failed)
             self.assertIn("common_make", failed)
+            self.assertIn("openapp", failed)
+            self.assertIn("msys_profile", failed)
+            self.assertIn("pacman_local_db", failed)
 
     def test_toolchain_archive_audit_accepts_complete_windows_layout(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -889,15 +1179,45 @@ class BuildInfraTests(unittest.TestCase):
                 zf.writestr(root + "/bin/gnustep-config", "tool")
                 zf.writestr(root + "/bin/clang.exe", "clang")
                 zf.writestr(root + "/clang64/bin/clang.exe", "clang")
+                zf.writestr(root + "/clang64/bin/openapp", "openapp")
                 zf.writestr(root + "/usr/bin/bash.exe", "bash")
                 zf.writestr(root + "/usr/bin/make.exe", "make")
                 zf.writestr(root + "/usr/bin/sha256sum.exe", "sha256sum")
                 zf.writestr(root + "/usr/bin/msys-2.0.dll", "runtime")
-                zf.writestr(root + "/share/GNUstep/Makefiles/common.make", "common")
-                zf.writestr(root + "/share/GNUstep/Makefiles/tool.make", "tool")
+                zf.writestr(root + "/clang64/share/GNUstep/Makefiles/common.make", "common")
+                zf.writestr(root + "/clang64/share/GNUstep/Makefiles/tool.make", "tool")
+                zf.writestr(root + "/etc/profile", "profile")
+                zf.writestr(root + "/var/lib/pacman/local/mingw-w64-clang-x86_64-gnustep-gui-0/desc", "desc")
                 zf.writestr(root + "/GNUstep.bat", "@echo off")
             payload = toolchain_archive_audit(archive, target_id="windows-amd64-msys2-clang64")
             self.assertTrue(payload["ok"])
+
+    def test_toolchain_archive_audit_flags_broken_pacman_local_db_entry(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            archive = Path(tempdir) / "gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev.zip"
+            with __import__("zipfile").ZipFile(archive, "w") as zf:
+                root = "gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev"
+                zf.writestr(root + "/bin/gnustep-config", "tool")
+                zf.writestr(root + "/bin/clang.exe", "clang")
+                zf.writestr(root + "/clang64/bin/clang.exe", "clang")
+                zf.writestr(root + "/clang64/bin/openapp", "openapp")
+                zf.writestr(root + "/usr/bin/bash.exe", "bash")
+                zf.writestr(root + "/usr/bin/make.exe", "make")
+                zf.writestr(root + "/usr/bin/sha256sum.exe", "sha256sum")
+                zf.writestr(root + "/usr/bin/msys-2.0.dll", "runtime")
+                zf.writestr(root + "/clang64/share/GNUstep/Makefiles/common.make", "common")
+                zf.writestr(root + "/clang64/share/GNUstep/Makefiles/tool.make", "tool")
+                zf.writestr(root + "/etc/profile", "profile")
+                zf.writestr(root + "/var/lib/pacman/local/mingw-w64-clang-x86_64-gnustep-gui-0/desc", "desc")
+                zf.writestr(root + "/var/lib/pacman/local/mingw-w64-clang-x86_64-tcl-8.6.17-1/files", "files")
+            payload = toolchain_archive_audit(archive, target_id="windows-amd64-msys2-clang64")
+            self.assertFalse(payload["ok"])
+            check_map = {check["id"]: check for check in payload["checks"]}
+            self.assertFalse(check_map["pacman_local_db_integrity"]["ok"])
+            self.assertIn(
+                "mingw-w64-clang-x86_64-tcl-8.6.17-1",
+                check_map["pacman_local_db_integrity"]["missing_desc_packages"],
+            )
 
 
     def test_verify_and_qualify_release(self):
@@ -1012,6 +1332,12 @@ class BuildInfraTests(unittest.TestCase):
     def test_release_candidate_qualification_status(self):
         payload = release_candidate_qualification_status()
         self.assertTrue(payload["ok"])
+        phase_status = {phase["phase"]: phase for phase in payload["phase_status"]}
+        self.assertEqual(phase_status["12"]["status"], "completed_for_local_release_tooling")
+        self.assertEqual(phase_status["13"]["status"], "completed_for_native_dogfood")
+        self.assertEqual(phase_status["14"]["status"], "completed_for_current_command_surface")
+        self.assertEqual(phase_status["18"]["status"], "completed_for_linux_amd64_and_staged_cross_platform_artifacts")
+        self.assertIn("production", " ".join(phase_status["12"]["remaining"]))
         artifact_checks = {check["id"]: check for check in payload["artifact_checks"]}
         live_checks = {check["id"]: check for check in payload["live_host_checks"]}
         self.assertEqual(artifact_checks["regression-gate"]["status"], "completed")
@@ -1097,10 +1423,10 @@ class BuildInfraTests(unittest.TestCase):
         openbsd_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-openbsd-amd64-clang")
         openbsd_arm64_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-openbsd-arm64-clang")
         windows_artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-windows-amd64-msys2-clang64")
-        self.assertFalse(linux_artifact["provenance_required"])
-        self.assertFalse(linux_artifact["signature_required"])
+        self.assertTrue(linux_artifact["provenance_required"])
+        self.assertTrue(linux_artifact["signature_required"])
         self.assertTrue(linux_artifact["production_ready"])
-        self.assertFalse(linux_artifact["publish"])
+        self.assertTrue(linux_artifact["publish"])
         self.assertEqual(linux_artifact["patches"][0]["upstream_status"], "submitted")
         self.assertTrue(ubuntu_artifact["publish"])
         self.assertTrue(ubuntu_artifact["production_ready"])
@@ -1108,16 +1434,16 @@ class BuildInfraTests(unittest.TestCase):
         self.assertEqual(ubuntu_artifact["toolchain_flavor"], "clang")
         self.assertEqual(linux_artifact["build_backend"], "gnustep-cli")
         self.assertEqual(linux_artifact["build_invocation"][:2], ["gnustep", "build"])
-        self.assertFalse(openbsd_artifact["provenance_required"])
-        self.assertFalse(openbsd_artifact["signature_required"])
+        self.assertTrue(openbsd_artifact["provenance_required"])
+        self.assertTrue(openbsd_artifact["signature_required"])
         self.assertTrue(openbsd_artifact["production_ready"])
-        self.assertFalse(openbsd_artifact["publish"])
+        self.assertTrue(openbsd_artifact["publish"])
         self.assertEqual(openbsd_artifact["patches"][0]["upstream_pr"], "https://github.com/gnustep/tools-xctest/pull/5")
-        self.assertFalse(linux_arm64_artifact["publish"])
+        self.assertTrue(linux_arm64_artifact["publish"])
         self.assertEqual(linux_arm64_artifact["arch"], "arm64")
         self.assertFalse(openbsd_arm64_artifact["publish"])
         self.assertEqual(openbsd_arm64_artifact["arch"], "arm64")
-        self.assertFalse(windows_artifact["publish"])
+        self.assertTrue(windows_artifact["publish"])
         self.assertEqual(windows_artifact["toolchain_flavor"], "msys2-clang64")
 
     def test_package_artifact_build_plan_allows_production_ready_manifest(self):
@@ -1164,21 +1490,24 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(artifact["publish"])
 
     def test_tools_xctest_release_gate_blocks_until_artifacts_are_rebuilt_and_dogfooded(self):
-        payload = tools_xctest_release_gate(ROOT / "packages")
-        self.assertFalse(payload["ok"])
-        self.assertEqual(payload["status"], "blocked")
+        payload = tools_xctest_release_gate(
+            ROOT / "packages", evidence_dir=ROOT / "docs" / "validation" / "tools-xctest-release-20260420"
+        )
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["status"], "ok")
         self.assertEqual(payload["phase"], "24.E-G")
         self.assertEqual(payload["required_patch"], "add-apple-style-xctest-cli-filters")
         blocker_codes = [blocker["code"] for blocker in payload["blockers"]]
-        self.assertIn("artifact_not_publishable", blocker_codes)
-        self.assertIn("artifact_pending_rebuild_with_declared_patches", blocker_codes)
-        self.assertIn("artifact_not_built", blocker_codes)
-        self.assertIn("artifact_digest_missing", blocker_codes)
-        self.assertIn("dogfood_evidence_missing", blocker_codes)
+        self.assertEqual(blocker_codes, [])
         targets = {target["id"]: target for target in payload["targets"]}
         self.assertEqual(targets["tools-xctest-linux-amd64-clang"]["selected_patches"], ["add-apple-style-xctest-cli-filters"])
-        self.assertFalse(targets["tools-xctest-linux-amd64-clang"]["release_ready"])
+        self.assertTrue(targets["tools-xctest-linux-amd64-clang"]["release_ready"])
+        self.assertTrue(targets["tools-xctest-openbsd-amd64-clang"]["release_ready"])
+        self.assertTrue(targets["tools-xctest-linux-arm64-clang"]["release_ready"])
         self.assertEqual(targets["tools-xctest-windows-amd64-msys2-clang64"]["format"], "zip")
+        self.assertTrue(targets["tools-xctest-windows-amd64-msys2-clang64"]["release_ready"])
+        self.assertEqual(targets["tools-xctest-openbsd-arm64-clang"]["dogfood_evidence"], "deferred")
+        self.assertTrue(targets["tools-xctest-openbsd-arm64-clang"]["deferred_non_release_blocker"])
         self.assertIn("minimal XCTest bundle execution", payload["dogfood_checks"])
 
     def test_tools_xctest_release_gate_passes_with_publishable_artifact_and_evidence(self):
