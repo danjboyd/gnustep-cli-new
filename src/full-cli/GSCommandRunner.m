@@ -685,9 +685,24 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   else
     {
       NSString *escapedURL = [urlString stringByReplacingOccurrencesOfString: @"'" withString: @"''"];
-      tempOutputPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
-                           [NSString stringWithFormat: @"gnustep-cli-download-%@.tmp",
-                                     [[NSProcessInfo processInfo] globallyUniqueString]]];
+      {
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+        NSString *tempRoot = [[self managedChildProcessEnvironment] objectForKey: @"TEMP"];
+        if ([tempRoot length] == 0)
+          {
+            tempRoot = NSTemporaryDirectory();
+          }
+#else
+        NSString *tempRoot = NSTemporaryDirectory();
+#endif
+        [[NSFileManager defaultManager] createDirectoryAtPath: tempRoot
+                                  withIntermediateDirectories: YES
+                                                   attributes: nil
+                                                        error: NULL];
+        tempOutputPath = [tempRoot stringByAppendingPathComponent:
+                             [NSString stringWithFormat: @"gnustep-cli-download-%@.tmp",
+                                       [[NSProcessInfo processInfo] globallyUniqueString]]];
+      }
       NSString *escapedOutputPath = [tempOutputPath stringByReplacingOccurrencesOfString: @"'" withString: @"''"];
       NSString *command = [NSString stringWithFormat:
                                       @"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri '%@' -OutFile '%@'",
