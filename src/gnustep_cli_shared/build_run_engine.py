@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 import json
+import shutil
+import sys
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -118,8 +120,15 @@ def runnable_project(project: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _make_command() -> str:
+    if sys.platform.startswith("openbsd"):
+        return shutil.which("gmake") or "gmake"
+    return "make"
+
+
 def plan_build(project_dir: str | Path = ".", clean_first: bool = False) -> dict[str, Any]:
     project = detect_project(project_dir)
+    make_command = _make_command()
     if not project["supported"]:
         return {
             "schema_version": 1,
@@ -143,8 +152,8 @@ def plan_build(project_dir: str | Path = ".", clean_first: bool = False) -> dict
             "operation": "clean_build",
             "invocation": None,
             "phases": [
-                {"name": "clean", "backend": "gnustep-make", "invocation": ["make", "distclean"]},
-                {"name": "build", "backend": "gnustep-make", "invocation": ["make"]},
+                {"name": "clean", "backend": "gnustep-make", "invocation": [make_command, "distclean"]},
+                {"name": "build", "backend": "gnustep-make", "invocation": [make_command]},
             ],
         }
     return {
@@ -155,12 +164,13 @@ def plan_build(project_dir: str | Path = ".", clean_first: bool = False) -> dict
         "summary": "GNUstep project build plan created.",
         "project": project,
         "backend": "gnustep-make",
-        "invocation": ["make"],
+        "invocation": [make_command],
     }
 
 
 def plan_clean(project_dir: str | Path = ".") -> dict[str, Any]:
     project = detect_project(project_dir)
+    make_command = _make_command()
     if not project["supported"]:
         return {
             "schema_version": 1,
@@ -181,7 +191,7 @@ def plan_clean(project_dir: str | Path = ".") -> dict[str, Any]:
         "project": project,
         "backend": "gnustep-make",
         "operation": "clean",
-        "invocation": ["make", "distclean"],
+        "invocation": [make_command, "distclean"],
     }
 
 

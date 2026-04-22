@@ -88,7 +88,7 @@ host_prerequisite_packages() {
       printf '%s\n' "ca-certificates curl tar gzip xz zstd git make cmake ninja pkgconf clang lld libxml2 libxslt icu avahi gnutls libffi libjpeg-turbo libtiff libpng cairo libxft libxt libx11 libxext"
       ;;
     openbsd)
-      printf '%s\n' "curl gmake cmake ninja pkgconf clang libxml libxslt icu4c avahi gnutls libffi jpeg tiff png cairo libXft"
+      printf '%s\n' "curl gmake cmake ninja pkgconf clang libxml libxslt icu4c avahi gnutls libffi jpeg tiff png cairo libXft gnustep-make gnustep-base gnustep-libobjc2"
       ;;
     *)
       printf '%s\n' ""

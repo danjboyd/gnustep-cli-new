@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -11,6 +12,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from gnustep_cli_shared.build_run_engine import detect_project, execute_build, execute_clean, execute_run, plan_build, plan_clean, plan_run
+import gnustep_cli_shared.build_run_engine as build_run_engine
 
 
 class BuildRunEngineTests(unittest.TestCase):
@@ -178,6 +180,26 @@ class BuildRunEngineTests(unittest.TestCase):
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["backend"], "gnustep-make")
             self.assertEqual(payload["invocation"], ["make"])
+
+    def test_plan_build_uses_gmake_on_openbsd(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            fake_gmake = fake_bin / "gmake"
+            fake_gmake.write_text("#!/bin/sh\n")
+            fake_gmake.chmod(0o755)
+            (root / "GNUmakefile").write_text("TOOL_NAME = hello\n")
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = f"{fake_bin}:{old_path}"
+            try:
+                with patch.object(build_run_engine.sys, "platform", "openbsd7"):
+                    build_payload = plan_build(root)
+                    clean_payload = plan_clean(root)
+            finally:
+                os.environ["PATH"] = old_path
+            self.assertEqual(build_payload["invocation"], [str(fake_gmake)])
+            self.assertEqual(clean_payload["invocation"], [str(fake_gmake), "distclean"])
 
     def test_plan_run_for_app(self):
         with tempfile.TemporaryDirectory() as tempdir:

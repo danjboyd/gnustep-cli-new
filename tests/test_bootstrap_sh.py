@@ -94,6 +94,10 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("DOGFOOD_MANIFEST_URL", content)
         self.assertIn("/releases/download/dogfood/release-manifest.json", content)
 
+    def test_openbsd_prerequisites_include_native_gnustep_runtime(self):
+        content = BOOTSTRAP.read_text(encoding="utf-8")
+        self.assertIn("gnustep-make gnustep-base gnustep-libobjc2", content)
+
     def test_bootstrap_script_does_not_depend_on_python(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")
         self.assertNotIn("python3", content)

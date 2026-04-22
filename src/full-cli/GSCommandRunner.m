@@ -62,6 +62,7 @@
 - (NSString *)singleQuotedShellString:(NSString *)string;
 - (NSString *)projectPathFromCommandArguments:(NSArray *)arguments;
 - (NSString *)buildSystemFromCommandArguments:(NSArray *)arguments;
+- (NSString *)makeCommandName;
 - (NSDictionary *)projectOperationPhaseWithName:(NSString *)name
                                         backend:(NSString *)backend
                                      invocation:(NSArray *)invocation
@@ -1316,6 +1317,20 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         }
     }
   return @"auto";
+}
+
+- (NSString *)makeCommandName
+{
+#if defined(__OpenBSD__)
+  NSString *gmake = [self firstAvailableExecutable: [NSArray arrayWithObjects: @"gmake", nil]];
+  if (gmake != nil)
+    {
+      return gmake;
+    }
+  return @"gmake";
+#else
+  return @"make";
+#endif
 }
 
 - (NSDictionary *)projectOperationPhaseWithName:(NSString *)name
@@ -5578,8 +5593,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSString *requestedBuildSystem = [self buildSystemFromCommandArguments: arguments];
   NSDictionary *project = [self detectProjectAtPath: projectPath];
   NSString *backend = [project objectForKey: @"build_system"];
-  NSArray *buildInvocation = [NSArray arrayWithObjects: @"make", nil];
-  NSArray *cleanInvocation = [NSArray arrayWithObjects: @"make", @"distclean", nil];
+  NSString *makeCommand = [self makeCommandName];
+  NSArray *buildInvocation = [NSArray arrayWithObjects: makeCommand, nil];
+  NSArray *cleanInvocation = [NSArray arrayWithObjects: makeCommand, @"distclean", nil];
   NSDictionary *cleanPhase = nil;
   NSDictionary *buildPhase = nil;
   NSMutableArray *phases = nil;
@@ -5698,7 +5714,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSString *requestedBuildSystem = [self buildSystemFromCommandArguments: arguments];
   NSDictionary *project = [self detectProjectAtPath: projectPath];
   NSString *backend = [project objectForKey: @"build_system"];
-  NSArray *invocation = [NSArray arrayWithObjects: @"make", @"distclean", nil];
+  NSArray *invocation = [NSArray arrayWithObjects: [self makeCommandName], @"distclean", nil];
   NSDictionary *phase = nil;
   BOOL streamOutput = ([context jsonOutput] == NO && [context quiet] == NO);
 
