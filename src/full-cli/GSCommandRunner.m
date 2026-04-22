@@ -901,6 +901,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSString *tmpDir = [installRoot stringByAppendingPathComponent: @"tmp"];
   NSMutableArray *pathEntries = [NSMutableArray array];
   NSString *existingPath = [environment objectForKey: @"PATH"];
+  BOOL hasManagedLayout = NO;
 
   if ([manager fileExistsAtPath: makefiles] == NO)
     {
@@ -908,7 +909,11 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       configFile = [[installRoot stringByAppendingPathComponent: @"etc"] stringByAppendingPathComponent: @"GNUstep\\GNUstep.conf"];
     }
 
-  if ([manager fileExistsAtPath: makefiles])
+  hasManagedLayout = ([manager fileExistsAtPath: makefiles] ||
+                      [managedRootOverride length] > 0 ||
+                      [manager fileExistsAtPath: [[installRoot stringByAppendingPathComponent: @"usr"] stringByAppendingPathComponent: @"bin"]]);
+
+  if (hasManagedLayout)
     {
       [manager createDirectoryAtPath: tmpDir withIntermediateDirectories: YES attributes: nil error: NULL];
       [pathEntries addObject: [installRoot stringByAppendingPathComponent: @"clang64\\bin"]];
