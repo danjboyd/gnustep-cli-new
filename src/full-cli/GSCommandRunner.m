@@ -404,7 +404,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
   else if ([command isEqualToString: @"run"])
     {
-      printf("  gnustep run [--json] [--build-system <id>] [project-dir]\n\n");
+      printf("  gnustep run [--json] [--no-build] [--build-system <id>] [project-dir]\n\n");
     }
   else if ([command isEqualToString: @"shell"])
     {
@@ -1342,6 +1342,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       NSString *argument = [arguments objectAtIndex: i];
       if ([argument isEqualToString: @"--clean"])
+        {
+          continue;
+        }
+      if ([argument isEqualToString: @"--no-build"])
         {
           continue;
         }
@@ -5920,11 +5924,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 {
   NSArray *arguments = [context commandArguments];
   NSString *projectPath = [self projectPathFromCommandArguments: arguments];
+  NSString *requestedBuildSystem = [self buildSystemFromCommandArguments: arguments];
   NSDictionary *project = [self detectProjectAtPath: projectPath];
   NSDictionary *runProject = nil;
   NSArray *invocation = nil;
   NSString *backend = nil;
+  NSString *buildBackend = [project objectForKey: @"build_system"];
+  NSArray *buildInvocation = [NSArray arrayWithObjects: [self makeCommandName], nil];
+  NSDictionary *buildPhase = nil;
   NSDictionary *result = nil;
+  BOOL buildFirst = ([self arguments: arguments containOption: @"--no-build"] == NO);
+  BOOL streamOutput = ([context jsonOutput] == NO && [context quiet] == NO);
   BOOL launchOnly = NO;
 
   if ([[project objectForKey: @"supported"] boolValue] == NO)
@@ -5940,6 +5950,60 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                             [NSNull null], @"backend",
                             [NSNull null], @"invocation",
                             nil];
+    }
+
+  if (([requestedBuildSystem isEqualToString: @"auto"] == NO)
+      && ([requestedBuildSystem isEqualToString: buildBackend] == NO))
+    {
+      *exitCode = 3;
+      return [NSDictionary dictionaryWithObjectsAndKeys:
+                            [NSNumber numberWithInt: 1], @"schema_version",
+                            @"run", @"command",
+                            [NSNumber numberWithBool: NO], @"ok",
+                            @"error", @"status",
+                            [NSString stringWithFormat: @"The requested build system '%@' is not available for this project.", requestedBuildSystem], @"summary",
+                            project, @"project",
+                            buildBackend, @"backend",
+                            [NSNull null], @"invocation",
+                            nil];
+    }
+
+  if (buildFirst)
+    {
+      buildPhase = [self projectOperationPhaseWithName: @"build"
+                                               backend: buildBackend
+                                            invocation: buildInvocation
+                                               project: project
+                                          streamOutput: streamOutput];
+      if ([[buildPhase objectForKey: @"ok"] boolValue] == NO
+          && [self createUnversionedSharedLibraryLinksUnderPath: [project objectForKey: @"project_dir"]] > 0)
+        {
+          buildPhase = [self projectOperationPhaseWithName: @"build"
+                                                   backend: buildBackend
+                                                invocation: buildInvocation
+                                                   project: project
+                                              streamOutput: streamOutput];
+        }
+      if ([[buildPhase objectForKey: @"ok"] boolValue] == NO)
+        {
+          *exitCode = 1;
+          return [NSDictionary dictionaryWithObjectsAndKeys:
+                                [NSNumber numberWithInt: 1], @"schema_version",
+                                @"run", @"command",
+                                [NSNumber numberWithBool: NO], @"ok",
+                                @"error", @"status",
+                                @"Run failed because the project build failed.", @"summary",
+                                project, @"project",
+                                [NSNull null], @"run_project",
+                                buildBackend, @"backend",
+                                @"build", @"failed_phase",
+                                buildPhase, @"build_phase",
+                                buildInvocation, @"invocation",
+                                [buildPhase objectForKey: @"stdout"], @"stdout",
+                                [buildPhase objectForKey: @"stderr"], @"stderr",
+                                [buildPhase objectForKey: @"exit_status"], @"exit_status",
+                                nil];
+        }
     }
 
   runProject = [self runnableProjectForProject: project];
@@ -6050,7 +6114,11 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
   else
     {
-      result = [self runCommand: invocation currentDirectory: [runProject objectForKey: @"project_dir"]];
+      result = [self runCommand: invocation
+               currentDirectory: [runProject objectForKey: @"project_dir"]
+                        timeout: 15.0
+          additionalPathEntries: nil
+                   streamOutput: streamOutput];
     }
   if ([[result objectForKey: @"launched"] boolValue] == NO)
     {
@@ -6084,6 +6152,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         project, @"project",
                         runProject, @"run_project",
                         backend, @"backend",
+                        [NSNumber numberWithBool: buildFirst], @"build_first",
+                        buildPhase ? buildPhase : [NSNull null], @"build_phase",
                         invocation, @"invocation",
                         [result objectForKey: @"stdout"], @"stdout",
                         [result objectForKey: @"stderr"], @"stderr",
@@ -7164,6 +7234,22 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         }
       NSDictionary *runProject = [payload objectForKey: @"run_project"];
       NSString *invocation = [[payload objectForKey: @"invocation"] componentsJoinedByString: @" "];
+      if (runProject == (id)[NSNull null])
+        {
+          NSMutableArray *lines = [NSMutableArray array];
+          [lines addObject: [NSString stringWithFormat: @"run: %@", [payload objectForKey: @"summary"]]];
+          if ([payload objectForKey: @"failed_phase"] != nil)
+            {
+              [lines addObject: [NSString stringWithFormat: @"run: failed_phase=%@", [payload objectForKey: @"failed_phase"]]];
+            }
+          [lines addObject: [NSString stringWithFormat: @"run: backend=%@", [payload objectForKey: @"backend"]]];
+          [lines addObject: [NSString stringWithFormat: @"run: invocation=%@", invocation]];
+          if ([[payload objectForKey: @"stderr"] length] > 0)
+            {
+              [lines addObject: [NSString stringWithFormat: @"run: stderr=%@", [payload objectForKey: @"stderr"]]];
+            }
+          return [lines componentsJoinedByString: @"\n"];
+        }
 
       if ([[payload objectForKey: @"backend"] isEqualToString: @"openapp"]
           && [[runProject objectForKey: @"project_type"] isEqualToString: @"app"])
