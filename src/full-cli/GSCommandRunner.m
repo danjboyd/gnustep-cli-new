@@ -6012,10 +6012,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   if (launchOnly)
     {
-      result = [self runCommand: invocation
-               currentDirectory: [runProject objectForKey: @"project_dir"]
-                        timeout: 15.0
-          additionalPathEntries: [self projectRuntimePathEntriesUnderPath: [project objectForKey: @"project_dir"]]];
+      result = [self launchCommand: invocation
+                   currentDirectory: [runProject objectForKey: @"project_dir"]
+              additionalPathEntries: [self projectRuntimePathEntriesUnderPath: [project objectForKey: @"project_dir"]]];
     }
   else
     {
