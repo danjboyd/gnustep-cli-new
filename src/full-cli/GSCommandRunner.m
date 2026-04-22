@@ -913,14 +913,22 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSMutableDictionary *environment = [NSMutableDictionary dictionaryWithDictionary: [[NSProcessInfo processInfo] environment]];
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
   NSString *binaryPath = [[[NSProcessInfo processInfo] arguments] objectAtIndex: 0];
-  NSString *resolvedPath = [binaryPath stringByResolvingSymlinksInPath];
+  NSString *resolvedBinaryPath = nil;
+  NSString *resolvedPath = nil;
+  if ([binaryPath rangeOfString: @"/"].location == NSNotFound &&
+      [binaryPath rangeOfString: @"\\"].location == NSNotFound)
+    {
+      resolvedBinaryPath = [self resolvedExecutablePathForCommand: binaryPath environment: environment];
+    }
+  resolvedPath = [(resolvedBinaryPath != nil ? resolvedBinaryPath : binaryPath) stringByResolvingSymlinksInPath];
   NSString *binDir = [resolvedPath stringByDeletingLastPathComponent];
   NSString *managedRootOverride = [environment objectForKey: @"GNUSTEP_CLI_MANAGED_ROOT"];
   NSString *installRoot = [managedRootOverride length] > 0 ? managedRootOverride : [binDir stringByDeletingLastPathComponent];
+  NSString *normalizedInstallRoot = [installRoot stringByReplacingOccurrencesOfString: @"\\" withString: @"/"];
   NSFileManager *manager = [NSFileManager defaultManager];
-  NSString *makefiles = [[[installRoot stringByAppendingPathComponent: @"clang64"] stringByAppendingPathComponent: @"share"] stringByAppendingPathComponent: @"GNUstep\\Makefiles"];
-  NSString *configFile = [[[installRoot stringByAppendingPathComponent: @"clang64"] stringByAppendingPathComponent: @"etc"] stringByAppendingPathComponent: @"GNUstep\\GNUstep.conf"];
-  NSString *tmpDir = [installRoot stringByAppendingPathComponent: @"tmp"];
+  NSString *makefiles = [[[normalizedInstallRoot stringByAppendingPathComponent: @"clang64"] stringByAppendingPathComponent: @"share"] stringByAppendingPathComponent: @"GNUstep/Makefiles"];
+  NSString *configFile = [[[normalizedInstallRoot stringByAppendingPathComponent: @"clang64"] stringByAppendingPathComponent: @"etc"] stringByAppendingPathComponent: @"GNUstep/GNUstep.conf"];
+  NSString *tmpDir = [normalizedInstallRoot stringByAppendingPathComponent: @"tmp"];
   NSMutableArray *pathEntries = [NSMutableArray array];
   NSString *existingPath = [environment objectForKey: @"PATH"];
   BOOL hasManagedLayout = NO;
@@ -931,20 +939,20 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
   if ([manager fileExistsAtPath: makefiles] == NO)
     {
-      makefiles = [[installRoot stringByAppendingPathComponent: @"share"] stringByAppendingPathComponent: @"GNUstep\\Makefiles"];
-      configFile = [[installRoot stringByAppendingPathComponent: @"etc"] stringByAppendingPathComponent: @"GNUstep\\GNUstep.conf"];
+      makefiles = [[normalizedInstallRoot stringByAppendingPathComponent: @"share"] stringByAppendingPathComponent: @"GNUstep/Makefiles"];
+      configFile = [[normalizedInstallRoot stringByAppendingPathComponent: @"etc"] stringByAppendingPathComponent: @"GNUstep/GNUstep.conf"];
     }
 
   hasManagedLayout = ([manager fileExistsAtPath: makefiles] ||
                       [managedRootOverride length] > 0 ||
-                      [manager fileExistsAtPath: [[installRoot stringByAppendingPathComponent: @"usr"] stringByAppendingPathComponent: @"bin"]]);
+                      [manager fileExistsAtPath: [[normalizedInstallRoot stringByAppendingPathComponent: @"usr"] stringByAppendingPathComponent: @"bin"]]);
 
   if (hasManagedLayout)
     {
       [manager createDirectoryAtPath: tmpDir withIntermediateDirectories: YES attributes: nil error: NULL];
-      [pathEntries addObject: [installRoot stringByAppendingPathComponent: @"clang64\\bin"]];
-      [pathEntries addObject: [installRoot stringByAppendingPathComponent: @"bin"]];
-      [pathEntries addObject: [installRoot stringByAppendingPathComponent: @"usr\\bin"]];
+      [pathEntries addObject: [normalizedInstallRoot stringByAppendingPathComponent: @"clang64/bin"]];
+      [pathEntries addObject: [normalizedInstallRoot stringByAppendingPathComponent: @"bin"]];
+      [pathEntries addObject: [normalizedInstallRoot stringByAppendingPathComponent: @"usr/bin"]];
       if ([existingPath length] > 0)
         {
           [pathEntries addObject: existingPath];
@@ -1089,6 +1097,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       timeout = atof(timeoutRaw);
     }
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  streamOutput = NO;
+#endif
 
   if (arguments == nil || [arguments count] == 0)
     {
@@ -7643,13 +7654,22 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                   [runProject objectForKey: @"target_name"]];
         }
 
-      return [NSString stringWithFormat: @"run: %@\nrun: backend=%@\nrun: project_type=%@ target=%@\nrun: selected_project=%@\nrun: invocation=%@",
-                [payload objectForKey: @"summary"],
-                [payload objectForKey: @"backend"],
-                [runProject objectForKey: @"project_type"],
-                [runProject objectForKey: @"target_name"],
-                [runProject objectForKey: @"project_dir"],
-                invocation];
+      {
+        NSMutableArray *lines = [NSMutableArray array];
+        NSString *stdoutText = [[payload objectForKey: @"stdout"] stringByTrimmingCharactersInSet: [NSCharacterSet newlineCharacterSet]];
+        [lines addObject: [NSString stringWithFormat: @"run: %@", [payload objectForKey: @"summary"]]];
+        [lines addObject: [NSString stringWithFormat: @"run: backend=%@", [payload objectForKey: @"backend"]]];
+        [lines addObject: [NSString stringWithFormat: @"run: project_type=%@ target=%@",
+                                    [runProject objectForKey: @"project_type"],
+                                    [runProject objectForKey: @"target_name"]]];
+        [lines addObject: [NSString stringWithFormat: @"run: selected_project=%@", [runProject objectForKey: @"project_dir"]]];
+        [lines addObject: [NSString stringWithFormat: @"run: invocation=%@", invocation]];
+        if ([stdoutText length] > 0)
+          {
+            [lines addObject: stdoutText];
+          }
+        return [lines componentsJoinedByString: @"\n"];
+      }
     }
   if ([command isEqualToString: @"shell"])
     {
