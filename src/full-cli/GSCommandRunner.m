@@ -4581,13 +4581,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSString *psPath = [binDir stringByAppendingPathComponent: @"gnustep.ps1"];
   NSString *cmdScript = @"@echo off\r\n"
                         @"set \"ROOT=%~dp0..\"\r\n"
+                        @"for %%I in (\"%ROOT%\") do set \"ROOT=%%~fI\"\r\n"
                         @"set /p RELEASE=<\"%ROOT%\\current\\release.txt\"\r\n"
                         @"set \"GNUSTEP_CLI_MANAGED_ROOT=%ROOT%\"\r\n"
                         @"set \"GNUSTEP_CLI_NO_DELEGATE=1\"\r\n"
                         @"set \"GNUSTEP_CLI_EXE=%ROOT%\\releases\\%RELEASE%\\bin\\gnustep.exe\"\r\n"
                         @"\"%GNUSTEP_CLI_EXE%\" %*\r\n"
                         @"exit /b %ERRORLEVEL%\r\n";
-  NSString *psScript = @"$Root = Split-Path -Parent $PSScriptRoot\r\n"
+  NSString *psScript = @"$Root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path\r\n"
                        @"$Release = (Get-Content -LiteralPath (Join-Path $Root 'current\\release.txt') -Raw).Trim()\r\n"
                        @"$Exe = Join-Path $Root (Join-Path 'releases' (Join-Path $Release 'bin\\gnustep.exe'))\r\n"
                        @"$env:GNUSTEP_CLI_MANAGED_ROOT = $Root\r\n"
