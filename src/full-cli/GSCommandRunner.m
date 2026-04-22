@@ -829,6 +829,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
 
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  if ([pathVariable length] == 0)
+    {
+      pathVariable = [environment objectForKey: @"Path"];
+    }
   pathEntries = pathVariable ? [pathVariable componentsSeparatedByString: @";"] : [NSArray array];
   [candidateNames addObject: command];
   if ([[command pathExtension] length] == 0)
@@ -848,6 +852,23 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       for (knownIndex = 0; knownIndex < [knownPowerShellPaths count]; knownIndex++)
         {
           NSString *candidate = [knownPowerShellPaths objectAtIndex: knownIndex];
+          if ([manager fileExistsAtPath: candidate])
+            {
+              return candidate;
+            }
+        }
+    }
+  if ([[command lowercaseString] isEqualToString: @"cmd"] ||
+      [[command lowercaseString] isEqualToString: @"cmd.exe"])
+    {
+      NSArray *knownCmdPaths = [NSArray arrayWithObjects:
+        @"C:/Windows/System32/cmd.exe",
+        @"C:\\Windows\\System32\\cmd.exe",
+        nil];
+      NSUInteger knownIndex = 0;
+      for (knownIndex = 0; knownIndex < [knownCmdPaths count]; knownIndex++)
+        {
+          NSString *candidate = [knownCmdPaths objectAtIndex: knownIndex];
           if ([manager fileExistsAtPath: candidate])
             {
               return candidate;
@@ -904,6 +925,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSString *existingPath = [environment objectForKey: @"PATH"];
   BOOL hasManagedLayout = NO;
 
+  if ([existingPath length] == 0)
+    {
+      existingPath = [environment objectForKey: @"Path"];
+    }
   if ([manager fileExistsAtPath: makefiles] == NO)
     {
       makefiles = [[installRoot stringByAppendingPathComponent: @"share"] stringByAppendingPathComponent: @"GNUstep\\Makefiles"];
@@ -925,6 +950,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
           [pathEntries addObject: existingPath];
         }
       [environment setObject: [pathEntries componentsJoinedByString: @";"] forKey: @"PATH"];
+      [environment setObject: [pathEntries componentsJoinedByString: @";"] forKey: @"Path"];
       [environment setObject: makefiles forKey: @"GNUSTEP_MAKEFILES"];
       [environment setObject: configFile forKey: @"GNUSTEP_CONFIG_FILE"];
       [environment setObject: @"CLANG64" forKey: @"MSYSTEM"];
