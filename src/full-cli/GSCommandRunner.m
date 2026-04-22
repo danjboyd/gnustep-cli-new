@@ -648,12 +648,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
 - (NSData *)downloadURLData:(NSString *)urlString error:(NSString **)errorMessage
 {
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  NSString *downloader = [self firstAvailableExecutable: [NSArray arrayWithObjects: @"powershell.exe", @"powershell", @"curl", @"wget", nil]];
+#else
   NSString *downloader = [self firstAvailableExecutable: [NSArray arrayWithObjects: @"curl", @"wget", @"powershell.exe", @"powershell", nil]];
+#endif
   NSTask *task = nil;
   NSPipe *output = nil;
   NSPipe *errors = nil;
   NSData *data = nil;
   NSString *downloaderName = nil;
+  NSString *tempOutputPath = nil;
 
   if (downloader == nil)
     {
@@ -680,9 +685,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   else
     {
       NSString *escapedURL = [urlString stringByReplacingOccurrencesOfString: @"'" withString: @"''"];
+      tempOutputPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
+                           [NSString stringWithFormat: @"gnustep-cli-download-%@.tmp",
+                                     [[NSProcessInfo processInfo] globallyUniqueString]]];
+      NSString *escapedOutputPath = [tempOutputPath stringByReplacingOccurrencesOfString: @"'" withString: @"''"];
       NSString *command = [NSString stringWithFormat:
-                                      @"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (Invoke-WebRequest -UseBasicParsing -Uri '%@').Content",
-                                      escapedURL];
+                                      @"[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri '%@' -OutFile '%@'",
+                                      escapedURL,
+                                      escapedOutputPath];
       [task setArguments: [NSArray arrayWithObjects: @"-NoProfile", @"-ExecutionPolicy", @"Bypass", @"-Command", command, nil]];
     }
   [task setStandardOutput: output];
@@ -691,7 +701,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   @try
     {
       [task launch];
-      data = [[output fileHandleForReading] readDataToEndOfFile];
+      if (tempOutputPath == nil)
+        {
+          data = [[output fileHandleForReading] readDataToEndOfFile];
+        }
+      else
+        {
+          [[output fileHandleForReading] readDataToEndOfFile];
+        }
       [task waitUntilExit];
     }
   @catch (NSException *exception)
@@ -701,6 +718,12 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
           *errorMessage = [NSString stringWithFormat: @"Failed to launch downloader for %@.", urlString];
         }
       return nil;
+    }
+
+  if ([task terminationStatus] == 0 && tempOutputPath != nil)
+    {
+      data = [NSData dataWithContentsOfFile: tempOutputPath];
+      [[NSFileManager defaultManager] removeItemAtPath: tempOutputPath error: NULL];
     }
 
   if ([task terminationStatus] != 0 || [data length] == 0)
