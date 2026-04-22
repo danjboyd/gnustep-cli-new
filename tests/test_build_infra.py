@@ -1713,6 +1713,10 @@ class BuildInfraTests(unittest.TestCase):
             launcher = (temp / "bundle" / "bin" / "gnustep").read_text()
             self.assertIn('export PATH="$INSTALL_ROOT/bin:$INSTALL_ROOT/Tools:$INSTALL_ROOT/System/Tools:$INSTALL_ROOT/Local/Tools:$PATH"', launcher)
             self.assertIn('export LD_LIBRARY_PATH="$INSTALL_ROOT/Library/Libraries:$INSTALL_ROOT/Local/Library/Libraries:$INSTALL_ROOT/System/Library/Libraries:$INSTALL_ROOT/lib:$INSTALL_ROOT/lib64:${LD_LIBRARY_PATH:-}"', launcher)
+            self.assertIn('MANAGED_MAKEFILES="$INSTALL_ROOT/System/Library/Makefiles"', launcher)
+            self.assertIn('gnustep-config --variable=GNUSTEP_MAKEFILES', launcher)
+            self.assertIn('/usr/local/share/GNUstep/Makefiles', launcher)
+            self.assertIn('[ -n "${GNUSTEP_MAKEFILES:-}" ]', launcher)
 
 
 if __name__ == "__main__":
