@@ -23,6 +23,7 @@
 - (NSDictionary *)detectProjectAtPath:(NSString *)projectPath;
 - (NSArray *)toolRunInvocationForProject:(NSDictionary *)project;
 - (NSDictionary *)executeRunForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
+- (NSComparisonResult)compareVersionString:(NSString *)left toVersionString:(NSString *)right;
 @end
 
 @interface GSCommandRunnerTests : XCTestCase
@@ -268,6 +269,16 @@
   XCTAssertTrue([[payload objectForKey: @"summary"] rangeOfString: @"Gorm.app was not found"].location != NSNotFound);
 
   [manager removeItemAtPath: root error: NULL];
+}
+
+- (void)testDogfoodVersionComparisonUsesTimestampBeforeHash
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *older = @"0.1.0-dev-dogfood.20260422T183802Z.ge6e7341.5";
+  NSString *newer = @"0.1.0-dev-dogfood.20260422T184223Z.gb8979cb.7";
+
+  XCTAssertEqual([runner compareVersionString: newer toVersionString: older], NSOrderedDescending);
+  XCTAssertEqual([runner compareVersionString: older toVersionString: newer], NSOrderedAscending);
 }
 
 - (void)testWindowsManagedToolchainHintRecognizesInstalledReleaseLayout

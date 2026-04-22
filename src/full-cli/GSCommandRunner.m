@@ -2142,9 +2142,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
 - (NSComparisonResult)compareVersionString:(NSString *)left toVersionString:(NSString *)right
 {
-  NSArray *leftParts = [left componentsSeparatedByString: @"."];
-  NSArray *rightParts = [right componentsSeparatedByString: @"."];
-  NSUInteger maxCount = [leftParts count] > [rightParts count] ? [leftParts count] : [rightParts count];
+  NSArray *leftParts = nil;
+  NSArray *rightParts = nil;
+  NSUInteger maxCount = 0;
   NSUInteger i = 0;
 
   if (left == nil && right == nil)
@@ -2160,6 +2160,34 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       return NSOrderedDescending;
     }
 
+  if ([left rangeOfString: @"-dogfood."].location != NSNotFound
+      && [right rangeOfString: @"-dogfood."].location != NSNotFound)
+    {
+      NSArray *leftDogfood = [[left componentsSeparatedByString: @"-dogfood."] lastObject] ? [[[left componentsSeparatedByString: @"-dogfood."] lastObject] componentsSeparatedByString: @"."] : [NSArray array];
+      NSArray *rightDogfood = [[right componentsSeparatedByString: @"-dogfood."] lastObject] ? [[[right componentsSeparatedByString: @"-dogfood."] lastObject] componentsSeparatedByString: @"."] : [NSArray array];
+      NSString *leftTimestamp = [leftDogfood count] > 0 ? [leftDogfood objectAtIndex: 0] : @"";
+      NSString *rightTimestamp = [rightDogfood count] > 0 ? [rightDogfood objectAtIndex: 0] : @"";
+      NSInteger leftSequence = [leftDogfood count] > 2 ? [[leftDogfood objectAtIndex: 2] integerValue] : 0;
+      NSInteger rightSequence = [rightDogfood count] > 2 ? [[rightDogfood objectAtIndex: 2] integerValue] : 0;
+      NSComparisonResult timestampComparison = [leftTimestamp compare: rightTimestamp];
+      if (timestampComparison != NSOrderedSame)
+        {
+          return timestampComparison;
+        }
+      if (leftSequence < rightSequence)
+        {
+          return NSOrderedAscending;
+        }
+      if (leftSequence > rightSequence)
+        {
+          return NSOrderedDescending;
+        }
+      return NSOrderedSame;
+    }
+
+  leftParts = [left componentsSeparatedByString: @"."];
+  rightParts = [right componentsSeparatedByString: @"."];
+  maxCount = [leftParts count] > [rightParts count] ? [leftParts count] : [rightParts count];
   for (i = 0; i < maxCount; i++)
     {
       NSString *leftPart = i < [leftParts count] ? [leftParts objectAtIndex: i] : @"0";
