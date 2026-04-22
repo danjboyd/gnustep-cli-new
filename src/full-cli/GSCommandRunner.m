@@ -134,6 +134,7 @@
 - (BOOL)smokeVersionedReleaseAtPath:(NSString *)releaseRoot error:(NSString **)errorMessage;
 - (BOOL)installCurrentPointerLauncherForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
 - (BOOL)activateCurrentPointerForInstallRoot:(NSString *)installRoot releaseVersion:(NSString *)version releaseRoot:(NSString *)releaseRoot error:(NSString **)errorMessage;
+- (BOOL)scheduleWindowsRootExecutableRefreshForInstallRoot:(NSString *)installRoot releaseRoot:(NSString *)releaseRoot error:(NSString **)errorMessage;
 - (NSString *)materializeVersionedReleaseForInstallRoot:(NSString *)installRoot version:(NSString *)version error:(NSString **)errorMessage;
 - (NSDictionary *)rollbackManagedInstallRoot:(NSString *)installRoot exitCode:(int *)exitCode;
 - (NSDictionary *)repairManagedInstallRoot:(NSString *)installRoot;
@@ -4673,6 +4674,94 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return [self installCurrentPointerLauncherForInstallRoot: installRoot error: errorMessage];
 }
 
+- (BOOL)scheduleWindowsRootExecutableRefreshForInstallRoot:(NSString *)installRoot releaseRoot:(NSString *)releaseRoot error:(NSString **)errorMessage
+{
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *currentPath = [installRoot stringByAppendingPathComponent: @"current"];
+  NSString *scriptPath = [currentPath stringByAppendingPathComponent: @"refresh-root.ps1"];
+  NSString *sourcePath = [[releaseRoot stringByAppendingPathComponent: @"bin"] stringByAppendingPathComponent: @"gnustep.exe"];
+  NSString *destinationPath = [[installRoot stringByAppendingPathComponent: @"bin"] stringByAppendingPathComponent: @"gnustep.exe"];
+  NSString *powershell = [self firstAvailableExecutable: [NSArray arrayWithObjects: @"powershell.exe", @"powershell", nil]];
+  NSString *cmd = [self firstAvailableExecutable: [NSArray arrayWithObjects: @"cmd.exe", @"cmd", nil]];
+  NSString *parentPid = [NSString stringWithFormat: @"%d", [[NSProcessInfo processInfo] processIdentifier]];
+  NSString *script = @"param([string]$Source, [string]$Destination, [int]$ParentPid)\r\n"
+                     @"$ErrorActionPreference = 'Stop'\r\n"
+                     @"try { Wait-Process -Id $ParentPid -Timeout 30 -ErrorAction SilentlyContinue } catch { }\r\n"
+                     @"for ($i = 0; $i -lt 60; $i++) {\r\n"
+                     @"  try {\r\n"
+                     @"    Copy-Item -LiteralPath $Source -Destination $Destination -Force\r\n"
+                     @"    exit 0\r\n"
+                     @"  } catch {\r\n"
+                     @"    Start-Sleep -Milliseconds 500\r\n"
+                     @"  }\r\n"
+                     @"}\r\n"
+                     @"exit 1\r\n";
+  NSDictionary *result = nil;
+
+  if ([manager fileExistsAtPath: sourcePath] == NO)
+    {
+      if (errorMessage != NULL)
+        {
+          *errorMessage = @"Updated release does not contain bin\\gnustep.exe for root launcher refresh.";
+        }
+      return NO;
+    }
+  if (powershell == nil || cmd == nil)
+    {
+      if (errorMessage != NULL)
+        {
+          *errorMessage = @"PowerShell and cmd.exe are required to schedule Windows root launcher refresh.";
+        }
+      return NO;
+    }
+  [manager createDirectoryAtPath: currentPath withIntermediateDirectories: YES attributes: nil error: NULL];
+  if ([self writeString: script toPath: scriptPath] == NO)
+    {
+      if (errorMessage != NULL)
+        {
+          *errorMessage = @"Failed to write Windows root launcher refresh helper.";
+        }
+      return NO;
+    }
+
+  result = [self runCommand: [NSArray arrayWithObjects:
+                                      cmd,
+                                      @"/c",
+                                      @"start",
+                                      @"",
+                                      @"/min",
+                                      powershell,
+                                      @"-NoProfile",
+                                      @"-ExecutionPolicy",
+                                      @"Bypass",
+                                      @"-File",
+                                      scriptPath,
+                                      @"-Source",
+                                      sourcePath,
+                                      @"-Destination",
+                                      destinationPath,
+                                      @"-ParentPid",
+                                      parentPid,
+                                      nil]
+                  currentDirectory: nil
+                           timeout: 5.0];
+  if ([[result objectForKey: @"exit_status"] intValue] != 0)
+    {
+      if (errorMessage != NULL)
+        {
+          *errorMessage = [NSString stringWithFormat: @"Failed to launch Windows root launcher refresh helper. stdout=%@ stderr=%@",
+                                                     [result objectForKey: @"stdout"] ? [result objectForKey: @"stdout"] : @"",
+                                                     [result objectForKey: @"stderr"] ? [result objectForKey: @"stderr"] : @""];
+        }
+      return NO;
+    }
+  return YES;
+#else
+  return YES;
+#endif
+}
+
 - (NSString *)materializeVersionedReleaseForInstallRoot:(NSString *)installRoot version:(NSString *)version error:(NSString **)errorMessage
 {
   NSFileManager *manager = [NSFileManager defaultManager];
@@ -5437,6 +5526,12 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                         releaseVersion: [release objectForKey: @"version"]
                                            releaseRoot: activeReleasePath
                                                 error: &errorMessage] == NO)
+          {
+            activeReleasePath = nil;
+          }
+        else if ([self scheduleWindowsRootExecutableRefreshForInstallRoot: installPath
+                                                               releaseRoot: activeReleasePath
+                                                                    error: &errorMessage] == NO)
           {
             activeReleasePath = nil;
           }
