@@ -346,7 +346,7 @@ def plan_run(project_dir: str | Path = ".") -> dict[str, Any]:
             invocation = ["bash.exe", "-lc", _windows_openapp_launch_command(run_project, project["project_dir"])]
             backend = "openapp"
         else:
-            invocation = ["openapp", f"{run_project['target_name']}.app"]
+            invocation = ["openapp", f"./{run_project['target_name']}.app"]
             backend = "openapp"
     else:
         return {

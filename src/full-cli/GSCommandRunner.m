@@ -5990,7 +5990,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                               nil];
       backend = @"openapp";
 #else
-      invocation = [NSArray arrayWithObjects: @"openapp", appName, nil];
+      invocation = [NSArray arrayWithObjects: @"openapp", [NSString stringWithFormat: @"./%@", appName], nil];
       backend = @"openapp";
 #endif
       launchOnly = YES;
@@ -6049,7 +6049,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         @"run", @"command",
                         [NSNumber numberWithBool: ([[result objectForKey: @"exit_status"] intValue] == 0)], @"ok",
                         ([[result objectForKey: @"exit_status"] intValue] == 0) ? @"ok" : @"error", @"status",
-                        launchOnly ? @"Run launched." : (([[result objectForKey: @"exit_status"] intValue] == 0) ? @"Run completed." : @"Run failed."), @"summary",
+                        ([[result objectForKey: @"exit_status"] intValue] == 0) ? (launchOnly ? @"Run launched." : @"Run completed.") : @"Run failed.", @"summary",
                         project, @"project",
                         runProject, @"run_project",
                         backend, @"backend",

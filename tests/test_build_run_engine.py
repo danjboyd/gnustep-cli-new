@@ -146,7 +146,7 @@ class BuildRunEngineTests(unittest.TestCase):
                 self.assertIn('export PATH="/clang64/bin:/usr/bin:', payload["invocation"][2])
                 self.assertIn("/clang64/bin/openapp './Gorm.app'", payload["invocation"][2])
             else:
-                self.assertEqual(payload["invocation"], ["openapp", "Gorm.app"])
+                self.assertEqual(payload["invocation"], ["openapp", "./Gorm.app"])
             self.assertEqual(payload["run_project"]["project_dir"], str(app_dir.resolve()))
 
     def test_plan_run_reports_multiple_runnable_targets(self):
@@ -213,7 +213,7 @@ class BuildRunEngineTests(unittest.TestCase):
                 self.assertIn('export PATH="/clang64/bin:/usr/bin:', payload["invocation"][2])
                 self.assertIn("/clang64/bin/openapp './HelloApp.app'", payload["invocation"][2])
             else:
-                self.assertEqual(payload["invocation"], ["openapp", "HelloApp.app"])
+                self.assertEqual(payload["invocation"], ["openapp", "./HelloApp.app"])
 
     def test_plan_run_uses_windows_tool_executable_when_present(self):
         with tempfile.TemporaryDirectory() as tempdir:
