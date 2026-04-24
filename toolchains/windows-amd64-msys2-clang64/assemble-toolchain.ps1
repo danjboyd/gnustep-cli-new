@@ -67,21 +67,25 @@ if (-not (Test-Path $clangRoot)) {
 }
 
 $toolDirs = @('bin','etc','include','lib','libexec','share')
-if (-not $installingIntoManagedRoot) {
-  $clangPrefix = Join-Path $Prefix 'clang64'
-  New-Item -ItemType Directory -Force -Path $clangPrefix | Out-Null
-  foreach ($entry in $toolDirs) {
-    $source = Join-Path $clangRoot $entry
-    if (Test-Path $source) {
-      Copy-Item -Recurse -Force $source (Join-Path $clangPrefix $entry)
+$clangPrefix = Join-Path $Prefix 'clang64'
+New-Item -ItemType Directory -Force -Path $clangPrefix | Out-Null
+foreach ($entry in $toolDirs) {
+  $source = Join-Path $clangRoot $entry
+  if (Test-Path $source) {
+    $destination = Join-Path $clangPrefix $entry
+    if (-not [string]::Equals([System.IO.Path]::GetFullPath($source).TrimEnd('\'), [System.IO.Path]::GetFullPath($destination).TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+      Copy-Item -Recurse -Force $source $destination
     }
   }
+}
 
-  $msysRootDirs = @('usr','etc','var')
-  foreach ($entry in $msysRootDirs) {
-    $source = Join-Path $MsysRoot $entry
-    if (Test-Path $source) {
-      Copy-Item -Recurse -Force $source (Join-Path $Prefix $entry)
+$msysRootDirs = @('usr','etc','var')
+foreach ($entry in $msysRootDirs) {
+  $source = Join-Path $MsysRoot $entry
+  if (Test-Path $source) {
+    $destination = Join-Path $Prefix $entry
+    if (-not [string]::Equals([System.IO.Path]::GetFullPath($source).TrimEnd('\'), [System.IO.Path]::GetFullPath($destination).TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+      Copy-Item -Recurse -Force $source $destination
     }
   }
 }

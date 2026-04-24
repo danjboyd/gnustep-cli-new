@@ -47,6 +47,11 @@
 - (void)appendInstallTrace:(NSString *)message;
 - (BOOL)writeString:(NSString *)content toPath:(NSString *)path;
 - (NSData *)dataFromFileAtPath:(NSString *)path offset:(unsigned long long *)offset;
+- (BOOL)copyTreeContentsFrom:(NSString *)source to:(NSString *)destination error:(NSString **)errorMessage;
+- (BOOL)copyTreeContentsFrom:(NSString *)source
+                          to:(NSString *)destination
+        skippingRelativePaths:(NSArray *)skipRelativePaths
+                        error:(NSString **)errorMessage;
 - (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory;
 - (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory timeout:(NSTimeInterval)timeout;
 - (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory timeout:(NSTimeInterval)timeout additionalPathEntries:(NSArray *)additionalPathEntries;
@@ -113,6 +118,7 @@
                                      success:(BOOL)success
                               preserveBackup:(BOOL)preserveBackup;
 - (NSDictionary *)installedLifecycleStateForInstallRoot:(NSString *)installRoot;
+- (NSString *)normalizedManagedInstallRootPath:(NSString *)installRoot;
 - (NSDate *)dateFromManifestTimestamp:(NSString *)timestamp;
 - (BOOL)manifestMetadataPolicyAllowsManifest:(NSDictionary *)manifest error:(NSString **)errorMessage;
 - (BOOL)manifest:(NSDictionary *)manifest revokesArtifacts:(NSArray *)artifacts error:(NSString **)errorMessage;
@@ -131,9 +137,12 @@
                                 exitCode:(int *)exitCode;
 - (BOOL)installManagedLauncherForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
 - (BOOL)relocateManagedToolchainForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
-- (BOOL)smokeVersionedReleaseAtPath:(NSString *)releaseRoot error:(NSString **)errorMessage;
+- (BOOL)smokeVersionedReleaseAtPath:(NSString *)releaseRoot
+                        managedRoot:(NSString *)managedRoot
+                              error:(NSString **)errorMessage;
 - (BOOL)installCurrentPointerLauncherForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
 - (BOOL)activateCurrentPointerForInstallRoot:(NSString *)installRoot releaseVersion:(NSString *)version releaseRoot:(NSString *)releaseRoot error:(NSString **)errorMessage;
+- (BOOL)ensureVersionedReleaseLayoutForInstallRoot:(NSString *)installRoot installedState:(NSDictionary *)installedState error:(NSString **)errorMessage;
 - (BOOL)scheduleWindowsRootExecutableRefreshForInstallRoot:(NSString *)installRoot releaseRoot:(NSString *)releaseRoot error:(NSString **)errorMessage;
 - (NSString *)materializeVersionedReleaseForInstallRoot:(NSString *)installRoot version:(NSString *)version error:(NSString **)errorMessage;
 - (NSDictionary *)rollbackManagedInstallRoot:(NSString *)installRoot exitCode:(int *)exitCode;
@@ -2100,6 +2109,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
 - (BOOL)copyTreeContentsFrom:(NSString *)source to:(NSString *)destination error:(NSString **)errorMessage
 {
+  return [self copyTreeContentsFrom: source
+                                 to: destination
+               skippingRelativePaths: nil
+                               error: errorMessage];
+}
+
+- (BOOL)copyTreeContentsFrom:(NSString *)source
+                          to:(NSString *)destination
+        skippingRelativePaths:(NSArray *)skipRelativePaths
+                        error:(NSString **)errorMessage
+{
   NSFileManager *manager = [NSFileManager defaultManager];
   NSDirectoryEnumerator *enumerator = nil;
   NSString *relative = nil;
@@ -2119,6 +2139,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         }
       else
         {
+          if ([skipRelativePaths containsObject: relative])
+            {
+              continue;
+            }
           [manager createDirectoryAtPath: [targetPath stringByDeletingLastPathComponent]
              withIntermediateDirectories: YES
                               attributes: nil
@@ -3816,7 +3840,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                        error:(NSString **)errorMessage
 {
   NSFileManager *manager = [NSFileManager defaultManager];
-  NSString *expandedInstallRoot = [installRoot stringByExpandingTildeInPath];
+  NSString *expandedInstallRoot = [self normalizedManagedInstallRootPath: installRoot];
   NSString *statePath = [self setupTransactionStatePathForInstallRoot: expandedInstallRoot];
   NSString *transactionDir = [statePath stringByDeletingLastPathComponent];
   NSString *createdBackup = nil;
@@ -3879,7 +3903,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                               preserveBackup:(BOOL)preserveBackup
 {
   NSFileManager *manager = [NSFileManager defaultManager];
-  NSString *expandedInstallRoot = [installRoot stringByExpandingTildeInPath];
+  NSString *expandedInstallRoot = [self normalizedManagedInstallRootPath: installRoot];
   NSString *statePath = [self setupTransactionStatePathForInstallRoot: expandedInstallRoot];
   NSString *transactionRoot = [[statePath stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
 
@@ -3898,7 +3922,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
 - (NSDictionary *)installedLifecycleStateForInstallRoot:(NSString *)installRoot
 {
-  NSString *root = [installRoot stringByExpandingTildeInPath];
+  NSString *root = [self normalizedManagedInstallRootPath: installRoot];
   NSString *statePath = [[root stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
   NSDictionary *state = [self readJSONFile: statePath error: NULL];
   if ([state isKindOfClass: [NSDictionary class]])
@@ -3906,6 +3930,15 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       return state;
     }
   return [NSDictionary dictionary];
+}
+
+- (NSString *)normalizedManagedInstallRootPath:(NSString *)installRoot
+{
+  NSString *root = [installRoot stringByExpandingTildeInPath];
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  root = [root stringByReplacingOccurrencesOfString: @"\\" withString: @"/"];
+#endif
+  return root;
 }
 
 - (BOOL)dictionaryArray:(NSArray *)values containsString:(NSString *)candidate
@@ -4290,7 +4323,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   {
     NSFileManager *fileManager = [NSFileManager defaultManager];
-    NSString *expandedRoot = [selectedRoot stringByExpandingTildeInPath];
+    NSString *expandedRoot = [self normalizedManagedInstallRootPath: selectedRoot];
     NSString *writableProbe = expandedRoot;
     BOOL isDirectory = NO;
 
@@ -4578,7 +4611,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
 
 
-- (BOOL)smokeVersionedReleaseAtPath:(NSString *)releaseRoot error:(NSString **)errorMessage
+- (BOOL)smokeVersionedReleaseAtPath:(NSString *)releaseRoot
+                        managedRoot:(NSString *)managedRoot
+                              error:(NSString **)errorMessage
 {
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
   NSString *launcherName = @"gnustep.exe";
@@ -4598,7 +4633,32 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
 
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
-  result = [self runCommand: [NSArray arrayWithObjects: launcher, @"--version", nil] currentDirectory: nil];
+  {
+    NSString *effectiveManagedRoot = [managedRoot length] > 0 ? managedRoot : [releaseRoot stringByDeletingLastPathComponent];
+    NSString *escapedManagedRoot = [effectiveManagedRoot stringByReplacingOccurrencesOfString: @"'" withString: @"''"];
+    NSString *escapedLauncher = [launcher stringByReplacingOccurrencesOfString: @"'" withString: @"''"];
+    NSString *script = [NSString stringWithFormat:
+      @"$env:GNUSTEP_CLI_MANAGED_ROOT='%@'; "
+       "$env:GNUSTEP_CLI_NO_DELEGATE='1'; "
+       "$env:PATH='%@;%@;%@;' + $env:PATH; "
+       "& '%@' --version",
+      escapedManagedRoot,
+      [[effectiveManagedRoot stringByAppendingPathComponent: @"clang64/bin"] stringByReplacingOccurrencesOfString: @"'" withString: @"''"],
+      [[effectiveManagedRoot stringByAppendingPathComponent: @"bin"] stringByReplacingOccurrencesOfString: @"'" withString: @"''"],
+      [[effectiveManagedRoot stringByAppendingPathComponent: @"usr/bin"] stringByReplacingOccurrencesOfString: @"'" withString: @"''"],
+      escapedLauncher];
+    result = [self runCommand: [NSArray arrayWithObjects:
+                                      @"powershell.exe",
+                                      @"-NoProfile",
+                                      @"-ExecutionPolicy",
+                                      @"Bypass",
+                                      @"-Command",
+                                      script,
+                                      nil]
+             currentDirectory: nil
+                      timeout: 15.0
+        additionalPathEntries: nil];
+  }
 #else
   result = [self runCommand: [NSArray arrayWithObjects: launcher, @"--version", nil] currentDirectory: nil];
 #endif
@@ -4607,7 +4667,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       if (errorMessage != NULL)
         {
           *errorMessage = [NSString stringWithFormat:
-            @"Candidate release failed post-upgrade smoke validation. stdout=%@ stderr=%@",
+            @"Candidate release failed post-upgrade smoke validation. exit=%@ launched=%@ timed_out=%@ stdout=%@ stderr=%@",
+            [result objectForKey: @"exit_status"] ? [result objectForKey: @"exit_status"] : @"unknown",
+            [result objectForKey: @"launched"] ? [result objectForKey: @"launched"] : @"unknown",
+            [result objectForKey: @"timed_out"] ? [result objectForKey: @"timed_out"] : @"unknown",
             [result objectForKey: @"stdout"] ? [result objectForKey: @"stdout"] : @"",
             [result objectForKey: @"stderr"] ? [result objectForKey: @"stderr"] : @""];
         }
@@ -4711,6 +4774,121 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return [self installCurrentPointerLauncherForInstallRoot: installRoot error: errorMessage];
 }
 
+- (BOOL)ensureVersionedReleaseLayoutForInstallRoot:(NSString *)installRoot installedState:(NSDictionary *)installedState error:(NSString **)errorMessage
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *root = [self normalizedManagedInstallRootPath: installRoot];
+  NSString *currentPath = [root stringByAppendingPathComponent: @"current"];
+  NSString *releasesRoot = [root stringByAppendingPathComponent: @"releases"];
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  NSString *releasePointer = [currentPath stringByAppendingPathComponent: @"release.txt"];
+  NSString *launcherPath = [[root stringByAppendingPathComponent: @"bin"] stringByAppendingPathComponent: @"gnustep.exe"];
+#else
+  NSString *releasePointer = currentPath;
+  NSString *launcherPath = [[root stringByAppendingPathComponent: @"bin"] stringByAppendingPathComponent: @"gnustep"];
+#endif
+  NSString *activeReleasePath = [installedState objectForKey: @"active_release_path"];
+  NSString *activeRelease = [installedState objectForKey: @"active_release"];
+  NSString *installedVersion = [installedState objectForKey: @"cli_version"];
+  NSString *releaseVersion = nil;
+  NSString *releaseRoot = nil;
+  NSString *existingReleaseRoot = nil;
+  NSString *existingReleaseLauncher = nil;
+  NSString *stateDir = nil;
+  NSString *statePath = nil;
+  NSMutableDictionary *updatedState = nil;
+  NSString *writeError = nil;
+
+  if ([manager fileExistsAtPath: releasePointer] && [manager fileExistsAtPath: releasesRoot])
+    {
+      [self appendInstallTrace: [NSString stringWithFormat: @"lifecycle.layout.already-versioned root=%@", root]];
+      return YES;
+    }
+  if ([manager fileExistsAtPath: launcherPath] == NO)
+    {
+      [self appendInstallTrace: [NSString stringWithFormat: @"lifecycle.layout.no-legacy-launcher root=%@ launcher=%@", root, launcherPath]];
+      return YES;
+    }
+
+  if ([activeReleasePath isKindOfClass: [NSString class]] &&
+      [activeReleasePath length] > 0 &&
+      [manager fileExistsAtPath: activeReleasePath])
+    {
+      [self appendInstallTrace: [NSString stringWithFormat: @"lifecycle.layout.restore-pointer root=%@ active=%@", root, activeReleasePath]];
+      releaseVersion = ([activeRelease isKindOfClass: [NSString class]] && [activeRelease length] > 0)
+        ? activeRelease
+        : [activeReleasePath lastPathComponent];
+      if ([self activateCurrentPointerForInstallRoot: root
+                                      releaseVersion: releaseVersion
+                                         releaseRoot: activeReleasePath
+                                              error: errorMessage] == NO)
+        {
+          return NO;
+        }
+      return YES;
+    }
+
+  releaseVersion = ([installedVersion isKindOfClass: [NSString class]] && [installedVersion length] > 0)
+    ? installedVersion
+    : (([activeRelease isKindOfClass: [NSString class]] && [activeRelease length] > 0) ? activeRelease : @"legacy");
+  existingReleaseRoot = [releasesRoot stringByAppendingPathComponent: releaseVersion];
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  existingReleaseLauncher = [[existingReleaseRoot stringByAppendingPathComponent: @"bin"] stringByAppendingPathComponent: @"gnustep.exe"];
+#else
+  existingReleaseLauncher = [[existingReleaseRoot stringByAppendingPathComponent: @"bin"] stringByAppendingPathComponent: @"gnustep"];
+#endif
+  if ([manager fileExistsAtPath: existingReleaseLauncher])
+    {
+      [self appendInstallTrace: [NSString stringWithFormat: @"lifecycle.layout.reuse-existing-release root=%@ release=%@", root, existingReleaseRoot]];
+      if ([self activateCurrentPointerForInstallRoot: root
+                                      releaseVersion: releaseVersion
+                                         releaseRoot: existingReleaseRoot
+                                              error: errorMessage] == NO)
+        {
+          [self appendInstallTrace: [NSString stringWithFormat: @"lifecycle.layout.reuse-existing-release.failed root=%@ release=%@", root, existingReleaseRoot]];
+          return NO;
+        }
+      releaseRoot = existingReleaseRoot;
+    }
+  else
+    {
+  [self appendInstallTrace: [NSString stringWithFormat: @"lifecycle.layout.materialize root=%@ version=%@", root, releaseVersion]];
+  releaseRoot = [self materializeVersionedReleaseForInstallRoot: root version: releaseVersion error: errorMessage];
+  if (releaseRoot == nil)
+    {
+      [self appendInstallTrace: [NSString stringWithFormat: @"lifecycle.layout.materialize.failed root=%@ version=%@", root, releaseVersion]];
+      return NO;
+    }
+    }
+
+  if ([installedState isKindOfClass: [NSDictionary class]] == NO || [installedState count] == 0)
+    {
+      return YES;
+    }
+
+  updatedState = [[installedState mutableCopy] autorelease];
+  [updatedState setObject: releaseVersion forKey: @"active_release"];
+  [updatedState setObject: releaseRoot forKey: @"active_release_path"];
+  if ([updatedState objectForKey: @"last_action"] == nil)
+    {
+      [updatedState setObject: @"migrate_release_layout" forKey: @"last_action"];
+    }
+  stateDir = [root stringByAppendingPathComponent: @"state"];
+  statePath = [stateDir stringByAppendingPathComponent: @"cli-state.json"];
+  [manager createDirectoryAtPath: stateDir withIntermediateDirectories: YES attributes: nil error: NULL];
+  if ([self writeJSONStringObject: updatedState toPath: statePath error: &writeError] == NO)
+    {
+      [self appendInstallTrace: [NSString stringWithFormat: @"lifecycle.layout.state-write.failed path=%@", statePath]];
+      if (errorMessage != NULL)
+        {
+          *errorMessage = (writeError != nil ? writeError : @"Failed to persist migrated managed install state.");
+        }
+      return NO;
+    }
+  [self appendInstallTrace: [NSString stringWithFormat: @"lifecycle.layout.complete root=%@ release=%@", root, releaseRoot]];
+  return YES;
+}
+
 - (BOOL)scheduleWindowsRootExecutableRefreshForInstallRoot:(NSString *)installRoot releaseRoot:(NSString *)releaseRoot error:(NSString **)errorMessage
 {
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
@@ -4738,6 +4916,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   if ([manager fileExistsAtPath: sourcePath] == NO)
     {
+      [self appendInstallTrace: [NSString stringWithFormat: @"windows.refresh.missing-source source=%@", sourcePath]];
       if (errorMessage != NULL)
         {
           *errorMessage = @"Updated release does not contain bin\\gnustep.exe for root launcher refresh.";
@@ -4746,6 +4925,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
   if (powershell == nil || cmd == nil)
     {
+      [self appendInstallTrace: @"windows.refresh.missing-shell"];
       if (errorMessage != NULL)
         {
           *errorMessage = @"PowerShell and cmd.exe are required to schedule Windows root launcher refresh.";
@@ -4755,12 +4935,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   [manager createDirectoryAtPath: currentPath withIntermediateDirectories: YES attributes: nil error: NULL];
   if ([self writeString: script toPath: scriptPath] == NO)
     {
+      [self appendInstallTrace: [NSString stringWithFormat: @"windows.refresh.script-write.failed path=%@", scriptPath]];
       if (errorMessage != NULL)
         {
           *errorMessage = @"Failed to write Windows root launcher refresh helper.";
         }
       return NO;
     }
+  [self appendInstallTrace: [NSString stringWithFormat: @"windows.refresh.launch source=%@ destination=%@ parent=%@", sourcePath, destinationPath, parentPid]];
 
   result = [self runCommand: [NSArray arrayWithObjects:
                                       cmd,
@@ -4785,6 +4967,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                            timeout: 5.0];
   if ([[result objectForKey: @"exit_status"] intValue] != 0)
     {
+      [self appendInstallTrace: [NSString stringWithFormat: @"windows.refresh.launch.failed stdout=%@ stderr=%@",
+                                 [result objectForKey: @"stdout"] ? [result objectForKey: @"stdout"] : @"",
+                                 [result objectForKey: @"stderr"] ? [result objectForKey: @"stderr"] : @""]];
       if (errorMessage != NULL)
         {
           *errorMessage = [NSString stringWithFormat: @"Failed to launch Windows root launcher refresh helper. stdout=%@ stderr=%@",
@@ -4793,6 +4978,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         }
       return NO;
     }
+  [self appendInstallTrace: @"windows.refresh.launch.ok"];
   return YES;
 #else
   return YES;
@@ -4841,7 +5027,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         }
     }
 
-  if ([self smokeVersionedReleaseAtPath: releaseRoot error: errorMessage] == NO)
+  if ([self smokeVersionedReleaseAtPath: releaseRoot managedRoot: installRoot error: errorMessage] == NO)
     {
       return nil;
     }
@@ -4859,7 +5045,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 - (NSDictionary *)rollbackManagedInstallRoot:(NSString *)installRoot exitCode:(int *)exitCode
 {
   NSFileManager *manager = [NSFileManager defaultManager];
-  NSString *root = [installRoot stringByExpandingTildeInPath];
+  NSString *root = [self normalizedManagedInstallRootPath: installRoot];
   NSDictionary *state = [self installedLifecycleStateForInstallRoot: root];
   NSString *previous = [state objectForKey: @"previous_release_path"];
   NSString *statePath = [[root stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
@@ -4908,7 +5094,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 - (NSDictionary *)repairManagedInstallRoot:(NSString *)installRoot
 {
   NSFileManager *manager = [NSFileManager defaultManager];
-  NSString *root = [installRoot stringByExpandingTildeInPath];
+  NSString *root = [self normalizedManagedInstallRootPath: installRoot];
   NSString *stateDir = [root stringByAppendingPathComponent: @"state"];
   NSString *packagesDir = [root stringByAppendingPathComponent: @"packages"];
   NSString *staging = [root stringByAppendingPathComponent: @".staging"];
@@ -4996,7 +5182,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                   exitCode:(int *)exitCode
 {
   NSString *root = (installRoot != nil ? installRoot : ([scope isEqualToString: @"system"] ? @"/opt/gnustep-cli" : [self defaultManagedRoot]));
-  NSString *expandedRoot = [root stringByExpandingTildeInPath];
+  NSString *expandedRoot = [self normalizedManagedInstallRootPath: root];
   NSDictionary *installedState = [self installedLifecycleStateForInstallRoot: expandedRoot];
   NSString *resolvedManifest = [self resolvedManifestPathForInstallRoot: expandedRoot preferredManifest: manifestPath];
   NSDictionary *manifest = nil;
@@ -5307,7 +5493,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     NSArray *artifacts = [self selectedArtifactsForRelease: release
                                                environment: [doctorPayload objectForKey: @"environment"]
                                            selectionErrors: NULL];
-    NSString *installPath = [[[payload objectForKey: @"plan"] objectForKey: @"install_root"] stringByExpandingTildeInPath];
+    NSString *installPath = [self normalizedManagedInstallRootPath: [[payload objectForKey: @"plan"] objectForKey: @"install_root"]];
     NSString *staging = [installPath stringByAppendingPathComponent: @".staging/setup"];
     NSString *downloads = [staging stringByAppendingPathComponent: @"downloads"];
     NSString *extracts = [staging stringByAppendingPathComponent: @"extracts"];
@@ -5336,6 +5522,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       {
         NSString *installedVersion = [installedState objectForKey: @"cli_version"];
         NSString *targetVersion = [release objectForKey: @"version"];
+        installedState = [self installedLifecycleStateForInstallRoot: installPath];
+        if ([self ensureVersionedReleaseLayoutForInstallRoot: installPath
+                                              installedState: installedState
+                                                       error: &errorMessage] == NO)
+          {
+            *exitCode = 1;
+            return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: errorMessage data: [NSDictionary dictionaryWithObjectsAndKeys: installedState ? installedState : [NSDictionary dictionary], @"installed_state", nil]];
+          }
         installedState = [self installedLifecycleStateForInstallRoot: installPath];
         installedVersion = [installedState objectForKey: @"cli_version"];
         if ([self manifest: manifest isOlderThanInstalledState: installedState error: &policyError])
@@ -5397,16 +5591,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     [manager createDirectoryAtPath: extracts withIntermediateDirectories: YES attributes: nil error: NULL];
     [manager createDirectoryAtPath: installPath withIntermediateDirectories: YES attributes: nil error: NULL];
 
-    for (j = 0; j < [artifacts count]; j++)
-      {
-        NSDictionary *artifact = [artifacts objectAtIndex: j];
-        NSString *sourcePath = nil;
-        NSString *localCandidate = [[[payload objectForKey: @"plan"] objectForKey: @"manifest_path"] stringByDeletingLastPathComponent];
-        NSString *downloadPath = [downloads stringByAppendingPathComponent: [[artifact objectForKey: @"url"] lastPathComponent]];
-        NSString *extractPath = [extracts stringByAppendingPathComponent: [artifact objectForKey: @"id"]];
-        NSString *copyError = nil;
-        NSString *checksum = nil;
-        NSString *sourceRoot = nil;
+	    for (j = 0; j < [artifacts count]; j++)
+	      {
+	        NSDictionary *artifact = [artifacts objectAtIndex: j];
+	        NSString *sourcePath = nil;
+	        NSString *localCandidate = [[[payload objectForKey: @"plan"] objectForKey: @"manifest_path"] stringByDeletingLastPathComponent];
+	        NSString *downloadPath = [downloads stringByAppendingPathComponent: [[artifact objectForKey: @"url"] lastPathComponent]];
+	        NSString *extractPath = [extracts stringByAppendingPathComponent: [artifact objectForKey: @"id"]];
+	        NSString *copyError = nil;
+	        NSString *checksum = nil;
+	        NSString *sourceRoot = nil;
+	        NSArray *skipRelativePaths = nil;
 
         if ([[artifact objectForKey: @"kind"] isEqualToString: @"cli"])
           {
@@ -5468,6 +5663,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
             return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: [NSString stringWithFormat: @"checksum mismatch for %@", [artifact objectForKey: @"id"]] data: nil];
           }
 
+        [manager removeItemAtPath: extractPath error: NULL];
         if ([self extractArchive: sourcePath toDirectory: extractPath error: &errorMessage] == NO)
           {
             [manager removeItemAtPath: staging error: NULL];
@@ -5486,12 +5682,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
             NSString *releaseVersion = [release objectForKey: @"version"] ? [release objectForKey: @"version"] : @"unknown";
             NSString *releasesRoot = [installPath stringByAppendingPathComponent: @"releases"];
             NSString *releaseRoot = [releasesRoot stringByAppendingPathComponent: releaseVersion];
+            NSString *smokeReleaseRoot = nil;
+            NSString *nestedReleaseRoot = nil;
+            NSString *nestedLauncher = nil;
 
+            [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.cli.stage.start release=%@ root=%@", releaseVersion, releaseRoot]];
             [manager createDirectoryAtPath: releasesRoot withIntermediateDirectories: YES attributes: nil error: NULL];
             [manager removeItemAtPath: releaseRoot error: NULL];
             [manager createDirectoryAtPath: releaseRoot withIntermediateDirectories: YES attributes: nil error: NULL];
             if ([self copyTreeContentsFrom: sourceRoot to: releaseRoot error: &copyError] == NO)
               {
+                [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.cli.stage.copy.failed release=%@ error=%@", releaseVersion, copyError]];
                 [manager removeItemAtPath: staging error: NULL];
                 if (transactionStarted)
                   {
@@ -5500,8 +5701,19 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                 *exitCode = 1;
                 return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: copyError data: nil];
               }
-            if ([self smokeVersionedReleaseAtPath: releaseRoot error: &errorMessage] == NO)
+            [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.cli.stage.copy.ok release=%@", releaseVersion]];
+            smokeReleaseRoot = releaseRoot;
+            nestedReleaseRoot = [self singleChildDirectoryOrSelf: releaseRoot];
+            nestedLauncher = [[nestedReleaseRoot stringByAppendingPathComponent: @"bin"] stringByAppendingPathComponent: @"gnustep.exe"];
+            if ([nestedReleaseRoot isEqualToString: releaseRoot] == NO
+                && [manager fileExistsAtPath: nestedLauncher])
               {
+                smokeReleaseRoot = nestedReleaseRoot;
+                [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.cli.stage.nested-root release=%@ root=%@", releaseVersion, smokeReleaseRoot]];
+              }
+            if ([self smokeVersionedReleaseAtPath: smokeReleaseRoot managedRoot: installPath error: &errorMessage] == NO)
+              {
+                [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.cli.stage.smoke.failed release=%@ error=%@", releaseVersion, errorMessage]];
                 [manager removeItemAtPath: staging error: NULL];
                 if (transactionStarted)
                   {
@@ -5510,18 +5722,29 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                 *exitCode = 1;
                 return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: errorMessage data: nil];
               }
-            windowsUpgradeReleasePath = releaseRoot;
+            [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.cli.stage.smoke.ok release=%@", releaseVersion]];
+            windowsUpgradeReleasePath = smokeReleaseRoot;
             [installedArtifacts addObject: [NSDictionary dictionaryWithObjectsAndKeys:
                                                             [artifact objectForKey: @"id"], @"artifact_id",
-                                                            [NSArray arrayWithObject: releaseRoot], @"paths",
+                                                            [NSArray arrayWithObject: smokeReleaseRoot], @"paths",
                                                             nil]];
             continue;
           }
-#endif
-        if ([self copyTreeContentsFrom: sourceRoot to: installPath error: &copyError] == NO)
-          {
-            [manager removeItemAtPath: staging error: NULL];
-            if (transactionStarted)
+	#endif
+	        if (!upgradeMode
+	            && [[artifact objectForKey: @"kind"] isEqualToString: @"toolchain"]
+	            && cliArtifact != nil)
+	          {
+	            skipRelativePaths = [NSArray arrayWithObject: @"bin/gnustep.exe"];
+	            [self appendInstallTrace: @"windows.install.toolchain.skip-cli-launcher"];
+	          }
+	        if ([self copyTreeContentsFrom: sourceRoot
+	                                   to: installPath
+	                 skippingRelativePaths: skipRelativePaths
+	                                 error: &copyError] == NO)
+	          {
+	            [manager removeItemAtPath: staging error: NULL];
+	            if (transactionStarted)
               {
                 [self finishSetupTransactionForInstallRoot: installPath backupPath: backupPath success: NO];
               }
@@ -5534,7 +5757,11 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                                         nil]];
       }
 
-    if ([self relocateManagedToolchainForInstallRoot: installPath error: &errorMessage] == NO)
+    if (windowsPointerOnlyUpgrade)
+      {
+        [self appendInstallTrace: @"windows.upgrade.skip-toolchain-relocate"];
+      }
+    else if ([self relocateManagedToolchainForInstallRoot: installPath error: &errorMessage] == NO)
       {
         [manager removeItemAtPath: staging error: NULL];
         if (transactionStarted)
@@ -5559,18 +5786,25 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     if (windowsUpgradeReleasePath != nil)
       {
         activeReleasePath = windowsUpgradeReleasePath;
+        [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.activate.start release=%@", [release objectForKey: @"version"]]];
         if ([self activateCurrentPointerForInstallRoot: installPath
                                         releaseVersion: [release objectForKey: @"version"]
                                            releaseRoot: activeReleasePath
                                                 error: &errorMessage] == NO)
           {
+            [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.activate.pointer.failed error=%@", errorMessage]];
             activeReleasePath = nil;
           }
         else if ([self scheduleWindowsRootExecutableRefreshForInstallRoot: installPath
                                                                releaseRoot: activeReleasePath
                                                                     error: &errorMessage] == NO)
           {
+            [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.activate.refresh.failed error=%@", errorMessage]];
             activeReleasePath = nil;
+          }
+        else
+          {
+            [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.activate.complete release=%@", [release objectForKey: @"version"]]];
           }
       }
     else

@@ -259,7 +259,7 @@
         encoding: NSUTF8StringEncoding
            error: NULL]);
 
-  context = [GSCommandContext contextWithArguments: [NSArray arrayWithObjects: @"run", root, nil]];
+  context = [GSCommandContext contextWithArguments: [NSArray arrayWithObjects: @"run", @"--no-build", root, nil]];
   payload = [runner executeRunForContext: context exitCode: &exitCode];
 
   XCTAssertEqual(exitCode, 1);

@@ -213,15 +213,70 @@ function Get-SingleChildDirectory {
     return $Path
 }
 
+function New-ShortJunctionPath {
+    param([string]$TargetPath)
+    $junctionRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("gsj-" + [guid]::NewGuid().ToString("N"))
+    $junctionPath = Join-Path $junctionRoot "src"
+    New-Item -ItemType Directory -Force -Path $junctionRoot | Out-Null
+    cmd.exe /d /c "mklink /J `"$junctionPath`" `"$TargetPath`"" | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $junctionPath)) {
+        Remove-Item -Recurse -Force $junctionRoot -ErrorAction SilentlyContinue
+        throw "Failed to create temporary junction for $TargetPath."
+    }
+    Write-TraceEvent "copy.junction.created" "$junctionPath -> $TargetPath"
+    return @{
+        root = $junctionRoot
+        path = $junctionPath
+    }
+}
+
+function Remove-ShortJunctionPath {
+    param($JunctionRecord)
+    if (-not $JunctionRecord) {
+        return
+    }
+    if ($JunctionRecord.path -and (Test-Path $JunctionRecord.path)) {
+        cmd.exe /d /c "rmdir `"$($JunctionRecord.path)`"" | Out-Null
+    }
+    if ($JunctionRecord.root -and (Test-Path $JunctionRecord.root)) {
+        Remove-Item -Recurse -Force $JunctionRecord.root -ErrorAction SilentlyContinue
+    }
+    if ($JunctionRecord.path) {
+        Write-TraceEvent "copy.junction.removed" $JunctionRecord.path
+    }
+}
+
+function Copy-TreeContentsWindows {
+    param(
+        [string]$Source,
+        [string]$Destination
+    )
+    $copySource = $Source
+    $junction = $null
+    try {
+        if ($Source.Length -gt 80) {
+            $junction = New-ShortJunctionPath -TargetPath $Source
+            $copySource = $junction.path
+        }
+        $sourceFull = [System.IO.Path]::GetFullPath($copySource).TrimEnd('\')
+        $destinationFull = [System.IO.Path]::GetFullPath($Destination).TrimEnd('\')
+        $command = 'tar -cf - -C "' + $sourceFull + '" . | tar -xf - -C "' + $destinationFull + '"'
+        cmd.exe /d /c $command | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to copy $Source to $Destination with tar pipeline exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Remove-ShortJunctionPath -JunctionRecord $junction
+    }
+}
+
 function Copy-TreeContents {
     param([string]$Source, [string]$Destination)
     Write-TraceEvent "copy.start" "$Source -> $Destination"
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
     if ($Script:IsWindowsHost) {
-        robocopy $Source $Destination /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP | Out-Null
-        if ($LASTEXITCODE -gt 7) {
-            throw "Failed to copy $Source to $Destination with robocopy exit code $LASTEXITCODE."
-        }
+        Copy-TreeContentsWindows -Source $Source -Destination $Destination
     }
     else {
         Copy-Item -Recurse -Force -ErrorAction Stop (Join-Path $Source '*') $Destination
@@ -258,6 +313,30 @@ function Install-CliBundle {
     }
     if (-not (Test-Path $cli)) {
         throw "CLI bundle did not install a runnable gnustep binary."
+    }
+}
+
+function Install-ActiveCliLaunchers {
+    param(
+        [string]$InstallRoot,
+        [string]$ReleaseRoot
+    )
+
+    $releaseCli = Join-Path $ReleaseRoot "bin\gnustep.exe"
+    $releaseLibexecCli = Join-Path $ReleaseRoot "libexec\gnustep-cli\bin\gnustep.exe"
+    $rootCli = Join-Path $InstallRoot "bin\gnustep.exe"
+    $rootLibexecDir = Join-Path $InstallRoot "libexec\gnustep-cli\bin"
+
+    if (-not (Test-Path $releaseCli)) {
+        throw "Versioned CLI release did not contain bin\\gnustep.exe."
+    }
+
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $rootCli) | Out-Null
+    Copy-Item -Force $releaseCli $rootCli
+
+    if (Test-Path $releaseLibexecCli) {
+        New-Item -ItemType Directory -Force -Path $rootLibexecDir | Out-Null
+        Copy-Item -Force $releaseLibexecCli (Join-Path $rootLibexecDir "gnustep.exe")
     }
 }
 
@@ -681,22 +760,40 @@ switch ($command) {
                 Expand-Artifact -ArchivePath $toolchainFile -Destination $toolchainExtract
                 $cliRoot = Get-SingleChildDirectory -Path $cliExtract
                 $toolchainRoot = Get-SingleChildDirectory -Path $toolchainExtract
-                New-Item -ItemType Directory -Force -Path (Join-Path $selectedRoot "bin") | Out-Null
+                $releaseRoot = Join-Path (Join-Path $selectedRoot "releases") $release.version
+                New-Item -ItemType Directory -Force -Path $releaseRoot, (Join-Path $selectedRoot "bin"), (Join-Path $selectedRoot "current") | Out-Null
                 Write-SetupProgress "installing CLI files"
                 Write-TraceEvent "install.cli.start" $cliRoot
-                Install-CliBundle -Source $cliRoot -Destination $selectedRoot
-                Write-TraceEvent "install.cli.complete" $selectedRoot
+                Install-CliBundle -Source $cliRoot -Destination $releaseRoot
+                Write-TraceEvent "install.cli.complete" $releaseRoot
                 Write-SetupProgress "installing GNUstep toolchain files"
                 Write-TraceEvent "install.toolchain.start" $toolchainRoot
                 Copy-TreeContents -Source $toolchainRoot -Destination $selectedRoot
                 Write-TraceEvent "install.toolchain.complete" $selectedRoot
+                Write-TraceEvent "install.release.activate.start" $releaseRoot
+                Install-ActiveCliLaunchers -InstallRoot $selectedRoot -ReleaseRoot $releaseRoot
+                Set-Content -Encoding ASCII -Path (Join-Path $selectedRoot "current\\release.txt") -Value $release.version
+                Write-TraceEvent "install.release.activate.complete" $releaseRoot
                 New-Item -ItemType Directory -Force -Path (Join-Path $selectedRoot "state") | Out-Null
                 Write-SetupProgress "recording managed install state"
                 @{
                     schema_version = 1
                     cli_version = $release.version
-                    toolchain_version = $release.version
+                    toolchain_version = if ($toolchainArtifact.version) { $toolchainArtifact.version } else { $release.version }
+                    cli_artifact_id = $cliArtifact.id
+                    cli_artifact_sha256 = $cliArtifact.sha256
+                    toolchain_artifact_id = $toolchainArtifact.id
+                    toolchain_artifact_sha256 = $toolchainArtifact.sha256
                     packages_version = 1
+                    active_release = $release.version
+                    active_release_path = $releaseRoot
+                    previous_release_path = $null
+                    channel = if ($Script:DogfoodMode) { "dogfood" } else { "stable" }
+                    manifest_path = $Script:SetupManifest
+                    last_manifest_metadata_version = $manifest.json.metadata_version
+                    last_manifest_generated_at = $manifest.json.generated_at
+                    last_manifest_expires_at = $manifest.json.expires_at
+                    selected_artifacts = @($cliArtifact.id, $toolchainArtifact.id)
                     last_action = "setup"
                     status = "healthy"
                 } | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $selectedRoot "state\\cli-state.json")

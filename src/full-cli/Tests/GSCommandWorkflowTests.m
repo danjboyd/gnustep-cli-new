@@ -1054,7 +1054,7 @@
   releaseRoot = [runner materializeVersionedReleaseForInstallRoot: root version: @"0.1.2" error: &error];
 
   XCTAssertNil(releaseRoot);
-  XCTAssertEqualObjects(error, @"Candidate release failed post-upgrade smoke validation.");
+  XCTAssertTrue([error rangeOfString: @"Candidate release failed post-upgrade smoke validation."].location != NSNotFound);
   XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: [root stringByAppendingPathComponent: @"current"]]);
 }
 

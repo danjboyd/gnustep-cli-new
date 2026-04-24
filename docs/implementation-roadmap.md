@@ -1417,7 +1417,128 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Phase 25.I now has a project-owned `gnustep-delta-v1` metadata envelope and helper for generating delta artifact records. Lifecycle planning can select a matching delta when the installed base digest and target digest match, or fall back to the full artifact when the delta is unavailable or not applicable. Concrete byte-patch application remains behind this metadata contract and is intentionally not exposed as policy.
 - Phase 25.J now has structured layered-update preflight checks for revoked artifacts, invalid base artifacts, corrupt or unsupported deltas, target digest mismatches, and missing full-artifact fallback. These checks fail before mutable filesystem work and return machine-readable failure reasons.
 - Phase 25.K has focused regression coverage for layered manifest reuse, dogfood snapshot ordering, content-addressed storage, active artifact state recording, layered update planning, delta selection, full-artifact fallback, revoked-artifact preflight, Windows MSYS2 inventory comparison, and warm-builder planning.
-- Phase 25.L is complete at the repository-tooling contract level: the project can model small CLI-only releases, dogfood snapshots, reused toolchain layers, content-addressed state, delta/fallback update strategy, and Windows toolchain component comparison. Remaining implementation depth is live warm-builder orchestration, native byte-delta application, and host-backed Windows dogfood proving only the CLI artifact downloads for a CLI-only update.
+- Phase 25.L is complete at the repository-tooling contract level: the project can model small CLI-only releases, dogfood snapshots, reused toolchain layers, content-addressed state, delta/fallback update strategy, and Windows toolchain component comparison. April 24, 2026 host-backed Windows dogfood evidence on a fresh `windows-2022` `otvm` lease proved a local-assets-only `.63` bootstrap install and `.63 -> .64` CLI update using a reused unchanged MSYS2 toolchain layer; the update trace reached `windows.upgrade.cli.stage.smoke.ok`, skipped toolchain relocation, and activated the new release. Remaining implementation depth is live warm-builder orchestration and native byte-delta application.
+
+## Phase 26. Cross-Platform Smoke Harness And Release-Proving Scenarios
+
+### A. Smoke Harness Architecture
+- Introduce a first-class smoke-test harness distinct from unit tests, contract tests, and narrow integration tests.
+- Build the harness around three explicit records:
+  - `scenario`: the workflow being proven
+  - `target`: the platform/architecture/toolchain combination under test
+  - `runner`: the execution transport, such as local process, SSH host, or `otvm` lease
+- Prefer a Python-based harness so the project can reuse existing Python build/test infrastructure, structured JSON assertions, and remote execution helpers without scattering more shell-only test logic.
+- Treat smoke tests as extensible infrastructure rather than a one-off set of scripts; adding a new smoke scenario later should require declaring target applicability, fixture inputs, steps, and assertions rather than cloning a whole validation script.
+- Keep smoke orchestration logic separate from per-platform command fragments so one scenario definition can run across multiple targets with target-specific adapters only where necessary.
+
+### B. Scenario Model And Extensibility
+- Define every smoke scenario with stable metadata including:
+  - scenario ID
+  - summary
+  - supported targets
+  - estimated duration
+  - network requirement
+  - GUI requirement
+  - destructive or isolated-prefix requirement
+  - artifact/channel prerequisites
+- Make scenarios composable so target suites can select a subset such as `core`, `update`, `gui`, or `release`.
+- Require scenario steps to emit structured results and named assertions rather than only shell exit codes or free-form log text.
+- Preserve a low-friction path for future scenarios such as package install/remove smoke, GUI app qualification, GCC interoperability smoke, upgrade-from-two-versions-back, or damaged-state repair smoke.
+- Ensure scenarios can consume pinned fixtures from the repository or pinned upstream revisions rather than drifting against moving external `HEAD` state.
+
+### C. Core Tier 1 Smoke Scenarios
+- Formalize the current manual validation set as canonical smoke scenarios for Tier 1 managed targets:
+  - `bootstrap-install-usable-cli`
+  - `new-cli-project-build-run`
+  - `gorm-build-run`
+  - `self-update-cli-only`
+- `bootstrap-install-usable-cli` should prove that the bootstrap script installs into a user-scoped root, produces a usable `gnustep` entry point, and can execute `--help`, `--version`, and `doctor --json`.
+- `new-cli-project-build-run` should prove that `gnustep new` creates a usable fresh project, `gnustep build` completes successfully, and `gnustep run` executes the expected sample output.
+- `gorm-build-run` should use a pinned Gorm revision or tag and prove that the installed CLI can build and launch a known real GNUstep GUI application on supported GUI targets.
+- `self-update-cli-only` should install an older dogfood or staged release, verify `gnustep update --check`, apply a CLI-only update, verify the selected layer plan, and rerun at least one post-update build/run workflow.
+- Treat these four scenarios as the minimum release-proving smoke bar for the currently active managed targets unless a roadmap revision explicitly changes that bar.
+
+### D. Target Matrix And Target Profiles
+- Define target profiles for at least:
+  - `windows-amd64-msys2-clang64`
+  - `openbsd-amd64-clang`
+- Target profiles should record remote OS family, shell or PowerShell invocation mode, path conventions, bootstrap entry point, expected managed layout, GUI capability, and required host provisioning method.
+- Support a future matrix expansion path for Linux amd64/clang, Windows amd64/MSVC, Linux arm64, and GCC/native-toolchain smoke without redesigning the harness.
+- Allow each target profile to opt scenarios in or out explicitly; for example, GUI scenarios may be unavailable on a headless lease while still allowing bootstrap/new/update smoke to run.
+- Record target-specific expected assertions such as toolchain flavor, Objective-C runtime, bootstrap script variant, and managed install root style so smoke failures can distinguish harness mismatch from product regression.
+
+### E. Runner Layer And OTVM Integration
+- Add runner implementations for:
+  - local process execution
+  - generic SSH execution
+  - `otvm` lease-backed execution
+- Keep `otvm` lease lifecycle in the runner layer rather than embedding lease creation and teardown inside each scenario.
+- Require the `otvm` runner to support create/reuse, TTL selection, artifact staging, result retrieval, explicit cleanup, and failure-safe destroy behavior.
+- Prefer short-lived lease-backed smoke for Windows and OpenBSD when no equivalent local runner exists, while still allowing reuse of existing active leases during rapid debugging.
+- Preserve the existing ad hoc validation scripts as transitional evidence only until equivalent scenario coverage exists in the shared harness, then retire or reduce those scripts to thin wrappers around the harness.
+
+### F. Assertions, Logs, And Report Format
+- Emit one machine-readable smoke report per run with stable fields such as:
+  - schema version
+  - smoke suite ID
+  - target ID
+  - scenario results
+  - command transcript references
+  - manifest/release identity
+  - artifact IDs and digests under test
+  - overall status
+- Record stdout, stderr, exit code, timing, and structured assertion results for every step.
+- Preserve failure artifacts automatically, including remote command logs, staged manifests, installed state files, and any scenario-specific evidence such as Gorm launch logs or update-plan JSON.
+- Prefer assertions over English matching wherever a stable machine-readable surface exists, but keep a limited set of human-output smoke checks where output clarity is itself part of the product contract.
+- Make the report format suitable for both local debugging and release-gate consumption.
+
+### G. Fixture And Provenance Policy
+- Pin external smoke inputs explicitly, including Gorm source revision, demo project expectations, and any package smoke fixtures.
+- Keep repository-owned smoke fixtures small, reproducible, and human-reviewable.
+- Do not allow smoke scenarios to silently consume mutable upstream default branches or mutable package indexes unless the scenario is explicitly testing that live channel behavior.
+- Record the manifest URL/path, artifact digests, fixture revisions, and source revision of the CLI in every smoke report so a pass is reproducible and auditable later.
+- For update smoke, record both the installed base release identity and the target release identity so regressions in update planning and activation can be reasoned about after the fact.
+
+### H. Execution Modes And Developer Workflow
+- Add explicit smoke modes such as:
+  - `quick`: core scenarios on one target
+  - `tier1-core`: canonical scenarios on all active Tier 1 targets
+  - `release`: full release-proving smoke matrix
+- Provide one command that can run a selected smoke suite against one or more declared targets without forcing developers to remember the per-target shell/PowerShell details.
+- Allow smoke runs to consume either a local staged release directory, a published manifest URL, or a dogfood channel manifest.
+- Keep local unit tests fast and separate; smoke should be an intentional command with heavier prerequisites and clearer evidence output.
+- Add thin convenience wrappers under `scripts/dev/` as needed, but keep the authoritative execution model in the shared harness rather than duplicating target logic in multiple wrapper scripts.
+
+### I. Release Gates And Policy Integration
+- Make smoke suite results consumable by release qualification tooling so dogfood, release-candidate, and stable-publication gates can require the appropriate smoke suites by target.
+- Require Tier 1 managed targets to pass the canonical smoke scenarios before the project claims that a new release, dogfood snapshot, or reused layered artifact is validated for that target.
+- Integrate update smoke with the layered-artifact policy from Phase 25 so release gates can prove that CLI-only iterations do not unnecessarily rebuild or redownload unchanged toolchain layers.
+- Allow scoped dogfood sessions to run a reduced target set while still marking full release qualification as incomplete until the broader smoke matrix has passed.
+- Ensure release gates can distinguish:
+  - smoke not run
+  - smoke failed
+  - smoke passed with explicit documented non-release blockers for deferred targets
+
+### J. Exit Criteria
+- The repository contains a reusable smoke harness with explicit scenario, target, and runner models rather than only one-off validation scripts.
+- The four canonical smoke scenarios are implemented and executable through the harness for the current active Tier 1 targets.
+- Windows `amd64/msys2-clang64` and OpenBSD `amd64/clang` can each produce a machine-readable smoke report that proves bootstrap install, new project build/run, Gorm build/run where GUI support is available, and CLI self-update behavior.
+- Developers can add a new smoke scenario without redesigning the harness or copying whole platform-specific validation scripts.
+- Dogfood and release qualification flows can consume smoke results directly and use them as evidence for target readiness.
+- Existing ad hoc host-backed validation scripts are either reduced to wrappers around the smoke harness or explicitly marked as temporary until the equivalent shared smoke scenario exists.
+
+### Phase 26 Execution Status
+- Phase 26.A is implemented through `src/gnustep_cli_shared/smoke_harness.py`, which introduces explicit smoke runner, target, and scenario records plus catalog validation and suite planning primitives. This establishes a reusable Python-based harness layer distinct from the existing unit and narrow integration tests.
+- Phase 26.B is implemented at the catalog-definition level: smoke scenarios now carry stable metadata for supported targets, estimated duration, network/gui requirements, isolation/destructive behavior, fixture policy, artifact/channel prerequisites, tags, and named assertions so additional scenarios can be added without cloning full validation scripts.
+- Phase 26.C is implemented as the first canonical Tier 1 smoke catalog with four shared scenarios: `bootstrap-install-usable-cli`, `new-cli-project-build-run`, `gorm-build-run`, and `self-update-cli-only`.
+- Phase 26.D is implemented for the currently active Tier 1 managed targets `windows-amd64-msys2-clang64` and `openbsd-amd64-clang`, including explicit bootstrap style, shell/path conventions, GUI availability, managed-root style, expected Objective-C runtime, and default runner profile metadata.
+- Phase 26.E is implemented at the runner-contract level: the shared harness now models local-process, SSH-host, and `otvm` lease runners, and can emit structured execution plans covering transport requirements, lease profile selection, stage actions, TTL/reuse policy, result retrieval, and cleanup behavior.
+- Phase 26.F is implemented through structured smoke report records for command transcripts, assertion results, step results, scenario reports, and top-level run reports. `scripts/dev/run-smoke-tests.py --report-template ...` now emits a machine-readable report template that includes target metadata, runner plan, fixture references, and scenario placeholders before live execution exists.
+- Phase 26.G is implemented through a pinned fixture catalog with explicit provenance records. The harness now records immutable Gorm source identity (`gorm-1_5_0` / `a8cd1792e08a50dd9900474373e6ca8daad4a4a9`), repository-owned generated CLI output expectations, and update-channel policy fixtures for CLI-only dogfood update smoke.
+- Phase 26.H is implemented through explicit suite modes and developer workflow surfaces: the harness now defines `quick`, `tier1-core`, and `release` suites, and `scripts/dev/run-smoke-tests.py --workflow-plan ...` can emit the intended developer command sequence for catalog validation, runner planning, and report-template generation against selected targets and release sources.
+- Phase 26.I is implemented through report-based smoke release gates. The harness now models `dogfood`, `release-candidate`, and `stable` gate policies, can evaluate one or more smoke report JSON files against the required suite/target set, and exposes that policy through `scripts/dev/run-smoke-tests.py --release-gate ...`.
+- Phase 26.J is implemented at the tooling/status level rather than as a blanket claim of live completion: `scripts/dev/run-smoke-tests.py --phase26-exit-status [--report ...]` can now evaluate whether the framework is present and whether supplied Tier 1 smoke reports satisfy the release-candidate gate. At the moment the infrastructure passes, but live target evidence still needs to be collected before the phase can be considered fully proven in practice.
+- `scripts/dev/run-smoke-tests.py` now exposes the smoke catalog as a lightweight planning/listing/report/gating command, and `tests/test_smoke_harness.py` provides focused regression coverage for framework definitions, runner plans, report templates, fixture provenance, workflow modes, release gates, and Phase 26 exit-status evaluation.
 
 ## Testing Principles For All Phases
 
