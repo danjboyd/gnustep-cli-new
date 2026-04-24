@@ -69,9 +69,12 @@ from gnustep_cli_shared.build_infra import (
     write_windows_current_source_marker,
     write_release_evidence_bundle,
     release_key_rotation_drill,
+    phase12_production_hardening_status,
+    phase13_update_hardening_status,
     windows_extracted_toolchain_rebuild_plan,
     windows_msys2_component_inventory,
 )
+from gnustep_cli_shared.smoke_harness import evidence_smoke_report
 
 
 class BuildInfraTests(unittest.TestCase):
@@ -1077,6 +1080,69 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(drill["ok"])
             self.assertTrue(checks["new-root-rejects-old-signature"]["ok"])
             self.assertTrue(checks["old-root-rejects-new-signature"]["ok"])
+
+    def test_phase12_status_reports_missing_host_backed_smoke(self):
+        payload = phase12_production_hardening_status()
+        checks = {check["id"]: check for check in payload["checks"]}
+        self.assertFalse(payload["ok"])
+        self.assertFalse(checks["release-dir-supplied"]["ok"])
+        self.assertFalse(checks["host-backed-smoke-evidence"]["ok"])
+
+    def test_phase13_status_requires_update_all_and_metadata_drills(self):
+        payload = phase13_update_hardening_status()
+        checks = {check["id"]: check for check in payload["checks"]}
+        self.assertFalse(payload["ok"])
+        self.assertFalse(checks["old-to-new-update-smoke-gate"]["ok"])
+        self.assertFalse(checks["update-all-production-like-evidence"]["ok"])
+        self.assertFalse(checks["signed-metadata-key-mismatch-drill"]["ok"])
+
+    def test_phase12_and_phase13_status_can_pass_with_complete_evidence(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_binary = temp / "gnustep"
+            cli_binary.write_text("binary")
+            cli_bundle = temp / "cli-bundle"
+            bundle_full_cli(cli_binary, cli_bundle, repo_root=ROOT)
+            staged = stage_release_assets(
+                "0.1.0",
+                temp / "dist",
+                "https://example.invalid/releases",
+                cli_inputs={"linux-amd64-clang": cli_bundle},
+            )
+            release_dir = Path(staged["release_dir"])
+            release_key = temp / "release-key.pem"
+            subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(release_key)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            self.assertTrue(sign_release_metadata(release_dir, release_key)["ok"])
+            reports = []
+            for target_id in ["windows-amd64-msys2-clang64", "openbsd-amd64-clang"]:
+                report_path = temp / f"{target_id}.json"
+                report_path.write_text(json.dumps(evidence_smoke_report(
+                    suite_id="tier1-core",
+                    target_id=target_id,
+                    release_source="dogfood",
+                    passed_scenario_ids=[
+                        "bootstrap-install-usable-cli",
+                        "new-cli-project-build-run",
+                        "gorm-build-run",
+                        "self-update-cli-only",
+                    ],
+                )))
+                reports.append(report_path)
+            update_all = temp / "update-all.json"
+            update_all.write_text(json.dumps({"ok": True, "summary": "update all --yes passed."}))
+
+            phase12 = phase12_production_hardening_status(
+                release_dir=release_dir,
+                release_trust_root=release_dir / "release-signing-public.pem",
+                smoke_report_paths=reports,
+            )
+            phase13 = phase13_update_hardening_status(
+                smoke_report_paths=reports,
+                update_all_evidence_path=update_all,
+                release_dir=release_dir,
+            )
+            self.assertTrue(phase12["ok"])
+            self.assertTrue(phase13["ok"])
 
 
     def test_build_infra_cli_exits_nonzero_for_failed_gate(self):

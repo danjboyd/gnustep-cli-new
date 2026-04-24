@@ -61,6 +61,8 @@ from gnustep_cli_shared.build_infra import (
     write_windows_current_source_marker,
     write_release_evidence_bundle,
     release_key_rotation_drill,
+    phase12_production_hardening_status,
+    phase13_update_hardening_status,
     session_build_box_plan,
 )
 
@@ -221,6 +223,18 @@ def main() -> int:
     controlled_gate.add_argument("--allow-unsigned-package-index", action="store_true")
     controlled_gate.add_argument("--tools-xctest-packages-dir")
     controlled_gate.add_argument("--tools-xctest-evidence-dir")
+
+    phase12_status = subparsers.add_parser("phase12-production-hardening-status", add_help=False)
+    phase12_status.add_argument("--release-dir")
+    phase12_status.add_argument("--package-index")
+    phase12_status.add_argument("--release-trust-root")
+    phase12_status.add_argument("--package-index-trust-root")
+    phase12_status.add_argument("--smoke-report", action="append", default=[])
+
+    phase13_status = subparsers.add_parser("phase13-update-hardening-status", add_help=False)
+    phase13_status.add_argument("--release-dir")
+    phase13_status.add_argument("--smoke-report", action="append", default=[])
+    phase13_status.add_argument("--update-all-evidence")
 
     toolchain_audit = subparsers.add_parser("toolchain-archive-audit", add_help=False)
     toolchain_audit.add_argument("--archive", required=True)
@@ -446,6 +460,20 @@ def main() -> int:
             allow_unsigned_package_index=args.allow_unsigned_package_index,
             tools_xctest_packages_dir=args.tools_xctest_packages_dir,
             tools_xctest_evidence_dir=args.tools_xctest_evidence_dir,
+        )
+    elif args.subcommand == "phase12-production-hardening-status":
+        payload = phase12_production_hardening_status(
+            release_dir=args.release_dir,
+            package_index_path=args.package_index,
+            release_trust_root=args.release_trust_root,
+            package_index_trust_root=args.package_index_trust_root,
+            smoke_report_paths=args.smoke_report or None,
+        )
+    elif args.subcommand == "phase13-update-hardening-status":
+        payload = phase13_update_hardening_status(
+            smoke_report_paths=args.smoke_report or None,
+            update_all_evidence_path=args.update_all_evidence,
+            release_dir=args.release_dir,
         )
     elif args.subcommand == "toolchain-archive-audit":
         payload = toolchain_archive_audit(args.archive, target_id=args.target)

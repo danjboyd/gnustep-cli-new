@@ -14,6 +14,7 @@ if str(SRC) not in sys.path:
 
 from gnustep_cli_shared.smoke_harness import (
     empty_smoke_report,
+    evidence_smoke_report,
     evaluate_release_gate,
     fixture_catalog,
     phase26_exit_status,
@@ -135,6 +136,25 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Evaluate Phase 26 exit criteria against optional smoke reports.",
     )
+    parser.add_argument(
+        "--evidence-report",
+        action="store_true",
+        help="Import externally collected live evidence as a structured smoke report.",
+    )
+    parser.add_argument(
+        "--passed-scenario",
+        action="append",
+        dest="passed_scenarios",
+        default=[],
+        help="Scenario ID that passed in the imported live evidence. May be passed more than once.",
+    )
+    parser.add_argument(
+        "--evidence-file",
+        action="append",
+        dest="evidence_files",
+        default=[],
+        help="JSON evidence file to reference from an imported smoke report. May be passed more than once.",
+    )
     return parser.parse_args()
 
 
@@ -196,6 +216,18 @@ def main() -> int:
                 target_id=args.targets[0],
                 release_source=args.release_source,
                 scenario_ids=args.scenarios or None,
+            )
+        )
+    if args.evidence_report:
+        if len(args.targets) != 1:
+            raise SystemExit("--evidence-report requires exactly one --target")
+        return emit(
+            evidence_smoke_report(
+                suite_id=args.suite,
+                target_id=args.targets[0],
+                release_source=args.release_source,
+                passed_scenario_ids=args.passed_scenarios,
+                evidence_paths=args.evidence_files,
             )
         )
     if args.release_gate:

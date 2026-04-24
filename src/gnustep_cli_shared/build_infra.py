@@ -17,6 +17,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from .setup_planner import execute_setup
 from .package_repository import package_index_trust_gate
+from .smoke_harness import evaluate_release_gate, phase26_exit_status
 
 
 UNIX_CORE_COMPONENTS = [
@@ -3224,6 +3225,109 @@ def controlled_release_gate(
         "package_index_path": str(Path(package_index_path).resolve()) if package_index_path else None,
         "tools_xctest_packages_dir": str(Path(tools_xctest_packages_dir).resolve()) if tools_xctest_packages_dir else None,
         "tools_xctest_evidence_dir": str(Path(tools_xctest_evidence_dir).resolve()) if tools_xctest_evidence_dir else None,
+        "checks": checks,
+    }
+
+
+def phase12_production_hardening_status(
+    *,
+    release_dir: str | Path | None = None,
+    package_index_path: str | Path | None = None,
+    release_trust_root: str | Path | None = None,
+    package_index_trust_root: str | Path | None = None,
+    smoke_report_paths: list[str | Path] | None = None,
+) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+
+    def add(check_id: str, ok: bool, summary: str, payload: dict[str, Any] | None = None) -> None:
+        item: dict[str, Any] = {"id": check_id, "ok": ok, "summary": summary}
+        if payload is not None:
+            item["payload"] = payload
+        checks.append(item)
+
+    if release_dir is None:
+        add("release-dir-supplied", False, "A release directory is required for production hardening.")
+    else:
+        add("release-dir-supplied", True, "A release directory was supplied.")
+        controlled = controlled_release_gate(
+            release_dir,
+            package_index_path=package_index_path,
+            release_trust_root=release_trust_root,
+            package_index_trust_root=package_index_trust_root,
+        )
+        add("controlled-release-gate", bool(controlled.get("ok")), controlled.get("summary", "Controlled release gate evaluated."), controlled)
+        rotation = release_key_rotation_drill(release_dir)
+        add("release-key-rotation-drill", bool(rotation.get("ok")), rotation.get("summary", "Release key rotation drill evaluated."), rotation)
+
+    phase26 = phase26_exit_status(smoke_report_paths or None)
+    add("host-backed-smoke-evidence", bool(phase26.get("ok")), phase26.get("summary", "Host-backed smoke evidence evaluated."), phase26)
+
+    ok = all(check["ok"] for check in checks)
+    return {
+        "schema_version": 1,
+        "command": "phase12-production-hardening-status",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": "Phase 12 production hardening is complete." if ok else "Phase 12 production hardening still has blockers.",
+        "checks": checks,
+    }
+
+
+def _report_has_passing_scenario(report: dict[str, Any], scenario_id: str) -> bool:
+    return any(
+        scenario.get("scenario_id") == scenario_id and bool(scenario.get("ok"))
+        for scenario in report.get("scenario_reports", [])
+    )
+
+
+def phase13_update_hardening_status(
+    *,
+    smoke_report_paths: list[str | Path] | None = None,
+    update_all_evidence_path: str | Path | None = None,
+    release_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+
+    def add(check_id: str, ok: bool, summary: str, payload: dict[str, Any] | None = None) -> None:
+        item: dict[str, Any] = {"id": check_id, "ok": ok, "summary": summary}
+        if payload is not None:
+            item["payload"] = payload
+        checks.append(item)
+
+    report_paths = smoke_report_paths or []
+    if report_paths:
+        reports = [json.loads(Path(path).read_text(encoding="utf-8")) for path in report_paths]
+        gate = evaluate_release_gate(gate_id="dogfood", report_paths=report_paths)
+        add("old-to-new-update-smoke-gate", bool(gate.get("ok")), gate.get("summary", "Update smoke gate evaluated."), gate)
+        update_reports = [report for report in reports if _report_has_passing_scenario(report, "self-update-cli-only")]
+        add(
+            "self-update-cli-only-live-evidence",
+            bool(update_reports),
+            "At least one live smoke report proves the self-update CLI-only scenario." if update_reports else "No live smoke report proves the self-update CLI-only scenario.",
+        )
+    else:
+        add("old-to-new-update-smoke-gate", False, "Live old-to-new smoke reports are required.")
+        add("self-update-cli-only-live-evidence", False, "No live smoke report proves the self-update CLI-only scenario.")
+
+    if update_all_evidence_path is None:
+        add("update-all-production-like-evidence", False, "A production-like update all --yes evidence JSON file is required.")
+    else:
+        ok, summary, payload = _load_json_evidence(Path(update_all_evidence_path))
+        add("update-all-production-like-evidence", ok, summary, payload)
+
+    if release_dir is None:
+        add("signed-metadata-key-mismatch-drill", False, "A release directory is required for signed metadata/key-mismatch drills.")
+    else:
+        rotation = release_key_rotation_drill(release_dir)
+        add("signed-metadata-key-mismatch-drill", bool(rotation.get("ok")), rotation.get("summary", "Signed metadata/key-mismatch drill evaluated."), rotation)
+
+    ok = all(check["ok"] for check in checks)
+    return {
+        "schema_version": 1,
+        "command": "phase13-update-hardening-status",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": "Phase 13 update hardening is complete." if ok else "Phase 13 update hardening still has blockers.",
         "checks": checks,
     }
 

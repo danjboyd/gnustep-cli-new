@@ -13,6 +13,7 @@ if str(SRC) not in sys.path:
 
 from gnustep_cli_shared.smoke_harness import (
     empty_smoke_report,
+    evidence_smoke_report,
     evaluate_release_gate,
     fixture_record,
     phase26_exit_status,
@@ -152,17 +153,17 @@ class SmokeHarnessTests(unittest.TestCase):
             report_path = Path(tempdir) / "windows.json"
             report_path.write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "suite_id": "tier1-core",
-                        "target_id": "windows-amd64-msys2-clang64",
-                        "runner_id": "otvm-lease",
-                        "release_under_test": {"source": "dogfood"},
-                        "fixture_references": ["cli-only-update-channel"],
-                        "overall_ok": True,
-                        "scenario_reports": [],
-                        "evidence": {},
-                    }
+                    evidence_smoke_report(
+                        suite_id="tier1-core",
+                        target_id="windows-amd64-msys2-clang64",
+                        release_source="dogfood",
+                        passed_scenario_ids=[
+                            "bootstrap-install-usable-cli",
+                            "new-cli-project-build-run",
+                            "gorm-build-run",
+                            "self-update-cli-only",
+                        ],
+                    )
                 )
             )
             payload = evaluate_release_gate(
@@ -206,6 +207,29 @@ class SmokeHarnessTests(unittest.TestCase):
         self.assertEqual(payload["status"], "warning")
         check_ids = [check["id"] for check in payload["checks"]]
         self.assertIn("tier1-reports-pass", check_ids)
+
+    def test_evidence_smoke_report_requires_every_suite_scenario_for_gate(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            evidence = temp / "windows-evidence.json"
+            evidence.write_text(json.dumps({"ok": True, "summary": "Windows update passed."}))
+            report = evidence_smoke_report(
+                suite_id="tier1-core",
+                target_id="windows-amd64-msys2-clang64",
+                release_source="local-dogfood",
+                passed_scenario_ids=["bootstrap-install-usable-cli", "self-update-cli-only"],
+                evidence_paths=[evidence],
+            )
+            report_path = temp / "windows-report.json"
+            report_path.write_text(json.dumps(report))
+            gate = evaluate_release_gate(
+                gate_id="dogfood",
+                report_paths=[report_path],
+                expected_targets=["windows-amd64-msys2-clang64"],
+            )
+            self.assertFalse(gate["ok"])
+            self.assertFalse(report["overall_ok"])
+            self.assertIn("report_failed", [finding["kind"] for finding in gate["findings"]])
 
 
 class SmokeHarnessScriptTests(unittest.TestCase):
@@ -342,17 +366,17 @@ class SmokeHarnessScriptTests(unittest.TestCase):
             report_path = Path(tempdir) / "windows.json"
             report_path.write_text(
                 json.dumps(
-                    {
-                        "schema_version": 1,
-                        "suite_id": "tier1-core",
-                        "target_id": "windows-amd64-msys2-clang64",
-                        "runner_id": "otvm-lease",
-                        "release_under_test": {"source": "dogfood"},
-                        "fixture_references": ["cli-only-update-channel"],
-                        "overall_ok": True,
-                        "scenario_reports": [],
-                        "evidence": {},
-                    }
+                    evidence_smoke_report(
+                        suite_id="tier1-core",
+                        target_id="windows-amd64-msys2-clang64",
+                        release_source="dogfood",
+                        passed_scenario_ids=[
+                            "bootstrap-install-usable-cli",
+                            "new-cli-project-build-run",
+                            "gorm-build-run",
+                            "self-update-cli-only",
+                        ],
+                    )
                 )
             )
             proc = subprocess.run(
@@ -391,6 +415,38 @@ class SmokeHarnessScriptTests(unittest.TestCase):
         payload = json.loads(proc.stdout)
         self.assertEqual(payload["command"], "phase26-exit-status")
         self.assertFalse(payload["ok"])
+
+    def test_run_smoke_tests_script_imports_evidence_report(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            evidence = Path(tempdir) / "evidence.json"
+            evidence.write_text(json.dumps({"ok": True, "summary": "Imported evidence passed."}))
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/dev/run-smoke-tests.py",
+                    "--evidence-report",
+                    "--suite",
+                    "tier1-core",
+                    "--target",
+                    "windows-amd64-msys2-clang64",
+                    "--release-source",
+                    "local-dogfood",
+                    "--passed-scenario",
+                    "self-update-cli-only",
+                    "--evidence-file",
+                    str(evidence),
+                ],
+                cwd=ROOT,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            payload = json.loads(proc.stdout)
+            self.assertEqual(payload["target_id"], "windows-amd64-msys2-clang64")
+            self.assertFalse(payload["overall_ok"])
+            self.assertEqual(payload["scenario_reports"][3]["scenario_id"], "self-update-cli-only")
+            self.assertTrue(payload["scenario_reports"][3]["ok"])
 
 
 if __name__ == "__main__":

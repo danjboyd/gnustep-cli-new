@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 import json
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -962,6 +963,97 @@ def load_smoke_report(path: str | Path) -> dict[str, Any]:
     return payload
 
 
+def _load_evidence_files(paths: list[str | Path]) -> list[dict[str, Any]]:
+    evidence: list[dict[str, Any]] = []
+    for raw_path in paths:
+        path = Path(raw_path)
+        payload: dict[str, Any] | None = None
+        ok = path.exists()
+        summary = "Evidence file is present." if ok else "Evidence file is missing."
+        if ok:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8-sig"))
+                ok = bool(payload.get("ok", True))
+                summary = payload.get("summary", summary)
+            except Exception as exc:
+                ok = False
+                summary = f"Evidence file is invalid JSON: {exc}"
+        evidence.append(
+            {
+                "path": str(path),
+                "ok": ok,
+                "summary": summary,
+                "payload_command": payload.get("command") if isinstance(payload, dict) else None,
+            }
+        )
+    return evidence
+
+
+def evidence_smoke_report(
+    *,
+    suite_id: str,
+    target_id: str,
+    release_source: str,
+    passed_scenario_ids: list[str],
+    evidence_paths: list[str | Path] | None = None,
+    release_identity: dict[str, Any] | None = None,
+    summary: str | None = None,
+) -> dict[str, Any]:
+    target = next((target for target in TARGET_PROFILES if target.id == target_id), None)
+    if target is None:
+        raise ValueError(f"unknown smoke target: {target_id}")
+    suite = suite_definition(suite_id)
+    expected_scenarios = [scenario_id for scenario_id in suite["scenario_ids"] if smoke_scenario(scenario_id)["supported_targets"] and target_id in smoke_scenario(scenario_id)["supported_targets"]]
+    passed = set(passed_scenario_ids)
+    unknown = sorted(passed - {scenario.id for scenario in CORE_SCENARIOS})
+    if unknown:
+        raise ValueError(f"unknown smoke scenario(s): {', '.join(unknown)}")
+    evidence_files = _load_evidence_files(evidence_paths or [])
+    scenario_reports = []
+    for scenario_id in expected_scenarios:
+        scenario_ok = scenario_id in passed
+        scenario_reports.append(
+            SmokeScenarioReport(
+                scenario_id=scenario_id,
+                ok=scenario_ok,
+                summary=(
+                    "Scenario passed with supplied live evidence."
+                    if scenario_ok
+                    else "Scenario has no supplied live passing evidence."
+                ),
+                fixture_ids=tuple(fixture["id"] for fixture in fixture_references_for_scenarios([scenario_id])),
+                steps=(
+                    SmokeStepResult(
+                        id="evidence-import",
+                        summary="Imported externally collected live smoke evidence.",
+                        ok=scenario_ok and all(item["ok"] for item in evidence_files),
+                        evidence={
+                            "evidence_files": evidence_files,
+                            "imported_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                        },
+                    ),
+                ),
+            )
+        )
+    report = SmokeRunReport(
+        suite_id=suite_id,
+        target_id=target_id,
+        runner_id=target.runner_profile,
+        release_under_test=release_identity or {"source": release_source},
+        fixture_references=tuple(
+            fixture["id"]
+            for fixture in fixture_references_for_scenarios(expected_scenarios)
+        ),
+        scenario_reports=tuple(scenario_reports),
+        evidence={
+            "summary": summary or "Smoke report imported from live evidence.",
+            "target_profile": target.to_dict(),
+            "evidence_files": evidence_files,
+        },
+    )
+    return report.to_dict()
+
+
 def evaluate_release_gate(
     *,
     gate_id: str,
@@ -977,6 +1069,12 @@ def evaluate_release_gate(
     ok = True
 
     for report in reports:
+        report_scenarios = {
+            scenario.get("scenario_id")
+            for scenario in report.get("scenario_reports", [])
+            if scenario.get("scenario_id")
+        }
+        required_scenarios = set(suite_definition(policy["required_suite"])["scenario_ids"])
         if report.get("suite_id") != policy["required_suite"]:
             ok = False
             findings.append(
@@ -985,6 +1083,16 @@ def evaluate_release_gate(
                     "target_id": report.get("target_id"),
                     "required_suite": policy["required_suite"],
                     "actual_suite": report.get("suite_id"),
+                }
+            )
+        missing_scenarios = sorted(required_scenarios - report_scenarios)
+        if missing_scenarios:
+            ok = False
+            findings.append(
+                {
+                    "kind": "missing_scenarios",
+                    "target_id": report.get("target_id"),
+                    "scenario_ids": missing_scenarios,
                 }
             )
         if policy["require_all_overall_ok"] and not report.get("overall_ok", False):
