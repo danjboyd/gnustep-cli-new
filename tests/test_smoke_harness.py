@@ -34,7 +34,7 @@ class SmokeHarnessTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["targets"], 2)
         self.assertEqual(payload["scenarios"], 4)
-        self.assertEqual(payload["fixtures"], 3)
+        self.assertEqual(payload["fixtures"], 4)
 
     def test_windows_target_profile_is_tier1_otvm_managed(self):
         payload = target_profile("windows-amd64-msys2-clang64")
@@ -76,6 +76,24 @@ class SmokeHarnessTests(unittest.TestCase):
         self.assertEqual(payload["provenance"]["reference"], "gorm-1_5_0")
         self.assertEqual(payload["provenance"]["commit"], "a8cd1792e08a50dd9900474373e6ca8daad4a4a9")
         self.assertFalse(payload["provenance"]["mutable"])
+
+    def test_windows_gorm_template_includes_private_ivar_patch_fixture(self):
+        payload = empty_smoke_report(
+            suite_id="tier1-core",
+            target_id="windows-amd64-msys2-clang64",
+            release_source="/tmp/staged-release",
+            scenario_ids=["gorm-build-run"],
+        )
+        self.assertEqual(
+            payload["fixture_references"],
+            ["gorm-upstream-pinned", "gorm-windows-private-ivar-patch"],
+        )
+        fixture = fixture_record("gorm-windows-private-ivar-patch")
+        self.assertEqual(fixture["provenance"]["target_id"], "windows-amd64-msys2-clang64")
+        self.assertEqual(
+            fixture["expected_observations"]["removes_symbol_reference"],
+            "__objc_ivar_offset_NSMatrix._selectedCells",
+        )
 
     def test_otvm_runner_plan_for_windows_includes_lease_lifecycle(self):
         payload = runner_execution_plan(
@@ -283,7 +301,7 @@ class SmokeHarnessScriptTests(unittest.TestCase):
         )
         payload = json.loads(proc.stdout)
         self.assertEqual(payload["schema_version"], 1)
-        self.assertEqual(len(payload["fixtures"]), 3)
+        self.assertEqual(len(payload["fixtures"]), 4)
 
     def test_run_smoke_tests_script_lists_suites(self):
         proc = subprocess.run(

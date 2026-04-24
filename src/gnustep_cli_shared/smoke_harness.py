@@ -438,6 +438,23 @@ FIXTURES: tuple[SmokeFixture, ...] = (
         tags=("gui", "gorm", "pinned"),
     ),
     SmokeFixture(
+        id="gorm-windows-private-ivar-patch",
+        kind="source-patch",
+        summary="Windows-only patch for the pinned Gorm smoke fixture that removes private NSMatrix selected-cell ivar access.",
+        provenance={
+            "applies_to_fixture": "gorm-upstream-pinned",
+            "target_id": "windows-amd64-msys2-clang64",
+            "patch_path": "docs/smoke-fixtures/gorm-1_5_0-windows-private-ivar.patch",
+            "reason": "The pinned Gorm tag references the private GNUstep GUI ivar NSMatrix._selectedCells; Windows libobjc2/lld does not export that ivar offset for this build.",
+            "mutable": False,
+        },
+        expected_observations={
+            "removes_symbol_reference": "__objc_ivar_offset_NSMatrix._selectedCells",
+            "preserves_launch_contract": "launch-and-stay-alive-briefly",
+        },
+        tags=("gui", "gorm", "windows", "patch"),
+    ),
+    SmokeFixture(
         id="generated-cli-template-output",
         kind="repo-fixture",
         summary="Expected output contract for a freshly generated CLI sample project.",
@@ -902,11 +919,13 @@ def runner_execution_plan(
     )
 
 
-def fixture_references_for_scenarios(scenario_ids: list[str]) -> list[dict[str, Any]]:
+def fixture_references_for_scenarios(scenario_ids: list[str], *, target_id: str | None = None) -> list[dict[str, Any]]:
     required_fixture_ids: list[str] = []
     for scenario_id in scenario_ids:
         if scenario_id == "gorm-build-run":
             required_fixture_ids.append("gorm-upstream-pinned")
+            if target_id == "windows-amd64-msys2-clang64":
+                required_fixture_ids.append("gorm-windows-private-ivar-patch")
         elif scenario_id == "new-cli-project-build-run":
             required_fixture_ids.append("generated-cli-template-output")
         elif scenario_id == "self-update-cli-only":
@@ -933,13 +952,13 @@ def empty_smoke_report(
         target_id=target_id,
         runner_id=target.runner_profile,
         release_under_test=release_identity or {"source": release_source},
-        fixture_references=tuple(fixture["id"] for fixture in fixture_references_for_scenarios(scenarios)),
+        fixture_references=tuple(fixture["id"] for fixture in fixture_references_for_scenarios(scenarios, target_id=target_id)),
         scenario_reports=tuple(
             SmokeScenarioReport(
                 scenario_id=scenario_id,
                 ok=False,
                 summary="Scenario has not been executed yet.",
-                fixture_ids=tuple(fixture["id"] for fixture in fixture_references_for_scenarios([scenario_id])),
+                fixture_ids=tuple(fixture["id"] for fixture in fixture_references_for_scenarios([scenario_id], target_id=target_id)),
             )
             for scenario_id in scenarios
         ),
@@ -950,7 +969,7 @@ def empty_smoke_report(
                 release_source=release_source,
                 scenario_ids=scenarios,
             ),
-            "fixtures": fixture_references_for_scenarios(scenarios),
+            "fixtures": fixture_references_for_scenarios(scenarios, target_id=target_id),
         },
     )
     return report.to_dict()
@@ -1021,7 +1040,7 @@ def evidence_smoke_report(
                     if scenario_ok
                     else "Scenario has no supplied live passing evidence."
                 ),
-                fixture_ids=tuple(fixture["id"] for fixture in fixture_references_for_scenarios([scenario_id])),
+                fixture_ids=tuple(fixture["id"] for fixture in fixture_references_for_scenarios([scenario_id], target_id=target_id)),
                 steps=(
                     SmokeStepResult(
                         id="evidence-import",
@@ -1042,7 +1061,7 @@ def evidence_smoke_report(
         release_under_test=release_identity or {"source": release_source},
         fixture_references=tuple(
             fixture["id"]
-            for fixture in fixture_references_for_scenarios(expected_scenarios)
+            for fixture in fixture_references_for_scenarios(expected_scenarios, target_id=target_id)
         ),
         scenario_reports=tuple(scenario_reports),
         evidence={
