@@ -957,7 +957,7 @@ def empty_smoke_report(
 
 
 def load_smoke_report(path: str | Path) -> dict[str, Any]:
-    payload = json.loads(Path(path).read_text())
+    payload = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     if payload.get("schema_version") != 1:
         raise ValueError(f"unsupported smoke report schema: {payload.get('schema_version')}")
     return payload

@@ -231,6 +231,32 @@ class SmokeHarnessTests(unittest.TestCase):
             self.assertFalse(report["overall_ok"])
             self.assertIn("report_failed", [finding["kind"] for finding in gate["findings"]])
 
+    def test_smoke_report_loader_accepts_powershell_utf8_bom(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            report_path = Path(tempdir) / "windows-report.json"
+            report_path.write_text(
+                "\ufeff" + json.dumps(
+                    evidence_smoke_report(
+                        suite_id="tier1-core",
+                        target_id="windows-amd64-msys2-clang64",
+                        release_source="local-dogfood",
+                        passed_scenario_ids=[
+                            "bootstrap-install-usable-cli",
+                            "new-cli-project-build-run",
+                            "gorm-build-run",
+                            "self-update-cli-only",
+                        ],
+                    )
+                ),
+                encoding="utf-8",
+            )
+            gate = evaluate_release_gate(
+                gate_id="dogfood",
+                report_paths=[report_path],
+                expected_targets=["windows-amd64-msys2-clang64"],
+            )
+            self.assertTrue(gate["ok"])
+
 
 class SmokeHarnessScriptTests(unittest.TestCase):
     def test_run_smoke_tests_script_lists_scenarios(self):

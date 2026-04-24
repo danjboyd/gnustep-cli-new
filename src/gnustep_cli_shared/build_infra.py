@@ -3296,7 +3296,7 @@ def phase13_update_hardening_status(
 
     report_paths = smoke_report_paths or []
     if report_paths:
-        reports = [json.loads(Path(path).read_text(encoding="utf-8")) for path in report_paths]
+        reports = [json.loads(Path(path).read_text(encoding="utf-8-sig")) for path in report_paths]
         gate = evaluate_release_gate(gate_id="dogfood", report_paths=report_paths)
         add("old-to-new-update-smoke-gate", bool(gate.get("ok")), gate.get("summary", "Update smoke gate evaluated."), gate)
         update_reports = [report for report in reports if _report_has_passing_scenario(report, "self-update-cli-only")]
