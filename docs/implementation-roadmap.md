@@ -1449,7 +1449,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Ensure scenarios can consume pinned fixtures from the repository or pinned upstream revisions rather than drifting against moving external `HEAD` state.
 
 ### C. Core Tier 1 Smoke Scenarios
-- Formalize the current manual validation set as canonical smoke scenarios for Tier 1 managed targets:
+- Formalize the current manual validation set as canonical smoke scenarios for Tier 1 release-validation targets:
   - `bootstrap-install-usable-cli`
   - `new-cli-project-build-run`
   - `gorm-build-run`
@@ -1458,7 +1458,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - `new-cli-project-build-run` should prove that `gnustep new` creates a usable fresh project, `gnustep build` completes successfully, and `gnustep run` executes the expected sample output.
 - `gorm-build-run` should use a pinned Gorm revision or tag and prove that the installed CLI can build and launch a known real GNUstep GUI application on supported GUI targets.
 - `self-update-cli-only` should install an older dogfood or staged release, verify `gnustep update --check`, apply a CLI-only update, verify the selected layer plan, and rerun at least one post-update build/run workflow.
-- Treat these four scenarios as the minimum release-proving smoke bar for the currently active managed targets unless a roadmap revision explicitly changes that bar.
+- Treat these four scenarios as the minimum release-proving smoke bar for the currently active Tier 1 targets unless a roadmap revision explicitly changes that bar.
 
 ### D. Target Matrix And Target Profiles
 - Define target profiles for at least:
@@ -1513,7 +1513,7 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 
 ### I. Release Gates And Policy Integration
 - Make smoke suite results consumable by release qualification tooling so dogfood, release-candidate, and stable-publication gates can require the appropriate smoke suites by target.
-- Require Tier 1 managed targets to pass the canonical smoke scenarios before the project claims that a new release, dogfood snapshot, or reused layered artifact is validated for that target.
+- Require Tier 1 targets to pass the canonical smoke scenarios before the project claims that a new release, dogfood snapshot, or reused layered artifact is validated for that target.
 - Integrate update smoke with the layered-artifact policy from Phase 25 so release gates can prove that CLI-only iterations do not unnecessarily rebuild or redownload unchanged toolchain layers.
 - Allow scoped dogfood sessions to run a reduced target set while still marking full release qualification as incomplete until the broader smoke matrix has passed.
 - Ensure release gates can distinguish:
@@ -1533,14 +1533,14 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Phase 26.A is implemented through `src/gnustep_cli_shared/smoke_harness.py`, which introduces explicit smoke runner, target, and scenario records plus catalog validation and suite planning primitives. This establishes a reusable Python-based harness layer distinct from the existing unit and narrow integration tests.
 - Phase 26.B is implemented at the catalog-definition level: smoke scenarios now carry stable metadata for supported targets, estimated duration, network/gui requirements, isolation/destructive behavior, fixture policy, artifact/channel prerequisites, tags, and named assertions so additional scenarios can be added without cloning full validation scripts.
 - Phase 26.C is implemented as the first canonical Tier 1 smoke catalog with four shared scenarios: `bootstrap-install-usable-cli`, `new-cli-project-build-run`, `gorm-build-run`, and `self-update-cli-only`.
-- Phase 26.D is implemented for the currently active Tier 1 managed targets `windows-amd64-msys2-clang64` and `openbsd-amd64-clang`, including explicit bootstrap style, shell/path conventions, GUI availability, managed-root style, expected Objective-C runtime, and default runner profile metadata.
+- Phase 26.D is implemented for the currently active Tier 1 targets `windows-amd64-msys2-clang64` and `openbsd-amd64-clang`, including explicit bootstrap style, shell/path conventions, GUI availability, managed-root style, expected Objective-C runtime, and default runner profile metadata. Windows remains modeled as a managed MSYS2 `clang64` artifact target; OpenBSD is now explicitly modeled as the preferred native-packaged GNUstep path for v1 smoke qualification rather than as requiring a managed OpenBSD toolchain artifact.
 - Phase 26.E is implemented at the runner-contract level: the shared harness now models local-process, SSH-host, and `otvm` lease runners, and can emit structured execution plans covering transport requirements, lease profile selection, stage actions, TTL/reuse policy, result retrieval, and cleanup behavior.
 - Phase 26.F is implemented through structured smoke report records for command transcripts, assertion results, step results, scenario reports, and top-level run reports. `scripts/dev/run-smoke-tests.py --report-template ...` now emits a machine-readable report template that includes target metadata, runner plan, fixture references, and scenario placeholders before live execution exists.
 - Phase 26.G is implemented through a pinned fixture catalog with explicit provenance records. The harness now records immutable Gorm source identity (`gorm-1_5_0` / `a8cd1792e08a50dd9900474373e6ca8daad4a4a9`), repository-owned generated CLI output expectations, and update-channel policy fixtures for CLI-only dogfood update smoke.
 - Phase 26.H is implemented through explicit suite modes and developer workflow surfaces: the harness now defines `quick`, `tier1-core`, and `release` suites, and `scripts/dev/run-smoke-tests.py --workflow-plan ...` can emit the intended developer command sequence for catalog validation, runner planning, and report-template generation against selected targets and release sources.
 - Phase 26.I is implemented through report-based smoke release gates. The harness now models `dogfood`, `release-candidate`, and `stable` gate policies, can evaluate one or more smoke report JSON files against the required suite/target set, and exposes that policy through `scripts/dev/run-smoke-tests.py --release-gate ...`.
 - Phase 26.J is implemented at the tooling/status level rather than as a blanket claim of live completion: `scripts/dev/run-smoke-tests.py --phase26-exit-status [--report ...]` can now evaluate whether the framework is present and whether supplied Tier 1 smoke reports satisfy the release-candidate gate. At the moment the infrastructure passes, but live target evidence still needs to be collected before the phase can be considered fully proven in practice.
-- Phase 26.J now also supports importing externally collected live evidence as structured smoke reports through `scripts/dev/run-smoke-tests.py --evidence-report`. Release gates reject partial reports that omit required scenarios or contain failed scenario entries. The April 24 Windows local-assets evidence imports as a partial `windows-amd64-msys2-clang64` report for `bootstrap-install-usable-cli` and `self-update-cli-only`, but the release-candidate gate still fails because `new-cli-project-build-run`, `gorm-build-run`, and the `openbsd-amd64-clang` Tier 1 report are not yet supplied.
+- Phase 26.J now also supports importing externally collected live evidence as structured smoke reports through `scripts/dev/run-smoke-tests.py --evidence-report`. Release gates reject partial reports that omit required scenarios or contain failed scenario entries. The April 24 Windows local-assets evidence now covers the `windows-amd64-msys2-clang64` Tier 1 scenarios, including the repository-owned Gorm Windows private-ivar compatibility patch. The release-candidate gate still fails until a full `openbsd-amd64-clang` Tier 1 native-packaged report is supplied; the existing OpenBSD evidence proves packaged GNUstep compile/link/run capability but is not a substitute for the four shared smoke scenarios.
 - `scripts/dev/run-smoke-tests.py` now exposes the smoke catalog as a lightweight planning/listing/report/gating command, and `tests/test_smoke_harness.py` provides focused regression coverage for framework definitions, runner plans, report templates, fixture provenance, workflow modes, release gates, and Phase 26 exit-status evaluation.
 
 ## Testing Principles For All Phases

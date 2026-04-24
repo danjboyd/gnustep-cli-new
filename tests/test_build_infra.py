@@ -850,6 +850,20 @@ class BuildInfraTests(unittest.TestCase):
         self.assertEqual(targets["windows-public-bootstrap-runtime-package"]["profile"], "windows-2022")
         self.assertEqual(payload["cleanup_policy"], "destroy-on-exit")
 
+    def test_published_url_qualification_plan_accepts_direct_manifest_url(self):
+        payload = published_url_qualification_plan("https://example.invalid/releases/download/v0.1.0/release-manifest.json")
+        self.assertEqual(
+            payload["release_manifest_url"],
+            "https://example.invalid/releases/download/v0.1.0/release-manifest.json",
+        )
+
+    def test_published_url_qualification_plan_converts_github_tag_url_to_asset_url(self):
+        payload = published_url_qualification_plan("https://github.com/gnustep/tools/releases/tag/v0.1.0")
+        self.assertEqual(
+            payload["release_manifest_url"],
+            "https://github.com/gnustep/tools/releases/download/v0.1.0/release-manifest.json",
+        )
+
     def test_controlled_release_gate_combines_release_and_package_trust(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp = Path(tempdir)

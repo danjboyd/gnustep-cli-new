@@ -4503,7 +4503,8 @@ def published_url_qualification_plan(
     *,
     config_path: str = "~/oracletestvms-libvirt.toml",
 ) -> dict[str, Any]:
-    release_manifest_url = release_url.rstrip("/") + "/release-manifest.json"
+    normalized_release_url = release_url.rstrip("/")
+    release_manifest_url = _release_manifest_url_for_public_release(normalized_release_url)
     targets = [
         {
             "id": "debian-public-bootstrap-full-cli-package",
@@ -4580,12 +4581,22 @@ def published_url_qualification_plan(
         "ok": True,
         "status": "ready",
         "summary": "Published URL release qualification plan generated.",
-        "release_url": release_url.rstrip("/"),
+        "release_url": normalized_release_url,
         "release_manifest_url": release_manifest_url,
         "config_path": config_path,
         "cleanup_policy": "destroy-on-exit",
         "targets": targets,
     }
+
+
+def _release_manifest_url_for_public_release(release_url: str) -> str:
+    if release_url.endswith("/release-manifest.json"):
+        return release_url
+    match = re.fullmatch(r"(https://github\.com/[^/]+/[^/]+)/releases/tag/([^/]+)", release_url)
+    if match:
+        repo_url, tag = match.groups()
+        return f"{repo_url}/releases/download/{tag}/release-manifest.json"
+    return release_url + "/release-manifest.json"
 
 
 def otvm_release_host_validation_plan(

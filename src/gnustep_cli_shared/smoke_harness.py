@@ -406,7 +406,7 @@ TARGET_PROFILES: tuple[SmokeTargetProfile, ...] = (
         gui_available=True,
         managed_root_style="user-home-local",
         runner_profile="otvm-lease",
-        tags=("tier1", "managed", "gui", "dogfood"),
+        tags=("tier1", "native-packaged", "gui", "dogfood"),
         metadata={
             "bootstrap_script": "scripts/bootstrap/gnustep-bootstrap.sh",
             "expected_objc_runtime": "libobjc2",
@@ -414,6 +414,16 @@ TARGET_PROFILES: tuple[SmokeTargetProfile, ...] = (
             "path_separator": ":",
             "gui_launch_contract": "launch-and-stay-alive-briefly",
             "otvm_profile": "openbsd-7.8-fvwm",
+            "toolchain_source_policy": "native-packaged-preferred",
+            "managed_artifacts_required": False,
+            "native_package_prerequisites": [
+                "gmake",
+                "gnustep-make",
+                "gnustep-base",
+                "gnustep-gui",
+                "gnustep-back",
+            ],
+            "release_artifact_policy": "build-full-cli-against-native-packaged-toolchain",
         },
     ),
 )
@@ -588,7 +598,7 @@ SUITES: dict[str, dict[str, Any]] = {
     },
     "release": {
         "id": "release",
-        "summary": "Release-proving smoke suite across the current Tier 1 managed targets.",
+        "summary": "Release-proving smoke suite across the current Tier 1 targets.",
         "mode": "release",
         "release_gate_usage": "stable-publication",
         "scenario_ids": tuple(scenario.id for scenario in CORE_SCENARIOS),
@@ -613,7 +623,7 @@ RELEASE_GATE_POLICIES: dict[str, dict[str, Any]] = {
     },
     "stable": {
         "id": "stable",
-        "summary": "Stable-publication smoke gate across the full Tier 1 managed matrix.",
+        "summary": "Stable-publication smoke gate across the full Tier 1 target matrix.",
         "required_suite": "release",
         "allow_scoped_targets": False,
         "require_all_overall_ok": True,
@@ -1184,7 +1194,7 @@ def phase26_exit_status(report_paths: list[str | Path] | None = None) -> dict[st
         {
             "id": "tier1-targets-present",
             "ok": set(target_ids) == {"windows-amd64-msys2-clang64", "openbsd-amd64-clang"},
-            "summary": "Current active Tier 1 managed targets are represented in the harness.",
+            "summary": "Current active Tier 1 targets are represented in the harness.",
         },
         {
             "id": "developer-workflow-surface",

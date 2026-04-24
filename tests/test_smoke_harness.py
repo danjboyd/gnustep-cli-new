@@ -48,6 +48,11 @@ class SmokeHarnessTests(unittest.TestCase):
         self.assertEqual(payload["bootstrap_kind"], "posix-sh")
         self.assertEqual(payload["path_style"], "posix")
         self.assertEqual(payload["metadata"]["expected_objc_runtime"], "libobjc2")
+        self.assertIn("native-packaged", payload["tags"])
+        self.assertNotIn("managed", payload["tags"])
+        self.assertEqual(payload["metadata"]["toolchain_source_policy"], "native-packaged-preferred")
+        self.assertFalse(payload["metadata"]["managed_artifacts_required"])
+        self.assertIn("gnustep-make", payload["metadata"]["native_package_prerequisites"])
 
     def test_core_scenarios_are_registered(self):
         scenario_ids = [
