@@ -577,6 +577,29 @@ CORE_SCENARIOS: tuple[SmokeScenario, ...] = (
     ),
 )
 
+WINDOWS_MANAGED_SCENARIOS: tuple[SmokeScenario, ...] = (
+    SmokeScenario(
+        id="windows-shell-pacman",
+        summary="Open gnustep shell on Windows and prove MSYS2 pacman works inside the managed CLANG64 environment.",
+        supported_targets=("windows-amd64-msys2-clang64",),
+        estimated_duration_minutes=4,
+        network_required=False,
+        gui_required=False,
+        isolated_prefix_required=True,
+        destructive=False,
+        artifact_prerequisites=("installed-cli", "managed-msys2-toolchain"),
+        tags=("windows", "shell", "msys2", "pacman"),
+        assertions=(
+            "shell-print-command-succeeds",
+            "shell-invocation-uses-managed-bash",
+            "pacman-version-succeeds-inside-shell",
+            "pacman-query-succeeds-inside-shell",
+        ),
+    ),
+)
+
+ALL_SCENARIOS: tuple[SmokeScenario, ...] = CORE_SCENARIOS + WINDOWS_MANAGED_SCENARIOS
+
 
 SUITES: dict[str, dict[str, Any]] = {
     "quick": {
@@ -602,6 +625,13 @@ SUITES: dict[str, dict[str, Any]] = {
         "mode": "release",
         "release_gate_usage": "stable-publication",
         "scenario_ids": tuple(scenario.id for scenario in CORE_SCENARIOS),
+    },
+    "windows-managed-shell": {
+        "id": "windows-managed-shell",
+        "summary": "Windows managed MSYS2 shell escape-hatch smoke scenarios.",
+        "mode": "qualification",
+        "release_gate_usage": "windows-managed-shell",
+        "scenario_ids": tuple(scenario.id for scenario in WINDOWS_MANAGED_SCENARIOS),
     },
 }
 
@@ -658,11 +688,11 @@ def target_profile(target_id: str) -> dict[str, Any]:
 
 
 def smoke_scenarios() -> list[dict[str, Any]]:
-    return [scenario.to_dict() for scenario in CORE_SCENARIOS]
+    return [scenario.to_dict() for scenario in ALL_SCENARIOS]
 
 
 def smoke_scenario(scenario_id: str) -> dict[str, Any]:
-    for scenario in CORE_SCENARIOS:
+    for scenario in ALL_SCENARIOS:
         if scenario.id == scenario_id:
             return scenario.to_dict()
     raise ValueError(f"unknown smoke scenario: {scenario_id}")
@@ -684,7 +714,7 @@ def validate_smoke_catalog() -> dict[str, Any]:
                 }
             )
 
-    for scenario in CORE_SCENARIOS:
+    for scenario in ALL_SCENARIOS:
         if not scenario.supported_targets:
             errors.append({"kind": "scenario_has_no_targets", "scenario_id": scenario.id})
             continue
@@ -720,7 +750,7 @@ def validate_smoke_catalog() -> dict[str, Any]:
 
     for suite_id, suite in SUITES.items():
         for scenario_id in suite["scenario_ids"]:
-            if scenario_id not in {scenario.id for scenario in CORE_SCENARIOS}:
+            if scenario_id not in {scenario.id for scenario in ALL_SCENARIOS}:
                 errors.append(
                     {
                         "kind": "unknown_suite_scenario",
@@ -734,7 +764,7 @@ def validate_smoke_catalog() -> dict[str, Any]:
         "ok": not errors,
         "status": "ok" if not errors else "error",
         "targets": len(TARGET_PROFILES),
-        "scenarios": len(CORE_SCENARIOS),
+        "scenarios": len(ALL_SCENARIOS),
         "fixtures": len(FIXTURES),
         "errors": errors,
     }
@@ -805,7 +835,7 @@ def smoke_plan(
     suite = suite_definition(suite_id)
     selected_targets = target_ids or [target.id for target in TARGET_PROFILES]
     known_targets = {target.id: target for target in TARGET_PROFILES}
-    known_scenarios = {scenario.id: scenario for scenario in CORE_SCENARIOS}
+    known_scenarios = {scenario.id: scenario for scenario in ALL_SCENARIOS}
     selected_scenarios = scenario_ids or list(suite["scenario_ids"])
     target_payloads: list[dict[str, Any]] = []
 
@@ -918,7 +948,7 @@ def runner_execution_plan(
     target = next((target for target in TARGET_PROFILES if target.id == target_id), None)
     if target is None:
         raise ValueError(f"unknown smoke target: {target_id}")
-    selected_scenarios = scenario_ids or [scenario.id for scenario in CORE_SCENARIOS if scenario.supports_target(target_id)]
+    selected_scenarios = scenario_ids or [scenario.id for scenario in ALL_SCENARIOS if scenario.supports_target(target_id)]
     runner = instantiate_runner(target.runner_profile)
     return runner.execution_plan(
         target=target,
@@ -956,7 +986,16 @@ def empty_smoke_report(
     target = next((target for target in TARGET_PROFILES if target.id == target_id), None)
     if target is None:
         raise ValueError(f"unknown smoke target: {target_id}")
-    scenarios = scenario_ids or [scenario.id for scenario in CORE_SCENARIOS if scenario.supports_target(target_id)]
+    if scenario_ids is not None:
+        scenarios = scenario_ids
+    else:
+        suite = suite_definition(suite_id)
+        scenarios = [
+            scenario_id
+            for scenario_id in suite["scenario_ids"]
+            if smoke_scenario(scenario_id)["supported_targets"]
+            and target_id in smoke_scenario(scenario_id)["supported_targets"]
+        ]
     report = SmokeRunReport(
         suite_id=suite_id,
         target_id=target_id,
@@ -1034,7 +1073,7 @@ def evidence_smoke_report(
     suite = suite_definition(suite_id)
     expected_scenarios = [scenario_id for scenario_id in suite["scenario_ids"] if smoke_scenario(scenario_id)["supported_targets"] and target_id in smoke_scenario(scenario_id)["supported_targets"]]
     passed = set(passed_scenario_ids)
-    unknown = sorted(passed - {scenario.id for scenario in CORE_SCENARIOS})
+    unknown = sorted(passed - {scenario.id for scenario in ALL_SCENARIOS})
     if unknown:
         raise ValueError(f"unknown smoke scenario(s): {', '.join(unknown)}")
     evidence_files = _load_evidence_files(evidence_paths or [])

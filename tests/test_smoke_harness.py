@@ -33,7 +33,7 @@ class SmokeHarnessTests(unittest.TestCase):
         payload = validate_smoke_catalog()
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["targets"], 2)
-        self.assertEqual(payload["scenarios"], 4)
+        self.assertEqual(payload["scenarios"], 5)
         self.assertEqual(payload["fixtures"], 4)
 
     def test_windows_target_profile_is_tier1_otvm_managed(self):
@@ -75,6 +75,17 @@ class SmokeHarnessTests(unittest.TestCase):
         self.assertTrue(payload["gui_required"])
         self.assertEqual(payload["fixture_policy"], "pinned-upstream-revision")
         self.assertIn("gorm-build-succeeds", payload["assertions"])
+
+    def test_windows_shell_pacman_scenario_is_windows_only(self):
+        payload = smoke_scenario("windows-shell-pacman")
+        self.assertEqual(payload["supported_targets"], ["windows-amd64-msys2-clang64"])
+        self.assertFalse(payload["gui_required"])
+        self.assertIn("managed-msys2-toolchain", payload["artifact_prerequisites"])
+        self.assertIn("pacman-query-succeeds-inside-shell", payload["assertions"])
+
+    def test_windows_managed_shell_suite_contains_pacman_scenario(self):
+        payload = suite_definition("windows-managed-shell")
+        self.assertEqual(payload["scenario_ids"], ["windows-shell-pacman"])
 
     def test_gorm_fixture_is_pinned_to_immutable_reference(self):
         payload = fixture_record("gorm-upstream-pinned")
@@ -293,7 +304,7 @@ class SmokeHarnessScriptTests(unittest.TestCase):
         )
         payload = json.loads(proc.stdout)
         self.assertEqual(payload["schema_version"], 1)
-        self.assertEqual(len(payload["scenarios"]), 4)
+        self.assertEqual(len(payload["scenarios"]), 5)
 
     def test_run_smoke_tests_script_lists_fixtures(self):
         proc = subprocess.run(
