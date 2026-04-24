@@ -263,6 +263,22 @@
   XCTAssertNotNil([[probeCheck objectForKey: @"details"] objectForKey: @"can_run"]);
 }
 
+- (void)testDoctorCompatibilityEnvelopeKeepsStableKeysWithoutArtifact
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *payload = [runner buildDoctorPayloadWithInterface: @"full" manifestPath: nil quick: YES];
+  NSDictionary *compatibility = [payload objectForKey: @"compatibility"];
+
+  XCTAssertNotNil(compatibility);
+  XCTAssertNotNil([compatibility objectForKey: @"compatible"]);
+  XCTAssertNotNil([compatibility objectForKey: @"target_kind"]);
+  XCTAssertNotNil([compatibility objectForKey: @"target_id"]);
+  XCTAssertNotNil([compatibility objectForKey: @"reasons"]);
+  XCTAssertNotNil([compatibility objectForKey: @"warnings"]);
+  XCTAssertTrue([[compatibility objectForKey: @"target_kind"] isKindOfClass: [NSNull class]]);
+  XCTAssertTrue([[compatibility objectForKey: @"target_id"] isKindOfClass: [NSNull class]]);
+}
+
 - (void)testQuickDoctorSkipsActiveProbeButKeepsCheckShape
 {
   GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];

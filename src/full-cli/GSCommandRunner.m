@@ -3421,8 +3421,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   return [NSDictionary dictionaryWithObjectsAndKeys:
                         [NSNumber numberWithBool: ([reasons count] == 0)], @"compatible",
-                        [artifact objectForKey: @"kind"], @"target_kind",
-                        [artifact objectForKey: @"id"], @"target_id",
+                        artifact ? [artifact objectForKey: @"kind"] : [NSNull null], @"target_kind",
+                        artifact ? [artifact objectForKey: @"id"] : [NSNull null], @"target_id",
                         reasons, @"reasons",
                         warnings, @"warnings",
                         nil];
