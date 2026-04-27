@@ -2940,6 +2940,72 @@ def _load_json_evidence(path: Path) -> tuple[bool, str, dict[str, Any] | None]:
     return bool(payload.get("ok")), payload.get("summary", f"{path.name} evidence loaded"), payload
 
 
+def _validate_update_all_evidence(path: Path) -> tuple[bool, str, dict[str, Any] | None]:
+    ok, summary, payload = _load_json_evidence(path)
+    if payload is None:
+        return ok, summary, payload
+
+    checks: list[dict[str, Any]] = []
+
+    def add(check_id: str, passed: bool, message: str) -> None:
+        checks.append({"id": check_id, "ok": passed, "message": message})
+
+    add("evidence-ok", bool(payload.get("ok")), "evidence payload reports success")
+    add("production-like", bool(payload.get("production_like")), "evidence was collected from a production-like managed install")
+
+    command = payload.get("command")
+    add(
+        "command",
+        command == "gnustep update all --yes",
+        "command is gnustep update all --yes",
+    )
+
+    result = payload.get("result")
+    if isinstance(result, dict):
+        add("result-ok", bool(result.get("ok")), "update command result reports success")
+    else:
+        add("result-ok", False, "update command result is present")
+
+    scopes = payload.get("scopes")
+    if not isinstance(scopes, dict):
+        scopes = {}
+    add("scope-cli", bool(scopes.get("cli")), "CLI update scope was exercised")
+    add("scope-toolchain", bool(scopes.get("toolchain")), "toolchain update scope was exercised")
+    add("scope-packages", bool(scopes.get("packages")), "package update scope was exercised")
+
+    package_updates = payload.get("package_updates")
+    add(
+        "package-update-present",
+        isinstance(package_updates, list) and bool(package_updates),
+        "at least one package update was exercised",
+    )
+    if isinstance(package_updates, list) and package_updates:
+        add(
+            "package-updates-ok",
+            all(isinstance(item, dict) and bool(item.get("ok")) for item in package_updates),
+            "all package update entries report success",
+        )
+    else:
+        add("package-updates-ok", False, "all package update entries report success")
+
+    release_transition = payload.get("release_transition")
+    if isinstance(release_transition, dict):
+        add(
+            "release-transition",
+            bool(release_transition.get("from_version")) and bool(release_transition.get("to_version")),
+            "release transition records from_version and to_version",
+        )
+    else:
+        add("release-transition", False, "release transition records from_version and to_version")
+
+    payload["validation_checks"] = checks
+    valid = all(check["ok"] for check in checks)
+    if not valid and ok:
+        failed = [check["id"] for check in checks if not check["ok"]]
+        summary = "update all --yes evidence is incomplete: " + ", ".join(failed)
+    return valid, summary, payload
+
+
 def write_windows_current_source_marker(
     release_dir: str | Path,
     *,
@@ -3312,7 +3378,7 @@ def phase13_update_hardening_status(
     if update_all_evidence_path is None:
         add("update-all-production-like-evidence", False, "A production-like update all --yes evidence JSON file is required.")
     else:
-        ok, summary, payload = _load_json_evidence(Path(update_all_evidence_path))
+        ok, summary, payload = _validate_update_all_evidence(Path(update_all_evidence_path))
         add("update-all-production-like-evidence", ok, summary, payload)
 
     if release_dir is None:

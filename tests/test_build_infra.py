@@ -1143,7 +1143,17 @@ class BuildInfraTests(unittest.TestCase):
                 )))
                 reports.append(report_path)
             update_all = temp / "update-all.json"
-            update_all.write_text(json.dumps({"ok": True, "summary": "update all --yes passed."}))
+            update_all.write_text(json.dumps({
+                "schema_version": 1,
+                "ok": True,
+                "summary": "update all --yes passed.",
+                "production_like": True,
+                "command": "gnustep update all --yes",
+                "scopes": {"cli": True, "toolchain": True, "packages": True},
+                "release_transition": {"from_version": "0.1.0-old", "to_version": "0.1.0"},
+                "package_updates": [{"id": "org.gnustep.tools-xctest", "ok": True}],
+                "result": {"ok": True},
+            }))
 
             phase12 = phase12_production_hardening_status(
                 release_dir=release_dir,
@@ -1158,6 +1168,22 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(phase12["ok"])
             self.assertTrue(phase13["ok"])
 
+    def test_phase13_rejects_incomplete_update_all_evidence(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            update_all = temp / "update-all.json"
+            update_all.write_text(json.dumps({"ok": True, "summary": "too weak"}))
+
+            phase13 = phase13_update_hardening_status(update_all_evidence_path=update_all)
+            checks = {check["id"]: check for check in phase13["checks"]}
+            self.assertFalse(checks["update-all-production-like-evidence"]["ok"])
+            failed = {
+                check["id"]
+                for check in checks["update-all-production-like-evidence"]["payload"]["validation_checks"]
+                if not check["ok"]
+            }
+            self.assertIn("production-like", failed)
+            self.assertIn("scope-packages", failed)
 
     def test_build_infra_cli_exits_nonzero_for_failed_gate(self):
         with tempfile.TemporaryDirectory() as tempdir:

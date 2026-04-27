@@ -58,6 +58,26 @@ Non-blocking for the immediate release unless this roadmap is revised:
 - Windows `amd64/msvc`
 - OpenBSD `arm64`
 - Debian/Linux `arm64` publication
+
+April 27, 2026 execution update:
+
+- Production-like `gnustep update all --yes` remains the main live-evidence
+  blocker, but the gate now validates a concrete evidence contract instead of
+  accepting a bare `{"ok": true}` payload. See
+  `docs/validation/update-all-production-like-evidence.md`.
+- Production signing/trust-root work is wired into the release workflow and
+  still requires real CI secrets or an external signing service before Phase 12
+  can pass in production mode.
+- The release workflow now enforces the Phase 26 release-candidate smoke gate
+  and Phase 12/13 hardening gates before GitHub publication.
+- Package artifact publication readiness is green for the current repository
+  package set; controlled build-job promotion remains an operations/CI
+  implementation task rather than a policy-model gap.
+- Native/shared doctor regression coverage is green; full parity remains a
+  release-risk item to finish before claiming the native full CLI as the
+  authoritative diagnostic implementation.
+- CI now runs on `master`, matching the current repository branch used for
+  pushes.
 - new deferred Linux distro families such as openSUSE, RHEL-family targets, and
   Alpine
 

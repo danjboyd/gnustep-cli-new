@@ -128,6 +128,31 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("--ttl-hours 2", content)
         self.assertIn("destroy", content)
 
+    def test_ci_runs_on_master_branch(self):
+        workflow = ROOT / ".github" / "workflows" / "ci.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("- master", content)
+
+    def test_release_workflow_enforces_phase_hardening_gates(self):
+        workflow = ROOT / ".github" / "workflows" / "release.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("phase26_openbsd_report", content)
+        self.assertIn("phase26_windows_report", content)
+        self.assertIn("update_all_evidence", content)
+        self.assertIn("--release-gate release-candidate", content)
+        self.assertIn("phase12-production-hardening-status", content)
+        self.assertIn("phase13-update-hardening-status", content)
+
+    def test_update_all_production_like_evidence_runbook_exists(self):
+        doc = ROOT / "docs" / "validation" / "update-all-production-like-evidence.md"
+        self.assertTrue(doc.exists())
+        content = doc.read_text()
+        self.assertIn('"command": "gnustep update all --yes"', content)
+        self.assertIn('"production_like": true', content)
+        self.assertIn('"packages": true', content)
+
 
 if __name__ == "__main__":
     unittest.main()

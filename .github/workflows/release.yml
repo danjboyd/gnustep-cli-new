@@ -10,6 +10,17 @@ on:
         description: Release channel
         required: true
         default: stable
+      phase26_openbsd_report:
+        description: Path to the OpenBSD Tier 1 smoke report JSON
+        required: true
+        default: .artifacts/phase26-openbsd-tier1-20260424/openbsd-tier1-report.json
+      phase26_windows_report:
+        description: Path to the Windows Tier 1 smoke report JSON
+        required: true
+        default: .artifacts/phase26-windows-gorm-patched-20260424/windows-tier1-report-patched-gorm.json
+      update_all_evidence:
+        description: Path to production-like gnustep update all --yes evidence JSON
+        required: true
 
 jobs:
   release:
@@ -136,6 +147,33 @@ jobs:
         run: |
           python3 scripts/internal/build_infra.py --json release-claim-consistency-gate \
             --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}"
+
+      - name: Enforce Phase 26 release-candidate smoke gate
+        run: |
+          test -f "${{ inputs.phase26_openbsd_report }}"
+          test -f "${{ inputs.phase26_windows_report }}"
+          python3 scripts/dev/run-smoke-tests.py --release-gate release-candidate \
+            --report "${{ inputs.phase26_openbsd_report }}" \
+            --report "${{ inputs.phase26_windows_report }}"
+          python3 scripts/dev/run-smoke-tests.py --phase26-exit-status \
+            --report "${{ inputs.phase26_openbsd_report }}" \
+            --report "${{ inputs.phase26_windows_report }}"
+
+      - name: Enforce Phase 12 and Phase 13 hardening gates
+        run: |
+          test -f "${{ inputs.update_all_evidence }}"
+          python3 scripts/internal/build_infra.py --json phase12-production-hardening-status \
+            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}" \
+            --release-trust-root /tmp/gnustep-cli-release-trust-root.pem \
+            --package-index /tmp/package-index-trust/package-index.json \
+            --package-index-trust-root /tmp/gnustep-cli-package-index-trust-root.pem \
+            --smoke-report "${{ inputs.phase26_openbsd_report }}" \
+            --smoke-report "${{ inputs.phase26_windows_report }}"
+          python3 scripts/internal/build_infra.py --json phase13-update-hardening-status \
+            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}" \
+            --smoke-report "${{ inputs.phase26_openbsd_report }}" \
+            --smoke-report "${{ inputs.phase26_windows_report }}" \
+            --update-all-evidence "${{ inputs.update_all_evidence }}"
 
       - name: Publish GitHub Release
         env:
