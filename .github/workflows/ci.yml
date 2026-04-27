@@ -19,6 +19,11 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Install GNUstep toolchain prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang gnustep-devel git
+
       - name: Run Python/shared unit suite
         run: python3 -m unittest discover -s tests
 

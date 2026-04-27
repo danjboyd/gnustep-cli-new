@@ -32,16 +32,25 @@ if [ -z "${GCC_OBJC_HEADERS:-}" ] || [ ! -f "$GCC_OBJC_HEADERS/objc/objc.h" ]; t
   printf '%s\n' "objc/objc.h was not found under /usr/lib/gcc; install the libobjc development headers." >&2
   exit 1
 fi
+if [ -z "${GCC_OBJC_LIBDIR:-}" ]; then
+  GCC_OBJC_LIBDIR=$(find /usr/lib/gcc -name libobjc.so -print 2>/dev/null | sort -V | tail -n 1 | sed 's,/libobjc\.so$,,')
+fi
+if [ -z "${GCC_OBJC_LIBDIR:-}" ] || [ ! -f "$GCC_OBJC_LIBDIR/libobjc.so" ]; then
+  printf '%s\n' "libobjc.so was not found under /usr/lib/gcc; install the libobjc development library." >&2
+  exit 1
+fi
 
 make -C "$TOOLS_XCTEST_DIR" clean >/dev/null || true
 make -C "$TOOLS_XCTEST_DIR" \
   CC=clang \
   OBJC=clang \
-  ADDITIONAL_OBJCFLAGS="-I$GCC_OBJC_HEADERS"
+  ADDITIONAL_OBJCFLAGS="-I$GCC_OBJC_HEADERS" \
+  ADDITIONAL_LDFLAGS="-L$GCC_OBJC_LIBDIR"
 make -C "$TOOLS_XCTEST_DIR" \
   CC=clang \
   OBJC=clang \
   ADDITIONAL_OBJCFLAGS="-I$GCC_OBJC_HEADERS" \
+  ADDITIONAL_LDFLAGS="-L$GCC_OBJC_LIBDIR" \
   GNUSTEP_INSTALLATION_DOMAIN=USER \
   install
 
