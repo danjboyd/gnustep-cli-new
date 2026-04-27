@@ -140,6 +140,12 @@ class RepositoryContractsTests(unittest.TestCase):
         workflow = ROOT / ".github" / "workflows" / "release.yml"
         self.assertTrue(workflow.exists())
         content = workflow.read_text()
+        self.assertIn("release_source", content)
+        self.assertIn("staged-artifact", content)
+        self.assertIn("release_artifact_name", content)
+        self.assertIn("release_artifact_run_id", content)
+        self.assertIn("actions/download-artifact@v4", content)
+        self.assertIn("RELEASE_DIR=dist/${{ inputs.channel }}/${{ inputs.version }}", content)
         self.assertIn("phase26_openbsd_report", content)
         self.assertIn("phase26_windows_report", content)
         self.assertIn("update_all_evidence", content)

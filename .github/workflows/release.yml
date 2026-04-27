@@ -10,6 +10,17 @@ on:
         description: Release channel
         required: true
         default: stable
+      release_source:
+        description: "Release asset source: staged-artifact or checked-in"
+        required: true
+        default: staged-artifact
+      release_artifact_name:
+        description: Workflow artifact name containing the staged release directory contents
+        required: false
+        default: gnustep-staged-release
+      release_artifact_run_id:
+        description: Workflow run id that produced the staged release artifact
+        required: false
       phase26_openbsd_report:
         description: Path to the OpenBSD Tier 1 smoke report JSON
         required: true
@@ -41,6 +52,36 @@ jobs:
 
       - name: Install tools-xctest
         run: ./scripts/ci/install-tools-xctest.sh
+
+      - name: Resolve release directory
+        run: |
+          echo "RELEASE_DIR=dist/${{ inputs.channel }}/${{ inputs.version }}" >> "$GITHUB_ENV"
+
+      - name: Validate release source inputs
+        run: |
+          case "${{ inputs.release_source }}" in
+            staged-artifact)
+              if [ -z "${{ inputs.release_artifact_run_id }}" ]; then
+                echo "release_artifact_run_id is required when release_source is staged-artifact" >&2
+                exit 2
+              fi
+              ;;
+            checked-in)
+              ;;
+            *)
+              echo "Unsupported release_source: ${{ inputs.release_source }}" >&2
+              exit 2
+              ;;
+          esac
+
+      - name: Download staged release artifact
+        if: ${{ inputs.release_source == 'staged-artifact' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.release_artifact_name }}
+          path: dist/${{ inputs.channel }}/${{ inputs.version }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.release_artifact_run_id }}
 
       - name: Run full regression suite
         run: |
@@ -85,24 +126,24 @@ jobs:
 
       - name: Verify staged release directory exists
         run: |
-          test -d "dist/${{ inputs.channel }}/${{ inputs.version }}"
-          test -f "dist/${{ inputs.channel }}/${{ inputs.version }}/release-manifest.json"
-          test -f "dist/${{ inputs.channel }}/${{ inputs.version }}/SHA256SUMS"
+          test -d "$RELEASE_DIR"
+          test -f "$RELEASE_DIR/release-manifest.json"
+          test -f "$RELEASE_DIR/SHA256SUMS"
 
       - name: Verify staged release contents
         run: |
           python3 scripts/internal/build_infra.py --json verify-release \
-            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}"
+            --release-dir "$RELEASE_DIR"
 
       - name: Build preliminary release evidence inventory
         run: |
           python3 scripts/internal/build_infra.py --json release-evidence-bundle \
-            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}" || true
+            --release-dir "$RELEASE_DIR" || true
 
       - name: Run release key rotation drill
         run: |
           python3 scripts/internal/build_infra.py --json release-key-rotation-drill \
-            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}"
+            --release-dir "$RELEASE_DIR"
 
       - name: Sign release metadata
         env:
@@ -115,7 +156,7 @@ jobs:
           fi
           umask 077
           printf '%s\n' "$GNUSTEP_CLI_RELEASE_SIGNING_PRIVATE_KEY" > /tmp/gnustep-cli-release-signing-private.pem
-          args=(--json sign-release-metadata --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}" --private-key /tmp/gnustep-cli-release-signing-private.pem)
+          args=(--json sign-release-metadata --release-dir "$RELEASE_DIR" --private-key /tmp/gnustep-cli-release-signing-private.pem)
           if [ -n "${GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY:-}" ]; then
             printf '%s\n' "$GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY" > /tmp/gnustep-cli-release-signing-public.pem
             args+=(--public-key /tmp/gnustep-cli-release-signing-public.pem)
@@ -127,7 +168,7 @@ jobs:
           GNUSTEP_CLI_RELEASE_TRUST_ROOT: ${{ secrets.GNUSTEP_CLI_RELEASE_TRUST_ROOT }}
           GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT }}
         run: |
-          args=(--json controlled-release-gate --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}")
+          args=(--json controlled-release-gate --release-dir "$RELEASE_DIR")
           if [ -n "${GNUSTEP_CLI_RELEASE_TRUST_ROOT:-}" ]; then
             printf '%s\n' "$GNUSTEP_CLI_RELEASE_TRUST_ROOT" > /tmp/gnustep-cli-release-trust-root.pem
             args+=(--release-trust-root /tmp/gnustep-cli-release-trust-root.pem)
@@ -146,7 +187,7 @@ jobs:
       - name: Enforce release claim consistency
         run: |
           python3 scripts/internal/build_infra.py --json release-claim-consistency-gate \
-            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}"
+            --release-dir "$RELEASE_DIR"
 
       - name: Enforce Phase 26 release-candidate smoke gate
         run: |
@@ -165,21 +206,21 @@ jobs:
           python3 scripts/internal/build_infra.py --json validate-update-all-evidence \
             --evidence "${{ inputs.update_all_evidence }}"
           python3 scripts/internal/build_infra.py --json release-evidence-bundle \
-            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}" \
+            --release-dir "$RELEASE_DIR" \
             --smoke-report "${{ inputs.phase26_openbsd_report }}" \
             --smoke-report "${{ inputs.phase26_windows_report }}" \
             --update-all-evidence "${{ inputs.update_all_evidence }}" \
             --release-trust-root /tmp/gnustep-cli-release-trust-root.pem \
             --package-index-trust-root /tmp/gnustep-cli-package-index-trust-root.pem
           python3 scripts/internal/build_infra.py --json phase12-production-hardening-status \
-            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}" \
+            --release-dir "$RELEASE_DIR" \
             --release-trust-root /tmp/gnustep-cli-release-trust-root.pem \
             --package-index /tmp/package-index-trust/package-index.json \
             --package-index-trust-root /tmp/gnustep-cli-package-index-trust-root.pem \
             --smoke-report "${{ inputs.phase26_openbsd_report }}" \
             --smoke-report "${{ inputs.phase26_windows_report }}"
           python3 scripts/internal/build_infra.py --json phase13-update-hardening-status \
-            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}" \
+            --release-dir "$RELEASE_DIR" \
             --smoke-report "${{ inputs.phase26_openbsd_report }}" \
             --smoke-report "${{ inputs.phase26_windows_report }}" \
             --update-all-evidence "${{ inputs.update_all_evidence }}"
@@ -202,4 +243,4 @@ jobs:
             --repo "${{ github.repository }}" \
             --version "${{ inputs.version }}" \
             --channel "${{ inputs.channel }}" \
-            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}"
+            --release-dir "$RELEASE_DIR"

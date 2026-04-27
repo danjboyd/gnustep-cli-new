@@ -56,6 +56,14 @@ Implemented subcommands include:
 - emitting the exact GitHub publish plan that would be executed next
 - emitting a package-artifact build plan from the reviewed `packages/` tree so package publication inputs are explicit before release publication
 
+The GitHub release workflow now treats the staged release directory as a
+workflow-owned input. Its default `release_source` is `staged-artifact`, which
+downloads a named artifact from a specified workflow run into
+`dist/<channel>/<version>` before signing, gating, evidence bundling, and
+publication. The legacy `checked-in` source remains available for bring-up, but
+release-candidate and production runs should use staged artifacts from
+controlled build/prep jobs.
+
 ## Current Verified State
 
 - A real staged prerelease payload now exists under `dist/stable/0.1.0-dev`.
@@ -97,11 +105,13 @@ Implemented subcommands include:
   `oracletestvms-windows2022-eval-libvirt-20260414153225.qcow2` image and the
   current `OracleTestVMs` readiness flow, and the staged `0.1.0-dev` bootstrap
   path is no longer blocked on PowerShell zip extraction.
-- broader cross-target host validation is still incomplete as production CI,
-  persisted evidence bundles, and published-URL qualification are not yet fully
-  wired, even though the current Linux managed toolchain assembly and
-  managed-prefix CLI artifact now pass Debian lease-side setup/project/package
-  and update/rollback dogfood against freshly staged release artifacts
+- broader cross-target host validation is still incomplete as production CI
+  evidence production and published-URL qualification are not yet fully wired,
+  even though the release publication workflow can now consume a staged release
+  directory artifact from another workflow run and the current Linux managed
+  toolchain assembly and managed-prefix CLI artifact now pass Debian lease-side
+  setup/project/package and update/rollback dogfood against freshly staged
+  release artifacts
 - `prepare-github-release` still generates the host-validation plan but does not
   itself execute live `otvm` farm actions; live validation remains an explicit
   follow-up step so local release staging is not coupled directly to farm
