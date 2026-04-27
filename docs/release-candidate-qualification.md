@@ -301,6 +301,16 @@ The update-all run covered a CLI/toolchain transition plus a package update. It 
 
 Remaining production blockers:
 
-- Run the controlled `Stage Release` and `Package Index` producer workflows, then pass their `gnustep-staged-release` and `gnustep-signed-package-index` artifacts into the release workflow instead of using operator-local artifact directories.
+- Configure the missing repository secret `GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY`, then rerun the controlled `Package Index` producer workflow and consume its `gnustep-signed-package-index` artifact from the release workflow.
+- Add or run a hosted source-artifact producer for CLI/toolchain release inputs, then run the controlled `Stage Release` workflow with that producer run as `source_artifact_run_id` and consume its `gnustep-staged-release` artifact from the release workflow.
 - Re-run the signed metadata and `update all --yes` path on clean Windows/OpenBSD/Linux Tier 1 hosts from the release lanes.
 - Keep the new native `update all --yes` regression and raw-package evidence checks in the release gate before RC sign-off.
+
+April 27 hosted workflow update:
+
+- GitHub Actions CI is green on `master` at commit `4d649e68`.
+- The `Package Index` workflow run `25020740853` failed because
+  `GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY` was empty in the hosted
+  environment.
+- The green CI run `25020575778` published no downloadable artifacts, so it
+  cannot serve as the `source_artifact_run_id` for `Stage Release`.

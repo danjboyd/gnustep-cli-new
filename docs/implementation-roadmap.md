@@ -1636,6 +1636,29 @@ core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
   evidence before returning to warm-builder live orchestration or native
   byte-delta application.
 
+### April 27, 2026 Hosted Workflow Status
+
+- Hosted CI is green on `master` as of commit `4d649e68`; the Python/shared,
+  native Objective-C, and package-artifact gate jobs all pass in GitHub Actions.
+- The Python/shared hosted job now installs `tools-xctest` before running the
+  full regression suite because `test_qa.QATests.test_regression_suite_runner`
+  intentionally executes the native regression stage as part of the nested QA
+  pass.
+- The controlled `Package Index` producer workflow was executed and failed
+  exactly at the expected production blocker: repository secret
+  `GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY` is not configured. The public
+  package-index key and trust root are present, but the private signing input is
+  required to produce `gnustep-signed-package-index`.
+- The controlled `Stage Release` producer workflow is present, but it still
+  requires a prior hosted workflow run that publishes CLI/toolchain input
+  artifacts. The current CI run publishes no artifacts, so Stage Release has no
+  valid `source_artifact_run_id` to consume yet.
+- Do not bypass the missing source-artifact producer by staging official release
+  inputs from the hosted runner's distro GNUstep packages. That would violate
+  the managed artifact source policy. The next implementation step is a real
+  source-built or explicitly provisional artifact-input workflow with clear
+  provenance, not a silent host-package repack.
+
 ## Testing Principles For All Phases
 
 ### A. Unit Testing Standard

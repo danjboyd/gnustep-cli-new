@@ -1,6 +1,6 @@
 # Release Readiness Review
 
-Current date: 2026-04-20.
+Current date: 2026-04-27.
 
 ## Release-Candidate Position
 
@@ -16,12 +16,13 @@ The project has reached a local v0.1.x RC1-style validation point for the delibe
 
 ## Production Blockers
 
-- Production release signing must use CI-held private keys or a signing service, not developer-local ad hoc keys. The workflow now requires release signing material and an explicit release trust root before publication.
-- Production package-index signing must also use CI-held private keys or a signing service. The workflow now requires package-index signing material and an explicit package-index trust root before publication.
+- Production release signing must use CI-held private keys or a signing service, not developer-local ad hoc keys. The workflow now requires release signing material and an explicit release trust root before publication; the release private/public/trust secrets are configured in GitHub.
+- Production package-index signing must also use CI-held private keys or a signing service. The workflow now requires package-index signing material and an explicit package-index trust root before publication; the hosted producer is currently blocked because `GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY` is not configured.
 - Release and package-index trust roots must be injected from an external trusted channel and verified by the release gate; local ephemeral signing is acceptable only as validation evidence. The controlled release gate no longer accepts a bundled package-index public key as production trust.
 - Key rotation, revocation, expiry, rollback/freeze, and compromised-key drills must be automated before making production security claims; the local release key-rotation drill now exists and must be run with CI-held production trust roots before any production claim.
 - Published-URL qualification still needs production persisted evidence and scheduled/CI execution; the staged-release OTVM lanes now have destroy-on-exit cleanup for Debian, OpenBSD, and Windows smoke coverage, and release evidence can now be bundled as `release-evidence-bundle.json`.
 - Package artifact publication is now blocked by automation until package manifests carry real source provenance and artifact checksums. The current `tools-xctest` package remains intentionally non-publishable until controlled package builds rebuild every target from the declared upstream revision plus PR #5 patch and native install/smoke/remove evidence is recorded.
+- The controlled `Stage Release` workflow needs a hosted source-artifact run that uploads CLI/toolchain input artifacts. Current hosted CI is green but publishes no release input artifacts, so Stage Release has no valid source run to consume.
 
 ## Next Gate
 
@@ -53,3 +54,14 @@ The next gate is productionizing cross-target release qualification: persist the
 - Final OTVM lease cleanup destroyed the validation and rebuild leases.
 
 The main remaining release-engineering issue is productionizing evidence and trust, not unresolved Debian/OpenBSD/Windows staged-release behavior. The first attempted RC staging caught that `stage-release` could misuse prebuilt archive inputs as directory inputs; that immediate bug is fixed by copying supported archive inputs directly and adding regression coverage. The Windows refresh also caught `assemble-toolchain.ps1` wildcard handling defects for `usr\bin` runtime files, including MSYS2 `[`-named tools; those are fixed with explicit wildcard enumeration and `Copy-Item -LiteralPath`.
+
+## April 27 Hosted CI And Producer Status
+
+- Hosted CI passed on `master` at commit `4d649e68`: Python/shared, native
+  Objective-C, and package-artifacts jobs are green.
+- The Python/shared job now installs `tools-xctest` because the QA regression
+  test executes the native suite inside the shared regression runner.
+- `Package Index` producer run `25020740853` failed at the signing step because
+  the private package-index signing secret is missing.
+- CI run `25020575778` has no Actions artifacts, so it cannot be used as a
+  `Stage Release` source run.
