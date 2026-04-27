@@ -17,13 +17,13 @@ The project has reached a local v0.1.x RC1-style validation point for the delibe
 ## Production Blockers
 
 - Production release signing must use CI-held private keys or a signing service, not developer-local ad hoc keys. The workflow now requires release signing material and an explicit release trust root before publication; the release private/public/trust secrets are configured in GitHub.
-- Production package-index signing must also use CI-held private keys or a signing service. The workflow now requires package-index signing material and an explicit package-index trust root before publication; the hosted producer is currently blocked because `GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY` is not configured.
+- Production package-index signing must also use CI-held private keys or a signing service. The workflow now requires package-index signing material and an explicit package-index trust root before publication; the hosted producer is no longer blocked after rotating the package-index signing material to RSA and producing signed package-index artifact run `25021604641`.
 - Release and package-index trust roots must be injected from an external trusted channel and verified by the release gate; local ephemeral signing is acceptable only as validation evidence. The controlled release gate no longer accepts a bundled package-index public key as production trust.
 - Key rotation, revocation, expiry, rollback/freeze, and compromised-key drills must be automated before making production security claims; the local release key-rotation drill now exists and must be run with CI-held production trust roots before any production claim.
-- Published-URL qualification still needs production persisted evidence and scheduled/CI execution; the staged-release OTVM lanes now have destroy-on-exit cleanup for Debian, OpenBSD, and Windows smoke coverage, and release evidence can now be bundled as `release-evidence-bundle.json`.
+- Published-URL qualification now has a successful dogfood publication path and persisted hosted evidence for the provisional `v0.1.0-dev-hosted.1` release. Production still needs scheduled/CI live host evidence rather than replaying April 24 local smoke reports.
 - Package artifact publication is now blocked by automation until package manifests carry real source provenance and artifact checksums. The current `tools-xctest` package remains intentionally non-publishable until controlled package builds rebuild every target from the declared upstream revision plus PR #5 patch and native install/smoke/remove evidence is recorded.
-- The controlled `Release Inputs` workflow now supplies the hosted source-artifact handoff for Stage Release. Current hosted CI is green but publishes no release input artifacts, so Stage Release should consume a `Release Inputs` workflow run rather than a CI run.
-- The controlled `Release Evidence` workflow now supplies the hosted evidence handoff for release qualification. Release publication can consume smoke and update evidence from a workflow artifact instead of relying on local `.artifacts/` files.
+- The controlled `Release Inputs` workflow now supplies the hosted source-artifact handoff for Stage Release. The current dogfood release consumed run `25021838530`.
+- The controlled `Release Evidence` workflow now supplies the hosted evidence handoff for release qualification. The current dogfood release consumed run `25022173894`.
 
 ## Next Gate
 
@@ -56,15 +56,36 @@ The next gate is productionizing cross-target release qualification: persist the
 
 The main remaining release-engineering issue is productionizing evidence and trust, not unresolved Debian/OpenBSD/Windows staged-release behavior. The first attempted RC staging caught that `stage-release` could misuse prebuilt archive inputs as directory inputs; that immediate bug is fixed by copying supported archive inputs directly and adding regression coverage. The Windows refresh also caught `assemble-toolchain.ps1` wildcard handling defects for `usr\bin` runtime files, including MSYS2 `[`-named tools; those are fixed with explicit wildcard enumeration and `Copy-Item -LiteralPath`.
 
-## April 27 Hosted CI And Producer Status
+## April 27 Hosted CI, Producer, And Release Status
 
-- Hosted CI passed on `master` at commit `4d649e68`: Python/shared, native
+- Hosted CI passed on `master` at commit `f67a390a`: Python/shared, native
   Objective-C, and package-artifacts jobs are green.
 - The Python/shared job now installs `tools-xctest` because the QA regression
   test executes the native suite inside the shared regression runner.
-- `Package Index` producer run `25020740853` failed at the signing step because
-  the private package-index signing secret is missing.
-- CI run `25020575778` has no Actions artifacts, so it cannot be used as a
-  `Stage Release` source run. The `Release Inputs` workflow now exists for that
-  handoff and verifies explicit URLs against supplied SHA256 values before
-  uploading Actions artifacts.
+- `Package Index` producer run `25021604641` passed and uploaded
+  `gnustep-signed-package-index` with digest
+  `sha256:39814e18490372ecbf0803de40206aa41d88f29254d5fcd024735dde777ee97e`.
+- `Release Inputs` run `25021838530` passed and uploaded the four hosted input
+  artifacts consumed by `Stage Release`.
+- `Stage Release` run `25021894289` passed and uploaded `gnustep-staged-release`
+  for version `0.1.0-dev-hosted.1`.
+- `Release Evidence` run `25022173894` passed and uploaded
+  `gnustep-release-evidence-inputs`.
+- `Release` run `25022880046` passed and published prerelease
+  `v0.1.0-dev-hosted.1`:
+  `https://github.com/danjboyd/gnustep-cli-new/releases/tag/v0.1.0-dev-hosted.1`.
+  The run evidence artifact `gnustep-release-evidence-dogfood-0.1.0-dev-hosted.1`
+  has digest
+  `sha256:6b3033c148a0ad5a83e24da75fde4fc730f9698c8d36c857afe6021c239edf88`.
+- Published asset digests include Linux CLI
+  `sha256:15190139967c202fee652301bdca8fb7e6d833cafe5447a34c55562f22fac682`,
+  Linux toolchain
+  `sha256:d9ce78d16d28842f7bedd24dbd2de64e16f67c064fbeb1d6ab1b372780ddff1b`,
+  Windows CLI
+  `sha256:8a1b0cf6f8db2f79ecc0c478532a213650131584baf4e2f7184c3b3364aa271e`,
+  and Windows toolchain
+  `sha256:1c07368c338c47502409fb996463ec53ff33324a6ede9cc29339fcda944a11a3`.
+- The release passed with the explicit `allow_stale_windows_artifact=true`
+  exception. This is acceptable for the dogfood hosted-path proof, but a
+  production Windows refresh still requires a current-source hosted Windows
+  artifact and live smoke evidence.

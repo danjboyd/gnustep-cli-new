@@ -3675,7 +3675,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                  ([selectionErrors count] > 0 ? [selectionErrors objectAtIndex: 0] : @"No matching managed artifact was found for this host.")
                              interface: ([interface isEqualToString: @"bootstrap"] ? @"bootstrap" : @"both")
                         executionTier: @"bootstrap_optional"
-                               details: nil]];
+                               details: compatibility]];
 
   [self appendInstallTrace: @"doctor.actions.start"];
   if ([[[environment objectForKey: @"bootstrap_prerequisites"] objectForKey: @"available"] boolValue] == NO)

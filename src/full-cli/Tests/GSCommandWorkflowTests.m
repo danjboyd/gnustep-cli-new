@@ -388,6 +388,30 @@
   XCTAssertNotNil([checks objectForKey: @"native-toolchain.assess"]);
 }
 
+- (void)testDoctorCompatibilityCheckCarriesStructuredDetails
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *payload = [runner buildDoctorPayloadWithInterface: @"full" manifestPath: nil];
+  NSDictionary *compatibility = [payload objectForKey: @"compatibility"];
+  NSDictionary *compatibilityCheck = nil;
+  NSUInteger i = 0;
+
+  for (i = 0; i < [[payload objectForKey: @"checks"] count]; i++)
+    {
+      NSDictionary *check = [[payload objectForKey: @"checks"] objectAtIndex: i];
+      if ([[check objectForKey: @"id"] isEqualToString: @"toolchain.compatibility"])
+        {
+          compatibilityCheck = check;
+          break;
+        }
+    }
+
+  XCTAssertNotNil(compatibilityCheck);
+  XCTAssertEqualObjects([compatibilityCheck objectForKey: @"details"], compatibility);
+  XCTAssertNotNil([[compatibilityCheck objectForKey: @"details"] objectForKey: @"reasons"]);
+  XCTAssertNotNil([[compatibilityCheck objectForKey: @"details"] objectForKey: @"warnings"]);
+}
+
 
 - (void)testDoctorBootstrapAndFullShareCoreCheckIdentifiers
 {

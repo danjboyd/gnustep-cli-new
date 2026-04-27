@@ -1638,30 +1638,53 @@ core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
 
 ### April 27, 2026 Hosted Workflow Status
 
-- Hosted CI is green on `master` as of commit `4d649e68`; the Python/shared,
+- Hosted CI is green on `master` as of commit `f67a390a`; the Python/shared,
   native Objective-C, and package-artifact gate jobs all pass in GitHub Actions.
 - The Python/shared hosted job now installs `tools-xctest` before running the
   full regression suite because `test_qa.QATests.test_regression_suite_runner`
   intentionally executes the native regression stage as part of the nested QA
   pass.
-- The controlled `Package Index` producer workflow was executed and failed
-  exactly at the expected production blocker: repository secret
-  `GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY` is not configured. The public
-  package-index key and trust root are present, but the private signing input is
-  required to produce `gnustep-signed-package-index`.
+- The controlled `Package Index` producer workflow is now unblocked after
+  rotating the package-index signing material to an RSA keypair compatible with
+  the current OpenSSL signing path. Run `25021604641` passed and produced
+  `gnustep-signed-package-index` with Actions artifact digest
+  `sha256:39814e18490372ecbf0803de40206aa41d88f29254d5fcd024735dde777ee97e`.
 - The controlled `Release Inputs` workflow now provides the missing hosted
   source-artifact handoff. It accepts explicit artifact URLs and SHA256 values,
   verifies the downloaded bytes in GitHub Actions, and uploads
   `gnustep-input-*` artifacts for the `Stage Release` workflow to consume as
-  `source_artifact_run_id`.
+  `source_artifact_run_id`. The current dogfood release used run `25021838530`.
 - The controlled `Stage Release` workflow stages and verifies release metadata
-  from hosted Actions artifacts. Release-claim consistency remains enforced in
-  the release workflow after hosted smoke and update evidence have been supplied.
-- Do not bypass the missing source-artifact producer by staging official release
-  inputs from the hosted runner's distro GNUstep packages. That would violate
-  the managed artifact source policy. The next implementation step is a real
-  source-built or explicitly provisional artifact-input workflow with clear
-  provenance, not a silent host-package repack.
+  from hosted Actions artifacts. The current dogfood release used Stage Release
+  run `25021894289`.
+- The controlled `Release Evidence` workflow now supplies hosted smoke/update
+  evidence to Release. Run `25022173894` produced
+  `gnustep-release-evidence-inputs`.
+- Dogfood release `v0.1.0-dev-hosted.1` was published by Release run
+  `25022880046` from commit `f67a390a`. All release gates passed: full
+  regression, package artifact publication readiness, signed package-index
+  verification, staged release verification, release key-rotation drill,
+  signed release metadata, controlled release gate, release-claim consistency,
+  Phase 26 release-candidate smoke, and Phase 12/13 hardening. The run uploaded
+  release evidence artifact `gnustep-release-evidence-dogfood-0.1.0-dev-hosted.1`
+  with digest
+  `sha256:6b3033c148a0ad5a83e24da75fde4fc730f9698c8d36c857afe6021c239edf88`.
+- Published release URL:
+  `https://github.com/danjboyd/gnustep-cli-new/releases/tag/v0.1.0-dev-hosted.1`.
+  Key published asset digests are:
+  `gnustep-cli-linux-amd64-clang-0.1.0-dev-hosted.1.tar.gz`
+  `sha256:15190139967c202fee652301bdca8fb7e6d833cafe5447a34c55562f22fac682`,
+  `gnustep-toolchain-linux-amd64-clang-0.1.0-dev-hosted.1.tar.gz`
+  `sha256:d9ce78d16d28842f7bedd24dbd2de64e16f67c064fbeb1d6ab1b372780ddff1b`,
+  `gnustep-cli-windows-amd64-msys2-clang64-0.1.0-dev-hosted.1.zip`
+  `sha256:8a1b0cf6f8db2f79ecc0c478532a213650131584baf4e2f7184c3b3364aa271e`,
+  and `gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev-hosted.1.zip`
+  `sha256:1c07368c338c47502409fb996463ec53ff33324a6ede9cc29339fcda944a11a3`.
+- This dogfood publication still used the explicit
+  `allow_stale_windows_artifact=true` exception because the Windows artifact was
+  the approved April 24 local dogfood smoke artifact, not a freshly hosted
+  current-source Windows build. That exception is documented and must not be
+  carried into a production Windows refresh claim.
 
 ## Testing Principles For All Phases
 

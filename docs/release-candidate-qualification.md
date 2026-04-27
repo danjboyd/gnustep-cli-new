@@ -301,18 +301,38 @@ The update-all run covered a CLI/toolchain transition plus a package update. It 
 
 Remaining production blockers:
 
-- Configure the missing repository secret `GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY`, then rerun the controlled `Package Index` producer workflow and consume its `gnustep-signed-package-index` artifact from the release workflow.
-- Run the hosted `Release Inputs` producer with explicit artifact URLs and SHA256 values, then run the controlled `Stage Release` workflow with that producer run as `source_artifact_run_id` and consume its `gnustep-staged-release` artifact from the release workflow.
-- Run the hosted `Release Evidence` producer with explicit smoke/update evidence URLs and SHA256 values, then consume its `gnustep-release-evidence-inputs` artifact from the release workflow.
+- Keep the controlled `Package Index`, `Release Inputs`, `Stage Release`, and
+  `Release Evidence` producer chain green and repeatable for each new release
+  candidate.
 - Re-run the signed metadata and `update all --yes` path on clean Windows/OpenBSD/Linux Tier 1 hosts from the release lanes.
 - Keep the new native `update all --yes` regression and raw-package evidence checks in the release gate before RC sign-off.
 
 April 27 hosted workflow update:
 
-- GitHub Actions CI is green on `master` at commit `4d649e68`.
-- The `Package Index` workflow run `25020740853` failed because
-  `GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY` was empty in the hosted
-  environment.
-- The green CI run `25020575778` published no downloadable artifacts, so it
-  cannot serve as the `source_artifact_run_id` for `Stage Release`; use the
-  `Release Inputs` producer instead.
+- GitHub Actions CI is green on `master` at commit `f67a390a`.
+- `Package Index` run `25021604641` passed and produced
+  `gnustep-signed-package-index` with digest
+  `sha256:39814e18490372ecbf0803de40206aa41d88f29254d5fcd024735dde777ee97e`.
+- `Release Inputs` run `25021838530` passed and produced the hosted CLI and
+  toolchain input artifacts consumed by `Stage Release`.
+- `Stage Release` run `25021894289` passed and produced
+  `gnustep-staged-release` for `0.1.0-dev-hosted.1`.
+- `Release Evidence` run `25022173894` passed and produced
+  `gnustep-release-evidence-inputs`.
+- `Release` run `25022880046` passed and published prerelease
+  `v0.1.0-dev-hosted.1`:
+  `https://github.com/danjboyd/gnustep-cli-new/releases/tag/v0.1.0-dev-hosted.1`.
+  Its release evidence artifact digest is
+  `sha256:6b3033c148a0ad5a83e24da75fde4fc730f9698c8d36c857afe6021c239edf88`.
+- Published release asset digests include Linux CLI
+  `sha256:15190139967c202fee652301bdca8fb7e6d833cafe5447a34c55562f22fac682`,
+  Linux toolchain
+  `sha256:d9ce78d16d28842f7bedd24dbd2de64e16f67c064fbeb1d6ab1b372780ddff1b`,
+  Windows CLI
+  `sha256:8a1b0cf6f8db2f79ecc0c478532a213650131584baf4e2f7184c3b3364aa271e`,
+  and Windows toolchain
+  `sha256:1c07368c338c47502409fb996463ec53ff33324a6ede9cc29339fcda944a11a3`.
+- This dogfood release passed with `allow_stale_windows_artifact=true`, using
+  the approved April 24 Windows smoke artifact as hosted evidence. Production
+  Windows refresh remains blocked until a current-source hosted Windows build
+  and live smoke run replace that exception.
