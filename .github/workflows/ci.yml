@@ -24,6 +24,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang gnustep-devel git
 
+      - name: Install tools-xctest
+        run: ./scripts/ci/install-tools-xctest.sh
+
       - name: Run Python/shared unit suite
         run: |
           set +u
