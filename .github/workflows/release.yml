@@ -21,6 +21,17 @@ on:
       release_artifact_run_id:
         description: Workflow run id that produced the staged release artifact
         required: false
+      package_index_source:
+        description: "Package index source: signed-artifact or sign-in-workflow"
+        required: true
+        default: signed-artifact
+      package_index_artifact_name:
+        description: Workflow artifact name containing signed package-index metadata
+        required: false
+        default: gnustep-signed-package-index
+      package_index_artifact_run_id:
+        description: Workflow run id that produced the signed package-index artifact
+        required: false
       phase26_openbsd_report:
         description: Path to the OpenBSD Tier 1 smoke report JSON
         required: true
@@ -73,6 +84,20 @@ jobs:
               exit 2
               ;;
           esac
+          case "${{ inputs.package_index_source }}" in
+            signed-artifact)
+              if [ -z "${{ inputs.package_index_artifact_run_id || inputs.release_artifact_run_id }}" ]; then
+                echo "package_index_artifact_run_id or release_artifact_run_id is required when package_index_source is signed-artifact" >&2
+                exit 2
+              fi
+              ;;
+            sign-in-workflow)
+              ;;
+            *)
+              echo "Unsupported package_index_source: ${{ inputs.package_index_source }}" >&2
+              exit 2
+              ;;
+          esac
 
       - name: Download staged release artifact
         if: ${{ inputs.release_source == 'staged-artifact' }}
@@ -83,6 +108,15 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ inputs.release_artifact_run_id }}
 
+      - name: Download signed package-index artifact
+        if: ${{ inputs.package_index_source == 'signed-artifact' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.package_index_artifact_name }}
+          path: /tmp/package-index-trust
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.package_index_artifact_run_id || inputs.release_artifact_run_id }}
+
       - name: Run full regression suite
         run: |
           python3 -c 'import sys, json; sys.path.insert(0, "src"); from gnustep_cli_shared.qa import regression_suite; payload = regression_suite(); print(json.dumps(payload, indent=2)); raise SystemExit(0 if payload["ok"] else 1)'
@@ -92,7 +126,28 @@ jobs:
           python3 scripts/internal/build_infra.py --json package-artifact-publication-gate \
             --packages-dir packages
 
+      - name: Verify signed package-index artifact
+        if: ${{ inputs.package_index_source == 'signed-artifact' }}
+        env:
+          GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT }}
+        run: |
+          if [ -z "${GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT:-}" ]; then
+            echo "GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT is required for release publication" >&2
+            exit 3
+          fi
+          test -f /tmp/package-index-trust/package-index.json
+          test -f /tmp/package-index-trust/package-index-provenance.json
+          test -f /tmp/package-index-trust/package-index.json.sig
+          test -f /tmp/package-index-trust/package-index-provenance.json.sig
+          python3 scripts/internal/package_repo.py --json packages --output /tmp/package-index-generated.json >/dev/null
+          diff -u /tmp/package-index-generated.json /tmp/package-index-trust/package-index.json
+          printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT" > /tmp/gnustep-cli-package-index-trust-root.pem
+          python3 scripts/internal/package_repo.py --json --trust-gate \
+            --trusted-public-key /tmp/gnustep-cli-package-index-trust-root.pem \
+            /tmp/package-index-trust/package-index.json
+
       - name: Verify and sign generated package index
+        if: ${{ inputs.package_index_source == 'sign-in-workflow' }}
         env:
           GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY }}
           GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY }}

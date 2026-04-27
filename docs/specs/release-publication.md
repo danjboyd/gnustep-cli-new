@@ -64,6 +64,14 @@ publication. The legacy `checked-in` source remains available for bring-up, but
 release-candidate and production runs should use staged artifacts from
 controlled build/prep jobs.
 
+Package-index custody can follow the same artifact handoff model. The default
+`package_index_source` is `signed-artifact`: the release workflow downloads a
+signed package-index metadata artifact, verifies it against
+`GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT`, and diffs the signed index against the
+index generated from the reviewed `packages/` tree. `sign-in-workflow` remains
+available when a repository explicitly chooses to hold the package-index private
+key in Actions secrets.
+
 ## Current Verified State
 
 - A real staged prerelease payload now exists under `dist/stable/0.1.0-dev`.
