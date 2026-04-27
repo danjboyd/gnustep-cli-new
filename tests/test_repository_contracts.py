@@ -149,6 +149,7 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("package_index_artifact_name", content)
         self.assertIn("package_index_artifact_run_id", content)
         self.assertIn("evidence_artifact_run_id", content)
+        self.assertIn("allow_stale_windows_artifact", content)
         self.assertIn("Download hosted release evidence artifact", content)
         self.assertIn("Verify signed package-index artifact", content)
         self.assertIn("actions/download-artifact@v4", content)

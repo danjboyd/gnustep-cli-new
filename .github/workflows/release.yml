@@ -39,6 +39,10 @@ on:
       evidence_artifact_run_id:
         description: Workflow run id that produced the hosted release evidence artifact
         required: false
+      allow_stale_windows_artifact:
+        description: "Allow release claim consistency without a current-source Windows marker"
+        required: true
+        default: "false"
       phase26_openbsd_report:
         description: Path to the OpenBSD Tier 1 smoke report JSON
         required: true
@@ -257,8 +261,14 @@ jobs:
 
       - name: Enforce release claim consistency
         run: |
-          python3 scripts/internal/build_infra.py --json release-claim-consistency-gate \
-            --release-dir "$RELEASE_DIR"
+          args=(--json release-claim-consistency-gate --release-dir "$RELEASE_DIR")
+          if [ -n "${{ inputs.evidence_artifact_run_id }}" ]; then
+            args+=(--evidence-dir .artifacts/hosted-release-evidence)
+          fi
+          if [ "${{ inputs.allow_stale_windows_artifact }}" = "true" ]; then
+            args+=(--allow-stale-windows-artifact)
+          fi
+          python3 scripts/internal/build_infra.py "${args[@]}"
 
       - name: Enforce Phase 26 release-candidate smoke gate
         run: |

@@ -1102,6 +1102,42 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(checks["release-evidence-bundle"]["ok"])
             self.assertTrue(checks["windows-current-source-artifact"]["ok"])
 
+    def test_release_claim_consistency_gate_accepts_hosted_evidence_names(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            release_dir = temp / "release"
+            evidence_dir = temp / "hosted-evidence"
+            release_dir.mkdir()
+            evidence_dir.mkdir()
+            (release_dir / "release-manifest.json").write_text(json.dumps({
+                "schema_version": 1,
+                "releases": [{
+                    "version": "0.1.0",
+                    "artifacts": [
+                        {"id": "cli-linux-amd64-clang"},
+                        {"id": "toolchain-linux-amd64-clang"},
+                        {"id": "cli-windows-amd64-msys2-clang64"},
+                        {"id": "toolchain-windows-amd64-msys2-clang64"},
+                    ],
+                }],
+            }))
+            for name in [
+                "update-all-production-like.json",
+                "openbsd-tier1-report.json",
+                "windows-tier1-report-patched-gorm.json",
+            ]:
+                (evidence_dir / name).write_text('{"ok": true, "summary": "hosted evidence ok"}')
+            gate = release_claim_consistency_gate(
+                release_dir,
+                evidence_dir=evidence_dir,
+                require_windows_current_source=False,
+            )
+            checks = {check["id"]: check for check in gate["checks"]}
+            self.assertTrue(gate["ok"])
+            self.assertIn("update-all-production-like.json", checks["debian-otvm-smoke"]["path"])
+            self.assertIn("openbsd-tier1-report.json", checks["openbsd-otvm-smoke"]["path"])
+            self.assertIn("windows-tier1-report-patched-gorm.json", checks["windows-otvm-smoke"]["path"])
+
     def test_release_evidence_bundle_accepts_modern_gate_inputs(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp = Path(tempdir)

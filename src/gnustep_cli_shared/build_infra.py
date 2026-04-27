@@ -3273,13 +3273,35 @@ def release_claim_consistency_gate(
         add("release-evidence-bundle", ok, summary, path=str(bundle_path))
 
     smoke_files = {
-        "debian-otvm-smoke": evidence_root / "otvm-debian-13-gnome-wayland-smoke.json",
-        "openbsd-otvm-smoke": evidence_root / "otvm-openbsd-7.8-fvwm-smoke.json",
-        "windows-otvm-smoke": evidence_root / "otvm-windows-2022-smoke.json",
+        "debian-otvm-smoke": [
+            evidence_root / "otvm-debian-13-gnome-wayland-smoke.json",
+            evidence_root / "linux-smoke-report.json",
+            evidence_root / "update-all-production-like.json",
+        ],
+        "openbsd-otvm-smoke": [
+            evidence_root / "otvm-openbsd-7.8-fvwm-smoke.json",
+            evidence_root / "openbsd-tier1-report.json",
+        ],
+        "windows-otvm-smoke": [
+            evidence_root / "otvm-windows-2022-smoke.json",
+            evidence_root / "windows-tier1-report-patched-gorm.json",
+        ],
     }
-    for check_id, path in smoke_files.items():
-        ok, summary, _payload = _load_json_evidence(path)
-        add(check_id, ok, summary, path=str(path))
+    for check_id, paths in smoke_files.items():
+        selected_path = paths[0]
+        selected_summary = "Evidence file is missing."
+        selected_ok = False
+        for path in paths:
+            ok, summary, _payload = _load_json_evidence(path)
+            if ok:
+                selected_path = path
+                selected_summary = summary
+                selected_ok = True
+                break
+            if path.exists():
+                selected_path = path
+                selected_summary = summary
+        add(check_id, selected_ok, selected_summary, path=str(selected_path), candidates=[str(path) for path in paths])
 
     if require_windows_current_source:
         marker = evidence_root / "windows-current-source-artifact.json"
