@@ -36,9 +36,9 @@ existence.
 
 Current priority order:
 
-1. Complete Phase 26 live smoke evidence for the active Tier 1 release targets,
-   especially `openbsd-amd64-clang`, and make the generated reports consumable
-   by release gates.
+1. Keep Phase 26 live smoke evidence current for the active Tier 1 release
+   targets. As of April 27, 2026, the release-candidate smoke gate passes with
+   the OpenBSD native-packaged report and the Windows MSYS2 `clang64` report.
 2. Complete Phase 12/13 production hardening: CI-held production signing keys
    or signing service, automated host-backed release qualification, controlled
    signed package artifact build jobs, and real old-to-new published update
@@ -575,7 +575,7 @@ core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
   - move host-backed qualification from operator-manual lanes into release automation
   - turn package artifact build plans into real controlled build jobs that produce signed artifacts
   - run live production-channel expiry, rollback, revocation, and key-rotation drills around production-like trust roots
-- Phase 12 hardening status is now machine-checkable through `scripts/internal/build_infra.py --json phase12-production-hardening-status`. The gate composes explicit release trust roots, controlled-release validation, release key-rotation drills, and Phase 26 host-backed smoke evidence. A synthetic complete-evidence fixture can pass the gate in regression coverage; the real repository still reports blockers until a production release directory/trust-root pair and complete Tier 1 smoke reports are supplied.
+- Phase 12 hardening status is now machine-checkable through `scripts/internal/build_infra.py --json phase12-production-hardening-status`. The gate composes explicit release trust roots, controlled-release validation, release key-rotation drills, and Phase 26 host-backed smoke evidence. A synthetic complete-evidence fixture can pass the gate in regression coverage; the April 27, 2026 run satisfies the host-backed Tier 1 smoke evidence input with the OpenBSD and Windows reports, and the refreshed dogfood release directory verifies in unsigned development mode. The real phase remains blocked on production trust roots/signatures and controlled package/release publication from production build lanes.
 
 ### G. Testing
 - CI verification for every build target.
@@ -657,7 +657,7 @@ core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
 - Regression coverage now includes update-available planning, downgrade rejection, expired metadata rejection, frozen older-manifest rejection, revoked selected-artifact rejection, needs-repair upgrade rejection, checksum rollback, stale transaction recovery, local artifact path staging, archive layout preservation, runtime-bundle double-wrap prevention, conflict rejection, smoke-validated pointer activation, explicit rollback, versioned-release snapshot creation, previous-release preservation, default `update all` planning, combined `update all --check`, `update cli --yes`, package-update rollback, update usage-error JSON, package-update human output, and built-executable `gnustep update` smoke tests.
 - Phase 13 is complete for native dogfood: `gnustep update` owns check/apply UX for CLI, package, and default all-scope updates; rollback, stale transaction recovery, downgrade rejection, expired metadata rejection, revoked artifact rejection, and package-update rollback are covered. Remaining Phase 13 hardening is live old-to-new dogfood against two real published update-capable releases, one production-like `update all --yes` run covering both CLI/toolchain and package updates, and final signed metadata/key-mismatch cases that require production-like trust roots.
 - Debian old-to-new VM dogfood automation is available at `scripts/dev/debian-upgrade-dogfood-validation.sh` and now stages old/new managed-built synthetic release pairs when release-candidate artifacts are not yet published in two update-capable versions. The current-pointer/rollback refresh passed this lane on April 20, 2026.
-- Phase 13 hardening status is now machine-checkable through `scripts/internal/build_infra.py --json phase13-update-hardening-status`. The gate requires live old-to-new smoke reports containing `self-update-cli-only`, production-like `update all --yes` evidence, and a release-key mismatch/rotation drill. The April 24 Windows local-assets report satisfies the self-update evidence portion only; the real phase remains blocked on complete Tier 1 smoke coverage, production-like `update all --yes`, and a release directory suitable for signed metadata drills.
+- Phase 13 hardening status is now machine-checkable through `scripts/internal/build_infra.py --json phase13-update-hardening-status`. The gate requires live old-to-new smoke reports containing `self-update-cli-only`, production-like `update all --yes` evidence, and a release-key mismatch/rotation drill. The April 27, 2026 run satisfies the old-to-new/self-update smoke evidence and signed metadata key-mismatch drill inputs using the refreshed dogfood release directory. The real phase remains blocked on one production-like `gnustep update all --yes` run that covers both CLI/toolchain and package update behavior.
 
 ## Phase 14. Cross-Platform Integration Polish
 
@@ -1583,20 +1583,24 @@ core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
 - Phase 26.G is implemented through a pinned fixture catalog with explicit provenance records. The harness now records immutable Gorm source identity (`gorm-1_5_0` / `a8cd1792e08a50dd9900474373e6ca8daad4a4a9`), repository-owned generated CLI output expectations, and update-channel policy fixtures for CLI-only dogfood update smoke.
 - Phase 26.H is implemented through explicit suite modes and developer workflow surfaces: the harness now defines `quick`, `tier1-core`, and `release` suites, and `scripts/dev/run-smoke-tests.py --workflow-plan ...` can emit the intended developer command sequence for catalog validation, runner planning, and report-template generation against selected targets and release sources.
 - Phase 26.I is implemented through report-based smoke release gates. The harness now models `dogfood`, `release-candidate`, and `stable` gate policies, can evaluate one or more smoke report JSON files against the required suite/target set, and exposes that policy through `scripts/dev/run-smoke-tests.py --release-gate ...`.
-- Phase 26.J is implemented at the tooling/status level rather than as a blanket claim of live completion: `scripts/dev/run-smoke-tests.py --phase26-exit-status [--report ...]` can now evaluate whether the framework is present and whether supplied Tier 1 smoke reports satisfy the release-candidate gate. At the moment the infrastructure passes, but live target evidence still needs to be collected before the phase can be considered fully proven in practice.
-- Phase 26.J now also supports importing externally collected live evidence as structured smoke reports through `scripts/dev/run-smoke-tests.py --evidence-report`. Release gates reject partial reports that omit required scenarios or contain failed scenario entries. The April 24 Windows local-assets evidence now covers the `windows-amd64-msys2-clang64` Tier 1 scenarios, including the repository-owned Gorm Windows private-ivar compatibility patch. The release-candidate gate still fails until a full `openbsd-amd64-clang` Tier 1 native-packaged report is supplied; the existing OpenBSD evidence proves packaged GNUstep compile/link/run capability but is not a substitute for the four shared smoke scenarios.
+- Phase 26.J is implemented and currently satisfied by live evidence: `scripts/dev/run-smoke-tests.py --phase26-exit-status [--report ...]` evaluates whether the framework is present and whether supplied Tier 1 smoke reports satisfy the release-candidate gate. On April 27, 2026, the phase exit check passed with the OpenBSD native-packaged Tier 1 report and the Windows MSYS2 `clang64` patched-Gorm Tier 1 report.
+- Phase 26.J now also supports importing externally collected live evidence as structured smoke reports through `scripts/dev/run-smoke-tests.py --evidence-report`. Release gates reject partial reports that omit required scenarios or contain failed scenario entries. The accepted April 24 evidence covers both active Tier 1 targets: `windows-amd64-msys2-clang64` and `openbsd-amd64-clang`, each including `bootstrap-install-usable-cli`, `new-cli-project-build-run`, `gorm-build-run`, and `self-update-cli-only`.
 - `scripts/dev/run-smoke-tests.py` now exposes the smoke catalog as a lightweight planning/listing/report/gating command, and `tests/test_smoke_harness.py` provides focused regression coverage for framework definitions, runner plans, report templates, fixture provenance, workflow modes, release gates, and Phase 26 exit-status evaluation.
 
 ### Current Phase 26 Focus
 
-- Treat Phase 26 as the immediate release-critical workstream.
-- First produce or import a complete `openbsd-amd64-clang` report covering:
-  `bootstrap-install-usable-cli`, `new-cli-project-build-run`,
-  `gorm-build-run` where GUI support is available, and `self-update-cli-only`.
-- Then run the release-candidate smoke gate with the existing Windows report and
-  the new OpenBSD report.
-- Only after that gate is green should the project spend release-critical time
-  on warm-builder live orchestration or native byte-delta application.
+- Treat Phase 26 as a release-maintenance gate rather than the primary blocker.
+  The April 27, 2026 release-candidate gate passed with both active Tier 1
+  targets represented.
+- Preserve the accepted evidence bundle paths in release qualification notes:
+  `.artifacts/phase26-openbsd-tier1-20260424/openbsd-tier1-report.json` and
+  `.artifacts/phase26-windows-gorm-patched-20260424/windows-tier1-report-patched-gorm.json`.
+- Re-run the gate whenever refreshed artifacts are published or any Tier 1
+  target metadata changes.
+- The next release-critical work should stay on Phase 12/13 production trust,
+  production build automation, and production-like `gnustep update all --yes`
+  evidence before returning to warm-builder live orchestration or native
+  byte-delta application.
 
 ## Testing Principles For All Phases
 

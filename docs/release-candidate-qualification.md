@@ -112,6 +112,20 @@ candidate.
 
 ## Host Qualification
 
+- Phase 26 release-candidate smoke gate:
+  on April 27, 2026, `scripts/dev/run-smoke-tests.py --release-gate release-candidate`
+  passed with the accepted OpenBSD and Windows Tier 1 reports:
+  `.artifacts/phase26-openbsd-tier1-20260424/openbsd-tier1-report.json` and
+  `.artifacts/phase26-windows-gorm-patched-20260424/windows-tier1-report-patched-gorm.json`.
+  The companion `--phase26-exit-status` check also passed with those reports.
+  The Windows dogfood full-CLI artifact was rebuilt from the current tree,
+  smoke-tested on a short-lived `windows-2022` lease, and republished to the
+  `dogfood` GitHub release as
+  `gnustep-cli-windows-amd64-msys2-clang64-0.1.0-dev-dogfood.20260427T162104Z.g31c1872c5dfd.28.zip`
+  with SHA-256
+  `2e7be6c43e75be52fcb53402f4b131b461eede81d5796418abb4bdd41b08a753`.
+  Refreshed dogfood release metadata was re-uploaded after local provenance
+  digest verification.
 - OpenBSD:
   preflight and live libvirt refresh passed on April 14, 2026 using the
   `~/.ssh/otvm` operator keypair; on the same date a fresh OpenBSD lease also
