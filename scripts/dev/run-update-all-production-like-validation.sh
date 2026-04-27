@@ -6,6 +6,8 @@ INSTALL_ROOT=${INSTALL_ROOT:-"$ROOT_DIR/.artifacts/update-all-production-like/in
 OLD_MANIFEST=${OLD_MANIFEST:?set OLD_MANIFEST to the starting release manifest}
 NEW_MANIFEST=${NEW_MANIFEST:?set NEW_MANIFEST to the target release manifest}
 PACKAGE_ID=${PACKAGE_ID:-org.gnustep.tools-xctest}
+OLD_PACKAGE_INDEX=${OLD_PACKAGE_INDEX:-}
+NEW_PACKAGE_INDEX=${NEW_PACKAGE_INDEX:-}
 TARGET_ID=${TARGET_ID:-local-managed}
 EVIDENCE_DIR=${EVIDENCE_DIR:-"$ROOT_DIR/.artifacts/update-all-production-like/evidence"}
 BOOTSTRAP=${BOOTSTRAP:-"$ROOT_DIR/scripts/bootstrap/gnustep-bootstrap.sh"}
@@ -35,21 +37,43 @@ copy_state() {
   fi
 }
 
+copy_packages_state() {
+  local name=$1
+  if [[ -f "$INSTALL_ROOT/state/installed-packages.json" ]]; then
+    cp "$INSTALL_ROOT/state/installed-packages.json" "$EVIDENCE_DIR/$name"
+  fi
+}
+
 rm -rf "$INSTALL_ROOT"
 chmod +x "$BOOTSTRAP"
 
 started_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-run_json setup-old "$BOOTSTRAP" --json setup --root "$INSTALL_ROOT" --manifest "$OLD_MANIFEST" --yes
+run_json setup-old "$BOOTSTRAP" --json --yes setup --root "$INSTALL_ROOT" --manifest "$OLD_MANIFEST"
 require_ok_json "$EVIDENCE_DIR/setup-old.json"
 copy_state cli-state-before.json
 
-run_json update-check "$INSTALL_ROOT/bin/gnustep" update all --check --json --root "$INSTALL_ROOT" --manifest "$NEW_MANIFEST"
+if [[ -n "$OLD_PACKAGE_INDEX" ]]; then
+  run_json install-old-package "$INSTALL_ROOT/bin/gnustep" install --json --root "$INSTALL_ROOT" --index "$OLD_PACKAGE_INDEX" "$PACKAGE_ID"
+  require_ok_json "$EVIDENCE_DIR/install-old-package.json"
+  copy_packages_state installed-packages-before.json
+fi
+
+update_args=(update all --check --json --root "$INSTALL_ROOT" --manifest "$NEW_MANIFEST")
+if [[ -n "$NEW_PACKAGE_INDEX" ]]; then
+  update_args+=(--index "$NEW_PACKAGE_INDEX")
+fi
+run_json update-check "$INSTALL_ROOT/bin/gnustep" "${update_args[@]}"
 require_ok_json "$EVIDENCE_DIR/update-check.json"
 
-run_json update-all "$INSTALL_ROOT/bin/gnustep" update all --yes --json --root "$INSTALL_ROOT" --manifest "$NEW_MANIFEST"
+update_args=(update all --yes --json --root "$INSTALL_ROOT" --manifest "$NEW_MANIFEST")
+if [[ -n "$NEW_PACKAGE_INDEX" ]]; then
+  update_args+=(--index "$NEW_PACKAGE_INDEX")
+fi
+run_json update-all "$INSTALL_ROOT/bin/gnustep" "${update_args[@]}"
 require_ok_json "$EVIDENCE_DIR/update-all.json"
 copy_state cli-state-after.json
+copy_packages_state installed-packages-after.json
 
 "$INSTALL_ROOT/bin/gnustep" --version >"$EVIDENCE_DIR/version.txt" 2>"$EVIDENCE_DIR/version.stderr"
 run_json doctor "$INSTALL_ROOT/bin/gnustep" doctor --json --manifest "$NEW_MANIFEST"
@@ -110,6 +134,8 @@ payload = {
         "doctor": "doctor.json",
         "state_before": "cli-state-before.json",
         "state_after": "cli-state-after.json",
+        "packages_before": "installed-packages-before.json",
+        "packages_after": "installed-packages-after.json",
         "version": "version.txt",
     },
     "raw_update_check": check,

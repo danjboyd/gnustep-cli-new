@@ -2974,6 +2974,9 @@ def _validate_update_all_evidence(path: Path) -> tuple[bool, str, dict[str, Any]
     add("scope-packages", bool(scopes.get("packages")), "package update scope was exercised")
 
     package_updates = payload.get("package_updates")
+    raw_result = payload.get("raw_update_result")
+    raw_package_result = raw_result.get("packages") if isinstance(raw_result, dict) else None
+    raw_package_updates = raw_package_result.get("package_updates") if isinstance(raw_package_result, dict) else None
     add(
         "package-update-present",
         isinstance(package_updates, list) and bool(package_updates),
@@ -2987,6 +2990,15 @@ def _validate_update_all_evidence(path: Path) -> tuple[bool, str, dict[str, Any]
         )
     else:
         add("package-updates-ok", False, "all package update entries report success")
+    if isinstance(raw_package_result, dict):
+        add("raw-package-result-ok", bool(raw_package_result.get("ok")), "raw package update result reports success")
+        add(
+            "raw-package-updates-ok",
+            isinstance(raw_package_updates, list)
+            and bool(raw_package_updates)
+            and all(isinstance(item, dict) and bool(item.get("ok")) for item in raw_package_updates),
+            "raw package update entries report success",
+        )
 
     release_transition = payload.get("release_transition")
     if isinstance(release_transition, dict):

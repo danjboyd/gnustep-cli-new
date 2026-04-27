@@ -6047,6 +6047,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSMutableArray *results = [NSMutableArray array];
   NSFileManager *manager = [NSFileManager defaultManager];
   NSUInteger i = 0;
+  BOOL anyFailure = NO;
 
   for (i = 0; i < [updates count]; i++)
     {
@@ -6069,6 +6070,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
         if (indexPath == nil || indexPath == (id)[NSNull null] || oldRecord == nil)
           {
+            anyFailure = YES;
             [results addObject: [NSDictionary dictionaryWithObjectsAndKeys:
                                                 packageID, @"id",
                                                 [NSNumber numberWithBool: NO], @"ok",
@@ -6141,13 +6143,13 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       }
     }
 
-  *exitCode = 0;
+  *exitCode = anyFailure ? 1 : 0;
   return [NSDictionary dictionaryWithObjectsAndKeys:
                         [NSNumber numberWithInt: 1], @"schema_version",
                         @"update", @"command",
-                        [NSNumber numberWithBool: YES], @"ok",
-                        @"ok", @"status",
-                        [results count] > 0 ? @"Package updates completed." : @"No package updates were applied.", @"summary",
+                        [NSNumber numberWithBool: anyFailure == NO], @"ok",
+                        anyFailure ? @"error" : @"ok", @"status",
+                        anyFailure ? @"One or more package updates failed." : ([results count] > 0 ? @"Package updates completed." : @"No package updates were applied."), @"summary",
                         @"packages", @"scope",
                         @"apply", @"mode",
                         managedRoot, @"managed_root",
@@ -6302,7 +6304,13 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       {
         NSDictionary *cliApply = nil;
         NSDictionary *packageApply = nil;
+        NSDictionary *packageStateBeforeCLI = nil;
+        NSString *managedRoot = installRoot != nil ? installRoot : [self defaultManagedRoot];
         int applyExit = 0;
+        if ([packagePlan count] > 0)
+          {
+            packageStateBeforeCLI = [[self loadInstalledPackagesState: managedRoot] retain];
+          }
         if ([[cliPlan objectForKey: @"update_available"] boolValue])
           {
             NSMutableArray *cliArguments = [NSMutableArray arrayWithObjects: @"update", @"cli", @"--yes", nil];
@@ -6326,11 +6334,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
             cliApply = [self executeUpdateForContext: [GSCommandContext contextWithArguments: cliArguments] exitCode: &applyExit];
             if (applyExit != 0)
               {
+                [packageStateBeforeCLI release];
                 *exitCode = applyExit;
                 return cliApply;
               }
+            if (packageStateBeforeCLI != nil)
+              {
+                [self saveInstalledPackagesState: packageStateBeforeCLI managedRoot: managedRoot];
+              }
           }
         packageApply = [self applyPackageUpdatePlan: packagePlanPayload root: installRoot exitCode: &applyExit];
+        [packageStateBeforeCLI release];
         *exitCode = applyExit;
         return [NSDictionary dictionaryWithObjectsAndKeys:
                               [NSNumber numberWithInt: 1], @"schema_version",
