@@ -148,6 +148,8 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("signed-artifact", content)
         self.assertIn("package_index_artifact_name", content)
         self.assertIn("package_index_artifact_run_id", content)
+        self.assertIn("evidence_artifact_run_id", content)
+        self.assertIn("Download hosted release evidence artifact", content)
         self.assertIn("Verify signed package-index artifact", content)
         self.assertIn("actions/download-artifact@v4", content)
         self.assertIn("RELEASE_DIR=dist/${{ inputs.channel }}/${{ inputs.version }}", content)
@@ -182,6 +184,18 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v4", content)
         self.assertIn("gnustep-input-linux-cli", content)
         self.assertIn("gnustep-input-windows-toolchain", content)
+
+    def test_release_evidence_workflow_publishes_verified_evidence_artifact(self):
+        workflow = ROOT / ".github" / "workflows" / "release-evidence.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("openbsd_smoke_url", content)
+        self.assertIn("windows_smoke_sha256", content)
+        self.assertIn("update_all_evidence_url", content)
+        self.assertIn("linux_smoke_url", content)
+        self.assertIn("sha256sum", content)
+        self.assertIn("actions/upload-artifact@v4", content)
+        self.assertIn("gnustep-release-evidence-inputs", content)
 
     def test_package_index_workflow_publishes_signed_artifact(self):
         workflow = ROOT / ".github" / "workflows" / "package-index.yml"

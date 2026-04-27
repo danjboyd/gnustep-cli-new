@@ -23,6 +23,7 @@ The project has reached a local v0.1.x RC1-style validation point for the delibe
 - Published-URL qualification still needs production persisted evidence and scheduled/CI execution; the staged-release OTVM lanes now have destroy-on-exit cleanup for Debian, OpenBSD, and Windows smoke coverage, and release evidence can now be bundled as `release-evidence-bundle.json`.
 - Package artifact publication is now blocked by automation until package manifests carry real source provenance and artifact checksums. The current `tools-xctest` package remains intentionally non-publishable until controlled package builds rebuild every target from the declared upstream revision plus PR #5 patch and native install/smoke/remove evidence is recorded.
 - The controlled `Release Inputs` workflow now supplies the hosted source-artifact handoff for Stage Release. Current hosted CI is green but publishes no release input artifacts, so Stage Release should consume a `Release Inputs` workflow run rather than a CI run.
+- The controlled `Release Evidence` workflow now supplies the hosted evidence handoff for release qualification. Release publication can consume smoke and update evidence from a workflow artifact instead of relying on local `.artifacts/` files.
 
 ## Next Gate
 

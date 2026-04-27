@@ -1,0 +1,71 @@
+name: Release Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      openbsd_smoke_url:
+        description: URL for the OpenBSD smoke report JSON
+        required: true
+      openbsd_smoke_sha256:
+        description: SHA256 for the OpenBSD smoke report JSON
+        required: true
+      windows_smoke_url:
+        description: URL for the Windows smoke report JSON
+        required: true
+      windows_smoke_sha256:
+        description: SHA256 for the Windows smoke report JSON
+        required: true
+      update_all_evidence_url:
+        description: URL for production-like update-all evidence JSON
+        required: true
+      update_all_evidence_sha256:
+        description: SHA256 for production-like update-all evidence JSON
+        required: true
+      linux_smoke_url:
+        description: Optional URL for Linux smoke report JSON
+        required: false
+      linux_smoke_sha256:
+        description: SHA256 for Linux smoke report JSON when supplied
+        required: false
+
+jobs:
+  release-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare evidence directory
+        run: mkdir -p "$RUNNER_TEMP/release-evidence"
+
+      - name: Download and verify release evidence
+        run: |
+          set -eu
+          fetch_evidence() {
+            label="$1"
+            url="$2"
+            expected_sha="$3"
+            output="$4"
+            if [ -z "$url" ]; then
+              return 0
+            fi
+            if [ -z "$expected_sha" ]; then
+              echo "$label requires a sha256 input when a URL is supplied" >&2
+              exit 2
+            fi
+            curl --fail --location --show-error --silent "$url" --output "$output"
+            actual_sha=$(sha256sum "$output" | awk '{print $1}')
+            if [ "$actual_sha" != "$expected_sha" ]; then
+              echo "$label checksum mismatch: expected $expected_sha, got $actual_sha" >&2
+              exit 3
+            fi
+            printf '%s  %s\n' "$actual_sha" "$(basename "$output")" > "$output.sha256"
+          }
+
+          fetch_evidence openbsd-smoke "${{ inputs.openbsd_smoke_url }}" "${{ inputs.openbsd_smoke_sha256 }}" "$RUNNER_TEMP/release-evidence/openbsd-tier1-report.json"
+          fetch_evidence windows-smoke "${{ inputs.windows_smoke_url }}" "${{ inputs.windows_smoke_sha256 }}" "$RUNNER_TEMP/release-evidence/windows-tier1-report-patched-gorm.json"
+          fetch_evidence update-all "${{ inputs.update_all_evidence_url }}" "${{ inputs.update_all_evidence_sha256 }}" "$RUNNER_TEMP/release-evidence/update-all-production-like.json"
+          fetch_evidence linux-smoke "${{ inputs.linux_smoke_url }}" "${{ inputs.linux_smoke_sha256 }}" "$RUNNER_TEMP/release-evidence/linux-smoke-report.json"
+
+      - name: Upload release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-release-evidence-inputs
+          path: ${{ runner.temp }}/release-evidence

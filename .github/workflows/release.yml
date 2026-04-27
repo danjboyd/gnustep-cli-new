@@ -32,6 +32,13 @@ on:
       package_index_artifact_run_id:
         description: Workflow run id that produced the signed package-index artifact
         required: false
+      evidence_artifact_name:
+        description: Workflow artifact name containing hosted release evidence inputs
+        required: false
+        default: gnustep-release-evidence-inputs
+      evidence_artifact_run_id:
+        description: Workflow run id that produced the hosted release evidence artifact
+        required: false
       phase26_openbsd_report:
         description: Path to the OpenBSD Tier 1 smoke report JSON
         required: true
@@ -116,6 +123,15 @@ jobs:
           path: /tmp/package-index-trust
           github-token: ${{ secrets.GITHUB_TOKEN }}
           run-id: ${{ inputs.package_index_artifact_run_id || inputs.release_artifact_run_id }}
+
+      - name: Download hosted release evidence artifact
+        if: ${{ inputs.evidence_artifact_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.evidence_artifact_name }}
+          path: .artifacts/hosted-release-evidence
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.evidence_artifact_run_id }}
 
       - name: Run full regression suite
         run: |

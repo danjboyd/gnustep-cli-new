@@ -81,6 +81,13 @@ available when a repository explicitly chooses to hold the package-index private
 key in Actions secrets. The `Package Index` workflow is the controlled producer
 for the signed package-index handoff and uploads `gnustep-signed-package-index`.
 
+Release evidence custody follows the same pattern. The `Release Evidence`
+workflow accepts explicit report URLs and SHA256 values, verifies the evidence
+bytes in GitHub Actions, and uploads `gnustep-release-evidence-inputs`. The
+release workflow can download that artifact before running Phase 26 and Phase
+12/13 gates, so release qualification does not depend on operator-local
+`.artifacts/` paths.
+
 ## Current Verified State
 
 - A real staged prerelease payload now exists under `dist/stable/0.1.0-dev`.

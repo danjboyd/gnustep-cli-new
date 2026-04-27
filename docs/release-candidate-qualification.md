@@ -303,6 +303,7 @@ Remaining production blockers:
 
 - Configure the missing repository secret `GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY`, then rerun the controlled `Package Index` producer workflow and consume its `gnustep-signed-package-index` artifact from the release workflow.
 - Run the hosted `Release Inputs` producer with explicit artifact URLs and SHA256 values, then run the controlled `Stage Release` workflow with that producer run as `source_artifact_run_id` and consume its `gnustep-staged-release` artifact from the release workflow.
+- Run the hosted `Release Evidence` producer with explicit smoke/update evidence URLs and SHA256 values, then consume its `gnustep-release-evidence-inputs` artifact from the release workflow.
 - Re-run the signed metadata and `update all --yes` path on clean Windows/OpenBSD/Linux Tier 1 hosts from the release lanes.
 - Keep the new native `update all --yes` regression and raw-package evidence checks in the release gate before RC sign-off.
 
