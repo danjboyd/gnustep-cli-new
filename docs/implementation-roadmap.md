@@ -24,6 +24,50 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
   - Alpine
 - Current-release validation infrastructure should therefore prioritize the highest-leverage current-release targets before expanding to the deferred distro set.
 
+## Current Release Critical Path
+
+The numbered phase history below remains the project record, but the current
+release should be driven from this shorter critical path. The repository is
+past the skeleton stage: the native Objective-C command surface, package flows,
+setup lifecycle, update lifecycle, release metadata tooling, and smoke-harness
+contracts exist and have local regression coverage. The remaining release risk
+is evidence, production trust, and automation rather than basic command
+existence.
+
+Current priority order:
+
+1. Complete Phase 26 live smoke evidence for the active Tier 1 release targets,
+   especially `openbsd-amd64-clang`, and make the generated reports consumable
+   by release gates.
+2. Complete Phase 12/13 production hardening: CI-held production signing keys
+   or signing service, automated host-backed release qualification, controlled
+   signed package artifact build jobs, and real old-to-new published update
+   dogfood including one `gnustep update all --yes` run.
+3. Finish native Objective-C `doctor` deep-detection parity with the shared
+   Python model before claiming the full CLI is the authoritative diagnostic
+   implementation.
+4. Rebuild final Tier 1 full-CLI artifacts from production build lanes rather
+   than relying on local, staged, or prerelease evidence.
+5. Keep package, setup, update, and release trust gates green while converting
+   remaining operator-run validation into repeatable automation.
+
+Non-blocking for the immediate release unless this roadmap is revised:
+
+- warm-builder live orchestration beyond the current planning surface
+- native byte-delta application beyond the current manifest/delta contract
+- Windows `amd64/msvc`
+- OpenBSD `arm64`
+- Debian/Linux `arm64` publication
+- new deferred Linux distro families such as openSUSE, RHEL-family targets, and
+  Alpine
+
+The Windows-only `gnustep shell` command is treated as a diagnostic escape hatch
+for the private MSYS2 `CLANG64` environment, not as part of the portable v1 core
+workflow. It may remain visible while Windows managed-toolchain validation needs
+it, but product docs and release claims should continue to center the portable
+core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
+`remove`, and `update`.
+
 ## Phase 1. Foundation And Specifications
 
 ### A. Repository Foundation
@@ -1542,6 +1586,17 @@ Testing is a first-class requirement in every phase. Each phase should leave beh
 - Phase 26.J is implemented at the tooling/status level rather than as a blanket claim of live completion: `scripts/dev/run-smoke-tests.py --phase26-exit-status [--report ...]` can now evaluate whether the framework is present and whether supplied Tier 1 smoke reports satisfy the release-candidate gate. At the moment the infrastructure passes, but live target evidence still needs to be collected before the phase can be considered fully proven in practice.
 - Phase 26.J now also supports importing externally collected live evidence as structured smoke reports through `scripts/dev/run-smoke-tests.py --evidence-report`. Release gates reject partial reports that omit required scenarios or contain failed scenario entries. The April 24 Windows local-assets evidence now covers the `windows-amd64-msys2-clang64` Tier 1 scenarios, including the repository-owned Gorm Windows private-ivar compatibility patch. The release-candidate gate still fails until a full `openbsd-amd64-clang` Tier 1 native-packaged report is supplied; the existing OpenBSD evidence proves packaged GNUstep compile/link/run capability but is not a substitute for the four shared smoke scenarios.
 - `scripts/dev/run-smoke-tests.py` now exposes the smoke catalog as a lightweight planning/listing/report/gating command, and `tests/test_smoke_harness.py` provides focused regression coverage for framework definitions, runner plans, report templates, fixture provenance, workflow modes, release gates, and Phase 26 exit-status evaluation.
+
+### Current Phase 26 Focus
+
+- Treat Phase 26 as the immediate release-critical workstream.
+- First produce or import a complete `openbsd-amd64-clang` report covering:
+  `bootstrap-install-usable-cli`, `new-cli-project-build-run`,
+  `gorm-build-run` where GUI support is available, and `self-update-cli-only`.
+- Then run the release-candidate smoke gate with the existing Windows report and
+  the new OpenBSD report.
+- Only after that gate is green should the project spend release-critical time
+  on warm-builder live orchestration or native byte-delta application.
 
 ## Testing Principles For All Phases
 

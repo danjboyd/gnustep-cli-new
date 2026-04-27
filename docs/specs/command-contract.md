@@ -81,7 +81,7 @@ gnustep <command> [options] [args]
 - GNUstep Make aggregate projects are valid build projects and must not be rejected because the top-level `GNUmakefile` lacks direct `TOOL_NAME`, `APP_NAME`, or `LIBRARY_NAME` assignments.
 - `gnustep clean` is the canonical clean-only command. `gnustep build --clean` should not be the primary documented UX because users reasonably read it as "clean, then build".
 - `gnustep clean` should use the selected backend clean operation and should report backend, invocation, and exit status in JSON.
-- `gnustep shell` is a Windows-only full-CLI escape hatch for opening the managed private MSYS2 `CLANG64` environment; it is not part of the portable core workflow.
+- `gnustep shell` is a Windows-only full-CLI diagnostic escape hatch for opening the managed private MSYS2 `CLANG64` environment; it is intentionally outside the portable v1 core workflow and should not drive general product documentation or support claims.
 - `run` may apply stricter target detection than `build`, but run-specific ambiguity must not be reported as an unsupported build project.
 
 ## Exit Codes
