@@ -1,0 +1,95 @@
+name: Release Inputs
+
+on:
+  workflow_dispatch:
+    inputs:
+      linux_cli_url:
+        description: URL for the Linux CLI input archive
+        required: false
+      linux_cli_sha256:
+        description: SHA256 for the Linux CLI input archive
+        required: false
+      linux_toolchain_url:
+        description: URL for the Linux toolchain input archive
+        required: false
+      linux_toolchain_sha256:
+        description: SHA256 for the Linux toolchain input archive
+        required: false
+      windows_cli_url:
+        description: URL for the Windows CLI input archive
+        required: false
+      windows_cli_sha256:
+        description: SHA256 for the Windows CLI input archive
+        required: false
+      windows_toolchain_url:
+        description: URL for the Windows toolchain input archive
+        required: false
+      windows_toolchain_sha256:
+        description: SHA256 for the Windows toolchain input archive
+        required: false
+
+jobs:
+  release-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare input directories
+        run: |
+          mkdir -p "$RUNNER_TEMP/release-inputs"
+
+      - name: Download and verify explicit release inputs
+        run: |
+          set -eu
+          fetch_input() {
+            label="$1"
+            url="$2"
+            expected_sha="$3"
+            output="$4"
+            if [ -z "$url" ]; then
+              return 0
+            fi
+            if [ -z "$expected_sha" ]; then
+              echo "$label requires a sha256 input when a URL is supplied" >&2
+              exit 2
+            fi
+            mkdir -p "$(dirname "$output")"
+            curl --fail --location --show-error --silent "$url" --output "$output"
+            actual_sha=$(sha256sum "$output" | awk '{print $1}')
+            if [ "$actual_sha" != "$expected_sha" ]; then
+              echo "$label checksum mismatch: expected $expected_sha, got $actual_sha" >&2
+              exit 3
+            fi
+            printf '%s  %s\n' "$actual_sha" "$(basename "$output")" > "$output.sha256"
+          }
+
+          fetch_input linux-cli "${{ inputs.linux_cli_url }}" "${{ inputs.linux_cli_sha256 }}" "$RUNNER_TEMP/release-inputs/linux-cli/input"
+          fetch_input linux-toolchain "${{ inputs.linux_toolchain_url }}" "${{ inputs.linux_toolchain_sha256 }}" "$RUNNER_TEMP/release-inputs/linux-toolchain/input"
+          fetch_input windows-cli "${{ inputs.windows_cli_url }}" "${{ inputs.windows_cli_sha256 }}" "$RUNNER_TEMP/release-inputs/windows-cli/input"
+          fetch_input windows-toolchain "${{ inputs.windows_toolchain_url }}" "${{ inputs.windows_toolchain_sha256 }}" "$RUNNER_TEMP/release-inputs/windows-toolchain/input"
+
+      - name: Upload Linux CLI input
+        if: ${{ inputs.linux_cli_url != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-input-linux-cli
+          path: ${{ runner.temp }}/release-inputs/linux-cli
+
+      - name: Upload Linux toolchain input
+        if: ${{ inputs.linux_toolchain_url != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-input-linux-toolchain
+          path: ${{ runner.temp }}/release-inputs/linux-toolchain
+
+      - name: Upload Windows CLI input
+        if: ${{ inputs.windows_cli_url != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-input-windows-cli
+          path: ${{ runner.temp }}/release-inputs/windows-cli
+
+      - name: Upload Windows toolchain input
+        if: ${{ inputs.windows_toolchain_url != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-input-windows-toolchain
+          path: ${{ runner.temp }}/release-inputs/windows-toolchain

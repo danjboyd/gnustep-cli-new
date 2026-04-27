@@ -62,11 +62,15 @@ downloads a named artifact from a specified workflow run into
 `dist/<channel>/<version>` before signing, gating, evidence bundling, and
 publication. The legacy `checked-in` source remains available for bring-up, but
 release-candidate and production runs should use staged artifacts from
-controlled build/prep jobs. The `Stage Release` workflow is the controlled
-producer for that handoff: it downloads CLI/toolchain artifacts from a specified
-workflow run, stages a release directory through `stage-release`, verifies the
-release directory, enforces release-claim consistency, and uploads
-`gnustep-staged-release`.
+controlled build/prep jobs. The `Release Inputs` workflow is the controlled
+handoff for externally produced release input bytes: it accepts explicit URLs
+and SHA256 values, verifies them in GitHub Actions, and uploads
+`gnustep-input-*` workflow artifacts. The `Stage Release` workflow then
+downloads CLI/toolchain artifacts from a specified workflow run, stages a
+release directory through `stage-release`, verifies the release directory, and
+uploads `gnustep-staged-release`. Release-claim consistency is enforced later
+by the release workflow after hosted smoke and update evidence inputs are
+available.
 
 Package-index custody can follow the same artifact handoff model. The default
 `package_index_source` is `signed-artifact`: the release workflow downloads a

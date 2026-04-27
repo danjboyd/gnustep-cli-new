@@ -22,7 +22,7 @@ The project has reached a local v0.1.x RC1-style validation point for the delibe
 - Key rotation, revocation, expiry, rollback/freeze, and compromised-key drills must be automated before making production security claims; the local release key-rotation drill now exists and must be run with CI-held production trust roots before any production claim.
 - Published-URL qualification still needs production persisted evidence and scheduled/CI execution; the staged-release OTVM lanes now have destroy-on-exit cleanup for Debian, OpenBSD, and Windows smoke coverage, and release evidence can now be bundled as `release-evidence-bundle.json`.
 - Package artifact publication is now blocked by automation until package manifests carry real source provenance and artifact checksums. The current `tools-xctest` package remains intentionally non-publishable until controlled package builds rebuild every target from the declared upstream revision plus PR #5 patch and native install/smoke/remove evidence is recorded.
-- The controlled `Stage Release` workflow needs a hosted source-artifact run that uploads CLI/toolchain input artifacts. Current hosted CI is green but publishes no release input artifacts, so Stage Release has no valid source run to consume.
+- The controlled `Release Inputs` workflow now supplies the hosted source-artifact handoff for Stage Release. Current hosted CI is green but publishes no release input artifacts, so Stage Release should consume a `Release Inputs` workflow run rather than a CI run.
 
 ## Next Gate
 
@@ -64,4 +64,6 @@ The main remaining release-engineering issue is productionizing evidence and tru
 - `Package Index` producer run `25020740853` failed at the signing step because
   the private package-index signing secret is missing.
 - CI run `25020575778` has no Actions artifacts, so it cannot be used as a
-  `Stage Release` source run.
+  `Stage Release` source run. The `Release Inputs` workflow now exists for that
+  handoff and verifies explicit URLs against supplied SHA256 values before
+  uploading Actions artifacts.

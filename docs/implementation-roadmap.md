@@ -1649,10 +1649,14 @@ core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
   `GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY` is not configured. The public
   package-index key and trust root are present, but the private signing input is
   required to produce `gnustep-signed-package-index`.
-- The controlled `Stage Release` producer workflow is present, but it still
-  requires a prior hosted workflow run that publishes CLI/toolchain input
-  artifacts. The current CI run publishes no artifacts, so Stage Release has no
-  valid `source_artifact_run_id` to consume yet.
+- The controlled `Release Inputs` workflow now provides the missing hosted
+  source-artifact handoff. It accepts explicit artifact URLs and SHA256 values,
+  verifies the downloaded bytes in GitHub Actions, and uploads
+  `gnustep-input-*` artifacts for the `Stage Release` workflow to consume as
+  `source_artifact_run_id`.
+- The controlled `Stage Release` workflow stages and verifies release metadata
+  from hosted Actions artifacts. Release-claim consistency remains enforced in
+  the release workflow after hosted smoke and update evidence have been supplied.
 - Do not bypass the missing source-artifact producer by staging official release
   inputs from the hosted runner's distro GNUstep packages. That would violate
   the managed artifact source policy. The next implementation step is a real

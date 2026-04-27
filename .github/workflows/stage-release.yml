@@ -116,7 +116,6 @@ jobs:
           fi
           python3 scripts/internal/build_infra.py "${args[@]}"
           python3 scripts/internal/build_infra.py --json verify-release --release-dir "$RELEASE_DIR"
-          python3 scripts/internal/build_infra.py --json release-claim-consistency-gate --release-dir "$RELEASE_DIR"
 
       - name: Upload staged release
         uses: actions/upload-artifact@v4

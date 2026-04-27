@@ -168,9 +168,20 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("source_artifact_run_id", content)
         self.assertIn("stage-release", content)
         self.assertIn("verify-release", content)
-        self.assertIn("release-claim-consistency-gate", content)
         self.assertIn("actions/upload-artifact@v4", content)
         self.assertIn("gnustep-staged-release", content)
+
+    def test_release_inputs_workflow_publishes_verified_source_artifacts(self):
+        workflow = ROOT / ".github" / "workflows" / "release-inputs.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("linux_cli_url", content)
+        self.assertIn("linux_cli_sha256", content)
+        self.assertIn("windows_toolchain_url", content)
+        self.assertIn("sha256sum", content)
+        self.assertIn("actions/upload-artifact@v4", content)
+        self.assertIn("gnustep-input-linux-cli", content)
+        self.assertIn("gnustep-input-windows-toolchain", content)
 
     def test_package_index_workflow_publishes_signed_artifact(self):
         workflow = ROOT / ".github" / "workflows" / "package-index.yml"
