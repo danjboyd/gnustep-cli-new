@@ -292,3 +292,16 @@ Remaining external production blockers:
 - Run old-to-new update dogfood against two real published update-capable releases, including one `update all --yes` run that covers both CLI/toolchain and package updates.
 - Finish native `doctor` deep-detection parity before claiming full native diagnostic replacement.
 - Build every final Tier 1 full-CLI artifact from production build lanes rather than reusing staged or prerelease evidence.
+
+## April 27 Phase 12/13 Production-Like Update
+
+Local production-like hardening now passes the Phase 12 and Phase 13 gates with explicit release and package-index trust roots, signed metadata, the existing OpenBSD and Windows Tier 1 smoke reports, and `gnustep update all --yes` evidence at `.artifacts/phase13-local-production-like/evidence/update-all-production-like.json`.
+
+The update-all run covered a CLI/toolchain transition plus a package update. It also found and fixed a native state-preservation bug: package state could disappear after the CLI/toolchain update, and the Phase 13 evidence validator did not previously reject failed raw package update entries.
+
+Remaining production blockers:
+
+- Move the same signing custody into CI-owned production secrets or an external signing service.
+- Publish release and package-index metadata from controlled release jobs, not operator-local artifact directories.
+- Re-run the signed metadata and `update all --yes` path on clean Windows/OpenBSD/Linux Tier 1 hosts from the release lanes.
+- Keep the new native `update all --yes` regression and raw-package evidence checks in the release gate before RC sign-off.

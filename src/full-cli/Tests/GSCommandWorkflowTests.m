@@ -1655,6 +1655,149 @@
   XCTAssertEqual((NSUInteger)1, [[[[payload objectForKey: @"plan"] objectForKey: @"packages"] objectAtIndex: 0] count] > 0 ? (NSUInteger)1 : (NSUInteger)0);
 }
 
+- (void)testUpdateAllYesPreservesPackageStateAcrossCliUpgrade
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-all-apply"];
+  NSString *payloadRoot = [tempRoot stringByAppendingPathComponent: @"payloads"];
+  NSString *cliDir = [payloadRoot stringByAppendingPathComponent: @"cli"];
+  NSString *toolchainDir = [payloadRoot stringByAppendingPathComponent: @"toolchain"];
+  NSString *packageDir = [payloadRoot stringByAppendingPathComponent: @"package"];
+  NSString *installRoot = [tempRoot stringByAppendingPathComponent: @"managed-root"];
+  NSString *manifestRoot = [tempRoot stringByAppendingPathComponent: @"manifest"];
+  NSString *cliArchive = [payloadRoot stringByAppendingPathComponent: @"cli.tar.gz"];
+  NSString *toolchainArchive = [payloadRoot stringByAppendingPathComponent: @"toolchain.tar.gz"];
+  NSString *packageArchive = [payloadRoot stringByAppendingPathComponent: @"tools-xctest-new.tar.gz"];
+  NSString *statePath = [[installRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+  NSString *packageStatePath = [installRoot stringByAppendingPathComponent: @"state/installed-packages.json"];
+  NSString *packageInstallRoot = [installRoot stringByAppendingPathComponent: @"packages/org.gnustep.tools-xctest"];
+  NSString *indexPath = [tempRoot stringByAppendingPathComponent: @"package-index.json"];
+  NSString *manifestPath = nil;
+  GSCommandContext *context = nil;
+  NSDictionary *payload = nil;
+  NSDictionary *state = nil;
+  NSDictionary *packageState = nil;
+  NSDictionary *packagePayload = nil;
+  NSArray *packageUpdates = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubManagedDoctorPayload]];
+  [self ensureDirectory: [cliDir stringByAppendingPathComponent: @"bin"]];
+  [self ensureDirectory: [toolchainDir stringByAppendingPathComponent: @"System/Tools"]];
+  [self ensureDirectory: [packageDir stringByAppendingPathComponent: @"bin"]];
+  [self ensureDirectory: [packageInstallRoot stringByAppendingPathComponent: @"bin"]];
+  [self ensureDirectory: [statePath stringByDeletingLastPathComponent]];
+  [@"#!/bin/sh\nexit 0\n" writeToFile: [cliDir stringByAppendingPathComponent: @"bin/gnustep"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [@"toolchain" writeToFile: [toolchainDir stringByAppendingPathComponent: @"System/Tools/make"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [@"xctest new" writeToFile: [packageDir stringByAppendingPathComponent: @"bin/xctest"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [@"xctest old" writeToFile: [packageInstallRoot stringByAppendingPathComponent: @"bin/xctest"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               @"0.0.9", @"cli_version",
+                                               @"0.0.9", @"toolchain_version",
+                                               @"healthy", @"status",
+                                               nil]
+                       toPath: statePath];
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         [NSDictionary dictionaryWithObjectsAndKeys:
+                                        [NSDictionary dictionaryWithObjectsAndKeys:
+                                                       packageInstallRoot, @"install_root",
+                                                       @"0.1.0", @"version",
+                                                       indexPath, @"index_path",
+                                                       @"tools-xctest-linux-clang-old", @"selected_artifact",
+                                                       [NSArray array], @"dependencies",
+                                                       [NSArray array], @"conflicts",
+                                                       [NSArray arrayWithObject: @"packages/org.gnustep.tools-xctest/bin/xctest"], @"installed_files",
+                                                       nil], @"org.gnustep.tools-xctest",
+                                        nil], @"packages",
+                         nil]
+                 toPath: packageStatePath];
+  [self archiveDirectory: cliDir toTarball: cliArchive withRunner: runner];
+  [self archiveDirectory: toolchainDir toTarball: toolchainArchive withRunner: runner];
+  [self archiveDirectory: packageDir toTarball: packageArchive withRunner: runner];
+  manifestPath = [self releaseManifestPathInDirectory: manifestRoot
+                                           cliSHA256: [runner sha256ForFile: cliArchive]
+                                     toolchainSHA256: [runner sha256ForFile: toolchainArchive]
+                                              cliURL: cliArchive
+                                        toolchainURL: toolchainArchive];
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         @"stable", @"channel",
+                         [NSArray arrayWithObject:
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"org.gnustep.tools-xctest", @"id",
+                                                   @"tools-xctest", @"name",
+                                                   @"0.2.0", @"version",
+                                                   @"cli-tool", @"kind",
+                                                   @"XCTest runner update.", @"summary",
+                                                   [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                  [NSArray arrayWithObject: @"linux"], @"supported_os",
+                                                                  [NSArray arrayWithObject: @"amd64"], @"supported_arch",
+                                                                  [NSArray arrayWithObject: @"clang"], @"supported_compiler_families",
+                                                                  [NSArray arrayWithObject: @"libobjc2"], @"supported_objc_runtimes",
+                                                                  [NSArray arrayWithObject: @"modern"], @"supported_objc_abi",
+                                                                  [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                  [NSArray array], @"forbidden_features",
+                                                                  nil], @"requirements",
+                                                   [NSArray array], @"dependencies",
+                                                   [NSArray array], @"conflicts",
+                                                   [NSArray arrayWithObject:
+                                                              [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                             @"tools-xctest-linux-clang-new", @"id",
+                                                                             @"linux", @"os",
+                                                                             @"amd64", @"arch",
+                                                                             @"clang", @"compiler_family",
+                                                                             @"clang", @"toolchain_flavor",
+                                                                             @"libobjc2", @"objc_runtime",
+                                                                             @"modern", @"objc_abi",
+                                                                             [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                             [NSString stringWithFormat: @"file://%@", packageArchive], @"url",
+                                                                             [runner sha256ForFile: packageArchive], @"sha256",
+                                                                             nil]], @"artifacts",
+                                                   nil]], @"packages",
+                         nil]
+                 toPath: indexPath];
+
+  context = [GSCommandContext contextWithArguments:
+                              [NSArray arrayWithObjects:
+                                         @"update",
+                                         @"all",
+                                         @"--yes",
+                                         @"--root",
+                                         installRoot,
+                                         @"--manifest",
+                                         manifestPath,
+                                         @"--index",
+                                         indexPath,
+                                         nil]];
+  payload = [runner executeUpdateForContext: context exitCode: &exitCode];
+  state = [runner installedLifecycleStateForInstallRoot: installRoot];
+  packageState = [NSJSONSerialization JSONObjectWithData:
+                                      [NSData dataWithContentsOfFile: packageStatePath]
+                                                options: 0
+                                                  error: NULL];
+  packagePayload = [payload objectForKey: @"packages"];
+  packageUpdates = [packagePayload objectForKey: @"package_updates"];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([payload objectForKey: @"scope"], @"all");
+  XCTAssertEqualObjects([payload objectForKey: @"mode"], @"apply");
+  XCTAssertTrue([[[payload objectForKey: @"cli"] objectForKey: @"ok"] boolValue]);
+  XCTAssertTrue([[packagePayload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqual((NSUInteger)1, [packageUpdates count]);
+  XCTAssertTrue([[[packageUpdates objectAtIndex: 0] objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([[packageUpdates objectAtIndex: 0] objectForKey: @"selected_artifact"], @"tools-xctest-linux-clang-new");
+  XCTAssertEqualObjects([state objectForKey: @"active_release"], @"0.1.0-test");
+  XCTAssertEqualObjects([[[packageState objectForKey: @"packages"] objectForKey: @"org.gnustep.tools-xctest"] objectForKey: @"version"], @"0.2.0");
+  XCTAssertEqualObjects([NSString stringWithContentsOfFile: [packageInstallRoot stringByAppendingPathComponent: @"bin/xctest"]
+                                                  encoding: NSUTF8StringEncoding
+                                                     error: NULL], @"xctest new");
+}
+
 - (void)testUpdateRejectsUsageErrorsWithStableJsonFields
 {
   GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
