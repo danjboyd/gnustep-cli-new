@@ -55,6 +55,10 @@ on:
         description: Path to production-like gnustep update all --yes evidence JSON
         required: true
 
+permissions:
+  actions: read
+  contents: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
