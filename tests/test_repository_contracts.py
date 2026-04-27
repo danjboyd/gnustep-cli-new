@@ -161,6 +161,27 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("phase12-production-hardening-status", content)
         self.assertIn("phase13-update-hardening-status", content)
 
+    def test_stage_release_workflow_publishes_staged_artifact(self):
+        workflow = ROOT / ".github" / "workflows" / "stage-release.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("source_artifact_run_id", content)
+        self.assertIn("stage-release", content)
+        self.assertIn("verify-release", content)
+        self.assertIn("release-claim-consistency-gate", content)
+        self.assertIn("actions/upload-artifact@v4", content)
+        self.assertIn("gnustep-staged-release", content)
+
+    def test_package_index_workflow_publishes_signed_artifact(self):
+        workflow = ROOT / ".github" / "workflows" / "package-index.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY", content)
+        self.assertIn("GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT", content)
+        self.assertIn("--trust-gate", content)
+        self.assertIn("actions/upload-artifact@v4", content)
+        self.assertIn("gnustep-signed-package-index", content)
+
     def test_update_all_production_like_evidence_runbook_exists(self):
         doc = ROOT / "docs" / "validation" / "update-all-production-like-evidence.md"
         self.assertTrue(doc.exists())

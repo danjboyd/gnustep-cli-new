@@ -1,0 +1,125 @@
+name: Stage Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, for example 0.1.0-dev-dogfood
+        required: true
+      channel:
+        description: Release channel
+        required: true
+        default: dogfood
+      base_url:
+        description: Base URL used in release manifest artifact URLs
+        required: true
+        default: https://github.com/danjboyd/gnustep-cli-new/releases/download
+      source_artifact_run_id:
+        description: Workflow run id containing CLI/toolchain input artifacts
+        required: true
+      linux_cli_artifact:
+        description: Artifact name containing the Linux CLI input archive or directory
+        required: false
+      linux_toolchain_artifact:
+        description: Artifact name containing the Linux toolchain input archive or directory
+        required: false
+      windows_cli_artifact:
+        description: Artifact name containing the Windows CLI input archive or directory
+        required: false
+      windows_toolchain_artifact:
+        description: Artifact name containing the Windows toolchain input archive or directory
+        required: false
+
+jobs:
+  stage-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Resolve staging paths
+        run: |
+          echo "INPUT_ROOT=$RUNNER_TEMP/gnustep-release-inputs" >> "$GITHUB_ENV"
+          echo "OUTPUT_ROOT=$RUNNER_TEMP/gnustep-release-output" >> "$GITHUB_ENV"
+          echo "RELEASE_DIR=$RUNNER_TEMP/gnustep-release-output/${{ inputs.channel }}/${{ inputs.version }}" >> "$GITHUB_ENV"
+
+      - name: Download Linux CLI artifact
+        if: ${{ inputs.linux_cli_artifact != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.linux_cli_artifact }}
+          path: ${{ runner.temp }}/gnustep-release-inputs/linux-cli
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.source_artifact_run_id }}
+
+      - name: Download Linux toolchain artifact
+        if: ${{ inputs.linux_toolchain_artifact != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.linux_toolchain_artifact }}
+          path: ${{ runner.temp }}/gnustep-release-inputs/linux-toolchain
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.source_artifact_run_id }}
+
+      - name: Download Windows CLI artifact
+        if: ${{ inputs.windows_cli_artifact != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.windows_cli_artifact }}
+          path: ${{ runner.temp }}/gnustep-release-inputs/windows-cli
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.source_artifact_run_id }}
+
+      - name: Download Windows toolchain artifact
+        if: ${{ inputs.windows_toolchain_artifact != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.windows_toolchain_artifact }}
+          path: ${{ runner.temp }}/gnustep-release-inputs/windows-toolchain
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.source_artifact_run_id }}
+
+      - name: Stage release directory
+        run: |
+          resolve_input() {
+            path="$1"
+            if [ -d "$path" ]; then
+              count=$(find "$path" -mindepth 1 -maxdepth 1 | wc -l)
+              if [ "$count" -eq 1 ]; then
+                find "$path" -mindepth 1 -maxdepth 1
+                return 0
+              fi
+            fi
+            printf '%s\n' "$path"
+          }
+          args=(--json stage-release
+            --version "${{ inputs.version }}"
+            --channel "${{ inputs.channel }}"
+            --base-url "${{ inputs.base_url }}/${{ inputs.channel }}"
+            --output-dir "$OUTPUT_ROOT")
+          if [ -n "${{ inputs.linux_cli_artifact }}" ]; then
+            args+=(--cli-input "linux-amd64-clang=$(resolve_input "$INPUT_ROOT/linux-cli")")
+          fi
+          if [ -n "${{ inputs.linux_toolchain_artifact }}" ]; then
+            args+=(--toolchain-input "linux-amd64-clang=$(resolve_input "$INPUT_ROOT/linux-toolchain")")
+          fi
+          if [ -n "${{ inputs.windows_cli_artifact }}" ]; then
+            args+=(--cli-input "windows-amd64-msys2-clang64=$(resolve_input "$INPUT_ROOT/windows-cli")")
+          fi
+          if [ -n "${{ inputs.windows_toolchain_artifact }}" ]; then
+            args+=(--toolchain-input "windows-amd64-msys2-clang64=$(resolve_input "$INPUT_ROOT/windows-toolchain")")
+          fi
+          python3 scripts/internal/build_infra.py "${args[@]}"
+          python3 scripts/internal/build_infra.py --json verify-release --release-dir "$RELEASE_DIR"
+          python3 scripts/internal/build_infra.py --json release-claim-consistency-gate --release-dir "$RELEASE_DIR"
+
+      - name: Upload staged release
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-staged-release
+          path: ${{ env.RELEASE_DIR }}

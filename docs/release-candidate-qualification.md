@@ -301,6 +301,6 @@ The update-all run covered a CLI/toolchain transition plus a package update. It 
 
 Remaining production blockers:
 
-- Produce the staged release directory and signed package-index metadata from controlled build/signing jobs, then pass them to the release workflow as `staged-artifact` and `signed-artifact` inputs instead of using operator-local artifact directories.
+- Run the controlled `Stage Release` and `Package Index` producer workflows, then pass their `gnustep-staged-release` and `gnustep-signed-package-index` artifacts into the release workflow instead of using operator-local artifact directories.
 - Re-run the signed metadata and `update all --yes` path on clean Windows/OpenBSD/Linux Tier 1 hosts from the release lanes.
 - Keep the new native `update all --yes` regression and raw-package evidence checks in the release gate before RC sign-off.

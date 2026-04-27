@@ -62,7 +62,11 @@ downloads a named artifact from a specified workflow run into
 `dist/<channel>/<version>` before signing, gating, evidence bundling, and
 publication. The legacy `checked-in` source remains available for bring-up, but
 release-candidate and production runs should use staged artifacts from
-controlled build/prep jobs.
+controlled build/prep jobs. The `Stage Release` workflow is the controlled
+producer for that handoff: it downloads CLI/toolchain artifacts from a specified
+workflow run, stages a release directory through `stage-release`, verifies the
+release directory, enforces release-claim consistency, and uploads
+`gnustep-staged-release`.
 
 Package-index custody can follow the same artifact handoff model. The default
 `package_index_source` is `signed-artifact`: the release workflow downloads a
@@ -70,7 +74,8 @@ signed package-index metadata artifact, verifies it against
 `GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT`, and diffs the signed index against the
 index generated from the reviewed `packages/` tree. `sign-in-workflow` remains
 available when a repository explicitly chooses to hold the package-index private
-key in Actions secrets.
+key in Actions secrets. The `Package Index` workflow is the controlled producer
+for the signed package-index handoff and uploads `gnustep-signed-package-index`.
 
 ## Current Verified State
 

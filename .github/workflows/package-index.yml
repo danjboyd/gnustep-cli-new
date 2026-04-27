@@ -1,0 +1,59 @@
+name: Package Index
+
+on:
+  workflow_dispatch:
+
+jobs:
+  signed-package-index:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Generate and sign package index
+        env:
+          GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY }}
+          GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY }}
+          GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT }}
+        run: |
+          if [ -z "${GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY is required to produce signed package-index metadata" >&2
+            exit 3
+          fi
+          if [ -z "${GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT:-}" ]; then
+            echo "GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT is required to verify signed package-index metadata" >&2
+            exit 3
+          fi
+          mkdir -p "$RUNNER_TEMP/package-index-trust"
+          python3 scripts/internal/package_repo.py --json packages --output "$RUNNER_TEMP/package-index-trust/package-index.json" >/dev/null
+          diff -u packages/package-index.json "$RUNNER_TEMP/package-index-trust/package-index.json"
+          umask 077
+          printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY" > "$RUNNER_TEMP/package-index-private.pem"
+          args=(--json --sign-private-key "$RUNNER_TEMP/package-index-private.pem")
+          if [ -n "${GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY:-}" ]; then
+            printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY" > "$RUNNER_TEMP/package-index-public.pem"
+            args+=(--sign-public-key "$RUNNER_TEMP/package-index-public.pem")
+            cp "$RUNNER_TEMP/package-index-public.pem" "$RUNNER_TEMP/package-index-trust/package-index-signing-public.pem"
+          fi
+          args+=("$RUNNER_TEMP/package-index-trust/package-index.json")
+          python3 scripts/internal/package_repo.py "${args[@]}"
+          printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT" > "$RUNNER_TEMP/package-index-trust-root.pem"
+          python3 scripts/internal/package_repo.py --json --trust-gate \
+            --trusted-public-key "$RUNNER_TEMP/package-index-trust-root.pem" \
+            "$RUNNER_TEMP/package-index-trust/package-index.json"
+
+      - name: Upload signed package index
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-signed-package-index
+          path: |
+            ${{ runner.temp }}/package-index-trust/package-index.json
+            ${{ runner.temp }}/package-index-trust/package-index-provenance.json
+            ${{ runner.temp }}/package-index-trust/package-index.json.sig
+            ${{ runner.temp }}/package-index-trust/package-index-provenance.json.sig
+            ${{ runner.temp }}/package-index-trust/package-index-signing-public.pem
