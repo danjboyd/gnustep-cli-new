@@ -1302,8 +1302,14 @@ class BuildInfraTests(unittest.TestCase):
                 "0.1.0",
                 temp / "dist",
                 "https://github.com/danjboyd/gnustep-cli-new/releases",
-                cli_inputs={"linux-amd64-clang": cli_bundle},
-                toolchain_inputs={"linux-amd64-clang": toolchain_dir},
+                cli_inputs={
+                    "linux-amd64-clang": cli_bundle,
+                    "linux-ubuntu2404-amd64-clang": cli_bundle,
+                },
+                toolchain_inputs={
+                    "linux-amd64-clang": toolchain_dir,
+                    "linux-ubuntu2404-amd64-clang": toolchain_dir,
+                },
                 install_root=temp / "qualified",
                 handoff_install_root=temp / "handoff-root",
             )
@@ -1439,8 +1445,14 @@ class BuildInfraTests(unittest.TestCase):
                 "0.1.0",
                 temp / "dist",
                 "https://github.com/danjboyd/gnustep-cli/releases",
-                cli_inputs={"linux-amd64-clang": cli_bundle},
-                toolchain_inputs={"linux-amd64-clang": toolchain_dir},
+                cli_inputs={
+                    "linux-amd64-clang": cli_bundle,
+                    "linux-ubuntu2404-amd64-clang": cli_bundle,
+                },
+                toolchain_inputs={
+                    "linux-amd64-clang": toolchain_dir,
+                    "linux-ubuntu2404-amd64-clang": toolchain_dir,
+                },
             )
             payload = qualify_full_cli_handoff(staged["release_dir"], temp / "handoff-root")
             self.assertTrue(payload["ok"])

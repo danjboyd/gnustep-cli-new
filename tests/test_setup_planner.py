@@ -410,8 +410,14 @@ class SetupPlannerTests(unittest.TestCase):
                 "0.1.0-test",
                 temp / "dist",
                 "https://example.invalid/releases",
-                cli_inputs={"linux-amd64-clang": cli_bundle},
-                toolchain_inputs={"linux-amd64-clang": toolchain_dir},
+                cli_inputs={
+                    "linux-amd64-clang": cli_bundle,
+                    "linux-ubuntu2404-amd64-clang": cli_bundle,
+                },
+                toolchain_inputs={
+                    "linux-amd64-clang": toolchain_dir,
+                    "linux-ubuntu2404-amd64-clang": toolchain_dir,
+                },
             )
             install_root = temp / "install-root"
             payload, exit_code = execute_setup(
