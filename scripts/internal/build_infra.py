@@ -60,6 +60,7 @@ from gnustep_cli_shared.build_infra import (
     write_release_provenance,
     write_windows_current_source_marker,
     write_release_evidence_bundle,
+    validate_update_all_evidence,
     release_key_rotation_drill,
     phase12_production_hardening_status,
     phase13_update_hardening_status,
@@ -210,6 +211,13 @@ def main() -> int:
     evidence_bundle = subparsers.add_parser("release-evidence-bundle", add_help=False)
     evidence_bundle.add_argument("--release-dir", required=True)
     evidence_bundle.add_argument("--evidence-dir")
+    evidence_bundle.add_argument("--smoke-report", action="append", default=[])
+    evidence_bundle.add_argument("--update-all-evidence")
+    evidence_bundle.add_argument("--release-trust-root")
+    evidence_bundle.add_argument("--package-index-trust-root")
+
+    validate_update_all = subparsers.add_parser("validate-update-all-evidence", add_help=False)
+    validate_update_all.add_argument("--evidence", required=True)
 
     key_rotation_drill = subparsers.add_parser("release-key-rotation-drill", add_help=False)
     key_rotation_drill.add_argument("--release-dir", required=True)
@@ -448,7 +456,16 @@ def main() -> int:
             builder_identity=args.builder_identity,
         )
     elif args.subcommand == "release-evidence-bundle":
-        payload = write_release_evidence_bundle(args.release_dir, evidence_dir=args.evidence_dir)
+        payload = write_release_evidence_bundle(
+            args.release_dir,
+            evidence_dir=args.evidence_dir,
+            smoke_report_paths=args.smoke_report or None,
+            update_all_evidence_path=args.update_all_evidence,
+            release_trust_root=args.release_trust_root,
+            package_index_trust_root=args.package_index_trust_root,
+        )
+    elif args.subcommand == "validate-update-all-evidence":
+        payload = validate_update_all_evidence(args.evidence)
     elif args.subcommand == "release-key-rotation-drill":
         payload = release_key_rotation_drill(args.release_dir, work_dir=args.work_dir)
     elif args.subcommand == "controlled-release-gate":
@@ -571,7 +588,7 @@ def main() -> int:
             "'assemble-linux-toolchain', 'package-source-built-linux-toolchain', 'toolchain-host-origin-audit', "
             "'stage-release', 'github-release-plan', 'github-release-publish', "
             "'prepare-github-release', 'session-build-box-plan', 'dogfood-snapshot-version', 'delta-artifact-record', 'package-artifact-publication-gate', 'tools-xctest-release-gate', 'package-tools-xctest-artifact', 'build-linux-cli-against-managed-toolchain', 'linux-cli-abi-audit', 'refresh-local-release-metadata', 'published-url-qualification-plan', "
-            "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', 'windows-current-source-marker', 'release-evidence-bundle', 'release-key-rotation-drill', "
+            "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', 'windows-current-source-marker', 'release-evidence-bundle', 'validate-update-all-evidence', 'release-key-rotation-drill', "
             "'validate-source-lock', 'msys2-input-manifest', 'validate-input-manifest', 'component-inventory', 'windows-msys2-component-inventory', 'compare-windows-msys2-inventories', 'toolchain-manifest', "
             "'toolchain-plan', 'linux-build-script', 'openbsd-build-script', "
             "'msys2-assembly-script', 'toolchain-archive-audit', 'debian-gcc-interop-plan', 'windows-extracted-toolchain-rebuild-plan', or 'msvc-status'",

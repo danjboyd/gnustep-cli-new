@@ -78,6 +78,20 @@ April 27, 2026 execution update:
   authoritative diagnostic implementation.
 - CI now runs on `master`, matching the current repository branch used for
   pushes.
+- The production-like update-all evidence path now has an executable operator
+  runner at `scripts/dev/run-update-all-production-like-validation.sh`; it
+  bootstraps an old managed release, runs `gnustep update all --yes` against a
+  target manifest, captures before/after state, validates the evidence JSON,
+  and emits the file expected by the Phase 13 gate.
+- Release evidence bundling now accepts the modern Phase 26 reports,
+  update-all evidence, and trust-root fingerprints. The release workflow uploads
+  the resulting evidence bundle as a GitHub Actions artifact before publishing.
+- CI has a dedicated package-artifact publication gate job so package release
+  readiness is checked outside the release workflow as well.
+- Support-matrix claims were refreshed for the April 27 OpenBSD and Windows
+  Phase 26 evidence. The remaining final support-claims audit should be limited
+  to production-signed artifacts and any target whose evidence changes after
+  the next release-candidate run.
 - new deferred Linux distro families such as openSUSE, RHEL-family targets, and
   Alpine
 

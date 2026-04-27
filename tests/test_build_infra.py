@@ -68,6 +68,7 @@ from gnustep_cli_shared.build_infra import (
     write_release_provenance,
     write_windows_current_source_marker,
     write_release_evidence_bundle,
+    validate_update_all_evidence,
     release_key_rotation_drill,
     phase12_production_hardening_status,
     phase13_update_hardening_status,
@@ -1076,6 +1077,51 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(checks["release-evidence-bundle"]["ok"])
             self.assertTrue(checks["windows-current-source-artifact"]["ok"])
 
+    def test_release_evidence_bundle_accepts_modern_gate_inputs(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            release_dir = temp / "release"
+            release_dir.mkdir()
+            smoke_report = temp / "smoke.json"
+            smoke_report.write_text(json.dumps(evidence_smoke_report(
+                suite_id="tier1-core",
+                target_id="windows-amd64-msys2-clang64",
+                release_source="dogfood",
+                passed_scenario_ids=[
+                    "bootstrap-install-usable-cli",
+                    "new-cli-project-build-run",
+                    "gorm-build-run",
+                    "self-update-cli-only",
+                ],
+            )))
+            update_all = temp / "update-all.json"
+            update_all.write_text(json.dumps({
+                "schema_version": 1,
+                "ok": True,
+                "summary": "update all --yes passed.",
+                "production_like": True,
+                "command": "gnustep update all --yes",
+                "scopes": {"cli": True, "toolchain": True, "packages": True},
+                "release_transition": {"from_version": "old", "to_version": "new"},
+                "package_updates": [{"id": "org.gnustep.tools-xctest", "ok": True}],
+                "result": {"ok": True},
+            }))
+            release_root = temp / "release-root.pem"
+            package_root = temp / "package-root.pem"
+            release_root.write_text("release-root")
+            package_root.write_text("package-root")
+
+            bundle = write_release_evidence_bundle(
+                release_dir,
+                smoke_report_paths=[smoke_report],
+                update_all_evidence_path=update_all,
+                release_trust_root=release_root,
+                package_index_trust_root=package_root,
+            )
+            self.assertTrue(bundle["ok"])
+            self.assertEqual({entry["id"] for entry in bundle["trust_roots"]}, {"release-trust-root", "package-index-trust-root"})
+            self.assertIn("update-all-production-like", {entry["id"] for entry in bundle["evidence"]})
+
     def test_release_key_rotation_drill_rejects_cross_signed_metadata(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp = Path(tempdir)
@@ -1184,6 +1230,24 @@ class BuildInfraTests(unittest.TestCase):
             }
             self.assertIn("production-like", failed)
             self.assertIn("scope-packages", failed)
+
+    def test_validate_update_all_evidence_command_payload(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            evidence = Path(tempdir) / "update-all.json"
+            evidence.write_text(json.dumps({
+                "schema_version": 1,
+                "ok": True,
+                "summary": "update all --yes passed.",
+                "production_like": True,
+                "command": "gnustep update all --yes",
+                "scopes": {"cli": True, "toolchain": True, "packages": True},
+                "release_transition": {"from_version": "old", "to_version": "new"},
+                "package_updates": [{"id": "org.gnustep.tools-xctest", "ok": True}],
+                "result": {"ok": True},
+            }))
+            payload = validate_update_all_evidence(evidence)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["command"], "validate-update-all-evidence")
 
     def test_build_infra_cli_exits_nonzero_for_failed_gate(self):
         with tempfile.TemporaryDirectory() as tempdir:

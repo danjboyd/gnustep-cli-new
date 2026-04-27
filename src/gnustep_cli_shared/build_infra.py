@@ -3006,6 +3006,20 @@ def _validate_update_all_evidence(path: Path) -> tuple[bool, str, dict[str, Any]
     return valid, summary, payload
 
 
+def validate_update_all_evidence(path: str | Path) -> dict[str, Any]:
+    evidence_path = Path(path).resolve()
+    ok, summary, payload = _validate_update_all_evidence(evidence_path)
+    return {
+        "schema_version": 1,
+        "command": "validate-update-all-evidence",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": summary,
+        "evidence_path": str(evidence_path),
+        "evidence": payload,
+    }
+
+
 def write_windows_current_source_marker(
     release_dir: str | Path,
     *,
@@ -3062,27 +3076,73 @@ def write_windows_current_source_marker(
     return payload
 
 
-def write_release_evidence_bundle(release_dir: str | Path, *, evidence_dir: str | Path | None = None) -> dict[str, Any]:
+def _file_evidence_entry(evidence_id: str, path: Path, *, required: bool = True, validator: str = "ok-json") -> dict[str, Any]:
+    if validator == "update-all":
+        ok, summary, payload = _validate_update_all_evidence(path)
+    else:
+        ok, summary, payload = _load_json_evidence(path)
+        if isinstance(payload, dict) and "overall_ok" in payload and "ok" not in payload:
+            ok = bool(payload.get("overall_ok"))
+    return {
+        "id": evidence_id,
+        "ok": ok,
+        "required": required,
+        "summary": summary,
+        "path": str(path),
+        "sha256": _sha256(path) if path.exists() else None,
+        "payload_command": payload.get("command") if isinstance(payload, dict) else None,
+    }
+
+
+def _trust_root_entry(trust_id: str, path: Path) -> dict[str, Any]:
+    return {
+        "id": trust_id,
+        "ok": path.exists() and path.is_file(),
+        "required": True,
+        "summary": "trust root is present" if path.exists() and path.is_file() else "trust root is missing",
+        "path": str(path),
+        "sha256": _sha256(path) if path.exists() else None,
+    }
+
+
+def write_release_evidence_bundle(
+    release_dir: str | Path,
+    *,
+    evidence_dir: str | Path | None = None,
+    smoke_report_paths: list[str | Path] | None = None,
+    update_all_evidence_path: str | Path | None = None,
+    release_trust_root: str | Path | None = None,
+    package_index_trust_root: str | Path | None = None,
+) -> dict[str, Any]:
     root = Path(release_dir).resolve()
     evidence_root = Path(evidence_dir).resolve() if evidence_dir else root
-    evidence_files = {
-        "debian-otvm-smoke": evidence_root / "otvm-debian-13-gnome-wayland-smoke.json",
-        "openbsd-otvm-smoke": evidence_root / "otvm-openbsd-7.8-fvwm-smoke.json",
-        "windows-otvm-smoke": evidence_root / "otvm-windows-2022-smoke.json",
-        "windows-current-source-artifact": evidence_root / "windows-current-source-artifact.json",
-    }
     entries: list[dict[str, Any]] = []
-    for evidence_id, path in evidence_files.items():
-        ok, summary, payload = _load_json_evidence(path)
-        entries.append({
-            "id": evidence_id,
-            "ok": ok,
-            "summary": summary,
-            "path": str(path),
-            "sha256": _sha256(path) if path.exists() else None,
-            "payload_command": payload.get("command") if isinstance(payload, dict) else None,
-        })
-    ok = all(entry["ok"] for entry in entries)
+    if smoke_report_paths:
+        for index, report_path in enumerate(smoke_report_paths, start=1):
+            entries.append(_file_evidence_entry(f"phase26-smoke-report-{index}", Path(report_path).resolve()))
+    else:
+        evidence_files = {
+            "debian-otvm-smoke": evidence_root / "otvm-debian-13-gnome-wayland-smoke.json",
+            "openbsd-otvm-smoke": evidence_root / "otvm-openbsd-7.8-fvwm-smoke.json",
+            "windows-otvm-smoke": evidence_root / "otvm-windows-2022-smoke.json",
+        }
+        for evidence_id, path in evidence_files.items():
+            entries.append(_file_evidence_entry(evidence_id, path))
+
+    marker_path = evidence_root / "windows-current-source-artifact.json"
+    if marker_path.exists():
+        entries.append(_file_evidence_entry("windows-current-source-artifact", marker_path))
+
+    if update_all_evidence_path is not None:
+        entries.append(_file_evidence_entry("update-all-production-like", Path(update_all_evidence_path).resolve(), validator="update-all"))
+
+    trust_roots: list[dict[str, Any]] = []
+    if release_trust_root is not None:
+        trust_roots.append(_trust_root_entry("release-trust-root", Path(release_trust_root).resolve()))
+    if package_index_trust_root is not None:
+        trust_roots.append(_trust_root_entry("package-index-trust-root", Path(package_index_trust_root).resolve()))
+
+    ok = all(entry["ok"] for entry in entries) and all(entry["ok"] for entry in trust_roots)
     bundle = {
         "schema_version": 1,
         "command": "release-evidence-bundle",
@@ -3093,6 +3153,7 @@ def write_release_evidence_bundle(release_dir: str | Path, *, evidence_dir: str 
         "evidence_dir": str(evidence_root),
         "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "evidence": entries,
+        "trust_roots": trust_roots,
     }
     bundle_path = root / "release-evidence-bundle.json"
     bundle_path.write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")

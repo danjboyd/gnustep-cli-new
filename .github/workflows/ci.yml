@@ -47,3 +47,17 @@ jobs:
 
       - name: Run native Objective-C tools-xctest suite
         run: ./scripts/dev/run-native-tests.sh
+
+  package-artifacts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Verify package artifact publication gate
+        run: python3 scripts/internal/build_infra.py --json package-artifact-publication-gate --packages-dir packages

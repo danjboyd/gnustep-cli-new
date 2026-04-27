@@ -14,7 +14,10 @@ targets the project is actively discussing.
   `gnustep-base`, `gnustep-libobjc2`, and `gmake`, then compiling, linking, and
   running a Foundation probe. On April 17, 2026 another fresh lease built the
   current full CLI, ran version/help/doctor, and passed package install/remove
-  smoke after native OpenBSD OS detection was fixed.
+  smoke after native OpenBSD OS detection was fixed. The April 27, 2026 Phase
+  26 release-candidate gate also accepted the full OpenBSD Tier 1 report
+  covering bootstrap install, generated project build/run, Gorm build/run, and
+  CLI-only self-update.
 - `fedora-amd64-gcc`
   status: `interoperability_only`
   notes: Fedora libvirt preflight and acceptance passed on April 16, 2026 using
@@ -108,7 +111,11 @@ targets the project is actively discussing.
   `doctor --json --manifest C:\Windows\Temp\minimal-release-manifest.json`
   exited `0` with `toolchain_compatible`. The remaining gap is production
   signing/trust-root management and turning this published-URL/runtime evidence
-  into an automated release qualification lane.
+  into an automated release qualification lane. On April 27, 2026 the dogfood
+  Windows full-CLI artifact was rebuilt from the current tree, smoke-tested on a
+  short-lived Windows lease, republished to the `dogfood` GitHub release, and
+  accepted by the Phase 26 release-candidate gate with the Windows MSYS2
+  `clang64` Tier 1 report.
 - `windows-amd64-msvc`
   status: `deferred`
   notes: explicitly deferred for the v0.1.x line

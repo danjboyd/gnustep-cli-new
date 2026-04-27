@@ -94,10 +94,10 @@ jobs:
           python3 scripts/internal/build_infra.py --json verify-release \
             --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}"
 
-      - name: Build release evidence bundle
+      - name: Build preliminary release evidence inventory
         run: |
           python3 scripts/internal/build_infra.py --json release-evidence-bundle \
-            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}"
+            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}" || true
 
       - name: Run release key rotation drill
         run: |
@@ -162,6 +162,15 @@ jobs:
       - name: Enforce Phase 12 and Phase 13 hardening gates
         run: |
           test -f "${{ inputs.update_all_evidence }}"
+          python3 scripts/internal/build_infra.py --json validate-update-all-evidence \
+            --evidence "${{ inputs.update_all_evidence }}"
+          python3 scripts/internal/build_infra.py --json release-evidence-bundle \
+            --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}" \
+            --smoke-report "${{ inputs.phase26_openbsd_report }}" \
+            --smoke-report "${{ inputs.phase26_windows_report }}" \
+            --update-all-evidence "${{ inputs.update_all_evidence }}" \
+            --release-trust-root /tmp/gnustep-cli-release-trust-root.pem \
+            --package-index-trust-root /tmp/gnustep-cli-package-index-trust-root.pem
           python3 scripts/internal/build_infra.py --json phase12-production-hardening-status \
             --release-dir "dist/${{ inputs.channel }}/${{ inputs.version }}" \
             --release-trust-root /tmp/gnustep-cli-release-trust-root.pem \
@@ -174,6 +183,16 @@ jobs:
             --smoke-report "${{ inputs.phase26_openbsd_report }}" \
             --smoke-report "${{ inputs.phase26_windows_report }}" \
             --update-all-evidence "${{ inputs.update_all_evidence }}"
+
+      - name: Upload release evidence bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-release-evidence-${{ inputs.channel }}-${{ inputs.version }}
+          path: |
+            dist/${{ inputs.channel }}/${{ inputs.version }}/release-evidence-bundle.json
+            ${{ inputs.phase26_openbsd_report }}
+            ${{ inputs.phase26_windows_report }}
+            ${{ inputs.update_all_evidence }}
 
       - name: Publish GitHub Release
         env:
