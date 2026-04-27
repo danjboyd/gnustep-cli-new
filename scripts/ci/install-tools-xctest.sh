@@ -5,7 +5,6 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 TOOLS_XCTEST_DIR=${TOOLS_XCTEST_DIR:-"$REPO_ROOT/.ci/tools-xctest"}
 GNUSTEP_MAKEFILES_DIR=${GNUSTEP_MAKEFILES_DIR:-/usr/share/GNUstep/Makefiles}
-GCC_OBJC_HEADERS=${GCC_OBJC_HEADERS:-/usr/lib/gcc/x86_64-linux-gnu/14/include}
 TOOLS_XCTEST_REPO=${TOOLS_XCTEST_REPO:-https://github.com/gnustep/tools-xctest.git}
 
 if [ ! -f "$GNUSTEP_MAKEFILES_DIR/GNUstep.sh" ]; then
@@ -25,6 +24,14 @@ fi
 set +u
 . "$GNUSTEP_MAKEFILES_DIR/GNUstep.sh"
 set -u
+
+if [ -z "${GCC_OBJC_HEADERS:-}" ]; then
+  GCC_OBJC_HEADERS=$(find /usr/lib/gcc -path '*/include/objc/objc.h' -print 2>/dev/null | sort -V | tail -n 1 | sed 's,/objc/objc\.h$,,')
+fi
+if [ -z "${GCC_OBJC_HEADERS:-}" ] || [ ! -f "$GCC_OBJC_HEADERS/objc/objc.h" ]; then
+  printf '%s\n' "objc/objc.h was not found under /usr/lib/gcc; install the libobjc development headers." >&2
+  exit 1
+fi
 
 make -C "$TOOLS_XCTEST_DIR" clean >/dev/null || true
 make -C "$TOOLS_XCTEST_DIR" \

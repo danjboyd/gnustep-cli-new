@@ -2,7 +2,7 @@ import subprocess
 import unittest
 from pathlib import Path
 
-ROOT = Path('/home/danboyd/gnustep-cli-new')
+ROOT = Path(__file__).resolve().parents[1]
 
 class NativeUpdateSmokeTests(unittest.TestCase):
     def test_built_full_cli_exposes_update_help_and_json_usage_errors(self):
