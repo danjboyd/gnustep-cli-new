@@ -78,6 +78,31 @@ from gnustep_cli_shared.build_infra import (
 from gnustep_cli_shared.smoke_harness import evidence_smoke_report
 
 
+def managed_debian_doctor_payload():
+    return {
+        "status": "warning",
+        "environment_classification": "no_toolchain",
+        "native_toolchain_assessment": "unavailable",
+        "summary": "No GNUstep toolchain detected.",
+        "environment": {
+            "os": "linux",
+            "arch": "amd64",
+            "distribution_id": "debian",
+            "os_version": "debian-13",
+            "bootstrap_prerequisites": {"curl": True, "wget": False},
+            "native_toolchain": {"assessment": "unavailable"},
+            "toolchain": {
+                "present": False,
+                "compiler_family": "unknown",
+                "toolchain_flavor": "unknown",
+                "objc_runtime": "unknown",
+                "objc_abi": "unknown",
+                "feature_flags": {},
+            },
+        },
+    }
+
+
 class BuildInfraTests(unittest.TestCase):
     def test_matrix_contains_tier1_targets(self):
         payload = build_matrix()
@@ -1297,22 +1322,23 @@ class BuildInfraTests(unittest.TestCase):
             (toolchain_dir / "System" / "Tools").mkdir(parents=True)
             (toolchain_dir / "System" / "Tools" / "make").write_text("tool")
             write_toolchain_metadata(toolchain_dir, "linux-amd64-clang", "2026.04.0", production_eligible=True)
-            payload = prepare_github_release(
-                "danjboyd/gnustep-cli-new",
-                "0.1.0",
-                temp / "dist",
-                "https://github.com/danjboyd/gnustep-cli-new/releases",
-                cli_inputs={
-                    "linux-amd64-clang": cli_bundle,
-                    "linux-ubuntu2404-amd64-clang": cli_bundle,
-                },
-                toolchain_inputs={
-                    "linux-amd64-clang": toolchain_dir,
-                    "linux-ubuntu2404-amd64-clang": toolchain_dir,
-                },
-                install_root=temp / "qualified",
-                handoff_install_root=temp / "handoff-root",
-            )
+            with patch("gnustep_cli_shared.setup_planner.build_doctor_payload", return_value=managed_debian_doctor_payload()):
+                payload = prepare_github_release(
+                    "danjboyd/gnustep-cli-new",
+                    "0.1.0",
+                    temp / "dist",
+                    "https://github.com/danjboyd/gnustep-cli-new/releases",
+                    cli_inputs={
+                        "linux-amd64-clang": cli_bundle,
+                        "linux-ubuntu2404-amd64-clang": cli_bundle,
+                    },
+                    toolchain_inputs={
+                        "linux-amd64-clang": toolchain_dir,
+                        "linux-ubuntu2404-amd64-clang": toolchain_dir,
+                    },
+                    install_root=temp / "qualified",
+                    handoff_install_root=temp / "handoff-root",
+                )
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["command"], "prepare-github-release")
             self.assertTrue(payload["stage_release"]["ok"])
@@ -1454,7 +1480,8 @@ class BuildInfraTests(unittest.TestCase):
                     "linux-ubuntu2404-amd64-clang": toolchain_dir,
                 },
             )
-            payload = qualify_full_cli_handoff(staged["release_dir"], temp / "handoff-root")
+            with patch("gnustep_cli_shared.setup_planner.build_doctor_payload", return_value=managed_debian_doctor_payload()):
+                payload = qualify_full_cli_handoff(staged["release_dir"], temp / "handoff-root")
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["command"], "qualify-full-cli-handoff")
             self.assertTrue(payload["checks"])

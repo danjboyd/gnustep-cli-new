@@ -16,6 +16,31 @@ from gnustep_cli_shared.build_infra import bundle_full_cli, stage_release_assets
 from gnustep_cli_shared.setup_planner import build_setup_payload, execute_setup
 
 
+def managed_debian_doctor_payload():
+    return {
+        "status": "warning",
+        "environment_classification": "no_toolchain",
+        "native_toolchain_assessment": "unavailable",
+        "summary": "No GNUstep toolchain detected.",
+        "environment": {
+            "os": "linux",
+            "arch": "amd64",
+            "distribution_id": "debian",
+            "os_version": "debian-13",
+            "bootstrap_prerequisites": {"curl": True, "wget": False},
+            "native_toolchain": {"assessment": "unavailable"},
+            "toolchain": {
+                "present": False,
+                "compiler_family": "unknown",
+                "toolchain_flavor": "unknown",
+                "objc_runtime": "unknown",
+                "objc_abi": "unknown",
+                "feature_flags": {},
+            },
+        },
+    }
+
+
 class SetupPlannerTests(unittest.TestCase):
     def test_user_scope_plan(self):
         payload, exit_code = build_setup_payload(scope="user")
@@ -420,11 +445,12 @@ class SetupPlannerTests(unittest.TestCase):
                 },
             )
             install_root = temp / "install-root"
-            payload, exit_code = execute_setup(
-                scope="user",
-                manifest_path=Path(staged["manifest_path"]),
-                install_root=install_root,
-            )
+            with patch("gnustep_cli_shared.setup_planner.build_doctor_payload", return_value=managed_debian_doctor_payload()):
+                payload, exit_code = execute_setup(
+                    scope="user",
+                    manifest_path=Path(staged["manifest_path"]),
+                    install_root=install_root,
+                )
             self.assertEqual(exit_code, 0)
             self.assertTrue(payload["ok"])
             self.assertTrue((install_root / "bin" / "gnustep").exists())
