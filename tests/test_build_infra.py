@@ -1121,12 +1121,16 @@ class BuildInfraTests(unittest.TestCase):
                     ],
                 }],
             }))
+            (evidence_dir / "update-all-production-like.json").write_text(
+                '{"ok": true, "summary": "hosted evidence ok"}'
+            )
             for name in [
-                "update-all-production-like.json",
                 "openbsd-tier1-report.json",
                 "windows-tier1-report-patched-gorm.json",
             ]:
-                (evidence_dir / name).write_text('{"ok": true, "summary": "hosted evidence ok"}')
+                (evidence_dir / name).write_text(
+                    '{"overall_ok": true, "summary": "hosted smoke evidence ok"}'
+                )
             gate = release_claim_consistency_gate(
                 release_dir,
                 evidence_dir=evidence_dir,

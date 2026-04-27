@@ -2937,7 +2937,11 @@ def _load_json_evidence(path: Path) -> tuple[bool, str, dict[str, Any] | None]:
         payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception as exc:
         return False, f"{path.name} evidence is invalid: {exc}", None
-    return bool(payload.get("ok")), payload.get("summary", f"{path.name} evidence loaded"), payload
+    if "ok" in payload:
+        ok = bool(payload.get("ok"))
+    else:
+        ok = bool(payload.get("overall_ok"))
+    return ok, payload.get("summary", f"{path.name} evidence loaded"), payload
 
 
 def _validate_update_all_evidence(path: Path) -> tuple[bool, str, dict[str, Any] | None]:
