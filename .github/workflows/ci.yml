@@ -25,7 +25,11 @@ jobs:
           sudo apt-get install -y clang gnustep-devel git
 
       - name: Run Python/shared unit suite
-        run: python3 -m unittest discover -s tests
+        run: |
+          set +u
+          . /usr/share/GNUstep/Makefiles/GNUstep.sh
+          set -u
+          python3 -m unittest discover -s tests
 
       - name: Verify generated package index
         run: |
