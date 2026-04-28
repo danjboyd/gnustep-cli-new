@@ -78,6 +78,8 @@ jobs:
           curl --fail --location --show-error --silent "${{ inputs.release_manifest_url }}" --output "$manifest"
           chmod +x "$bootstrap"
           rm -rf "$install_root"
+          export GNUSTEP_CLI_INSTALL_TRACE="$evidence/full-cli-trace.log"
+          export GNUSTEP_CLI_INSTALL_TRACE_STDERR=1
           "$bootstrap" --json setup --yes --root "$install_root" --manifest "$manifest" > "$evidence/setup.json"
           "$install_root/bin/gnustep" --version > "$evidence/version.txt"
           "$install_root/bin/gnustep" --help > "$evidence/help.txt"

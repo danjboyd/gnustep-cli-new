@@ -3474,8 +3474,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSMutableArray *checks = [NSMutableArray array];
   NSMutableArray *actions = [NSMutableArray array];
   NSArray *selectionErrors = [NSArray array];
-  NSArray *emptyLayouts = [[[NSArray alloc] init] autorelease];
-  NSArray *emptyPrefixes = [[[NSArray alloc] init] autorelease];
+  NSMutableArray *emptyLayouts = [[NSMutableArray alloc] initWithCapacity: 0];
+  NSMutableArray *emptyPrefixes = [[NSMutableArray alloc] initWithCapacity: 0];
   NSString *summary = nil;
   NSString *manifestError = nil;
   BOOL powershellDownloader = NO;
@@ -3517,6 +3517,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                  forKey: @"bootstrap_prerequisites"];
   [environment setObject: emptyLayouts forKey: @"detected_layouts"];
   [environment setObject: emptyPrefixes forKey: @"install_prefixes"];
+  [emptyLayouts release];
+  [emptyPrefixes release];
   [self appendInstallTrace: @"doctor.environment.ready"];
 
   if (manifestPath != nil)
@@ -3787,8 +3789,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSString *osName = [self normalizeOSName];
   NSString *arch = [self normalizeArchName];
   NSDictionary *toolchain = [self toolchainFactsForInterface: interface];
-  NSArray *emptyLayouts = [[[NSArray alloc] init] autorelease];
-  NSArray *emptyPrefixes = [[[NSArray alloc] init] autorelease];
+  NSMutableArray *emptyLayouts = [[NSMutableArray alloc] initWithCapacity: 0];
+  NSMutableArray *emptyPrefixes = [[NSMutableArray alloc] initWithCapacity: 0];
   NSMutableDictionary *environment = [NSMutableDictionary dictionaryWithObjectsAndKeys:
                                                           osName, @"os",
                                                           arch, @"arch",
@@ -3810,6 +3812,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
   [environment setObject: emptyLayouts forKey: @"detected_layouts"];
   [environment setObject: emptyPrefixes forKey: @"install_prefixes"];
+  [emptyLayouts release];
+  [emptyPrefixes release];
   return environment;
 }
 
