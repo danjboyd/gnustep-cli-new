@@ -40,20 +40,20 @@ jobs:
             status=$?
             if [ "$status" -ne 0 ] && [ ! -f "$report" ]; then
               python3 - <<'PY' "$report" "$status"
-import json, sys
-report, status = sys.argv[1], int(sys.argv[2])
-payload = {
-  "schema_version": 1,
-  "suite_id": "tier1-core",
-  "target_id": "linux-amd64-clang",
-  "runner_id": "github-actions-ubuntu-latest",
-  "overall_ok": False,
-  "summary": "Linux published-URL smoke failed before structured completion.",
-  "failure_exit_status": status,
-  "scenario_reports": [],
-}
-open(report, "w", encoding="utf-8").write(json.dumps(payload, indent=2) + "\n")
-PY
+          import json, sys
+          report, status = sys.argv[1], int(sys.argv[2])
+          payload = {
+            "schema_version": 1,
+            "suite_id": "tier1-core",
+            "target_id": "linux-amd64-clang",
+            "runner_id": "github-actions-ubuntu-latest",
+            "overall_ok": False,
+            "summary": "Linux published-URL smoke failed before structured completion.",
+            "failure_exit_status": status,
+            "scenario_reports": [],
+          }
+          open(report, "w", encoding="utf-8").write(json.dumps(payload, indent=2) + "\n")
+          PY
             fi
           }
           trap cleanup EXIT
@@ -71,31 +71,31 @@ PY
           "$install_root/bin/gnustep" build "$work/HelloSmoke" --json > "$evidence/build.json"
           "$install_root/bin/gnustep" run "$work/HelloSmoke" --json > "$evidence/run.json"
           python3 - <<'PY' "$report" "$evidence"
-import json, pathlib, sys
-report = pathlib.Path(sys.argv[1])
-evidence = pathlib.Path(sys.argv[2])
-scenario_ids = [
-    "bootstrap-install-usable-cli",
-    "new-cli-project-build-run",
-]
-payload = {
-    "schema_version": 1,
-    "suite_id": "tier1-core",
-    "target_id": "linux-amd64-clang",
-    "runner_id": "github-actions-ubuntu-latest",
-    "release_under_test": {"source": "${{ inputs.release_manifest_url }}"},
-    "overall_ok": True,
-    "summary": "Linux published-URL bootstrap, doctor, new/build/run smoke passed.",
-    "scenario_reports": [
-        {"scenario_id": scenario_id, "ok": True, "status": "passed", "summary": f"{scenario_id} passed."}
-        for scenario_id in scenario_ids
-    ],
-    "evidence": {
-        "files": sorted(path.name for path in evidence.iterdir() if path.name != report.name),
-    },
-}
-report.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-PY
+          import json, pathlib, sys
+          report = pathlib.Path(sys.argv[1])
+          evidence = pathlib.Path(sys.argv[2])
+          scenario_ids = [
+              "bootstrap-install-usable-cli",
+              "new-cli-project-build-run",
+          ]
+          payload = {
+              "schema_version": 1,
+              "suite_id": "tier1-core",
+              "target_id": "linux-amd64-clang",
+              "runner_id": "github-actions-ubuntu-latest",
+              "release_under_test": {"source": "${{ inputs.release_manifest_url }}"},
+              "overall_ok": True,
+              "summary": "Linux published-URL bootstrap, doctor, new/build/run smoke passed.",
+              "scenario_reports": [
+                  {"scenario_id": scenario_id, "ok": True, "status": "passed", "summary": f"{scenario_id} passed."}
+                  for scenario_id in scenario_ids
+              ],
+              "evidence": {
+                  "files": sorted(path.name for path in evidence.iterdir() if path.name != report.name),
+              },
+          }
+          report.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+          PY
 
       - name: Upload published URL qualification evidence
         if: always()
