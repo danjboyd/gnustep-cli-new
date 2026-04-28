@@ -2508,7 +2508,6 @@ def bundle_full_cli(
             'if [ -f "$MANAGED_MAKEFILES/GNUstep.sh" ]; then\n'
             '  export GNUSTEP_SYSTEM_ROOT="$INSTALL_ROOT/System"\n'
             '  export GNUSTEP_LOCAL_ROOT="$INSTALL_ROOT/Local"\n'
-            '  export GNUSTEP_NETWORK_ROOT="$INSTALL_ROOT/Network"\n'
             '  export GNUSTEP_MAKEFILES="$MANAGED_MAKEFILES"\n'
             '  GNUSTEP_CLI_SOURCE_MAKEFILES=0\n'
             'elif command -v gnustep-config >/dev/null 2>&1; then\n'
