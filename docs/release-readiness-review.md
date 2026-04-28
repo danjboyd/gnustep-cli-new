@@ -103,8 +103,19 @@ The main remaining release-engineering issue is productionizing evidence and tru
 - Advanced native `doctor` parity by adding a structured `toolchain.features`
   check that exposes normalized Objective-C feature flags as first-class check
   evidence.
-- Remaining production blockers are now execution/provenance blockers: run the
-  new Windows current-source workflow successfully, collect fresh Windows and
-  OpenBSD live smoke reports against the resulting artifacts, run the
-  published-URL Linux workflow against the release manifest, and rerun Release
-  without `allow_stale_windows_artifact`.
+- `Windows Current Source Artifacts` run `25069092549` passed with fresh
+  `assemble-msys2`, built and smoked the Objective-C full CLI from current
+  source, and uploaded `gnustep-windows-current-source-artifacts` as artifact
+  `6691317171`.
+- `Package tools-xctest` run `25069093408` passed and uploaded
+  `gnustep-package-tools-xctest-linux-amd64-clang` as artifact `6691217427`.
+- Published-URL qualification run `25068782043` failed for the existing
+  `v0.1.0-dev-hosted.1` release because its manifest points artifact URLs at
+  `/releases/download/dogfood/download/v...`. Commit `7444b101` fixes future
+  staged GitHub release URLs and keeps package workflow failure diagnostics as
+  uploaded artifacts.
+- Remaining production blockers are now candidate-publication and live-host
+  evidence blockers: stage/publish a fresh dogfood candidate from the fixed
+  manifest generator and current-source Windows artifacts, run published-URL
+  Linux qualification against it, collect fresh Windows/OpenBSD live smoke
+  reports, and rerun Release without `allow_stale_windows_artifact`.

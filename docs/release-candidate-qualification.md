@@ -351,5 +351,18 @@ April 28 execution update:
   outside the `dogfood` channel.
 - Native `doctor` now includes a structured `toolchain.features` check for
   normalized Objective-C feature flags.
-- Remaining RC blocker: run the new producer workflows and fresh Windows/OpenBSD
-  live smoke, then rerun release without the stale Windows exception.
+- April 28 follow-up: CI passed at commit `7444b101` in run `25069081363`.
+  `Windows Current Source Artifacts` run `25069092549` passed with fresh
+  `assemble-msys2`, current-source full-CLI build, workflow smoke, and uploaded
+  artifact `gnustep-windows-current-source-artifacts` (`6691317171`).
+  `Package tools-xctest` run `25069093408` passed and uploaded
+  `gnustep-package-tools-xctest-linux-amd64-clang` (`6691217427`).
+- Published-URL qualification against `v0.1.0-dev-hosted.1` failed in run
+  `25068782043` because that immutable dogfood manifest contains malformed
+  GitHub asset URLs. The generator and Stage Release workflow are fixed in
+  `7444b101`; the published-URL lane should be rerun against the next candidate,
+  not counted as a pass for `v0.1.0-dev-hosted.1`.
+- Remaining RC blocker: stage/publish a new dogfood candidate with fixed
+  manifest URLs and the current-source Windows artifact, then collect
+  published-URL Linux, Windows live, and OpenBSD live smoke evidence before
+  rerunning release without the stale Windows exception.

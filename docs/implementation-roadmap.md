@@ -1716,11 +1716,26 @@ core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
   normalized Objective-C feature flags used for compatibility decisions, so
   doctor evidence consumers no longer need to infer feature state only from the
   broader environment block.
-- Remaining external execution: dispatch the new Windows current-source
-  workflow, run Windows/OpenBSD live smoke against its artifacts, run the
-  published-URL Linux workflow against the current dogfood manifest, feed those
-  reports through `Release Evidence`, then rerun `Stage Release` and `Release`
-  without the stale Windows exception for the next candidate.
+- April 28 execution follow-up: CI passed at commit `7444b101` in run
+  `25069081363`. `Windows Current Source Artifacts` run `25069092549` passed
+  using fresh `assemble-msys2`, built and smoked the Objective-C full CLI from
+  the current source revision, and uploaded `gnustep-windows-current-source-artifacts`
+  as artifact `6691317171`. `Package tools-xctest` run `25069093408` passed and
+  uploaded `gnustep-package-tools-xctest-linux-amd64-clang` as artifact
+  `6691217427`.
+- Published-URL qualification run `25068782043` correctly failed against
+  `v0.1.0-dev-hosted.1` because that already-published manifest contains bad
+  GitHub asset URLs of the form `/releases/download/dogfood/download/v...`.
+  Commit `7444b101` fixes future staged manifests to use
+  `/releases/download/v<version>/<asset>`, but the existing hosted manifest is
+  immutable release evidence and should not be treated as a passing
+  published-URL artifact.
+- Remaining external execution: stage and publish a fresh dogfood candidate from
+  the fixed manifest generator and current-source Windows artifacts, run
+  published-URL Linux qualification against that new candidate, collect fresh
+  Windows/OpenBSD live smoke reports against it, feed those reports through
+  `Release Evidence`, then rerun `Release` without the stale Windows exception
+  for the next candidate.
 
 ## Testing Principles For All Phases
 
