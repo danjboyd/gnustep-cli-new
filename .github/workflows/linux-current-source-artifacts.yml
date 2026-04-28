@@ -1,0 +1,120 @@
+name: Linux Current Source Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Artifact version label
+        required: true
+        default: 0.1.0-dev-current
+
+permissions:
+  contents: read
+
+jobs:
+  linux-current-source:
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - name: Install build prerequisites
+        run: |
+          set -eu
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            ca-certificates \
+            clang \
+            git \
+            gnustep-devel \
+            libblocksruntime-dev \
+            lld \
+            make \
+            python3 \
+            tar
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Prepare paths
+        run: |
+          set -eu
+          echo "OUTPUT_ROOT=$RUNNER_TEMP/gnustep-linux-current-source-artifacts" >> "$GITHUB_ENV"
+          echo "CLI_ROOT=$RUNNER_TEMP/gnustep-linux-current-source-artifacts/cli-root" >> "$GITHUB_ENV"
+          echo "TOOLCHAIN_ROOT=$RUNNER_TEMP/gnustep-linux-current-source-artifacts/toolchain-root" >> "$GITHUB_ENV"
+
+      - name: Build full CLI from current source
+        run: |
+          set -eu
+          . /usr/share/GNUstep/Makefiles/GNUstep.sh
+          make -C src/full-cli clean
+          make -C src/full-cli
+
+      - name: Smoke built CLI
+        run: |
+          set -eu
+          . /usr/share/GNUstep/Makefiles/GNUstep.sh
+          src/full-cli/obj/gnustep --version
+          src/full-cli/obj/gnustep --help
+          mkdir -p "$OUTPUT_ROOT"
+          src/full-cli/obj/gnustep doctor --json --quick > "$OUTPUT_ROOT/doctor.json"
+
+      - name: Package CLI and toolchain
+        run: |
+          set -eu
+          version="${{ inputs.version }}"
+          mkdir -p "$OUTPUT_ROOT"
+          python3 scripts/internal/build_infra.py --json bundle-cli \
+            --binary src/full-cli/obj/gnustep \
+            --output-dir "$CLI_ROOT" \
+            --repo-root "$GITHUB_WORKSPACE"
+          python3 scripts/internal/build_infra.py --json assemble-linux-toolchain \
+            --runtime-binary src/full-cli/obj/gnustep \
+            --output-dir "$TOOLCHAIN_ROOT"
+          cli_archive="$OUTPUT_ROOT/gnustep-cli-linux-amd64-clang-$version.tar.gz"
+          toolchain_archive="$OUTPUT_ROOT/gnustep-toolchain-linux-amd64-clang-$version.tar.gz"
+          tar -C "$CLI_ROOT" -czf "$cli_archive" .
+          tar -C "$TOOLCHAIN_ROOT" -czf "$toolchain_archive" .
+          sha256sum "$cli_archive" "$toolchain_archive" > "$OUTPUT_ROOT/SHA256SUMS.linux"
+          source_revision=$(git rev-parse HEAD)
+          python3 - <<'PY' "$OUTPUT_ROOT/linux-current-source-artifact.json" "$source_revision" "$GITHUB_RUN_ID" "$cli_archive" "$toolchain_archive"
+          import hashlib
+          import json
+          import sys
+          from datetime import UTC, datetime
+          from pathlib import Path
+
+          marker_path, source_revision, run_id, cli_archive, toolchain_archive = sys.argv[1:]
+
+          def sha256(path: str) -> str:
+              digest = hashlib.sha256()
+              with Path(path).open("rb") as handle:
+                  for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                      digest.update(chunk)
+              return digest.hexdigest()
+
+          payload = {
+              "schema_version": 1,
+              "command": "linux-current-source-marker",
+              "ok": True,
+              "status": "ok",
+              "summary": "Linux CLI artifact was built from the current workflow source revision.",
+              "artifact_id": "cli-linux-amd64-clang",
+              "source_revision": source_revision,
+              "builder_identity": f"github-actions/debian-12/{run_id}",
+              "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "cli_artifact": {
+                  "filename": Path(cli_archive).name,
+                  "sha256": sha256(cli_archive),
+              },
+              "toolchain_artifact": {
+                  "filename": Path(toolchain_archive).name,
+                  "sha256": sha256(toolchain_archive),
+              },
+          }
+          Path(marker_path).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Upload Linux current-source artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-linux-current-source-artifacts
+          path: ${{ runner.temp }}/gnustep-linux-current-source-artifacts

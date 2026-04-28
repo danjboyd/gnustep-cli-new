@@ -222,6 +222,17 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("windows-current-source-artifact.json", content)
         self.assertIn("gnustep-windows-current-source-artifacts", content)
 
+    def test_linux_current_source_artifacts_workflow_exists(self):
+        workflow = ROOT / ".github" / "workflows" / "linux-current-source-artifacts.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("container: debian:12", content)
+        self.assertIn("gnustep-devel", content)
+        self.assertIn("bundle-cli", content)
+        self.assertIn("assemble-linux-toolchain", content)
+        self.assertIn("linux-current-source-artifact.json", content)
+        self.assertIn("gnustep-linux-current-source-artifacts", content)
+
     def test_published_url_qualification_workflow_exists(self):
         workflow = ROOT / ".github" / "workflows" / "published-url-qualification.yml"
         self.assertTrue(workflow.exists())
