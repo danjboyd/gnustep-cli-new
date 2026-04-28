@@ -1848,7 +1848,10 @@ def _artifact_filename(kind: str, target_id: str, version: str) -> str:
 
 
 def _artifact_url(base_url: str, version: str, filename: str) -> str:
-    return f"{base_url.rstrip('/')}/download/v{version}/{filename}"
+    normalized = base_url.rstrip("/")
+    if normalized.endswith("/releases/download"):
+        return f"{normalized}/v{version}/{filename}"
+    return f"{normalized}/download/v{version}/{filename}"
 
 
 def _sha256(path: Path) -> str:

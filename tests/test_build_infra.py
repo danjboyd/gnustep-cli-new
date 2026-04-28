@@ -561,6 +561,20 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(all(artifact["published"] for artifact in payload["artifacts"]))
             self.assertIn("metadata", toolchain_artifact)
             self.assertIsNone(toolchain_artifact["metadata"]["lock_file"])
+            self.assertEqual(
+                next(artifact for artifact in payload["artifacts"] if artifact["kind"] == "cli")["url"],
+                "https://github.com/danjboyd/gnustep-cli/releases/download/v0.1.0/gnustep-cli-linux-amd64-clang-0.1.0.tar.gz",
+            )
+            github_payload = stage_release_assets(
+                "0.1.0",
+                temp / "github-dist",
+                "https://github.com/danjboyd/gnustep-cli/releases/download",
+                cli_inputs={"linux-amd64-clang": cli_bundle},
+            )
+            self.assertEqual(
+                github_payload["artifacts"][0]["url"],
+                "https://github.com/danjboyd/gnustep-cli/releases/download/v0.1.0/gnustep-cli-linux-amd64-clang-0.1.0.tar.gz",
+            )
 
             windows_cli = temp / "windows-cli"
             (windows_cli / "bin").mkdir(parents=True)

@@ -100,7 +100,7 @@ jobs:
           args=(--json stage-release
             --version "${{ inputs.version }}"
             --channel "${{ inputs.channel }}"
-            --base-url "${{ inputs.base_url }}/${{ inputs.channel }}"
+            --base-url "${{ inputs.base_url }}"
             --output-dir "$OUTPUT_ROOT")
           if [ -n "${{ inputs.linux_cli_artifact }}" ]; then
             args+=(--cli-input "linux-amd64-clang=$(resolve_input "$INPUT_ROOT/linux-cli")")

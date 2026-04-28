@@ -47,9 +47,10 @@ jobs:
           if [ -n "${{ inputs.source_revision }}" ]; then
             args+=(--source-revision "${{ inputs.source_revision }}")
           fi
-          python3 scripts/internal/build_infra.py "${args[@]}" > "$RUNNER_TEMP/tools-xctest-package/package-tools-xctest-artifact.json"
+          python3 scripts/internal/build_infra.py "${args[@]}" | tee "$RUNNER_TEMP/tools-xctest-package/package-tools-xctest-artifact.json"
 
       - name: Upload tools-xctest package artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: gnustep-package-tools-xctest-${{ inputs.target }}
