@@ -889,6 +889,30 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   [candidateNames addObject: command];
 #endif
 
+#if !defined(_WIN32) && !defined(__MINGW32__) && !defined(__MINGW64__)
+  {
+    NSArray *fallbackPathEntries = [NSArray arrayWithObjects:
+      @"/usr/local/bin",
+      @"/usr/bin",
+      @"/bin",
+      @"/usr/local/sbin",
+      @"/usr/sbin",
+      @"/sbin",
+      nil];
+    NSMutableArray *combinedPathEntries = [NSMutableArray arrayWithArray: pathEntries];
+    NSUInteger fallbackIndex = 0;
+    for (fallbackIndex = 0; fallbackIndex < [fallbackPathEntries count]; fallbackIndex++)
+      {
+        NSString *fallbackEntry = [fallbackPathEntries objectAtIndex: fallbackIndex];
+        if ([combinedPathEntries containsObject: fallbackEntry] == NO)
+          {
+            [combinedPathEntries addObject: fallbackEntry];
+          }
+      }
+    pathEntries = combinedPathEntries;
+  }
+#endif
+
   for (i = 0; i < [pathEntries count]; i++)
     {
       NSString *entry = [pathEntries objectAtIndex: i];
