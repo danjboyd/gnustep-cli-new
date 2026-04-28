@@ -3474,6 +3474,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSMutableArray *checks = [NSMutableArray array];
   NSMutableArray *actions = [NSMutableArray array];
   NSArray *selectionErrors = [NSArray array];
+  NSArray *emptyLayouts = [[[NSArray alloc] init] autorelease];
+  NSArray *emptyPrefixes = [[[NSArray alloc] init] autorelease];
   NSString *summary = nil;
   NSString *manifestError = nil;
   BOOL powershellDownloader = NO;
@@ -3513,8 +3515,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                           [NSNumber numberWithBool: downloaderAvailable], @"available",
                                           nil]
                  forKey: @"bootstrap_prerequisites"];
-  [environment setObject: [NSArray array] forKey: @"detected_layouts"];
-  [environment setObject: [NSArray array] forKey: @"install_prefixes"];
+  [environment setObject: emptyLayouts forKey: @"detected_layouts"];
+  [environment setObject: emptyPrefixes forKey: @"install_prefixes"];
   [self appendInstallTrace: @"doctor.environment.ready"];
 
   if (manifestPath != nil)
@@ -3785,6 +3787,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSString *osName = [self normalizeOSName];
   NSString *arch = [self normalizeArchName];
   NSDictionary *toolchain = [self toolchainFactsForInterface: interface];
+  NSArray *emptyLayouts = [[[NSArray alloc] init] autorelease];
+  NSArray *emptyPrefixes = [[[NSArray alloc] init] autorelease];
   NSMutableDictionary *environment = [NSMutableDictionary dictionaryWithObjectsAndKeys:
                                                           osName, @"os",
                                                           arch, @"arch",
@@ -3804,8 +3808,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       [environment setObject: distributionID forKey: @"distribution_id"];
     }
-  [environment setObject: [NSArray array] forKey: @"detected_layouts"];
-  [environment setObject: [NSArray array] forKey: @"install_prefixes"];
+  [environment setObject: emptyLayouts forKey: @"detected_layouts"];
+  [environment setObject: emptyPrefixes forKey: @"install_prefixes"];
   return environment;
 }
 
