@@ -930,7 +930,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
               return candidate;
             }
 #else
-          if ([manager isExecutableFileAtPath: candidate])
+          if ([manager isExecutableFileAtPath: candidate] || [manager fileExistsAtPath: candidate])
             {
               return candidate;
             }
