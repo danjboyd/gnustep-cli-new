@@ -2077,6 +2077,8 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn('GNUSTEP_CLI_SOURCE_MAKEFILES=0', launcher)
             self.assertIn('GNUSTEP_CLI_SOURCE_MAKEFILES=1', launcher)
             self.assertIn('[ -n "${GNUSTEP_MAKEFILES:-}" ]', launcher)
+            self.assertNotIn("GNUSTEP_SYSTEM_ROOT", launcher)
+            self.assertNotIn("GNUSTEP_LOCAL_ROOT", launcher)
             self.assertNotIn("GNUSTEP_NETWORK_ROOT", launcher)
 
 

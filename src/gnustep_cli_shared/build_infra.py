@@ -2506,8 +2506,6 @@ def bundle_full_cli(
             'export LD_LIBRARY_PATH="$INSTALL_ROOT/Library/Libraries:$INSTALL_ROOT/Local/Library/Libraries:$INSTALL_ROOT/System/Library/Libraries:$INSTALL_ROOT/lib:$INSTALL_ROOT/lib64:${LD_LIBRARY_PATH:-}"\n'
             'MANAGED_MAKEFILES="$INSTALL_ROOT/System/Library/Makefiles"\n'
             'if [ -f "$MANAGED_MAKEFILES/GNUstep.sh" ]; then\n'
-            '  export GNUSTEP_SYSTEM_ROOT="$INSTALL_ROOT/System"\n'
-            '  export GNUSTEP_LOCAL_ROOT="$INSTALL_ROOT/Local"\n'
             '  export GNUSTEP_MAKEFILES="$MANAGED_MAKEFILES"\n'
             '  GNUSTEP_CLI_SOURCE_MAKEFILES=0\n'
             'elif command -v gnustep-config >/dev/null 2>&1; then\n'
