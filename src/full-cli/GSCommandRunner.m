@@ -3576,6 +3576,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                 managedState = [self readJSONFile: managedStatePath error: NULL];
                 [environment setObject: [NSNumber numberWithBool: YES] forKey: @"managed_install_detected"];
                 [environment setObject: managedStatePath forKey: @"managed_install_state_path"];
+                [self appendInstallTrace: @"doctor.managed-state.detected"];
               }
           }
       }
@@ -3615,6 +3616,25 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                       [[candidate objectForKey: @"id"] isEqualToString: managedToolchainArtifactID])
                     {
                       artifact = candidate;
+                      [self appendInstallTrace: @"doctor.managed-state.artifact-id-selected"];
+                      break;
+                    }
+                }
+            }
+          if (artifact == nil && managedStatePath != nil)
+            {
+              NSArray *artifacts = [release objectForKey: @"artifacts"];
+              for (i = 0; i < [artifacts count]; i++)
+                {
+                  NSDictionary *candidate = [artifacts objectAtIndex: i];
+                  if ([[candidate objectForKey: @"kind"] isEqualToString: @"toolchain"] &&
+                      [self artifact: candidate
+                        matchesHostOS: [environment objectForKey: @"os"]
+                                arch: [environment objectForKey: @"arch"]] &&
+                      [self artifact: candidate matchesDistributionForEnvironment: environment])
+                    {
+                      artifact = candidate;
+                      [self appendInstallTrace: @"doctor.managed-state.host-artifact-selected"];
                       break;
                     }
                 }

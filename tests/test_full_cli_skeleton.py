@@ -78,6 +78,7 @@ class FullCliSkeletonTests(unittest.TestCase):
         self.assertIn('@"managed_install_state_path"', content)
         self.assertIn('@"toolchain_artifact_id"', content)
         self.assertIn('managedToolchainArtifactID', content)
+        self.assertIn('doctor.managed-state.host-artifact-selected', content)
 
     def test_context_tracks_global_options(self):
         content = (FULL_CLI / "GSCommandContext.m").read_text()
