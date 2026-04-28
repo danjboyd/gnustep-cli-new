@@ -1897,6 +1897,13 @@ def _archive_file(source_file: Path, archive_path: Path, root_name: str) -> None
         archive.add(source_file, arcname=str(Path(root_name) / source_file.name))
 
 
+def _single_archive_in_directory(source_dir: Path) -> Path | None:
+    candidates = [path for path in source_dir.iterdir() if path.is_file() and _is_supported_archive(path)]
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
 def _copy_tree_if_exists(source: Path | None, destination: Path) -> bool:
     if source is None or not source.exists():
         return False
@@ -3635,7 +3642,11 @@ def stage_release_assets(
             archive_path = release_dir / filename
             root_name = _artifact_basename(kind, target["id"], version)
             if source.is_dir():
-                _archive_directory(source, archive_path, root_name)
+                archive_input = _single_archive_in_directory(source)
+                if archive_input is not None:
+                    _archive_file(archive_input, archive_path, root_name)
+                else:
+                    _archive_directory(source, archive_path, root_name)
             else:
                 _archive_file(source, archive_path, root_name)
 

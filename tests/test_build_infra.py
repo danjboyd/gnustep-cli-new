@@ -639,6 +639,32 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("prebuilt-cli/bin/gnustep", names)
             self.assertNotIn("prebuilt-cli/input", "\n".join(names))
 
+    def test_stage_release_assets_copies_action_archive_directory_without_wrapping(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            archive_root = temp / "archive-root"
+            (archive_root / "bin").mkdir(parents=True)
+            (archive_root / "bin" / "gnustep").write_text("binary")
+            artifact_dir = temp / "downloaded-artifact"
+            artifact_dir.mkdir()
+            source_archive = artifact_dir / "input"
+            with tarfile.open(source_archive, "w:gz") as archive:
+                archive.add(archive_root, arcname="prebuilt-cli")
+            (artifact_dir / "input.sha256").write_text("abc123  input\n")
+
+            payload = stage_release_assets(
+                "0.1.0-rc1",
+                temp / "dist",
+                "https://github.com/danjboyd/gnustep-cli/releases",
+                cli_inputs={"linux-amd64-clang": artifact_dir},
+            )
+            release_dir = Path(payload["release_dir"])
+            staged_archive = release_dir / "gnustep-cli-linux-amd64-clang-0.1.0-rc1.tar.gz"
+            with tarfile.open(staged_archive, "r:gz") as archive:
+                names = archive.getnames()
+            self.assertIn("prebuilt-cli/bin/gnustep", names)
+            self.assertNotIn("downloaded-artifact/input", "\n".join(names))
+
     def test_stage_release_assets_can_reuse_immutable_toolchain_artifact(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp = Path(tempdir)
