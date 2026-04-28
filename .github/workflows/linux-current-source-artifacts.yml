@@ -78,7 +78,7 @@ jobs:
           tar -C "$CLI_ROOT" -czf "$cli_archive" .
           tar -C "$TOOLCHAIN_ROOT" -czf "$toolchain_archive" .
           sha256sum "$cli_archive" "$toolchain_archive" > "$OUTPUT_ROOT/SHA256SUMS.linux"
-          source_revision=$(git rev-parse HEAD)
+          source_revision="${{ github.sha }}"
           python3 - <<'PY' "$OUTPUT_ROOT/linux-current-source-artifact.json" "$source_revision" "$GITHUB_RUN_ID" "$cli_archive" "$toolchain_archive"
           import hashlib
           import json
