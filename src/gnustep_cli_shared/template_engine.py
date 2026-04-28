@@ -20,7 +20,14 @@ def available_templates() -> list[str]:
     return ["gui-app", "cli-tool", "library"]
 
 
+def _canonical_template(template: str) -> str:
+    if template == "cli":
+        return "cli-tool"
+    return template
+
+
 def create_template(template: str, destination: str | Path, name: str) -> dict[str, object]:
+    template = _canonical_template(template)
     dest = Path(destination).resolve()
     if dest.exists() and any(dest.iterdir()):
         return {

@@ -30,6 +30,16 @@ class TemplateEngineTests(unittest.TestCase):
             self.assertIn("ADDITIONAL_OBJCFLAGS", gnumakefile)
             self.assertIn("ADDITIONAL_LDFLAGS", gnumakefile)
 
+    def test_create_cli_alias_template(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            dest = Path(tempdir) / "hello-cli"
+            payload = create_template("cli", dest, "HelloCLI")
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["template"], "cli-tool")
+            self.assertTrue((dest / "GNUmakefile").exists())
+            self.assertTrue((dest / "main.m").exists())
+            self.assertTrue((dest / "package.json").exists())
+
     def test_create_gui_app_template(self):
         with tempfile.TemporaryDirectory() as tempdir:
             dest = Path(tempdir) / "hello-app"

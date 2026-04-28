@@ -7167,6 +7167,10 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       *exitCode = 2;
       return [self payloadWithCommand: @"new" ok: NO status: @"error" summary: @"template and destination are required" data: nil];
     }
+  if ([templateName isEqualToString: @"cli"])
+    {
+      templateName = @"cli-tool";
+    }
 
   destPath = [[destination stringByResolvingSymlinksInPath] length] > 0 ? [destination stringByResolvingSymlinksInPath] : destination;
   if ([manager fileExistsAtPath: destPath] && [[[manager contentsOfDirectoryAtPath: destPath error: NULL] copy] autorelease] != nil &&

@@ -80,6 +80,11 @@ class FullCliSkeletonTests(unittest.TestCase):
         self.assertIn('managedToolchainArtifactID', content)
         self.assertIn('doctor.managed-state.host-artifact-selected', content)
 
+    def test_new_accepts_cli_alias_for_cli_tool_template(self):
+        content = (FULL_CLI / "GSCommandRunner.m").read_text()
+        self.assertIn('[templateName isEqualToString: @"cli"]', content)
+        self.assertIn('templateName = @"cli-tool";', content)
+
     def test_context_tracks_global_options(self):
         content = (FULL_CLI / "GSCommandContext.m").read_text()
         for token in ("--json", "--verbose", "--quiet", "--yes", "--help", "--version"):
