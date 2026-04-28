@@ -27,6 +27,8 @@ class TemplateEngineTests(unittest.TestCase):
             self.assertTrue((dest / "main.m").exists())
             self.assertTrue((dest / "package.json").exists())
             gnumakefile = (dest / "GNUmakefile").read_text()
+            self.assertIn("CC := clang", gnumakefile)
+            self.assertIn("OBJC := clang", gnumakefile)
             self.assertIn("ADDITIONAL_OBJCFLAGS", gnumakefile)
             self.assertIn("ADDITIONAL_LDFLAGS", gnumakefile)
 

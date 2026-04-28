@@ -7076,6 +7076,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 - (NSString *)managedGNUmakefileFlags
 {
   return @"GNUSTEP_PREFIX := $(GNUSTEP_MAKEFILES)/../../..\n"
+         @"CC := clang\n"
+         @"OBJC := clang\n"
          @"GNUSTEP_LOCAL_LIB_DIR := $(GNUSTEP_PREFIX)/Local/Library/Libraries\n"
          @"GNUSTEP_SYSTEM_LIB_DIR := $(GNUSTEP_PREFIX)/System/Library/Libraries\n"
          @"GNUSTEP_RUNTIME_LIB_DIR := $(GNUSTEP_PREFIX)/lib\n"

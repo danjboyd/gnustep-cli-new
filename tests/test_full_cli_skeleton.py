@@ -45,6 +45,8 @@ class FullCliSkeletonTests(unittest.TestCase):
         self.assertIn('libexec/gnustep-cli', content)
         self.assertIn('GNUSTEP_CLI_DISPATCH_LIB :=', content)
         self.assertIn('GNUSTEP_CLI_BLOCKS_RUNTIME_LIB :=', content)
+        self.assertIn('CC := clang', content)
+        self.assertIn('OBJC := clang', content)
         self.assertIn('ADDITIONAL_TOOL_LIBS += -ldispatch', content)
         self.assertIn('ADDITIONAL_TOOL_LIBS += -lBlocksRuntime', content)
         self.assertIn('@"toolchain_flavor"', content)

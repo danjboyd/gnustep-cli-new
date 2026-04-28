@@ -10,6 +10,8 @@ def _write(path: Path, content: str) -> None:
 
 def _managed_gnumakefile_flags() -> str:
     return (
+        "CC := clang\n"
+        "OBJC := clang\n"
         "ADDITIONAL_OBJCFLAGS += -I$(GNUSTEP_MAKEFILES)/../../../include\n"
         "ADDITIONAL_CPPFLAGS += -I$(GNUSTEP_MAKEFILES)/../../../include\n"
         "ADDITIONAL_LDFLAGS += -L$(GNUSTEP_MAKEFILES)/../../../lib -L$(GNUSTEP_MAKEFILES)/../../../lib64\n\n"
