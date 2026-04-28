@@ -339,7 +339,13 @@ extract_tarball() {
 
 first_child_dir() {
   parent="$1"
-  find "$parent" -mindepth 1 -maxdepth 1 -type d | head -n 1
+  child_count=$(find "$parent" -mindepth 1 -maxdepth 1 | wc -l)
+  child_dir=$(find "$parent" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+  if [ "$child_count" -eq 1 ] && [ -n "$child_dir" ]; then
+    printf '%s\n' "$child_dir"
+    return 0
+  fi
+  printf '%s\n' "$parent"
 }
 
 copy_tree_contents() {

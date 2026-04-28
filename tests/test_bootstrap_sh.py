@@ -102,6 +102,11 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("bootstrap_user_name", content)
         self.assertIn("chown -R \"$owner_user\" \"$selected_root\"", content)
 
+    def test_bootstrap_accepts_single_directory_and_direct_root_artifacts(self):
+        content = BOOTSTRAP.read_text(encoding="utf-8")
+        self.assertIn('child_count=$(find "$parent" -mindepth 1 -maxdepth 1 | wc -l)', content)
+        self.assertIn('printf \'%s\\n\' "$parent"', content)
+
     def test_bootstrap_script_does_not_depend_on_python(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")
         self.assertNotIn("python3", content)
