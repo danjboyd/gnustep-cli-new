@@ -13,7 +13,7 @@ from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from zipfile import ZIP_DEFLATED, ZipFile
+from zipfile import ZIP_DEFLATED, ZipFile, is_zipfile
 
 from .setup_planner import execute_setup
 from .package_repository import package_index_trust_gate
@@ -1878,7 +1878,9 @@ def _archive_directory(source_dir: Path, archive_path: Path, root_name: str) -> 
 
 def _is_supported_archive(path: Path) -> bool:
     name = path.name.lower()
-    return name.endswith(".tar.gz") or name.endswith(".zip")
+    if name.endswith(".tar.gz") or name.endswith(".zip"):
+        return True
+    return tarfile.is_tarfile(path) or is_zipfile(path)
 
 
 def _archive_file(source_file: Path, archive_path: Path, root_name: str) -> None:

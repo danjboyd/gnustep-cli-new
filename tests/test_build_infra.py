@@ -616,6 +616,29 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("prebuilt-cli/bin/gnustep", names)
             self.assertNotIn("prebuilt-cli.tar.gz", "\n".join(names))
 
+    def test_stage_release_assets_copies_extensionless_action_archive_inputs_without_wrapping(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            archive_root = temp / "archive-root"
+            (archive_root / "bin").mkdir(parents=True)
+            (archive_root / "bin" / "gnustep").write_text("binary")
+            source_archive = temp / "input"
+            with tarfile.open(source_archive, "w:gz") as archive:
+                archive.add(archive_root, arcname="prebuilt-cli")
+
+            payload = stage_release_assets(
+                "0.1.0-rc1",
+                temp / "dist",
+                "https://github.com/danjboyd/gnustep-cli/releases",
+                cli_inputs={"linux-amd64-clang": source_archive},
+            )
+            release_dir = Path(payload["release_dir"])
+            staged_archive = release_dir / "gnustep-cli-linux-amd64-clang-0.1.0-rc1.tar.gz"
+            with tarfile.open(staged_archive, "r:gz") as archive:
+                names = archive.getnames()
+            self.assertIn("prebuilt-cli/bin/gnustep", names)
+            self.assertNotIn("prebuilt-cli/input", "\n".join(names))
+
     def test_stage_release_assets_can_reuse_immutable_toolchain_artifact(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp = Path(tempdir)
