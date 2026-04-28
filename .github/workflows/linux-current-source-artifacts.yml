@@ -44,14 +44,18 @@ jobs:
       - name: Build full CLI from current source
         run: |
           set -eu
+          set +u
           . /usr/share/GNUstep/Makefiles/GNUstep.sh
+          set -u
           make -C src/full-cli clean
           make -C src/full-cli
 
       - name: Smoke built CLI
         run: |
           set -eu
+          set +u
           . /usr/share/GNUstep/Makefiles/GNUstep.sh
+          set -u
           src/full-cli/obj/gnustep --version
           src/full-cli/obj/gnustep --help
           mkdir -p "$OUTPUT_ROOT"
