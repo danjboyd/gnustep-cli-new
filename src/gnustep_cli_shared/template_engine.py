@@ -12,8 +12,8 @@ def _managed_gnumakefile_flags() -> str:
     return (
         "CC := clang\n"
         "OBJC := clang\n"
-        "ADDITIONAL_OBJCFLAGS += -I$(GNUSTEP_MAKEFILES)/../../../include\n"
-        "ADDITIONAL_CPPFLAGS += -I$(GNUSTEP_MAKEFILES)/../../../include\n"
+        "ADDITIONAL_OBJCFLAGS += -I$(GNUSTEP_PREFIX)/include -I$(GNUSTEP_PREFIX)/System/Sysroot/usr/include/GNUstep -I$(GNUSTEP_PREFIX)/System/Sysroot/usr/include\n"
+        "ADDITIONAL_CPPFLAGS += -I$(GNUSTEP_PREFIX)/include -I$(GNUSTEP_PREFIX)/System/Sysroot/usr/include/GNUstep -I$(GNUSTEP_PREFIX)/System/Sysroot/usr/include\n"
         "ADDITIONAL_LDFLAGS += -L$(GNUSTEP_MAKEFILES)/../../../lib -L$(GNUSTEP_MAKEFILES)/../../../lib64\n\n"
     )
 

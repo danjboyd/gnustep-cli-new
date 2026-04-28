@@ -30,6 +30,7 @@ class TemplateEngineTests(unittest.TestCase):
             self.assertIn("CC := clang", gnumakefile)
             self.assertIn("OBJC := clang", gnumakefile)
             self.assertIn("ADDITIONAL_OBJCFLAGS", gnumakefile)
+            self.assertIn("System/Sysroot/usr/include/GNUstep", gnumakefile)
             self.assertIn("ADDITIONAL_LDFLAGS", gnumakefile)
 
     def test_create_cli_alias_template(self):
