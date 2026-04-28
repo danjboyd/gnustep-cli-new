@@ -17,6 +17,12 @@ on:
       source_artifact_run_id:
         description: Workflow run id containing CLI/toolchain input artifacts
         required: true
+      linux_source_artifact_run_id:
+        description: Optional workflow run id containing Linux input artifacts
+        required: false
+      windows_source_artifact_run_id:
+        description: Optional workflow run id containing Windows input artifacts
+        required: false
       linux_cli_artifact:
         description: Artifact name containing the Linux CLI input archive or directory
         required: false
@@ -55,7 +61,7 @@ jobs:
           name: ${{ inputs.linux_cli_artifact }}
           path: ${{ runner.temp }}/gnustep-release-inputs/linux-cli
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ inputs.source_artifact_run_id }}
+          run-id: ${{ inputs.linux_source_artifact_run_id || inputs.source_artifact_run_id }}
 
       - name: Download Linux toolchain artifact
         if: ${{ inputs.linux_toolchain_artifact != '' }}
@@ -64,7 +70,7 @@ jobs:
           name: ${{ inputs.linux_toolchain_artifact }}
           path: ${{ runner.temp }}/gnustep-release-inputs/linux-toolchain
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ inputs.source_artifact_run_id }}
+          run-id: ${{ inputs.linux_source_artifact_run_id || inputs.source_artifact_run_id }}
 
       - name: Download Windows CLI artifact
         if: ${{ inputs.windows_cli_artifact != '' }}
@@ -73,7 +79,7 @@ jobs:
           name: ${{ inputs.windows_cli_artifact }}
           path: ${{ runner.temp }}/gnustep-release-inputs/windows-cli
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ inputs.source_artifact_run_id }}
+          run-id: ${{ inputs.windows_source_artifact_run_id || inputs.source_artifact_run_id }}
 
       - name: Download Windows toolchain artifact
         if: ${{ inputs.windows_toolchain_artifact != '' }}
@@ -82,13 +88,20 @@ jobs:
           name: ${{ inputs.windows_toolchain_artifact }}
           path: ${{ runner.temp }}/gnustep-release-inputs/windows-toolchain
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ inputs.source_artifact_run_id }}
+          run-id: ${{ inputs.windows_source_artifact_run_id || inputs.source_artifact_run_id }}
 
       - name: Stage release directory
         run: |
           resolve_input() {
-            path="$1"
+            kind="$1"
+            target="$2"
+            path="$3"
             if [ -d "$path" ]; then
+              match=$(find "$path" -type f \( -name "gnustep-$kind-$target-*.tar.gz" -o -name "gnustep-$kind-$target-*.zip" \) | sort | tail -n 1)
+              if [ -n "$match" ]; then
+                printf '%s\n' "$match"
+                return 0
+              fi
               count=$(find "$path" -mindepth 1 -maxdepth 1 | wc -l)
               if [ "$count" -eq 1 ]; then
                 find "$path" -mindepth 1 -maxdepth 1
@@ -103,18 +116,22 @@ jobs:
             --base-url "${{ inputs.base_url }}"
             --output-dir "$OUTPUT_ROOT")
           if [ -n "${{ inputs.linux_cli_artifact }}" ]; then
-            args+=(--cli-input "linux-amd64-clang=$(resolve_input "$INPUT_ROOT/linux-cli")")
+            args+=(--cli-input "linux-amd64-clang=$(resolve_input cli linux-amd64-clang "$INPUT_ROOT/linux-cli")")
           fi
           if [ -n "${{ inputs.linux_toolchain_artifact }}" ]; then
-            args+=(--toolchain-input "linux-amd64-clang=$(resolve_input "$INPUT_ROOT/linux-toolchain")")
+            args+=(--toolchain-input "linux-amd64-clang=$(resolve_input toolchain linux-amd64-clang "$INPUT_ROOT/linux-toolchain")")
           fi
           if [ -n "${{ inputs.windows_cli_artifact }}" ]; then
-            args+=(--cli-input "windows-amd64-msys2-clang64=$(resolve_input "$INPUT_ROOT/windows-cli")")
+            args+=(--cli-input "windows-amd64-msys2-clang64=$(resolve_input cli windows-amd64-msys2-clang64 "$INPUT_ROOT/windows-cli")")
           fi
           if [ -n "${{ inputs.windows_toolchain_artifact }}" ]; then
-            args+=(--toolchain-input "windows-amd64-msys2-clang64=$(resolve_input "$INPUT_ROOT/windows-toolchain")")
+            args+=(--toolchain-input "windows-amd64-msys2-clang64=$(resolve_input toolchain windows-amd64-msys2-clang64 "$INPUT_ROOT/windows-toolchain")")
           fi
           python3 scripts/internal/build_infra.py "${args[@]}"
+          marker=$(find "$INPUT_ROOT" -type f -name windows-current-source-artifact.json | sort | head -n 1)
+          if [ -n "$marker" ]; then
+            cp "$marker" "$RELEASE_DIR/windows-current-source-artifact.json"
+          fi
           python3 scripts/internal/build_infra.py --json verify-release --release-dir "$RELEASE_DIR"
 
       - name: Upload staged release

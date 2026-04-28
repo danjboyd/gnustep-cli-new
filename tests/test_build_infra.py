@@ -575,6 +575,7 @@ class BuildInfraTests(unittest.TestCase):
                 github_payload["artifacts"][0]["url"],
                 "https://github.com/danjboyd/gnustep-cli/releases/download/v0.1.0/gnustep-cli-linux-amd64-clang-0.1.0.tar.gz",
             )
+            self.assertNotIn("/releases/download/dogfood/download/v", github_payload["artifacts"][0]["url"])
 
             windows_cli = temp / "windows-cli"
             (windows_cli / "bin").mkdir(parents=True)

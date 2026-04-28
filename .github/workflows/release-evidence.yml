@@ -27,6 +27,12 @@ on:
       linux_smoke_sha256:
         description: SHA256 for Linux smoke report JSON
         required: true
+      windows_current_source_marker_url:
+        description: URL for Windows current-source marker JSON
+        required: true
+      windows_current_source_marker_sha256:
+        description: SHA256 for Windows current-source marker JSON
+        required: true
 
 jobs:
   release-evidence:
@@ -63,6 +69,7 @@ jobs:
           fetch_evidence windows-smoke "${{ inputs.windows_smoke_url }}" "${{ inputs.windows_smoke_sha256 }}" "$RUNNER_TEMP/release-evidence/windows-tier1-report-patched-gorm.json"
           fetch_evidence update-all "${{ inputs.update_all_evidence_url }}" "${{ inputs.update_all_evidence_sha256 }}" "$RUNNER_TEMP/release-evidence/update-all-production-like.json"
           fetch_evidence linux-smoke "${{ inputs.linux_smoke_url }}" "${{ inputs.linux_smoke_sha256 }}" "$RUNNER_TEMP/release-evidence/linux-smoke-report.json"
+          fetch_evidence windows-current-source-marker "${{ inputs.windows_current_source_marker_url }}" "${{ inputs.windows_current_source_marker_sha256 }}" "$RUNNER_TEMP/release-evidence/windows-current-source-artifact.json"
 
       - name: Upload release evidence
         uses: actions/upload-artifact@v4
