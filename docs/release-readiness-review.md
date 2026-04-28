@@ -89,3 +89,22 @@ The main remaining release-engineering issue is productionizing evidence and tru
   exception. This is acceptable for the dogfood hosted-path proof, but a
   production Windows refresh still requires a current-source hosted Windows
   artifact and live smoke evidence.
+
+## April 28 Execution Update
+
+- Added hosted producer workflows for current-source Windows artifacts,
+  published-URL Linux qualification, and controlled `tools-xctest` package
+  artifact production.
+- Tightened Release so stale Windows artifacts are dogfood-only and Linux smoke
+  evidence is a required hosted evidence input.
+- Added `release-qualification-summary.json` generation to Release so each
+  publication carries a compact index of producer run IDs, asset digests,
+  evidence digests, source revision, and exceptions.
+- Advanced native `doctor` parity by adding a structured `toolchain.features`
+  check that exposes normalized Objective-C feature flags as first-class check
+  evidence.
+- Remaining production blockers are now execution/provenance blockers: run the
+  new Windows current-source workflow successfully, collect fresh Windows and
+  OpenBSD live smoke reports against the resulting artifacts, run the
+  published-URL Linux workflow against the release manifest, and rerun Release
+  without `allow_stale_windows_artifact`.

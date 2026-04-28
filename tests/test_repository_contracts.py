@@ -144,6 +144,7 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("staged-artifact", content)
         self.assertIn("release_artifact_name", content)
         self.assertIn("release_artifact_run_id", content)
+        self.assertIn("release_inputs_run_id", content)
         self.assertIn("package_index_source", content)
         self.assertIn("signed-artifact", content)
         self.assertIn("package_index_artifact_name", content)
@@ -159,10 +160,13 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("RELEASE_DIR=dist/${{ inputs.channel }}/${{ inputs.version }}", content)
         self.assertIn("phase26_openbsd_report", content)
         self.assertIn("phase26_windows_report", content)
+        self.assertIn("linux_smoke_report", content)
+        self.assertIn("allow_stale_windows_artifact is only permitted for dogfood releases", content)
         self.assertIn("update_all_evidence", content)
         self.assertIn("--release-gate release-candidate", content)
         self.assertIn("validate-update-all-evidence", content)
         self.assertIn("release-evidence-bundle", content)
+        self.assertIn("release-qualification-summary", content)
         self.assertIn("actions/upload-artifact@v4", content)
         self.assertIn("phase12-production-hardening-status", content)
         self.assertIn("phase13-update-hardening-status", content)
@@ -197,9 +201,34 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("windows_smoke_sha256", content)
         self.assertIn("update_all_evidence_url", content)
         self.assertIn("linux_smoke_url", content)
+        self.assertIn("required: true", content)
         self.assertIn("sha256sum", content)
         self.assertIn("actions/upload-artifact@v4", content)
         self.assertIn("gnustep-release-evidence-inputs", content)
+
+    def test_windows_current_source_artifacts_workflow_exists(self):
+        workflow = ROOT / ".github" / "workflows" / "windows-current-source-artifacts.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("windows-latest", content)
+        self.assertIn("assemble-toolchain.ps1", content)
+        self.assertIn("windows-current-source-artifact.json", content)
+        self.assertIn("gnustep-windows-current-source-artifacts", content)
+
+    def test_published_url_qualification_workflow_exists(self):
+        workflow = ROOT / ".github" / "workflows" / "published-url-qualification.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("release_manifest_url", content)
+        self.assertIn("linux-smoke-report.json", content)
+        self.assertIn("gnustep-published-url-linux-evidence", content)
+
+    def test_package_tools_xctest_workflow_exists(self):
+        workflow = ROOT / ".github" / "workflows" / "package-tools-xctest.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("package-tools-xctest-artifact", content)
+        self.assertIn("gnustep-package-tools-xctest", content)
 
     def test_package_index_workflow_publishes_signed_artifact(self):
         workflow = ROOT / ".github" / "workflows" / "package-index.yml"

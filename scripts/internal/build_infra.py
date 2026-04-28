@@ -60,6 +60,7 @@ from gnustep_cli_shared.build_infra import (
     write_release_provenance,
     write_windows_current_source_marker,
     write_release_evidence_bundle,
+    write_release_qualification_summary,
     validate_update_all_evidence,
     release_key_rotation_drill,
     phase12_production_hardening_status,
@@ -215,6 +216,17 @@ def main() -> int:
     evidence_bundle.add_argument("--update-all-evidence")
     evidence_bundle.add_argument("--release-trust-root")
     evidence_bundle.add_argument("--package-index-trust-root")
+
+    qualification_summary = subparsers.add_parser("release-qualification-summary", add_help=False)
+    qualification_summary.add_argument("--release-dir", required=True)
+    qualification_summary.add_argument("--evidence-dir")
+    qualification_summary.add_argument("--release-run-id")
+    qualification_summary.add_argument("--release-inputs-run-id")
+    qualification_summary.add_argument("--stage-release-run-id")
+    qualification_summary.add_argument("--package-index-run-id")
+    qualification_summary.add_argument("--release-evidence-run-id")
+    qualification_summary.add_argument("--source-revision")
+    qualification_summary.add_argument("--stale-windows-allowed", action="store_true")
 
     validate_update_all = subparsers.add_parser("validate-update-all-evidence", add_help=False)
     validate_update_all.add_argument("--evidence", required=True)
@@ -464,6 +476,18 @@ def main() -> int:
             release_trust_root=args.release_trust_root,
             package_index_trust_root=args.package_index_trust_root,
         )
+    elif args.subcommand == "release-qualification-summary":
+        payload = write_release_qualification_summary(
+            args.release_dir,
+            evidence_dir=args.evidence_dir,
+            release_run_id=args.release_run_id,
+            release_inputs_run_id=args.release_inputs_run_id,
+            stage_release_run_id=args.stage_release_run_id,
+            package_index_run_id=args.package_index_run_id,
+            release_evidence_run_id=args.release_evidence_run_id,
+            source_revision=args.source_revision,
+            stale_windows_allowed=args.stale_windows_allowed,
+        )
     elif args.subcommand == "validate-update-all-evidence":
         payload = validate_update_all_evidence(args.evidence)
     elif args.subcommand == "release-key-rotation-drill":
@@ -588,7 +612,7 @@ def main() -> int:
             "'assemble-linux-toolchain', 'package-source-built-linux-toolchain', 'toolchain-host-origin-audit', "
             "'stage-release', 'github-release-plan', 'github-release-publish', "
             "'prepare-github-release', 'session-build-box-plan', 'dogfood-snapshot-version', 'delta-artifact-record', 'package-artifact-publication-gate', 'tools-xctest-release-gate', 'package-tools-xctest-artifact', 'build-linux-cli-against-managed-toolchain', 'linux-cli-abi-audit', 'refresh-local-release-metadata', 'published-url-qualification-plan', "
-            "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', 'windows-current-source-marker', 'release-evidence-bundle', 'validate-update-all-evidence', 'release-key-rotation-drill', "
+            "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', 'windows-current-source-marker', 'release-evidence-bundle', 'release-qualification-summary', 'validate-update-all-evidence', 'release-key-rotation-drill', "
             "'validate-source-lock', 'msys2-input-manifest', 'validate-input-manifest', 'component-inventory', 'windows-msys2-component-inventory', 'compare-windows-msys2-inventories', 'toolchain-manifest', "
             "'toolchain-plan', 'linux-build-script', 'openbsd-build-script', "
             "'msys2-assembly-script', 'toolchain-archive-audit', 'debian-gcc-interop-plan', 'windows-extracted-toolchain-rebuild-plan', or 'msvc-status'",

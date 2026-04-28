@@ -1,0 +1,105 @@
+name: Published URL Qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_manifest_url:
+        description: Published release manifest URL to qualify
+        required: true
+      bootstrap_url:
+        description: Bootstrap script URL
+        required: true
+        default: https://raw.githubusercontent.com/danjboyd/gnustep-cli-new/master/scripts/bootstrap/gnustep-bootstrap.sh
+      install_root:
+        description: Temporary install root
+        required: true
+        default: /tmp/gnustep-published-url-qualification/install
+
+permissions:
+  contents: read
+
+jobs:
+  linux-published-url:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install host prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl clang make
+
+      - name: Run Linux published-URL smoke
+        run: |
+          set -eu
+          evidence="$RUNNER_TEMP/published-url-evidence"
+          mkdir -p "$evidence"
+          report="$evidence/linux-smoke-report.json"
+          bootstrap="$evidence/gnustep-bootstrap.sh"
+          manifest="$evidence/release-manifest.json"
+          install_root="${{ inputs.install_root }}"
+          cleanup() {
+            status=$?
+            if [ "$status" -ne 0 ] && [ ! -f "$report" ]; then
+              python3 - <<'PY' "$report" "$status"
+import json, sys
+report, status = sys.argv[1], int(sys.argv[2])
+payload = {
+  "schema_version": 1,
+  "suite_id": "tier1-core",
+  "target_id": "linux-amd64-clang",
+  "runner_id": "github-actions-ubuntu-latest",
+  "overall_ok": False,
+  "summary": "Linux published-URL smoke failed before structured completion.",
+  "failure_exit_status": status,
+  "scenario_reports": [],
+}
+open(report, "w", encoding="utf-8").write(json.dumps(payload, indent=2) + "\n")
+PY
+            fi
+          }
+          trap cleanup EXIT
+          curl --fail --location --show-error --silent "${{ inputs.bootstrap_url }}" --output "$bootstrap"
+          curl --fail --location --show-error --silent "${{ inputs.release_manifest_url }}" --output "$manifest"
+          chmod +x "$bootstrap"
+          rm -rf "$install_root"
+          "$bootstrap" --json setup --yes --root "$install_root" --manifest "$manifest" > "$evidence/setup.json"
+          "$install_root/bin/gnustep" --version > "$evidence/version.txt"
+          "$install_root/bin/gnustep" --help > "$evidence/help.txt"
+          "$install_root/bin/gnustep" doctor --json --quick --manifest "$manifest" > "$evidence/doctor.json"
+          work="$evidence/new-project"
+          mkdir -p "$work"
+          "$install_root/bin/gnustep" new cli "$work/HelloSmoke" --json > "$evidence/new.json"
+          "$install_root/bin/gnustep" build "$work/HelloSmoke" --json > "$evidence/build.json"
+          "$install_root/bin/gnustep" run "$work/HelloSmoke" --json > "$evidence/run.json"
+          python3 - <<'PY' "$report" "$evidence"
+import json, pathlib, sys
+report = pathlib.Path(sys.argv[1])
+evidence = pathlib.Path(sys.argv[2])
+scenario_ids = [
+    "bootstrap-install-usable-cli",
+    "new-cli-project-build-run",
+]
+payload = {
+    "schema_version": 1,
+    "suite_id": "tier1-core",
+    "target_id": "linux-amd64-clang",
+    "runner_id": "github-actions-ubuntu-latest",
+    "release_under_test": {"source": "${{ inputs.release_manifest_url }}"},
+    "overall_ok": True,
+    "summary": "Linux published-URL bootstrap, doctor, new/build/run smoke passed.",
+    "scenario_reports": [
+        {"scenario_id": scenario_id, "ok": True, "status": "passed", "summary": f"{scenario_id} passed."}
+        for scenario_id in scenario_ids
+    ],
+    "evidence": {
+        "files": sorted(path.name for path in evidence.iterdir() if path.name != report.name),
+    },
+}
+report.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+
+      - name: Upload published URL qualification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-published-url-linux-evidence
+          path: ${{ runner.temp }}/published-url-evidence

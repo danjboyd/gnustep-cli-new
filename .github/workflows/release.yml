@@ -21,6 +21,9 @@ on:
       release_artifact_run_id:
         description: Workflow run id that produced the staged release artifact
         required: false
+      release_inputs_run_id:
+        description: Workflow run id that produced source input artifacts consumed by Stage Release
+        required: false
       package_index_source:
         description: "Package index source: signed-artifact or sign-in-workflow"
         required: true
@@ -51,6 +54,10 @@ on:
         description: Path to the Windows Tier 1 smoke report JSON
         required: true
         default: .artifacts/phase26-windows-gorm-patched-20260424/windows-tier1-report-patched-gorm.json
+      linux_smoke_report:
+        description: Path to Linux hosted smoke report JSON
+        required: true
+        default: .artifacts/hosted-release-evidence/linux-smoke-report.json
       update_all_evidence:
         description: Path to production-like gnustep update all --yes evidence JSON
         required: true
@@ -99,6 +106,10 @@ jobs:
               exit 2
               ;;
           esac
+          if [ "${{ inputs.allow_stale_windows_artifact }}" = "true" ] && [ "${{ inputs.channel }}" != "dogfood" ]; then
+            echo "allow_stale_windows_artifact is only permitted for dogfood releases" >&2
+            exit 2
+          fi
           case "${{ inputs.package_index_source }}" in
             signed-artifact)
               if [ -z "${{ inputs.package_index_artifact_run_id || inputs.release_artifact_run_id }}" ]; then
@@ -288,10 +299,12 @@ jobs:
       - name: Enforce Phase 12 and Phase 13 hardening gates
         run: |
           test -f "${{ inputs.update_all_evidence }}"
+          test -f "${{ inputs.linux_smoke_report }}"
           python3 scripts/internal/build_infra.py --json validate-update-all-evidence \
             --evidence "${{ inputs.update_all_evidence }}"
           python3 scripts/internal/build_infra.py --json release-evidence-bundle \
             --release-dir "$RELEASE_DIR" \
+            --smoke-report "${{ inputs.linux_smoke_report }}" \
             --smoke-report "${{ inputs.phase26_openbsd_report }}" \
             --smoke-report "${{ inputs.phase26_windows_report }}" \
             --update-all-evidence "${{ inputs.update_all_evidence }}" \
@@ -310,12 +323,30 @@ jobs:
             --smoke-report "${{ inputs.phase26_windows_report }}" \
             --update-all-evidence "${{ inputs.update_all_evidence }}"
 
+      - name: Write release qualification summary
+        run: |
+          args=(--json release-qualification-summary
+            --release-dir "$RELEASE_DIR"
+            --evidence-dir .artifacts/hosted-release-evidence
+            --release-run-id "${{ github.run_id }}"
+            --release-inputs-run-id "${{ inputs.release_inputs_run_id }}"
+            --stage-release-run-id "${{ inputs.release_artifact_run_id }}"
+            --package-index-run-id "${{ inputs.package_index_artifact_run_id || inputs.release_artifact_run_id }}"
+            --release-evidence-run-id "${{ inputs.evidence_artifact_run_id }}"
+            --source-revision "${{ github.sha }}")
+          if [ "${{ inputs.allow_stale_windows_artifact }}" = "true" ]; then
+            args+=(--stale-windows-allowed)
+          fi
+          python3 scripts/internal/build_infra.py "${args[@]}"
+
       - name: Upload release evidence bundle
         uses: actions/upload-artifact@v4
         with:
           name: gnustep-release-evidence-${{ inputs.channel }}-${{ inputs.version }}
           path: |
             dist/${{ inputs.channel }}/${{ inputs.version }}/release-evidence-bundle.json
+            dist/${{ inputs.channel }}/${{ inputs.version }}/release-qualification-summary.json
+            ${{ inputs.linux_smoke_report }}
             ${{ inputs.phase26_openbsd_report }}
             ${{ inputs.phase26_windows_report }}
             ${{ inputs.update_all_evidence }}

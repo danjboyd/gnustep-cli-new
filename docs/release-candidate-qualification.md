@@ -336,3 +336,20 @@ April 27 hosted workflow update:
   the approved April 24 Windows smoke artifact as hosted evidence. Production
   Windows refresh remains blocked until a current-source hosted Windows build
   and live smoke run replace that exception.
+
+April 28 execution update:
+
+- Added a `Windows Current Source Artifacts` workflow to produce hosted Windows
+  CLI/toolchain artifacts plus `windows-current-source-artifact.json` from the
+  workflow source revision.
+- Added a `Published URL Qualification` workflow to produce hosted Linux smoke
+  evidence from a published release manifest URL.
+- Added a `Package tools-xctest` workflow to generate controlled package
+  artifacts from declared source provenance in CI.
+- Release now requires Linux smoke evidence, writes
+  `release-qualification-summary.json`, and refuses stale Windows artifacts
+  outside the `dogfood` channel.
+- Native `doctor` now includes a structured `toolchain.features` check for
+  normalized Objective-C feature flags.
+- Remaining RC blocker: run the new producer workflows and fresh Windows/OpenBSD
+  live smoke, then rerun release without the stale Windows exception.

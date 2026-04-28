@@ -1,0 +1,117 @@
+name: Windows Current Source Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Artifact version label
+        required: true
+        default: 0.1.0-dev-current
+      toolchain_source:
+        description: "Toolchain source: assemble-msys2 or existing-zip"
+        required: true
+        default: assemble-msys2
+      toolchain_zip_url:
+        description: Existing Windows toolchain zip URL when toolchain_source is existing-zip
+        required: false
+      toolchain_zip_sha256:
+        description: SHA256 for existing Windows toolchain zip
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  windows-current-source:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Prepare paths
+        shell: pwsh
+        run: |
+          "TOOLCHAIN_ROOT=$env:RUNNER_TEMP\gnustep-toolchain" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "OUTPUT_ROOT=$env:RUNNER_TEMP\gnustep-current-source-artifacts" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Assemble or download Windows toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path $env:TOOLCHAIN_ROOT, $env:OUTPUT_ROOT | Out-Null
+          if ('${{ inputs.toolchain_source }}' -eq 'existing-zip') {
+            if (-not '${{ inputs.toolchain_zip_url }}' -or -not '${{ inputs.toolchain_zip_sha256 }}') {
+              throw 'toolchain_zip_url and toolchain_zip_sha256 are required for existing-zip'
+            }
+            $zip = Join-Path $env:RUNNER_TEMP 'windows-toolchain.zip'
+            Invoke-WebRequest -UseBasicParsing -Uri '${{ inputs.toolchain_zip_url }}' -OutFile $zip
+            $actual = (Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLowerInvariant()
+            if ($actual -ne '${{ inputs.toolchain_zip_sha256 }}'.ToLowerInvariant()) {
+              throw "toolchain checksum mismatch: expected ${{ inputs.toolchain_zip_sha256 }}, got $actual"
+            }
+            Expand-Archive -Path $zip -DestinationPath $env:TOOLCHAIN_ROOT -Force
+          } elseif ('${{ inputs.toolchain_source }}' -eq 'assemble-msys2') {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File toolchains\windows-amd64-msys2-clang64\assemble-toolchain.ps1 -Prefix $env:TOOLCHAIN_ROOT -CacheDir "$env:RUNNER_TEMP\msys2-cache"
+          } else {
+            throw 'unsupported toolchain_source: ${{ inputs.toolchain_source }}'
+          }
+
+      - name: Build full CLI from current source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bash = Join-Path $env:TOOLCHAIN_ROOT 'usr\bin\bash.exe'
+          if (-not (Test-Path $bash)) { throw "managed bash not found: $bash" }
+          & $bash -lc "cd '$($env:GITHUB_WORKSPACE -replace '\\','/')/src/full-cli' && export PATH='$($env:TOOLCHAIN_ROOT -replace '\\','/')/clang64/bin:$($env:TOOLCHAIN_ROOT -replace '\\','/')/usr/bin':`$PATH && export GNUSTEP_MAKEFILES='$($env:TOOLCHAIN_ROOT -replace '\\','/')/clang64/share/GNUstep/Makefiles' && make clean && make"
+
+      - name: Smoke built CLI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:PATH = (Join-Path $env:TOOLCHAIN_ROOT 'clang64\bin') + ';' + (Join-Path $env:TOOLCHAIN_ROOT 'usr\bin') + ';' + $env:PATH
+          $env:GNUSTEP_MAKEFILES = Join-Path $env:TOOLCHAIN_ROOT 'clang64\share\GNUstep\Makefiles'
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'src\full-cli\obj\gnustep.exe'
+          & $exe --version
+          & $exe --help
+          & $exe doctor --json --quick | Out-File -Encoding utf8 (Join-Path $env:OUTPUT_ROOT 'doctor.json')
+
+      - name: Package CLI and toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ inputs.version }}'
+          $cliRoot = Join-Path $env:OUTPUT_ROOT 'cli-root'
+          New-Item -ItemType Directory -Force -Path (Join-Path $cliRoot 'bin') | Out-Null
+          Copy-Item -Force (Join-Path $env:GITHUB_WORKSPACE 'src\full-cli\obj\gnustep.exe') (Join-Path $cliRoot 'bin\gnustep.exe')
+          $cliZip = Join-Path $env:OUTPUT_ROOT "gnustep-cli-windows-amd64-msys2-clang64-$version.zip"
+          $toolchainZip = Join-Path $env:OUTPUT_ROOT "gnustep-toolchain-windows-amd64-msys2-clang64-$version.zip"
+          Compress-Archive -Path (Join-Path $cliRoot '*') -DestinationPath $cliZip -Force
+          Compress-Archive -Path (Join-Path $env:TOOLCHAIN_ROOT '*') -DestinationPath $toolchainZip -Force
+          $sourceRevision = (git rev-parse HEAD).Trim()
+          $marker = [ordered]@{
+            schema_version = 1
+            command = 'windows-current-source-marker'
+            ok = $true
+            status = 'ok'
+            summary = 'Windows CLI artifact was built from the current workflow source revision.'
+            artifact_id = 'cli-windows-amd64-msys2-clang64'
+            source_revision = $sourceRevision
+            builder_identity = "github-actions/windows-latest/$env:GITHUB_RUN_ID"
+            generated_at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+            cli_artifact = @{
+              filename = Split-Path -Leaf $cliZip
+              sha256 = (Get-FileHash -Algorithm SHA256 -Path $cliZip).Hash.ToLowerInvariant()
+            }
+            toolchain_artifact = @{
+              filename = Split-Path -Leaf $toolchainZip
+              sha256 = (Get-FileHash -Algorithm SHA256 -Path $toolchainZip).Hash.ToLowerInvariant()
+            }
+          }
+          $marker | ConvertTo-Json -Depth 8 | Out-File -Encoding utf8 (Join-Path $env:OUTPUT_ROOT 'windows-current-source-artifact.json')
+          Get-FileHash -Algorithm SHA256 -Path $cliZip, $toolchainZip | ForEach-Object { "$($_.Hash.ToLowerInvariant())  $(Split-Path -Leaf $_.Path)" } | Out-File -Encoding ascii (Join-Path $env:OUTPUT_ROOT 'SHA256SUMS.windows')
+
+      - name: Upload Windows current-source artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-windows-current-source-artifacts
+          path: ${{ runner.temp }}\gnustep-current-source-artifacts

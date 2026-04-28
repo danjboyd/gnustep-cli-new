@@ -3623,6 +3623,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                                         [nativeToolchain objectForKey: @"reasons"], @"reasons",
                                                         nil]]];
 
+  [checks addObject: [self checkWithID: @"toolchain.features"
+                                 title: @"Detect Objective-C feature flags"
+                                status: [[toolchain objectForKey: @"present"] boolValue] ? @"ok" : @"not_run"
+                              severity: @"warning"
+                               message: [[toolchain objectForKey: @"present"] boolValue] ?
+                                 @"Objective-C feature flags were normalized for compatibility evaluation." :
+                                 @"No toolchain was detected, so Objective-C feature flags were not evaluated."
+                             interface: ([interface isEqualToString: @"bootstrap"] ? @"bootstrap" : @"both")
+                        executionTier: @"bootstrap_optional"
+                               details: [toolchain objectForKey: @"feature_flags"]]];
+
   if ([interface isEqualToString: @"full"])
     {
       BOOL probeDeferred = [self isDeferredProbe: [toolchain objectForKey: @"probe"]];

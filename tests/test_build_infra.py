@@ -1,5 +1,6 @@
 import sys
 import subprocess
+import hashlib
 import json
 import tarfile
 import tempfile
@@ -68,6 +69,7 @@ from gnustep_cli_shared.build_infra import (
     write_release_provenance,
     write_windows_current_source_marker,
     write_release_evidence_bundle,
+    write_release_qualification_summary,
     validate_update_all_evidence,
     release_key_rotation_drill,
     phase12_production_hardening_status,
@@ -76,6 +78,10 @@ from gnustep_cli_shared.build_infra import (
     windows_msys2_component_inventory,
 )
 from gnustep_cli_shared.smoke_harness import evidence_smoke_report
+
+
+def sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def managed_debian_doctor_payload():
@@ -1186,6 +1192,44 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(bundle["ok"])
             self.assertEqual({entry["id"] for entry in bundle["trust_roots"]}, {"release-trust-root", "package-index-trust-root"})
             self.assertIn("update-all-production-like", {entry["id"] for entry in bundle["evidence"]})
+
+    def test_release_qualification_summary_records_workflow_runs_and_digests(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            release_dir = temp / "release"
+            release_dir.mkdir()
+            (release_dir / "gnustep-cli-linux-amd64-clang-0.1.0.tar.gz").write_text("cli")
+            (release_dir / "release-manifest.json").write_text(json.dumps({
+                "schema_version": 1,
+                "releases": [{
+                    "version": "0.1.0",
+                    "artifacts": [{
+                        "id": "cli-linux-amd64-clang",
+                        "kind": "cli",
+                        "filename": "gnustep-cli-linux-amd64-clang-0.1.0.tar.gz",
+                        "sha256": "placeholder",
+                    }],
+                }],
+            }))
+            (release_dir / "release-evidence-bundle.json").write_text(json.dumps({
+                "schema_version": 1,
+                "ok": True,
+                "evidence": [{"id": "linux-hosted-smoke", "ok": True}],
+            }))
+            (release_dir / "windows-current-source-artifact.json").write_text('{"ok": true, "summary": "ok"}')
+            summary = write_release_qualification_summary(
+                release_dir,
+                release_run_id="5",
+                release_inputs_run_id="1",
+                stage_release_run_id="2",
+                package_index_run_id="3",
+                release_evidence_run_id="4",
+                source_revision="abc123",
+            )
+            self.assertTrue(summary["ok"])
+            self.assertEqual(summary["workflow_runs"]["release"], "5")
+            self.assertEqual(summary["assets"][0]["asset_sha256"], sha256(release_dir / "gnustep-cli-linux-amd64-clang-0.1.0.tar.gz"))
+            self.assertTrue((release_dir / "release-qualification-summary.json").exists())
 
     def test_release_key_rotation_drill_rejects_cross_signed_metadata(self):
         with tempfile.TemporaryDirectory() as tempdir:

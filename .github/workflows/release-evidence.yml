@@ -22,11 +22,11 @@ on:
         description: SHA256 for production-like update-all evidence JSON
         required: true
       linux_smoke_url:
-        description: Optional URL for Linux smoke report JSON
-        required: false
+        description: URL for Linux smoke report JSON
+        required: true
       linux_smoke_sha256:
-        description: SHA256 for Linux smoke report JSON when supplied
-        required: false
+        description: SHA256 for Linux smoke report JSON
+        required: true
 
 jobs:
   release-evidence:

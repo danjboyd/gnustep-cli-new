@@ -3177,6 +3177,103 @@ def write_release_evidence_bundle(
     return bundle
 
 
+def write_release_qualification_summary(
+    release_dir: str | Path,
+    *,
+    evidence_dir: str | Path | None = None,
+    release_run_id: str | None = None,
+    release_inputs_run_id: str | None = None,
+    stage_release_run_id: str | None = None,
+    package_index_run_id: str | None = None,
+    release_evidence_run_id: str | None = None,
+    source_revision: str | None = None,
+    stale_windows_allowed: bool = False,
+) -> dict[str, Any]:
+    root = Path(release_dir).resolve()
+    if not root.exists():
+        return {
+            "schema_version": 1,
+            "command": "release-qualification-summary",
+            "ok": False,
+            "status": "error",
+            "summary": "Release directory does not exist.",
+            "release_dir": str(root),
+        }
+    evidence_root = Path(evidence_dir).resolve() if evidence_dir else root
+    manifest_path = root / "release-manifest.json"
+    evidence_bundle_path = root / "release-evidence-bundle.json"
+    assets: list[dict[str, Any]] = []
+
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+            for release in manifest.get("releases", []):
+                for artifact in release.get("artifacts", []):
+                    filename = artifact.get("filename") or Path(str(artifact.get("url", artifact.get("id", "")))).name
+                    asset_path = root / filename
+                    assets.append(
+                        {
+                            "id": artifact.get("id"),
+                            "kind": artifact.get("kind"),
+                            "filename": filename,
+                            "manifest_sha256": artifact.get("sha256") or artifact.get("integrity", {}).get("sha256"),
+                            "asset_sha256": _sha256(asset_path) if asset_path.exists() else None,
+                            "url": artifact.get("url"),
+                        }
+                    )
+        except Exception:
+            assets = []
+
+    evidence_entries: list[dict[str, Any]] = []
+    if evidence_bundle_path.exists():
+        try:
+            bundle = json.loads(evidence_bundle_path.read_text(encoding="utf-8-sig"))
+            evidence_entries = bundle.get("evidence", [])
+        except Exception:
+            evidence_entries = []
+
+    workflow_runs = {
+        "release": release_run_id,
+        "release_inputs": release_inputs_run_id,
+        "stage_release": stage_release_run_id,
+        "package_index": package_index_run_id,
+        "release_evidence": release_evidence_run_id,
+    }
+    checks = [
+        {"id": "release-manifest-present", "ok": manifest_path.exists(), "message": "release manifest is present"},
+        {"id": "release-evidence-bundle-present", "ok": evidence_bundle_path.exists(), "message": "release evidence bundle is present"},
+        {"id": "workflow-run-ids-recorded", "ok": all(workflow_runs.values()), "message": "all producer and release workflow run ids are recorded"},
+        {
+            "id": "windows-current-source-or-explicit-exception",
+            "ok": stale_windows_allowed or (evidence_root / "windows-current-source-artifact.json").exists(),
+            "message": "Windows current-source evidence is present or an explicit stale-artifact exception was recorded.",
+        },
+    ]
+    ok = all(check["ok"] for check in checks)
+    payload = {
+        "schema_version": 1,
+        "command": "release-qualification-summary",
+        "ok": ok,
+        "status": "ok" if ok else "warning",
+        "summary": "Release qualification summary is complete." if ok else "Release qualification summary is missing evidence references.",
+        "release_dir": str(root),
+        "evidence_dir": str(evidence_root),
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "source_revision": source_revision or _git_revision(),
+        "workflow_runs": workflow_runs,
+        "stale_windows_allowed": stale_windows_allowed,
+        "release_manifest": {"path": str(manifest_path), "sha256": _sha256(manifest_path) if manifest_path.exists() else None},
+        "release_evidence_bundle": {"path": str(evidence_bundle_path), "sha256": _sha256(evidence_bundle_path) if evidence_bundle_path.exists() else None},
+        "assets": assets,
+        "evidence": evidence_entries,
+        "checks": checks,
+    }
+    summary_path = root / "release-qualification-summary.json"
+    summary_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    payload["summary_path"] = str(summary_path)
+    return payload
+
+
 def release_key_rotation_drill(release_dir: str | Path, *, work_dir: str | Path | None = None) -> dict[str, Any]:
     root = Path(release_dir).resolve()
     temp_context = tempfile.TemporaryDirectory() if work_dir is None else None

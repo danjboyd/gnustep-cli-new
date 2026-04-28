@@ -1,0 +1,55 @@
+name: Package tools-xctest
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package artifact version
+        required: true
+        default: 0.1.0
+      target:
+        description: Package target id
+        required: true
+        default: linux-amd64-clang
+      source_revision:
+        description: tools-xctest source revision
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  package-tools-xctest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install GNUstep prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang gnustep-devel git
+
+      - name: Install tools-xctest build dependency
+        run: ./scripts/ci/install-tools-xctest.sh
+
+      - name: Build package artifact from declared source
+        run: |
+          set +u
+          . /usr/share/GNUstep/Makefiles/GNUstep.sh
+          set -u
+          args=(--json package-tools-xctest-artifact
+            --output-dir "$RUNNER_TEMP/tools-xctest-package"
+            --target "${{ inputs.target }}"
+            --version "${{ inputs.version }}"
+            --rebuild)
+          if [ -n "${{ inputs.source_revision }}" ]; then
+            args+=(--source-revision "${{ inputs.source_revision }}")
+          fi
+          python3 scripts/internal/build_infra.py "${args[@]}" > "$RUNNER_TEMP/tools-xctest-package/package-tools-xctest-artifact.json"
+
+      - name: Upload tools-xctest package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-package-tools-xctest-${{ inputs.target }}
+          path: ${{ runner.temp }}/tools-xctest-package

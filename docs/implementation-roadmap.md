@@ -1686,6 +1686,42 @@ core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
   current-source Windows build. That exception is documented and must not be
   carried into a production Windows refresh claim.
 
+### April 28, 2026 Execution Status
+
+- Added a hosted `Windows Current Source Artifacts` workflow that builds the
+  Objective-C full CLI from the checked-out source on `windows-latest`, assembles
+  or consumes a Windows MSYS2 `clang64` toolchain, smokes `--version`, `--help`,
+  and `doctor --json --quick`, writes `windows-current-source-artifact.json`,
+  and uploads `gnustep-windows-current-source-artifacts`.
+- Added a hosted `Published URL Qualification` workflow that installs from a
+  published manifest URL through the POSIX bootstrap script on Ubuntu, runs
+  `doctor --json --quick`, `new`, `build`, and `run`, and uploads
+  `gnustep-published-url-linux-evidence` containing `linux-smoke-report.json`.
+- The `Release Evidence` workflow now requires Linux smoke evidence in addition
+  to OpenBSD, Windows, and update-all evidence. The release workflow now requires
+  `linux_smoke_report`, includes it in the release evidence bundle, and uploads
+  it with the release evidence artifact.
+- The release workflow now rejects `allow_stale_windows_artifact=true` outside
+  the `dogfood` channel, so the stale Windows exception cannot silently reach
+  release-candidate or stable publication paths.
+- Release publication now writes `release-qualification-summary.json`, a concise
+  machine-readable index tying together producer run IDs, release run ID, source
+  revision, release manifest digest, asset digests, evidence bundle digest, and
+  any explicit stale-Windows exception.
+- Added a `Package tools-xctest` workflow that runs the controlled
+  `package-tools-xctest-artifact` command in GitHub Actions and uploads the
+  generated artifact/evidence bundle, moving the first official package toward
+  repeatable source-built package production.
+- Native `doctor` now emits a dedicated `toolchain.features` check with the
+  normalized Objective-C feature flags used for compatibility decisions, so
+  doctor evidence consumers no longer need to infer feature state only from the
+  broader environment block.
+- Remaining external execution: dispatch the new Windows current-source
+  workflow, run Windows/OpenBSD live smoke against its artifacts, run the
+  published-URL Linux workflow against the current dogfood manifest, feed those
+  reports through `Release Evidence`, then rerun `Stage Release` and `Release`
+  without the stale Windows exception for the next candidate.
+
 ## Testing Principles For All Phases
 
 ### A. Unit Testing Standard

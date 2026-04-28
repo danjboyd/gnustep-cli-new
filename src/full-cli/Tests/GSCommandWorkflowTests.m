@@ -386,6 +386,7 @@
   XCTAssertEqualObjects([[checks objectForKey: @"toolchain.probe"] objectForKey: @"status"], @"not_run");
   XCTAssertEqualObjects([[checks objectForKey: @"managed.install.integrity"] objectForKey: @"status"], @"not_run");
   XCTAssertNotNil([checks objectForKey: @"native-toolchain.assess"]);
+  XCTAssertNotNil([checks objectForKey: @"toolchain.features"]);
 }
 
 - (void)testDoctorCompatibilityCheckCarriesStructuredDetails
@@ -412,6 +413,29 @@
   XCTAssertNotNil([[compatibilityCheck objectForKey: @"details"] objectForKey: @"warnings"]);
 }
 
+- (void)testDoctorFeatureCheckCarriesNormalizedFeatureFlags
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *payload = [runner buildDoctorPayloadWithInterface: @"full" manifestPath: nil];
+  NSDictionary *featureCheck = nil;
+  NSUInteger i = 0;
+
+  for (i = 0; i < [[payload objectForKey: @"checks"] count]; i++)
+    {
+      NSDictionary *check = [[payload objectForKey: @"checks"] objectAtIndex: i];
+      if ([[check objectForKey: @"id"] isEqualToString: @"toolchain.features"])
+        {
+          featureCheck = check;
+          break;
+        }
+    }
+
+  XCTAssertNotNil(featureCheck);
+  XCTAssertNotNil([[featureCheck objectForKey: @"details"] objectForKey: @"blocks"]);
+  XCTAssertNotNil([[featureCheck objectForKey: @"details"] objectForKey: @"objc2_syntax"]);
+  XCTAssertNotNil([[featureCheck objectForKey: @"details"] objectForKey: @"nonfragile_abi"]);
+}
+
 
 - (void)testDoctorBootstrapAndFullShareCoreCheckIdentifiers
 {
@@ -425,6 +449,7 @@
                                   @"bootstrap.downloader",
                                   @"toolchain.detect",
                                   @"native-toolchain.assess",
+                                  @"toolchain.features",
                                   @"toolchain.probe",
                                   @"managed.install.integrity",
                                   @"toolchain.compatibility",
