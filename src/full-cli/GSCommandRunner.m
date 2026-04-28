@@ -3804,6 +3804,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       [environment setObject: distributionID forKey: @"distribution_id"];
     }
+  [environment setObject: [NSArray array] forKey: @"detected_layouts"];
+  [environment setObject: [NSArray array] forKey: @"install_prefixes"];
   return environment;
 }
 
