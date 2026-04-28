@@ -2074,6 +2074,8 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn('MANAGED_MAKEFILES="$INSTALL_ROOT/System/Library/Makefiles"', launcher)
             self.assertIn('gnustep-config --variable=GNUSTEP_MAKEFILES', launcher)
             self.assertIn('/usr/local/share/GNUstep/Makefiles', launcher)
+            self.assertIn('GNUSTEP_CLI_SOURCE_MAKEFILES=0', launcher)
+            self.assertIn('GNUSTEP_CLI_SOURCE_MAKEFILES=1', launcher)
             self.assertIn('[ -n "${GNUSTEP_MAKEFILES:-}" ]', launcher)
 
 
