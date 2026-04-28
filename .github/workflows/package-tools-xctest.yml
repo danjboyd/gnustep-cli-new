@@ -38,6 +38,7 @@ jobs:
           set +u
           . /usr/share/GNUstep/Makefiles/GNUstep.sh
           set -u
+          mkdir -p "$RUNNER_TEMP/tools-xctest-package"
           args=(--json package-tools-xctest-artifact
             --output-dir "$RUNNER_TEMP/tools-xctest-package"
             --target "${{ inputs.target }}"

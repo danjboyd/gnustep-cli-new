@@ -21,11 +21,12 @@ permissions:
 jobs:
   linux-published-url:
     runs-on: ubuntu-latest
+    container: debian:12
     steps:
       - name: Install host prerequisites
         run: |
-          sudo apt-get update
-          sudo apt-get install -y curl clang make
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl python3
 
       - name: Run Linux published-URL smoke
         run: |
@@ -46,7 +47,7 @@ jobs:
             "schema_version": 1,
             "suite_id": "tier1-core",
             "target_id": "linux-amd64-clang",
-            "runner_id": "github-actions-ubuntu-latest",
+            "runner_id": "github-actions-debian-12-container",
             "overall_ok": False,
             "summary": "Linux published-URL smoke failed before structured completion.",
             "failure_exit_status": status,
@@ -82,7 +83,7 @@ jobs:
               "schema_version": 1,
               "suite_id": "tier1-core",
               "target_id": "linux-amd64-clang",
-              "runner_id": "github-actions-ubuntu-latest",
+              "runner_id": "github-actions-debian-12-container",
               "release_under_test": {"source": "${{ inputs.release_manifest_url }}"},
               "overall_ok": True,
               "summary": "Linux published-URL bootstrap, doctor, new/build/run smoke passed.",

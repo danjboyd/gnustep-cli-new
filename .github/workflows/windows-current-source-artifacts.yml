@@ -56,6 +56,20 @@ jobs:
             throw 'unsupported toolchain_source: ${{ inputs.toolchain_source }}'
           }
 
+      - name: Normalize Windows toolchain root
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bash = Get-ChildItem -Path $env:TOOLCHAIN_ROOT -Filter bash.exe -Recurse |
+            Where-Object { $_.FullName -like '*\usr\bin\bash.exe' } |
+            Select-Object -First 1
+          if (-not $bash) { throw "managed bash not found under $env:TOOLCHAIN_ROOT" }
+          $bin = Split-Path -Parent $bash.FullName
+          $usr = Split-Path -Parent $bin
+          $root = Split-Path -Parent $usr
+          "TOOLCHAIN_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "Using TOOLCHAIN_ROOT=$root"
+
       - name: Build full CLI from current source
         shell: pwsh
         run: |
