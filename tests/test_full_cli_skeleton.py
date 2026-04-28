@@ -73,6 +73,12 @@ class FullCliSkeletonTests(unittest.TestCase):
         self.assertIn('@"dependencies"', content)
         self.assertNotIn('@"python3"', content)
 
+    def test_full_doctor_uses_managed_state_for_artifact_selection(self):
+        content = (FULL_CLI / "GSCommandRunner.m").read_text()
+        self.assertIn('@"managed_install_state_path"', content)
+        self.assertIn('@"toolchain_artifact_id"', content)
+        self.assertIn('managedToolchainArtifactID', content)
+
     def test_context_tracks_global_options(self):
         content = (FULL_CLI / "GSCommandContext.m").read_text()
         for token in ("--json", "--verbose", "--quiet", "--yes", "--help", "--version"):

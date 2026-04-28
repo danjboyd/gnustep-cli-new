@@ -3493,6 +3493,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSDictionary *artifact = nil;
   NSDictionary *compatibility = nil;
   NSDictionary *nativeToolchain = nil;
+  NSDictionary *managedState = nil;
   NSString *classification = nil;
   NSString *status = @"ok";
   NSMutableArray *checks = [NSMutableArray array];
@@ -3502,6 +3503,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSMutableArray *emptyPrefixes = [[NSMutableArray alloc] initWithCapacity: 0];
   NSString *summary = nil;
   NSString *manifestError = nil;
+  NSString *managedStatePath = nil;
   BOOL powershellDownloader = NO;
   BOOL downloaderAvailable = NO;
 
@@ -3543,6 +3545,41 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   [environment setObject: emptyPrefixes forKey: @"install_prefixes"];
   [emptyLayouts release];
   [emptyPrefixes release];
+  {
+    NSArray *processArguments = [[NSProcessInfo processInfo] arguments];
+    NSString *binaryPath = [processArguments count] > 0 ? [processArguments objectAtIndex: 0] : nil;
+    NSString *resolvedPath = binaryPath != nil ? [binaryPath stringByResolvingSymlinksInPath] : nil;
+    NSString *binaryDir = nil;
+    NSString *installRoot = nil;
+    if (resolvedPath == nil || [resolvedPath length] == 0)
+      {
+        resolvedPath = binaryPath;
+      }
+    if (resolvedPath != nil && [resolvedPath length] > 0)
+      {
+        binaryDir = [resolvedPath stringByDeletingLastPathComponent];
+        if ([binaryDir hasSuffix: @"/libexec/gnustep-cli/bin"] || [binaryDir hasSuffix: @"\\libexec\\gnustep-cli\\bin"])
+          {
+            installRoot = [[[binaryDir stringByDeletingLastPathComponent]
+                                      stringByDeletingLastPathComponent]
+                                      stringByDeletingLastPathComponent];
+          }
+        else
+          {
+            installRoot = [binaryDir stringByDeletingLastPathComponent];
+          }
+        if (installRoot != nil && [installRoot length] > 0)
+          {
+            managedStatePath = [[installRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+            if ([[NSFileManager defaultManager] fileExistsAtPath: managedStatePath])
+              {
+                managedState = [self readJSONFile: managedStatePath error: NULL];
+                [environment setObject: [NSNumber numberWithBool: YES] forKey: @"managed_install_detected"];
+                [environment setObject: managedStatePath forKey: @"managed_install_state_path"];
+              }
+          }
+      }
+  }
   [self appendInstallTrace: @"doctor.environment.ready"];
 
   if (manifestPath != nil)
@@ -3565,6 +3602,21 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                 {
                   artifact = candidate;
                   break;
+                }
+            }
+          if (artifact == nil && managedState != nil)
+            {
+              NSString *managedToolchainArtifactID = [managedState objectForKey: @"toolchain_artifact_id"];
+              NSArray *artifacts = [release objectForKey: @"artifacts"];
+              for (i = 0; i < [artifacts count]; i++)
+                {
+                  NSDictionary *candidate = [artifacts objectAtIndex: i];
+                  if ([[candidate objectForKey: @"kind"] isEqualToString: @"toolchain"] &&
+                      [[candidate objectForKey: @"id"] isEqualToString: managedToolchainArtifactID])
+                    {
+                      artifact = candidate;
+                      break;
+                    }
                 }
             }
         }
