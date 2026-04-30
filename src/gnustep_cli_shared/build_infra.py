@@ -2356,6 +2356,12 @@ def assemble_linux_toolchain_artifact(
             if source.exists():
                 shutil.copy2(source, usr_lib_target / source.name)
                 copied_files.append(str(usr_lib_target / source.name))
+        for library_name in ("libgnustep-base.so", "libobjc.so"):
+            library_source = system_library_target / library_name
+            sysroot_library = usr_lib_target / library_name
+            if library_source.exists() and not sysroot_library.exists():
+                sysroot_library.symlink_to(Path("../../../../Library/Libraries") / library_name)
+                copied_files.append(str(sysroot_library))
 
     _rewrite_managed_gnustep_make_for_relocation(output_root)
 

@@ -431,6 +431,8 @@ class BuildInfraTests(unittest.TestCase):
                 target.write_text(relative)
             dep = temp / "libgnustep-base.so.1.31"
             dep.write_text("dep")
+            objc_dep = temp / "libobjc.so.4"
+            objc_dep.write_text("objc-dep")
             clang_dep = temp / "libclang-cpp.so.19.1"
             clang_dep.write_text("clang-dep")
 
@@ -474,7 +476,7 @@ class BuildInfraTests(unittest.TestCase):
                 "gnustep_cli_shared.build_infra._linux_gcc_runtime_dir", return_value=gcc_runtime_dir
             ), patch(
                 "gnustep_cli_shared.build_infra._linux_shared_library_dependencies",
-                side_effect=lambda path: [dep] if Path(path) == runtime_binary else [clang_dep],
+                side_effect=lambda path: [dep, objc_dep] if Path(path) == runtime_binary else [clang_dep],
             ), patch(
                 "gnustep_cli_shared.build_infra.Path.exists",
                 new=mocked_exists,
@@ -515,6 +517,8 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "gcc" / "x86_64-linux-gnu" / "14" / "crtbeginS.o").exists())
             self.assertTrue((assembled / "System" / "Sysroot" / "lib" / "x86_64-linux-gnu" / "Scrt1.o").exists())
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libc.so").exists())
+            self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libgnustep-base.so").is_symlink())
+            self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libobjc.so").is_symlink())
             self.assertTrue((assembled / "Tools" / "xctest").exists())
             self.assertTrue((assembled / "System" / "Library" / "Libraries" / "libgnustep-base.so.1.31").exists())
             self.assertTrue((assembled / "System" / "Library" / "Libraries" / "libclang-cpp.so.19.1").exists())
