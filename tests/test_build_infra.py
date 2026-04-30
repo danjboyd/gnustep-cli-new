@@ -546,6 +546,10 @@ class BuildInfraTests(unittest.TestCase):
                 '--sysroot="$SYSROOT" -B"$GCC_RUNTIME_DIR" -L"$GCC_RUNTIME_DIR"',
                 (assembled / "System" / "Tools" / "clang").read_text(),
             )
+            self.assertIn(
+                '-L"$SYSROOT_LIBRARY_DIR" -L"$SYSROOT_RUNTIME_LIBRARY_DIR"',
+                (assembled / "System" / "Tools" / "clang").read_text(),
+            )
             self.assertTrue(
                 (assembled / "System" / "Tools" / "ld").read_text().startswith("#!/bin/sh\n")
             )
@@ -554,7 +558,11 @@ class BuildInfraTests(unittest.TestCase):
                 (assembled / "System" / "Tools" / "clang").read_text(),
             )
             self.assertIn(
-                '--sysroot="$SYSROOT" -L"$GCC_RUNTIME_DIR" -L"$GNUSTEP_LIBRARY_DIR"',
+                '--sysroot="$SYSROOT" -L"$GCC_RUNTIME_DIR"',
+                (assembled / "System" / "Tools" / "ld").read_text(),
+            )
+            self.assertIn(
+                '-L"$SYSROOT_LIBRARY_DIR" -L"$SYSROOT_RUNTIME_LIBRARY_DIR"',
                 (assembled / "System" / "Tools" / "ld").read_text(),
             )
             self.assertIn(

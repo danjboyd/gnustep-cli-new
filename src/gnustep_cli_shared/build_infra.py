@@ -2098,7 +2098,9 @@ def _write_linux_compiler_wrapper(
         'SYSROOT=$(CDPATH= cd -- "$TOOLS_DIR/../Sysroot" && pwd)\n'
         'GCC_RUNTIME_DIR=$(CDPATH= cd -- "$SYSROOT/usr/lib/gcc/x86_64-linux-gnu/%s" && pwd)\n'
         'GNUSTEP_LIBRARY_DIR=$(CDPATH= cd -- "$TOOLS_DIR/../Library/Libraries" && pwd)\n'
-        'exec "$TOOLS_DIR/%s" --sysroot="$SYSROOT" -B"$GCC_RUNTIME_DIR" -L"$GCC_RUNTIME_DIR" -L"$GNUSTEP_LIBRARY_DIR" -Wl,-rpath,"$GNUSTEP_LIBRARY_DIR" "$@"\n'
+        'SYSROOT_LIBRARY_DIR="$SYSROOT/usr/lib/x86_64-linux-gnu"\n'
+        'SYSROOT_RUNTIME_LIBRARY_DIR="$SYSROOT/lib/x86_64-linux-gnu"\n'
+        'exec "$TOOLS_DIR/%s" --sysroot="$SYSROOT" -B"$GCC_RUNTIME_DIR" -L"$GCC_RUNTIME_DIR" -L"$SYSROOT_LIBRARY_DIR" -L"$SYSROOT_RUNTIME_LIBRARY_DIR" -L"$GNUSTEP_LIBRARY_DIR" -Wl,-rpath,"$GNUSTEP_LIBRARY_DIR" "$@"\n'
         % (gcc_runtime_version, target_relative_path),
         encoding="utf-8",
     )
@@ -2119,7 +2121,9 @@ def _write_linux_linker_wrapper(
         'SYSROOT=$(CDPATH= cd -- "$TOOLS_DIR/../Sysroot" && pwd)\n'
         'GCC_RUNTIME_DIR=$(CDPATH= cd -- "$SYSROOT/usr/lib/gcc/x86_64-linux-gnu/%s" && pwd)\n'
         'GNUSTEP_LIBRARY_DIR=$(CDPATH= cd -- "$TOOLS_DIR/../Library/Libraries" && pwd)\n'
-        'exec "$TOOLS_DIR/%s" --sysroot="$SYSROOT" -L"$GCC_RUNTIME_DIR" -L"$GNUSTEP_LIBRARY_DIR" -rpath "$GNUSTEP_LIBRARY_DIR" "$@"\n'
+        'SYSROOT_LIBRARY_DIR="$SYSROOT/usr/lib/x86_64-linux-gnu"\n'
+        'SYSROOT_RUNTIME_LIBRARY_DIR="$SYSROOT/lib/x86_64-linux-gnu"\n'
+        'exec "$TOOLS_DIR/%s" --sysroot="$SYSROOT" -L"$GCC_RUNTIME_DIR" -L"$SYSROOT_LIBRARY_DIR" -L"$SYSROOT_RUNTIME_LIBRARY_DIR" -L"$GNUSTEP_LIBRARY_DIR" -rpath "$GNUSTEP_LIBRARY_DIR" "$@"\n'
         % (gcc_runtime_version, target_relative_path),
         encoding="utf-8",
     )
