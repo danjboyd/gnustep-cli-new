@@ -429,7 +429,7 @@ class BuildInfraTests(unittest.TestCase):
             ):
                 target = system_lib / relative
                 target.write_text(relative)
-            dep = temp / "libgnustep-base.so.1.31"
+            dep = temp / "libgnustep-base.so.1.28"
             dep.write_text("dep")
             objc_dep = temp / "libobjc.so.4"
             objc_dep.write_text("objc-dep")
@@ -520,7 +520,8 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libgnustep-base.so").is_symlink())
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libobjc.so").is_symlink())
             self.assertTrue((assembled / "Tools" / "xctest").exists())
-            self.assertTrue((assembled / "System" / "Library" / "Libraries" / "libgnustep-base.so.1.31").exists())
+            self.assertTrue((assembled / "System" / "Library" / "Libraries" / "libgnustep-base.so.1.28").exists())
+            self.assertTrue((assembled / "System" / "Library" / "Libraries" / "libgnustep-base.so").is_symlink())
             self.assertTrue((assembled / "System" / "Library" / "Libraries" / "libclang-cpp.so.19.1").exists())
             self.assertIn(
                 "DEB_HOST_MULTIARCH",
@@ -537,6 +538,14 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn(
                 '-L"$GNUSTEP_LIBRARY_DIR" -Wl,-rpath,"$GNUSTEP_LIBRARY_DIR"',
                 (assembled / "System" / "Tools" / "clang").read_text(),
+            )
+            self.assertEqual(
+                (assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libgnustep-base.so").readlink(),
+                Path("../../../../../Library/Libraries/libgnustep-base.so"),
+            )
+            self.assertEqual(
+                (assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libobjc.so").readlink(),
+                Path("../../../../../Library/Libraries/libobjc.so"),
             )
 
     def test_linux_objc_headers_follow_detected_gcc_runtime_version(self):

@@ -2283,8 +2283,10 @@ def assemble_linux_toolchain_artifact(
             shutil.copy2(dependency, target)
             copied_files.append(str(target))
 
-    linker_names = {
-        "libgnustep-base.so": ("libgnustep-base.so.1.31", "libgnustep-base.so.1.30"),
+    linker_names: dict[str, tuple[str, ...]] = {
+        "libgnustep-base.so": tuple(
+            path.name for path in sorted(system_library_target.glob("libgnustep-base.so.*"), reverse=True)
+        ),
         "libobjc.so": ("libobjc.so.4", "libobjc.so.4.6"),
     }
     for link_name, candidates in linker_names.items():
@@ -2360,7 +2362,7 @@ def assemble_linux_toolchain_artifact(
             library_source = system_library_target / library_name
             sysroot_library = usr_lib_target / library_name
             if library_source.exists() and not sysroot_library.exists():
-                sysroot_library.symlink_to(Path("../../../../Library/Libraries") / library_name)
+                sysroot_library.symlink_to(Path("../../../../../Library/Libraries") / library_name)
                 copied_files.append(str(sysroot_library))
 
     _rewrite_managed_gnustep_make_for_relocation(output_root)
