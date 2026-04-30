@@ -502,6 +502,7 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue((assembled / "System" / "Library" / "Headers" / "Foundation" / "Foundation.h").exists())
             self.assertTrue((assembled / "Library" / "Headers" / "XCTest" / "XCTest.h").exists())
             self.assertTrue((assembled / "include" / "objc" / "objc.h").exists())
+            self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "include" / "objc" / "objc.h").exists())
             self.assertTrue((assembled / "System" / "Tools" / "gnustep-config").exists())
             self.assertTrue((assembled / "System" / "Tools" / "dpkg-architecture").exists())
             self.assertTrue((assembled / "System" / "Tools" / "clang").exists())

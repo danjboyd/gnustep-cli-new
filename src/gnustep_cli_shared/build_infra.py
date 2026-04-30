@@ -2277,6 +2277,10 @@ def assemble_linux_toolchain_artifact(
                 header_target = usr_include_target if header_source.name == "include" else usr_include_target / header_source.name
                 shutil.copytree(header_source, header_target, dirs_exist_ok=True)
                 copied_sections.append(str(header_target.relative_to(output_root)))
+        if resolved_objc_headers.exists():
+            objc_sysroot_target = usr_include_target / "objc"
+            shutil.copytree(resolved_objc_headers, objc_sysroot_target, dirs_exist_ok=True)
+            copied_sections.append(str(objc_sysroot_target.relative_to(output_root)))
 
         gcc_target = sysroot / "usr" / "lib" / "gcc" / "x86_64-linux-gnu" / resolved_gcc_runtime_dir.name
         gcc_target.mkdir(parents=True, exist_ok=True)
