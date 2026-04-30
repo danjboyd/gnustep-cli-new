@@ -30,6 +30,7 @@ from gnustep_cli_shared.build_infra import (
     validate_delta_artifact_record,
     linux_build_script,
     linux_cli_abi_audit,
+    _linux_objc_headers_dir,
     refresh_local_release_metadata,
     release_candidate_qualification_status,
     native_linux_validation_plan,
@@ -529,6 +530,15 @@ class BuildInfraTests(unittest.TestCase):
                 '--sysroot="$SYSROOT" -B"$GCC_RUNTIME_DIR" -L"$GCC_RUNTIME_DIR"',
                 (assembled / "System" / "Tools" / "clang").read_text(),
             )
+
+    def test_linux_objc_headers_follow_detected_gcc_runtime_version(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            runtime = Path(tempdir) / "usr" / "lib" / "gcc" / "x86_64-linux-gnu" / "12"
+            objc_headers = runtime / "include" / "objc"
+            objc_headers.mkdir(parents=True)
+            (objc_headers / "objc.h").write_text("objc")
+
+            self.assertEqual(_linux_objc_headers_dir(runtime), objc_headers)
 
     def test_stage_release_assets(self):
         with tempfile.TemporaryDirectory() as tempdir:

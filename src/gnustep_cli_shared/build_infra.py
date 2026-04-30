@@ -2048,6 +2048,23 @@ def _linux_gcc_runtime_dir() -> Path | None:
     return path.parent
 
 
+def _linux_objc_headers_dir(gcc_runtime_dir: Path | None = None) -> Path | None:
+    candidates: list[Path] = []
+    if gcc_runtime_dir is not None:
+        candidates.append(gcc_runtime_dir / "include" / "objc")
+    candidates.extend(
+        [
+            Path("/usr/lib/gcc/x86_64-linux-gnu/14/include/objc"),
+            Path("/usr/lib/gcc/x86_64-linux-gnu/13/include/objc"),
+            Path("/usr/lib/gcc/x86_64-linux-gnu/12/include/objc"),
+        ]
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def _write_linux_tool_wrapper(
     destination: Path, target_relative_path: str, extra_args: list[str] | None = None
 ) -> None:
@@ -2163,13 +2180,17 @@ def assemble_linux_toolchain_artifact(
     resolved_user_tools = Path(user_tools_dir).resolve() if user_tools_dir else (
         _gnustep_config_value("GNUSTEP_USER_TOOLS") or (Path.home() / "GNUstep" / "Tools")
     )
-    resolved_objc_headers = Path(objc_headers_dir).resolve() if objc_headers_dir else Path("/usr/lib/gcc/x86_64-linux-gnu/14/include/objc")
     resolved_clang_binary = _linux_clang_binary()
     resolved_clang_resource_dir = (
         _linux_clang_resource_dir(resolved_clang_binary) if resolved_clang_binary is not None else None
     )
     resolved_linker_binary = _linux_linker_binary()
     resolved_gcc_runtime_dir = _linux_gcc_runtime_dir()
+    resolved_objc_headers = (
+        Path(objc_headers_dir).resolve()
+        if objc_headers_dir
+        else _linux_objc_headers_dir(resolved_gcc_runtime_dir)
+    )
 
     copied_sections: list[str] = []
     copied_files: list[str] = []
@@ -2180,7 +2201,7 @@ def assemble_linux_toolchain_artifact(
         copied_sections.append("System/Library/Headers")
     if _copy_tree_if_exists(resolved_user_headers, output_root / "Library" / "Headers"):
         copied_sections.append("Library/Headers")
-    if _copy_tree_if_exists(resolved_objc_headers, output_root / "include" / "objc"):
+    if resolved_objc_headers is not None and _copy_tree_if_exists(resolved_objc_headers, output_root / "include" / "objc"):
         copied_sections.append("include/objc")
 
     system_tools_target = output_root / "System" / "Tools"
@@ -2277,7 +2298,7 @@ def assemble_linux_toolchain_artifact(
                 header_target = usr_include_target if header_source.name == "include" else usr_include_target / header_source.name
                 shutil.copytree(header_source, header_target, dirs_exist_ok=True)
                 copied_sections.append(str(header_target.relative_to(output_root)))
-        if resolved_objc_headers.exists():
+        if resolved_objc_headers is not None and resolved_objc_headers.exists():
             objc_sysroot_target = usr_include_target / "objc"
             shutil.copytree(resolved_objc_headers, objc_sysroot_target, dirs_exist_ok=True)
             copied_sections.append(str(objc_sysroot_target.relative_to(output_root)))
