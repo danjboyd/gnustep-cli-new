@@ -530,6 +530,10 @@ class BuildInfraTests(unittest.TestCase):
                 '--sysroot="$SYSROOT" -B"$GCC_RUNTIME_DIR" -L"$GCC_RUNTIME_DIR"',
                 (assembled / "System" / "Tools" / "clang").read_text(),
             )
+            self.assertIn(
+                '-L"$GNUSTEP_LIBRARY_DIR" -Wl,-rpath,"$GNUSTEP_LIBRARY_DIR"',
+                (assembled / "System" / "Tools" / "clang").read_text(),
+            )
 
     def test_linux_objc_headers_follow_detected_gcc_runtime_version(self):
         with tempfile.TemporaryDirectory() as tempdir:

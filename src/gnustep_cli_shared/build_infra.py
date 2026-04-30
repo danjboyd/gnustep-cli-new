@@ -2084,7 +2084,9 @@ def _write_linux_tool_wrapper(
     destination.chmod(0o755)
 
 
-def _write_linux_compiler_wrapper(destination: Path, target_relative_path: str) -> None:
+def _write_linux_compiler_wrapper(
+    destination: Path, target_relative_path: str, gcc_runtime_version: str
+) -> None:
     destination.write_text(
         "#!/usr/bin/env sh\n"
         "set -eu\n"
@@ -2094,9 +2096,10 @@ def _write_linux_compiler_wrapper(destination: Path, target_relative_path: str) 
         "done\n"
         'TOOLS_DIR=$(CDPATH= cd -- "$(dirname "$PROGRAM_PATH")" && pwd)\n'
         'SYSROOT=$(CDPATH= cd -- "$TOOLS_DIR/../Sysroot" && pwd)\n'
-        'GCC_RUNTIME_DIR=$(CDPATH= cd -- "$SYSROOT/usr/lib/gcc/x86_64-linux-gnu/14" && pwd)\n'
-        'exec "$TOOLS_DIR/%s" --sysroot="$SYSROOT" -B"$GCC_RUNTIME_DIR" -L"$GCC_RUNTIME_DIR" "$@"\n'
-        % target_relative_path,
+        'GCC_RUNTIME_DIR=$(CDPATH= cd -- "$SYSROOT/usr/lib/gcc/x86_64-linux-gnu/%s" && pwd)\n'
+        'GNUSTEP_LIBRARY_DIR=$(CDPATH= cd -- "$TOOLS_DIR/../Library/Libraries" && pwd)\n'
+        'exec "$TOOLS_DIR/%s" --sysroot="$SYSROOT" -B"$GCC_RUNTIME_DIR" -L"$GCC_RUNTIME_DIR" -L"$GNUSTEP_LIBRARY_DIR" -Wl,-rpath,"$GNUSTEP_LIBRARY_DIR" "$@"\n'
+        % (gcc_runtime_version, target_relative_path),
         encoding="utf-8",
     )
     destination.chmod(0o755)
@@ -2233,7 +2236,11 @@ def assemble_linux_toolchain_artifact(
             ("c++", "../LLVM/bin/clang++"),
         ):
             wrapper = system_tools_target / name
-            _write_linux_compiler_wrapper(wrapper, relative)
+            _write_linux_compiler_wrapper(
+                wrapper,
+                relative,
+                resolved_gcc_runtime_dir.name if resolved_gcc_runtime_dir is not None else "14",
+            )
             copied_files.append(str(wrapper))
         if resolved_clang_resource_dir is not None and resolved_clang_resource_dir.exists():
             resource_target = compiler_root / "lib" / "clang" / resolved_clang_resource_dir.name
