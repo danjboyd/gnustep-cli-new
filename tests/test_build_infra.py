@@ -74,6 +74,7 @@ from gnustep_cli_shared.build_infra import (
     release_key_rotation_drill,
     phase12_production_hardening_status,
     phase13_update_hardening_status,
+    immediate_rc_blocker_status,
     windows_extracted_toolchain_rebuild_plan,
     windows_msys2_component_inventory,
 )
@@ -1403,6 +1404,155 @@ class BuildInfraTests(unittest.TestCase):
             }
             self.assertIn("production-like", failed)
             self.assertIn("scope-packages", failed)
+
+    def test_immediate_rc_blocker_status_requires_concrete_candidate_evidence(self):
+        payload = immediate_rc_blocker_status()
+        checks = {check["id"]: check for check in payload["checks"]}
+        self.assertFalse(payload["ok"])
+        self.assertFalse(checks["phase12-production-hardening"]["ok"])
+        self.assertFalse(checks["phase13-update-hardening"]["ok"])
+        self.assertFalse(checks["release-claim-consistency"]["ok"])
+        self.assertFalse(checks["controlled-package-artifacts"]["ok"])
+        self.assertFalse(checks["published-url-linux-qualification"]["ok"])
+        self.assertFalse(checks["windows-current-source-artifact"]["ok"])
+        self.assertFalse(checks["release-qualification-summary"]["ok"])
+
+    def test_immediate_rc_blocker_status_passes_with_complete_candidate_evidence(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            input_root = temp / "input"
+            cli_input = input_root / "cli"
+            toolchain_input = input_root / "toolchain"
+            (cli_input / "bin").mkdir(parents=True)
+            (cli_input / "bin" / "gnustep").write_text("#!/bin/sh\nprintf 'gnustep\\n'\n")
+            (toolchain_input / "System" / "Tools").mkdir(parents=True)
+            (toolchain_input / "System" / "Tools" / "gnustep-config").write_text("#!/bin/sh\n")
+
+            staged = stage_release_assets(
+                "0.1.0",
+                temp / "dist",
+                "https://example.invalid/releases",
+                channel="dogfood",
+                cli_inputs={
+                    "linux-amd64-clang": cli_input,
+                    "windows-amd64-msys2-clang64": cli_input,
+                },
+                toolchain_inputs={
+                    "linux-amd64-clang": toolchain_input,
+                    "windows-amd64-msys2-clang64": toolchain_input,
+                },
+            )
+            release_dir = Path(staged["release_dir"])
+            release_key = temp / "release-key.pem"
+            subprocess.run(
+                ["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(release_key)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            self.assertTrue(sign_release_metadata(release_dir, release_key)["ok"])
+
+            evidence_dir = temp / "evidence"
+            evidence_dir.mkdir()
+            smoke_reports = []
+            for target_id, filename in [
+                ("openbsd-amd64-clang", "openbsd-tier1-report.json"),
+                ("windows-amd64-msys2-clang64", "windows-tier1-report-patched-gorm.json"),
+            ]:
+                report = evidence_smoke_report(
+                    suite_id="tier1-core",
+                    target_id=target_id,
+                    release_source="https://example.invalid/releases/dogfood/0.1.0/release-manifest.json",
+                    passed_scenario_ids=[
+                        "bootstrap-install-usable-cli",
+                        "new-cli-project-build-run",
+                        "gorm-build-run",
+                        "self-update-cli-only",
+                    ],
+                )
+                report_path = evidence_dir / filename
+                report_path.write_text(json.dumps(report))
+                smoke_reports.append(report_path)
+
+            linux_report = {
+                "schema_version": 1,
+                "suite_id": "tier1-core",
+                "target_id": "linux-amd64-clang",
+                "runner_id": "github-actions-debian-container",
+                "release_under_test": {"source": "https://example.invalid/releases/dogfood/0.1.0/release-manifest.json"},
+                "overall_ok": True,
+                "summary": "Linux published-URL smoke passed.",
+                "scenario_reports": [
+                    {"scenario_id": "bootstrap-install-usable-cli", "ok": True, "summary": "bootstrap passed"},
+                    {"scenario_id": "new-cli-project-build-run", "ok": True, "summary": "new/build/run passed"},
+                ],
+            }
+            (evidence_dir / "linux-smoke-report.json").write_text(json.dumps(linux_report))
+            (evidence_dir / "windows-current-source-artifact.json").write_text(json.dumps({
+                "schema_version": 1,
+                "command": "windows-current-source-marker",
+                "ok": True,
+                "status": "ok",
+                "summary": "Windows artifact was built from current source.",
+            }))
+            update_all = evidence_dir / "update-all-production-like.json"
+            update_all.write_text(json.dumps({
+                "schema_version": 1,
+                "ok": True,
+                "summary": "update all --yes passed.",
+                "production_like": True,
+                "command": "gnustep update all --yes",
+                "scopes": {"cli": True, "toolchain": True, "packages": True},
+                "release_transition": {"from_version": "0.1.0-old", "to_version": "0.1.0"},
+                "package_updates": [{"id": "org.gnustep.tools-xctest", "ok": True}],
+                "result": {"ok": True},
+            }))
+
+            self.assertTrue(write_release_evidence_bundle(
+                release_dir,
+                evidence_dir=evidence_dir,
+                smoke_report_paths=[evidence_dir / "linux-smoke-report.json", *smoke_reports],
+                update_all_evidence_path=update_all,
+                release_trust_root=release_dir / "release-signing-public.pem",
+            )["ok"])
+            self.assertTrue(write_release_qualification_summary(
+                release_dir,
+                evidence_dir=evidence_dir,
+                release_run_id="5",
+                release_inputs_run_id="1",
+                stage_release_run_id="2",
+                package_index_run_id="3",
+                release_evidence_run_id="4",
+                source_revision="abc123",
+            )["ok"])
+
+            payload = immediate_rc_blocker_status(
+                release_dir=release_dir,
+                evidence_dir=evidence_dir,
+                release_trust_root=release_dir / "release-signing-public.pem",
+                smoke_report_paths=smoke_reports,
+                update_all_evidence_path=update_all,
+                packages_dir=ROOT / "packages",
+            )
+            checks = {check["id"]: check for check in payload["checks"]}
+            self.assertTrue(payload["ok"], json.dumps(payload, indent=2))
+            self.assertTrue(all(check["ok"] for check in checks.values()))
+
+    def test_immediate_rc_blocker_status_rejects_stale_windows_exception(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            release_dir = Path(tempdir)
+            release_dir.mkdir(exist_ok=True)
+            (release_dir / "release-qualification-summary.json").write_text(json.dumps({
+                "schema_version": 1,
+                "command": "release-qualification-summary",
+                "ok": True,
+                "summary": "summary with stale exception",
+                "stale_windows_allowed": True,
+            }))
+            payload = immediate_rc_blocker_status(release_dir=release_dir, evidence_dir=release_dir)
+            checks = {check["id"]: check for check in payload["checks"]}
+            self.assertFalse(checks["release-qualification-summary"]["ok"])
+            self.assertIn("stale Windows", checks["release-qualification-summary"]["summary"])
 
     def test_validate_update_all_evidence_command_payload(self):
         with tempfile.TemporaryDirectory() as tempdir:

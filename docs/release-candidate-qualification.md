@@ -366,3 +366,33 @@ April 28 execution update:
   manifest URLs and the current-source Windows artifact, then collect
   published-URL Linux, Windows live, and OpenBSD live smoke evidence before
   rerunning release without the stale Windows exception.
+
+## April 30 Roadmap Audit Result
+
+The remaining release plan is still the right shape, but the short critical
+path now supersedes the older phase sequence. The project is not blocked on
+command skeleton work; it is blocked on candidate freshness, production trust
+material, release-lane evidence, and native `doctor` parity.
+
+Immediate RC sequence:
+
+- Stage and publish a new candidate from the fixed manifest URL generator.
+- Use current-source Windows artifacts; do not carry
+  `allow_stale_windows_artifact=true` into a release-candidate or stable claim.
+- Run published-URL Linux qualification against the new candidate.
+- Collect fresh Windows and OpenBSD live smoke reports for the same candidate.
+- Feed Linux, Windows, OpenBSD, and update-all evidence through `Release
+  Evidence`.
+- Rerun `Release` without the stale-Windows exception.
+
+The release workflow now has an aggregate machine-check for this list:
+`python3 scripts/internal/build_infra.py --json immediate-rc-blocker-status`.
+The gate composes Phase 12, Phase 13, release-claim consistency, controlled
+package artifact readiness, Linux published-URL evidence, Windows
+current-source evidence, and release qualification summary checks. It is
+expected to fail until the exact candidate has all required evidence and no
+stale-Windows exception.
+
+Support-claim note: OpenBSD `amd64` remains a native packaged GNUstep claim for
+the current release. Managed OpenBSD artifact publication is optional future
+work unless the roadmap is explicitly revised to require it.

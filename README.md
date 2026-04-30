@@ -71,26 +71,32 @@ The repository currently contains:
 
 ### Still Blocked Or Pending
 
-- repaired Linux managed artifact portability beyond Debian; until then the
-  current `linux-amd64-clang` managed artifact is explicitly Debian-scoped
-- Windows public-manifest bootstrap setup now passes from the public prerelease
-  endpoint with retained JSONL trace evidence; follow-up native runtime work
-  fixed the installed `doctor --json` hang and validated the managed
-  `msys2-clang64` toolchain against an explicit local manifest
+- publish a fresh dogfood/release-candidate candidate from the fixed release
+  manifest URL generator; the immutable `v0.1.0-dev-hosted.1` dogfood manifest
+  contains malformed GitHub asset URLs and should remain historical evidence,
+  not a passing published-URL qualification target
+- use current-source Windows artifacts for the next candidate and remove the
+  stale-Windows artifact exception before making release-candidate or stable
+  Windows claims
+- collect fresh published-URL Linux qualification plus Windows and OpenBSD live
+  smoke reports for the exact candidate and feed those reports through the
+  release evidence workflow
 - release provenance and OpenSSL-backed metadata signatures are generated,
   published, locally gate-verified, and wired into the controlled release gate;
-  production still requires CI-held trust roots and key rotation/revocation
-  procedures before any production security claim
+  production still requires CI-held trust roots or a signing service plus key
+  rotation/revocation procedures before any production security claim
+- finish native Objective-C `doctor` deep-detection parity with the shared model
+  before claiming the full CLI as the authoritative diagnostic implementation
+- repaired Linux managed artifact portability beyond the explicitly scoped
+  Debian and Ubuntu managed targets remains deferred; Fedora and Arch are
+  currently GCC/libobjc interoperability paths unless per-distro managed
+  Clang/libobjc2 artifacts are built and validated
 - package-index trust metadata, provenance generation, signing, trust-gate
   validation, and signed-index enforcement in package-index consumer paths are
   implemented for the official package repository path
-- Windows bootstrap setup can now write JSONL trace logs with `--trace` and
-  preserve temporary artifacts with `GNUSTEP_BOOTSTRAP_KEEP_TEMP=1` for live
-  failure diagnosis
-- Windows extracted-toolchain developer rebuild is no longer blocked by loader
-  errors: the assembly now preserves the `clang64` prefix and includes the MSYS
-  `usr/bin` executable/DLL runtime closure needed by `bash`, `make`, and
-  checksum tooling
+- OpenBSD `amd64` release claims are native packaged GNUstep claims; managed
+  OpenBSD artifact publication is optional future work, not a current
+  release-candidate blocker
 
 ### otvm Libvirt Note
 

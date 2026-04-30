@@ -36,19 +36,28 @@ existence.
 
 Current priority order:
 
-1. Keep Phase 26 live smoke evidence current for the active Tier 1 release
-   targets. As of April 27, 2026, the release-candidate smoke gate passes with
-   the OpenBSD native-packaged report and the Windows MSYS2 `clang64` report.
-2. Complete Phase 12/13 production hardening: CI-held production signing keys
+1. Stage and publish the next dogfood candidate from the fixed manifest
+   generator. The previously published `v0.1.0-dev-hosted.1` manifest has bad
+   GitHub asset URLs and must remain historical evidence, not a passing
+   published-URL qualification target.
+2. Use current-source Windows artifacts for the next candidate, not the
+   documented stale-Windows dogfood exception. The stale artifact exception is
+   allowed only for dogfood diagnostics and must not carry into release-candidate
+   or stable claims.
+3. Run published-URL Linux qualification against the new candidate, collect
+   fresh Windows and OpenBSD live smoke reports for that exact candidate, feed
+   those reports through `Release Evidence`, and rerun `Release` without the
+   stale-Windows exception.
+4. Complete Phase 12/13 production hardening: CI-held production signing keys
    or signing service, automated host-backed release qualification, controlled
-   signed package artifact build jobs, and real old-to-new published update
-   dogfood including one `gnustep update all --yes` run.
-3. Finish native Objective-C `doctor` deep-detection parity with the shared
+   signed package artifact build jobs, and real release-lane `gnustep update all
+   --yes` evidence for the candidate under test.
+5. Finish native Objective-C `doctor` deep-detection parity with the shared
    Python model before claiming the full CLI is the authoritative diagnostic
    implementation.
-4. Rebuild final Tier 1 full-CLI artifacts from production build lanes rather
+6. Rebuild final Tier 1 full-CLI artifacts from production build lanes rather
    than relying on local, staged, or prerelease evidence.
-5. Keep package, setup, update, and release trust gates green while converting
+7. Keep package, setup, update, and release trust gates green while converting
    remaining operator-run validation into repeatable automation.
 
 Non-blocking for the immediate release unless this roadmap is revised:
@@ -58,6 +67,8 @@ Non-blocking for the immediate release unless this roadmap is revised:
 - Windows `amd64/msvc`
 - OpenBSD `arm64`
 - Debian/Linux `arm64` publication
+- broadening Linux managed-artifact portability beyond the explicitly
+  distribution-scoped Debian and Ubuntu targets
 
 April 27, 2026 execution update:
 
@@ -94,6 +105,29 @@ April 27, 2026 execution update:
   the next release-candidate run.
 - new deferred Linux distro families such as openSUSE, RHEL-family targets, and
   Alpine
+
+April 30, 2026 audit update:
+
+- The current implementation and tests still support the roadmap's short
+  critical path. The remaining release blockers are candidate freshness,
+  production trust material, release-lane evidence, and native `doctor` parity,
+  not basic command existence.
+- The next release candidate should be built from the fixed manifest URL
+  generator, current-source Windows artifacts, and fresh target-specific smoke
+  evidence. Do not count `v0.1.0-dev-hosted.1` published-URL qualification as a
+  pass because its immutable manifest contains malformed GitHub asset URLs.
+- OpenBSD `amd64` should be described as a current-release target through the
+  preferred native packaged GNUstep path. Managed OpenBSD artifacts remain a
+  future or optional publication track and must not be implied by OpenBSD
+  native-packaged release claims.
+- Phase 25 remains non-blocking for the immediate release: the manifest,
+  lifecycle, and delta contracts are useful and tested, but live warm-builder
+  orchestration and native byte-delta application should wait until after the
+  next candidate is proven.
+- `src/full-cli/GSCommandRunner.m` now carries a large amount of production
+  behavior. That is acceptable for the next candidate, but post-RC work should
+  split native command/service areas so future `doctor`, setup/update, package,
+  and build/run changes can be reviewed and tested in smaller units.
 
 The Windows-only `gnustep shell` command is treated as a diagnostic escape hatch
 for the private MSYS2 `CLANG64` environment, not as part of the portable v1 core
@@ -801,6 +835,10 @@ core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
 - Record and apply OpenBSD-specific patches explicitly.
 - Validate the resulting artifact with compile, link, run, and `doctor` coverage.
 - Keep the managed OpenBSD toolchain path optional in product policy if the packaged OpenBSD GNUstep environment proves sufficient for the CLI's supported workflows.
+- Current release interpretation: OpenBSD `amd64` release claims are native
+  packaged claims, not managed OpenBSD artifact publication claims. Do not make
+  Phase 17.A a release blocker unless the project explicitly chooses to publish
+  a managed OpenBSD toolchain artifact for the current release.
 
 ### A2. OpenBSD `arm64/clang` Managed Toolchain Build
 - Add OpenBSD/arm64 as a first-class planned target for the full CLI, managed toolchain metadata, and official packages.
@@ -1498,6 +1536,11 @@ core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
 - Phase 25.J now has structured layered-update preflight checks for revoked artifacts, invalid base artifacts, corrupt or unsupported deltas, target digest mismatches, and missing full-artifact fallback. These checks fail before mutable filesystem work and return machine-readable failure reasons.
 - Phase 25.K has focused regression coverage for layered manifest reuse, dogfood snapshot ordering, content-addressed storage, active artifact state recording, layered update planning, delta selection, full-artifact fallback, revoked-artifact preflight, Windows MSYS2 inventory comparison, and warm-builder planning.
 - Phase 25.L is complete at the repository-tooling contract level: the project can model small CLI-only releases, dogfood snapshots, reused toolchain layers, content-addressed state, delta/fallback update strategy, and Windows toolchain component comparison. April 24, 2026 host-backed Windows dogfood evidence on a fresh `windows-2022` `otvm` lease proved a local-assets-only `.63` bootstrap install and `.63 -> .64` CLI update using a reused unchanged MSYS2 toolchain layer; the update trace reached `windows.upgrade.cli.stage.smoke.ok`, skipped toolchain relocation, and activated the new release. Remaining implementation depth is live warm-builder orchestration and native byte-delta application.
+- Release planning note: Phase 25 should stay out of the immediate RC critical
+  path unless a routine CLI-only update becomes impossible without it. The
+  existing contract-level implementation is enough to preserve the update model
+  while production trust, candidate evidence, and native `doctor` parity are
+  finished.
 
 ## Phase 26. Cross-Platform Smoke Harness And Release-Proving Scenarios
 
@@ -1736,6 +1779,77 @@ core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
   Windows/OpenBSD live smoke reports against it, feed those reports through
   `Release Evidence`, then rerun `Release` without the stale Windows exception
   for the next candidate.
+
+### Remaining Subphase Register
+
+This register is the authoritative short list after the April 30 audit. Older
+phase bodies remain useful historical context, but unlisted historical subtasks
+are either complete, explicitly deferred, or not release-critical unless a later
+roadmap revision reopens them.
+
+Immediate release-candidate blockers:
+
+- Phase 12.D: production signing/trust-root operation for release metadata and
+  package-index metadata, including CI-held keys or an external signing service.
+- Phase 12.C/D: controlled package artifact build jobs that produce signed,
+  provenance-linked artifacts from reviewed package source inputs.
+- Phase 13.H/I: release-lane old-to-new and `gnustep update all --yes` evidence
+  for the candidate under test, covering CLI/toolchain plus package updates.
+- Phase 19.C/D: publish a fresh candidate with fixed manifest asset URLs and
+  qualify bootstrap/full consumption from the published manifest URL.
+- Phase 20.C/G: finish native Objective-C `doctor` deep-detection parity with
+  the shared model and validate it through built native CLI tests.
+- Phase 23.B/C/E: final documentation and support-claim audit against the exact
+  signed candidate artifacts and evidence bundle.
+- Phase 26.I/J: refresh OpenBSD and Windows Tier 1 smoke reports, add hosted
+  Linux published-URL smoke evidence, and feed all three through release gates
+  for the exact candidate.
+
+Machine-checkable gate:
+
+- Run `python3 scripts/internal/build_infra.py --json immediate-rc-blocker-status
+  ...` against the candidate release directory, hosted evidence directory,
+  trust roots, smoke reports, update-all evidence, package index, and
+  `packages/`. This aggregate gate is the local proof that the immediate RC
+  blocker set is cleared. It must fail when candidate evidence is missing, when
+  the stale-Windows exception remains, or when Linux published-URL smoke lacks
+  the required bootstrap/new-build-run scenarios.
+
+Post-RC hardening before a stable production claim:
+
+- Phase 14.A/B/C: platform integration polish, including shell/PATH behavior,
+  Windows integration details, package launcher polish, and practical sandboxing
+  or constrained-process hardening where feasible.
+- Phase 15.C/D/E: user, maintainer, contribution, and operator documentation;
+  structured beta validation; final release-readiness review.
+- Phase 18.B/C2/G: continue moving future shipped behavior into native
+  Objective-C and split the large native command runner into smaller command and
+  service units after the next candidate is proven.
+- Phase 21.B/C/G: broader failure-injection coverage for setup/update repair,
+  shell integration, corrupted state, interrupted activation, and stale staging.
+- Phase 22.D/G: package UX polish and additional official-package safety tests
+  beyond the current `tools-xctest` proof.
+
+Deferred expansion tracks:
+
+- Phase 16.B2: Linux `arm64/clang` build and publication, blocked on
+  Debian/aarch64 or accepted Ubuntu/aarch64 host-backed validation.
+- Phase 17.A: optional managed OpenBSD `amd64/clang` artifact publication if the
+  project later needs a managed OpenBSD path; current release claims should use
+  the preferred native packaged path.
+- Phase 17.A2: OpenBSD `arm64/clang` build and publication, blocked on
+  OpenBSD/arm64 host access or OTVM support.
+- Phase 17.C: Windows `amd64/msvc`, explicitly deferred.
+- Phase 24.C/E/G: complete any deferred package artifacts and dogfood evidence
+  for non-release-blocking targets such as OpenBSD arm64.
+- Phase 25.D/I: live warm-builder orchestration and native byte-delta
+  application. Keep the existing manifest/lifecycle contract, but defer the
+  heavier implementation until after production candidate evidence is clean.
+- Phase 26.E/H: turn remaining live smoke execution into fuller harness-owned
+  orchestration rather than imported external evidence, once the immediate
+  release gates are stable.
+- Future distro discovery: openSUSE, RHEL-family distributions and clones, and
+  Alpine remain out of current-release scope.
 
 ## Testing Principles For All Phases
 

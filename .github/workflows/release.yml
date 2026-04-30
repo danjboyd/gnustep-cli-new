@@ -339,6 +339,19 @@ jobs:
           fi
           python3 scripts/internal/build_infra.py "${args[@]}"
 
+      - name: Enforce immediate RC blocker gate
+        run: |
+          python3 scripts/internal/build_infra.py --json immediate-rc-blocker-status \
+            --release-dir "$RELEASE_DIR" \
+            --evidence-dir .artifacts/hosted-release-evidence \
+            --package-index /tmp/package-index-trust/package-index.json \
+            --release-trust-root /tmp/gnustep-cli-release-trust-root.pem \
+            --package-index-trust-root /tmp/gnustep-cli-package-index-trust-root.pem \
+            --smoke-report "${{ inputs.phase26_openbsd_report }}" \
+            --smoke-report "${{ inputs.phase26_windows_report }}" \
+            --update-all-evidence "${{ inputs.update_all_evidence }}" \
+            --packages-dir packages
+
       - name: Upload release evidence bundle
         uses: actions/upload-artifact@v4
         with:

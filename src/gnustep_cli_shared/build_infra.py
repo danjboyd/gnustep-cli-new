@@ -3524,14 +3524,32 @@ def phase12_production_hardening_status(
         add("release-dir-supplied", False, "A release directory is required for production hardening.")
     else:
         add("release-dir-supplied", True, "A release directory was supplied.")
-        controlled = controlled_release_gate(
-            release_dir,
-            package_index_path=package_index_path,
-            release_trust_root=release_trust_root,
-            package_index_trust_root=package_index_trust_root,
-        )
+        try:
+            controlled = controlled_release_gate(
+                release_dir,
+                package_index_path=package_index_path,
+                release_trust_root=release_trust_root,
+                package_index_trust_root=package_index_trust_root,
+            )
+        except Exception as exc:
+            controlled = {
+                "schema_version": 1,
+                "command": "controlled-release-gate",
+                "ok": False,
+                "status": "error",
+                "summary": f"Controlled release gate failed before completion: {exc}",
+            }
         add("controlled-release-gate", bool(controlled.get("ok")), controlled.get("summary", "Controlled release gate evaluated."), controlled)
-        rotation = release_key_rotation_drill(release_dir)
+        try:
+            rotation = release_key_rotation_drill(release_dir)
+        except Exception as exc:
+            rotation = {
+                "schema_version": 1,
+                "command": "release-key-rotation-drill",
+                "ok": False,
+                "status": "error",
+                "summary": f"Release key rotation drill failed before completion: {exc}",
+            }
         add("release-key-rotation-drill", bool(rotation.get("ok")), rotation.get("summary", "Release key rotation drill evaluated."), rotation)
 
     phase26 = phase26_exit_status(smoke_report_paths or None)
@@ -3593,7 +3611,16 @@ def phase13_update_hardening_status(
     if release_dir is None:
         add("signed-metadata-key-mismatch-drill", False, "A release directory is required for signed metadata/key-mismatch drills.")
     else:
-        rotation = release_key_rotation_drill(release_dir)
+        try:
+            rotation = release_key_rotation_drill(release_dir)
+        except Exception as exc:
+            rotation = {
+                "schema_version": 1,
+                "command": "release-key-rotation-drill",
+                "ok": False,
+                "status": "error",
+                "summary": f"Release key rotation drill failed before completion: {exc}",
+            }
         add("signed-metadata-key-mismatch-drill", bool(rotation.get("ok")), rotation.get("summary", "Signed metadata/key-mismatch drill evaluated."), rotation)
 
     ok = all(check["ok"] for check in checks)
@@ -3603,6 +3630,106 @@ def phase13_update_hardening_status(
         "ok": ok,
         "status": "ok" if ok else "error",
         "summary": "Phase 13 update hardening is complete." if ok else "Phase 13 update hardening still has blockers.",
+        "checks": checks,
+    }
+
+
+def _smoke_report_has_scenarios(report: dict[str, Any], scenario_ids: set[str]) -> bool:
+    passed = {
+        scenario.get("scenario_id")
+        for scenario in report.get("scenario_reports", [])
+        if bool(scenario.get("ok"))
+    }
+    return scenario_ids.issubset(passed)
+
+
+def immediate_rc_blocker_status(
+    *,
+    release_dir: str | Path | None = None,
+    evidence_dir: str | Path | None = None,
+    package_index_path: str | Path | None = None,
+    release_trust_root: str | Path | None = None,
+    package_index_trust_root: str | Path | None = None,
+    smoke_report_paths: list[str | Path] | None = None,
+    update_all_evidence_path: str | Path | None = None,
+    packages_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
+    root = Path(release_dir).resolve() if release_dir is not None else None
+    evidence_root = Path(evidence_dir).resolve() if evidence_dir is not None else root
+
+    def add(check_id: str, ok: bool, summary: str, payload: dict[str, Any] | None = None) -> None:
+        item: dict[str, Any] = {"id": check_id, "ok": ok, "summary": summary}
+        if payload is not None:
+            item["payload"] = payload
+        checks.append(item)
+
+    phase12 = phase12_production_hardening_status(
+        release_dir=root,
+        package_index_path=package_index_path,
+        release_trust_root=release_trust_root,
+        package_index_trust_root=package_index_trust_root,
+        smoke_report_paths=smoke_report_paths,
+    )
+    add("phase12-production-hardening", bool(phase12.get("ok")), phase12.get("summary", "Phase 12 evaluated."), phase12)
+
+    phase13 = phase13_update_hardening_status(
+        smoke_report_paths=smoke_report_paths,
+        update_all_evidence_path=update_all_evidence_path,
+        release_dir=root,
+    )
+    add("phase13-update-hardening", bool(phase13.get("ok")), phase13.get("summary", "Phase 13 evaluated."), phase13)
+
+    if root is None:
+        add("release-claim-consistency", False, "A release directory is required for release-claim consistency.")
+    else:
+        claim = release_claim_consistency_gate(root, evidence_dir=evidence_root, require_windows_current_source=True)
+        add("release-claim-consistency", bool(claim.get("ok")), claim.get("summary", "Release-claim consistency evaluated."), claim)
+
+    if packages_dir is None:
+        add("controlled-package-artifacts", False, "A packages directory is required to prove controlled package artifact readiness.")
+    else:
+        package_gate = package_artifact_publication_gate(packages_dir)
+        add("controlled-package-artifacts", bool(package_gate.get("ok")), package_gate.get("summary", "Package artifact publication gate evaluated."), package_gate)
+
+    if evidence_root is None:
+        add("published-url-linux-qualification", False, "An evidence directory is required for published-URL Linux qualification.")
+        add("windows-current-source-artifact", False, "An evidence directory is required for Windows current-source evidence.")
+    else:
+        linux_report = evidence_root / "linux-smoke-report.json"
+        linux_ok, linux_summary, linux_payload = _load_json_evidence(linux_report)
+        if linux_payload is not None:
+            linux_ok = linux_ok and _smoke_report_has_scenarios(
+                linux_payload,
+                {"bootstrap-install-usable-cli", "new-cli-project-build-run"},
+            )
+            if not linux_ok:
+                linux_summary = "Linux published-URL smoke report is missing required scenario passes."
+        add("published-url-linux-qualification", linux_ok, linux_summary, linux_payload)
+
+        windows_marker = evidence_root / "windows-current-source-artifact.json"
+        marker_ok, marker_summary, marker_payload = _load_json_evidence(windows_marker)
+        add("windows-current-source-artifact", marker_ok, marker_summary, marker_payload)
+
+    if root is None:
+        add("release-qualification-summary", False, "A release directory is required for release qualification summary.")
+    else:
+        summary_path = root / "release-qualification-summary.json"
+        summary_ok, summary_text, summary_payload = _load_json_evidence(summary_path)
+        if summary_payload is not None and bool(summary_payload.get("stale_windows_allowed")):
+            summary_ok = False
+            summary_text = "Release qualification summary still allows stale Windows artifacts."
+        add("release-qualification-summary", summary_ok, summary_text, summary_payload)
+
+    ok = all(check["ok"] for check in checks)
+    return {
+        "schema_version": 1,
+        "command": "immediate-rc-blocker-status",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": "Immediate RC blockers are cleared." if ok else "Immediate RC blockers still have missing proof.",
+        "release_dir": str(root) if root is not None else None,
+        "evidence_dir": str(evidence_root) if evidence_root is not None else None,
         "checks": checks,
     }
 

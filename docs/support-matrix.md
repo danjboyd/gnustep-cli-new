@@ -17,7 +17,10 @@ targets the project is actively discussing.
   smoke after native OpenBSD OS detection was fixed. The April 27, 2026 Phase
   26 release-candidate gate also accepted the full OpenBSD Tier 1 report
   covering bootstrap install, generated project build/run, Gorm build/run, and
-  CLI-only self-update.
+  CLI-only self-update. This is a native packaged release claim, not evidence
+  that a managed OpenBSD toolchain artifact is published or release-blocking.
+  A managed OpenBSD artifact may remain useful later, but it is optional while
+  the packaged path satisfies the supported workflows.
 - `fedora-amd64-gcc`
   status: `interoperability_only`
   notes: Fedora libvirt preflight and acceptance passed on April 16, 2026 using

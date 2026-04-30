@@ -65,6 +65,7 @@ from gnustep_cli_shared.build_infra import (
     release_key_rotation_drill,
     phase12_production_hardening_status,
     phase13_update_hardening_status,
+    immediate_rc_blocker_status,
     session_build_box_plan,
 )
 
@@ -255,6 +256,16 @@ def main() -> int:
     phase13_status.add_argument("--release-dir")
     phase13_status.add_argument("--smoke-report", action="append", default=[])
     phase13_status.add_argument("--update-all-evidence")
+
+    immediate_rc = subparsers.add_parser("immediate-rc-blocker-status", add_help=False)
+    immediate_rc.add_argument("--release-dir")
+    immediate_rc.add_argument("--evidence-dir")
+    immediate_rc.add_argument("--package-index")
+    immediate_rc.add_argument("--release-trust-root")
+    immediate_rc.add_argument("--package-index-trust-root")
+    immediate_rc.add_argument("--smoke-report", action="append", default=[])
+    immediate_rc.add_argument("--update-all-evidence")
+    immediate_rc.add_argument("--packages-dir")
 
     toolchain_audit = subparsers.add_parser("toolchain-archive-audit", add_help=False)
     toolchain_audit.add_argument("--archive", required=True)
@@ -516,6 +527,17 @@ def main() -> int:
             update_all_evidence_path=args.update_all_evidence,
             release_dir=args.release_dir,
         )
+    elif args.subcommand == "immediate-rc-blocker-status":
+        payload = immediate_rc_blocker_status(
+            release_dir=args.release_dir,
+            evidence_dir=args.evidence_dir,
+            package_index_path=args.package_index,
+            release_trust_root=args.release_trust_root,
+            package_index_trust_root=args.package_index_trust_root,
+            smoke_report_paths=args.smoke_report or None,
+            update_all_evidence_path=args.update_all_evidence,
+            packages_dir=args.packages_dir,
+        )
     elif args.subcommand == "toolchain-archive-audit":
         payload = toolchain_archive_audit(args.archive, target_id=args.target)
     elif args.subcommand == "package-artifact-build-plan":
@@ -612,7 +634,7 @@ def main() -> int:
             "'assemble-linux-toolchain', 'package-source-built-linux-toolchain', 'toolchain-host-origin-audit', "
             "'stage-release', 'github-release-plan', 'github-release-publish', "
             "'prepare-github-release', 'session-build-box-plan', 'dogfood-snapshot-version', 'delta-artifact-record', 'package-artifact-publication-gate', 'tools-xctest-release-gate', 'package-tools-xctest-artifact', 'build-linux-cli-against-managed-toolchain', 'linux-cli-abi-audit', 'refresh-local-release-metadata', 'published-url-qualification-plan', "
-            "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', 'windows-current-source-marker', 'release-evidence-bundle', 'release-qualification-summary', 'validate-update-all-evidence', 'release-key-rotation-drill', "
+            "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', 'windows-current-source-marker', 'release-evidence-bundle', 'release-qualification-summary', 'validate-update-all-evidence', 'release-key-rotation-drill', 'immediate-rc-blocker-status', "
             "'validate-source-lock', 'msys2-input-manifest', 'validate-input-manifest', 'component-inventory', 'windows-msys2-component-inventory', 'compare-windows-msys2-inventories', 'toolchain-manifest', "
             "'toolchain-plan', 'linux-build-script', 'openbsd-build-script', "
             "'msys2-assembly-script', 'toolchain-archive-audit', 'debian-gcc-interop-plan', 'windows-extracted-toolchain-rebuild-plan', or 'msvc-status'",
