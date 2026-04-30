@@ -2386,6 +2386,8 @@ def assemble_linux_toolchain_artifact(
             Path("/usr/lib/x86_64-linux-gnu/libc.so"),
             Path("/usr/lib/x86_64-linux-gnu/libc_nonshared.a"),
             Path("/usr/lib/x86_64-linux-gnu/libpthread.so"),
+            Path("/usr/lib/x86_64-linux-gnu/libpthread.so.0"),
+            Path("/usr/lib/x86_64-linux-gnu/libpthread.a"),
             Path("/usr/lib/x86_64-linux-gnu/libpthread_nonshared.a"),
             Path("/usr/lib/x86_64-linux-gnu/libdl.so"),
             Path("/usr/lib/x86_64-linux-gnu/libm.so"),
@@ -2394,6 +2396,19 @@ def assemble_linux_toolchain_artifact(
             if source.exists():
                 shutil.copy2(source, usr_lib_target / source.name)
                 copied_files.append(str(usr_lib_target / source.name))
+        pthread_linker_input = usr_lib_target / "libpthread.so"
+        if not pthread_linker_input.exists():
+            pthread_inputs = [
+                name
+                for name in ("libpthread.so.0", "libpthread.a", "libpthread_nonshared.a")
+                if (usr_lib_target / name).exists()
+            ]
+            if pthread_inputs:
+                pthread_linker_input.write_text(
+                    "/* GNU ld script */\nINPUT(" + " ".join(pthread_inputs) + ")\n",
+                    encoding="utf-8",
+                )
+                copied_files.append(str(pthread_linker_input))
         for library_name in ("libgnustep-base.so", "libobjc.so"):
             library_source = system_library_target / library_name
             sysroot_library = usr_lib_target / library_name

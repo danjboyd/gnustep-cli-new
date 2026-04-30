@@ -423,7 +423,8 @@ class BuildInfraTests(unittest.TestCase):
                 "lib64/ld-linux-x86-64.so.2",
                 "usr/lib/x86_64-linux-gnu/libc.so",
                 "usr/lib/x86_64-linux-gnu/libc_nonshared.a",
-                "usr/lib/x86_64-linux-gnu/libpthread.so",
+                "usr/lib/x86_64-linux-gnu/libpthread.so.0",
+                "usr/lib/x86_64-linux-gnu/libpthread.a",
                 "usr/lib/x86_64-linux-gnu/libpthread_nonshared.a",
                 "usr/lib/x86_64-linux-gnu/libdl.so",
                 "usr/lib/x86_64-linux-gnu/libm.so",
@@ -450,7 +451,8 @@ class BuildInfraTests(unittest.TestCase):
                     "/lib64/ld-linux-x86-64.so.2",
                     "/usr/lib/x86_64-linux-gnu/libc.so",
                     "/usr/lib/x86_64-linux-gnu/libc_nonshared.a",
-                    "/usr/lib/x86_64-linux-gnu/libpthread.so",
+                    "/usr/lib/x86_64-linux-gnu/libpthread.so.0",
+                    "/usr/lib/x86_64-linux-gnu/libpthread.a",
                     "/usr/lib/x86_64-linux-gnu/libpthread_nonshared.a",
                     "/usr/lib/x86_64-linux-gnu/libdl.so",
                     "/usr/lib/x86_64-linux-gnu/libm.so",
@@ -525,6 +527,10 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue((assembled / "System" / "Sysroot" / "lib" / "x86_64-linux-gnu" / "libm.so.6").exists())
             self.assertTrue((assembled / "System" / "Sysroot" / "lib" / "x86_64-linux-gnu" / "libmvec.so.1").exists())
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libc.so").exists())
+            self.assertEqual(
+                "/* GNU ld script */\nINPUT(libpthread.so.0 libpthread.a libpthread_nonshared.a)\n",
+                (assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libpthread.so").read_text(),
+            )
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libgnustep-base.so").is_symlink())
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libobjc.so").is_symlink())
             self.assertTrue((assembled / "Tools" / "xctest").exists())
