@@ -2362,6 +2362,8 @@ def assemble_linux_toolchain_artifact(
             Path("/lib/x86_64-linux-gnu/crtn.o"),
             Path("/lib/x86_64-linux-gnu/libc.so.6"),
             Path("/lib/x86_64-linux-gnu/libgcc_s.so.1"),
+            Path("/lib/x86_64-linux-gnu/libm.so.6"),
+            Path("/lib/x86_64-linux-gnu/libmvec.so.1"),
         ):
             if source.exists():
                 shutil.copy2(source, lib_target / source.name)

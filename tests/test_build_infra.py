@@ -418,6 +418,8 @@ class BuildInfraTests(unittest.TestCase):
                 "lib/x86_64-linux-gnu/crtn.o",
                 "lib/x86_64-linux-gnu/libc.so.6",
                 "lib/x86_64-linux-gnu/libgcc_s.so.1",
+                "lib/x86_64-linux-gnu/libm.so.6",
+                "lib/x86_64-linux-gnu/libmvec.so.1",
                 "lib64/ld-linux-x86-64.so.2",
                 "usr/lib/x86_64-linux-gnu/libc.so",
                 "usr/lib/x86_64-linux-gnu/libc_nonshared.a",
@@ -443,6 +445,8 @@ class BuildInfraTests(unittest.TestCase):
                     "/lib/x86_64-linux-gnu/crtn.o",
                     "/lib/x86_64-linux-gnu/libc.so.6",
                     "/lib/x86_64-linux-gnu/libgcc_s.so.1",
+                    "/lib/x86_64-linux-gnu/libm.so.6",
+                    "/lib/x86_64-linux-gnu/libmvec.so.1",
                     "/lib64/ld-linux-x86-64.so.2",
                     "/usr/lib/x86_64-linux-gnu/libc.so",
                     "/usr/lib/x86_64-linux-gnu/libc_nonshared.a",
@@ -518,6 +522,8 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue((assembled / "System" / "LLVM" / "lib" / "clang" / "19" / "README.txt").exists())
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "gcc" / "x86_64-linux-gnu" / "14" / "crtbeginS.o").exists())
             self.assertTrue((assembled / "System" / "Sysroot" / "lib" / "x86_64-linux-gnu" / "Scrt1.o").exists())
+            self.assertTrue((assembled / "System" / "Sysroot" / "lib" / "x86_64-linux-gnu" / "libm.so.6").exists())
+            self.assertTrue((assembled / "System" / "Sysroot" / "lib" / "x86_64-linux-gnu" / "libmvec.so.1").exists())
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libc.so").exists())
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libgnustep-base.so").is_symlink())
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libobjc.so").is_symlink())
