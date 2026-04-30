@@ -1960,7 +1960,7 @@ def _linux_shared_library_dependencies(binary_path: Path) -> list[Path]:
 
 def _write_linux_dpkg_architecture_shim(destination: Path) -> None:
     destination.write_text(
-        "#!/usr/bin/env sh\n"
+        "#!/bin/sh\n"
         "set -eu\n"
         "if [ \"$#\" -ne 2 ] || [ \"$1\" != \"--query\" ] || [ \"$2\" != \"DEB_HOST_MULTIARCH\" ]; then\n"
         "  printf '%s\\n' 'unsupported dpkg-architecture invocation' >&2\n"
@@ -2071,7 +2071,7 @@ def _write_linux_tool_wrapper(
     extra_args = extra_args or []
     extra = "".join(f' "{arg}"' for arg in extra_args)
     destination.write_text(
-        "#!/usr/bin/env sh\n"
+        "#!/bin/sh\n"
         "set -eu\n"
         'PROGRAM_PATH="$0"\n'
         'while [ -L "$PROGRAM_PATH" ]; do\n'
@@ -2088,7 +2088,7 @@ def _write_linux_compiler_wrapper(
     destination: Path, target_relative_path: str, gcc_runtime_version: str
 ) -> None:
     destination.write_text(
-        "#!/usr/bin/env sh\n"
+        "#!/bin/sh\n"
         "set -eu\n"
         'PROGRAM_PATH="$0"\n'
         'while [ -L "$PROGRAM_PATH" ]; do\n'
@@ -2109,7 +2109,7 @@ def _write_linux_linker_wrapper(
     destination: Path, target_relative_path: str, gcc_runtime_version: str
 ) -> None:
     destination.write_text(
-        "#!/usr/bin/env sh\n"
+        "#!/bin/sh\n"
         "set -eu\n"
         'PROGRAM_PATH="$0"\n'
         'while [ -L "$PROGRAM_PATH" ]; do\n'
