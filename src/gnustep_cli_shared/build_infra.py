@@ -2104,6 +2104,28 @@ def _write_linux_compiler_wrapper(
     )
     destination.chmod(0o755)
 
+
+def _write_linux_linker_wrapper(
+    destination: Path, target_relative_path: str, gcc_runtime_version: str
+) -> None:
+    destination.write_text(
+        "#!/usr/bin/env sh\n"
+        "set -eu\n"
+        'PROGRAM_PATH="$0"\n'
+        'while [ -L "$PROGRAM_PATH" ]; do\n'
+        '  PROGRAM_PATH="$(readlink "$PROGRAM_PATH")"\n'
+        "done\n"
+        'TOOLS_DIR=$(CDPATH= cd -- "$(dirname "$PROGRAM_PATH")" && pwd)\n'
+        'SYSROOT=$(CDPATH= cd -- "$TOOLS_DIR/../Sysroot" && pwd)\n'
+        'GCC_RUNTIME_DIR=$(CDPATH= cd -- "$SYSROOT/usr/lib/gcc/x86_64-linux-gnu/%s" && pwd)\n'
+        'GNUSTEP_LIBRARY_DIR=$(CDPATH= cd -- "$TOOLS_DIR/../Library/Libraries" && pwd)\n'
+        'exec "$TOOLS_DIR/%s" --sysroot="$SYSROOT" -L"$GCC_RUNTIME_DIR" -L"$GNUSTEP_LIBRARY_DIR" -rpath "$GNUSTEP_LIBRARY_DIR" "$@"\n'
+        % (gcc_runtime_version, target_relative_path),
+        encoding="utf-8",
+    )
+    destination.chmod(0o755)
+
+
 def _rewrite_managed_gnustep_make_for_relocation(output_root: Path) -> None:
     """Rewrite copied GNUstep Make config to an install-root placeholder."""
     placeholder = MANAGED_PREFIX_PLACEHOLDER
@@ -2247,8 +2269,16 @@ def assemble_linux_toolchain_artifact(
             shutil.copytree(resolved_clang_resource_dir, resource_target, dirs_exist_ok=True)
             copied_sections.append(f"System/LLVM/lib/clang/{resolved_clang_resource_dir.name}")
     if resolved_linker_binary is not None and resolved_linker_binary.exists():
+        linker_runtime_target = output_root / "System" / "LLVM" / "bin" / "ld"
+        linker_runtime_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(resolved_linker_binary, linker_runtime_target)
+        copied_files.append(str(linker_runtime_target))
         linker_target = system_tools_target / "ld"
-        shutil.copy2(resolved_linker_binary, linker_target)
+        _write_linux_linker_wrapper(
+            linker_target,
+            "../LLVM/bin/ld",
+            resolved_gcc_runtime_dir.name if resolved_gcc_runtime_dir is not None else "14",
+        )
         copied_files.append(str(linker_target))
         for name in ("x86_64-linux-gnu-ld", "x86_64-linux-gnu-ld.bfd"):
             wrapper = system_tools_target / name

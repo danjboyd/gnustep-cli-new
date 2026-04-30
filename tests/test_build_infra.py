@@ -511,8 +511,10 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue((assembled / "System" / "Tools" / "clang").exists())
             self.assertTrue((assembled / "System" / "Tools" / "clang++").exists())
             self.assertTrue((assembled / "System" / "Tools" / "cc").exists())
+            self.assertTrue((assembled / "System" / "Tools" / "ld").exists())
             self.assertTrue((assembled / "System" / "LLVM" / "bin" / "clang").exists())
             self.assertTrue((assembled / "System" / "LLVM" / "bin" / "clang++").is_symlink())
+            self.assertTrue((assembled / "System" / "LLVM" / "bin" / "ld").exists())
             self.assertTrue((assembled / "System" / "LLVM" / "lib" / "clang" / "19" / "README.txt").exists())
             self.assertTrue((assembled / "System" / "Sysroot" / "usr" / "lib" / "gcc" / "x86_64-linux-gnu" / "14" / "crtbeginS.o").exists())
             self.assertTrue((assembled / "System" / "Sysroot" / "lib" / "x86_64-linux-gnu" / "Scrt1.o").exists())
@@ -538,6 +540,14 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn(
                 '-L"$GNUSTEP_LIBRARY_DIR" -Wl,-rpath,"$GNUSTEP_LIBRARY_DIR"',
                 (assembled / "System" / "Tools" / "clang").read_text(),
+            )
+            self.assertIn(
+                '--sysroot="$SYSROOT" -L"$GCC_RUNTIME_DIR" -L"$GNUSTEP_LIBRARY_DIR"',
+                (assembled / "System" / "Tools" / "ld").read_text(),
+            )
+            self.assertIn(
+                '-rpath "$GNUSTEP_LIBRARY_DIR"',
+                (assembled / "System" / "Tools" / "ld").read_text(),
             )
             self.assertEqual(
                 (assembled / "System" / "Sysroot" / "usr" / "lib" / "x86_64-linux-gnu" / "libgnustep-base.so").readlink(),
