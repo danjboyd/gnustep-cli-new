@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import time
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -4451,8 +4452,9 @@ def publish_github_release(
 
     if view_proc.returncode == 0:
         edit_command = ["gh", "release", "edit", tag, "--repo", repo, "--title", title, *prerelease_args]
-        upload_command = ["gh", "release", "upload", tag, "--repo", repo, "--clobber", *plan["assets"]]
-        commands.extend([edit_command, upload_command])
+        commands.append(edit_command)
+        for asset in plan["assets"]:
+            commands.append(["gh", "release", "upload", tag, "--repo", repo, "--clobber", asset])
     else:
         create_command = list(plan["command_line"])
         commands.append(create_command)
@@ -4460,9 +4462,17 @@ def publish_github_release(
     ok = True
     exit_status = 0
     for command in commands:
-        proc = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
-        stdout_parts.append(proc.stdout)
-        stderr_parts.append(proc.stderr)
+        attempts = 3 if command[:3] == ["gh", "release", "upload"] else 1
+        proc = None
+        for attempt in range(1, attempts + 1):
+            proc = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+            stdout_parts.append(proc.stdout)
+            stderr_parts.append(proc.stderr)
+            if proc.returncode == 0:
+                break
+            if attempt < attempts:
+                time.sleep(attempt)
+        assert proc is not None
         if proc.returncode != 0:
             ok = False
             exit_status = proc.returncode

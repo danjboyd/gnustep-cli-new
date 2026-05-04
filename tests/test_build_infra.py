@@ -46,6 +46,7 @@ from gnustep_cli_shared.build_infra import (
     tools_xctest_release_gate,
     package_source_built_linux_toolchain_artifact,
     prepare_github_release,
+    publish_github_release,
     published_url_qualification_plan,
     qualify_full_cli_handoff,
     toolchain_manifest,
@@ -1718,6 +1719,34 @@ class BuildInfraTests(unittest.TestCase):
             self.assertEqual(payload["tag"], "v0.1.0")
             self.assertIn("gh", payload["command_line"][0])
             self.assertIn("--repo", payload["command_line"])
+
+    def test_publish_github_release_retries_existing_release_asset_uploads_individually(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            release_dir = Path(tempdir)
+            (release_dir / "a.tar.gz").write_text("a")
+            (release_dir / "b.tar.gz").write_text("b")
+            calls = []
+            results = [
+                subprocess.CompletedProcess(["gh", "release", "view"], 0, stdout="exists", stderr=""),
+                subprocess.CompletedProcess(["gh", "release", "edit"], 0, stdout="", stderr=""),
+                subprocess.CompletedProcess(["gh", "release", "upload"], 1, stdout="", stderr="HTTP 504"),
+                subprocess.CompletedProcess(["gh", "release", "upload"], 0, stdout="", stderr=""),
+                subprocess.CompletedProcess(["gh", "release", "upload"], 0, stdout="", stderr=""),
+            ]
+
+            def fake_run(command, **kwargs):
+                calls.append(command)
+                return results.pop(0)
+
+            with patch("gnustep_cli_shared.build_infra.subprocess.run", side_effect=fake_run), \
+                 patch("gnustep_cli_shared.build_infra.time.sleep"):
+                payload = publish_github_release("danjboyd/gnustep-cli-new", "0.1.0", release_dir)
+
+            self.assertTrue(payload["ok"], json.dumps(payload, indent=2))
+            upload_calls = [call for call in calls if call[:3] == ["gh", "release", "upload"]]
+            self.assertEqual(len(upload_calls), 3)
+            self.assertEqual(upload_calls[0], upload_calls[1])
+            self.assertNotEqual(upload_calls[1][-1], upload_calls[2][-1])
 
     def test_prepare_github_release(self):
         with tempfile.TemporaryDirectory() as tempdir:
