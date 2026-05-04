@@ -1,0 +1,84 @@
+name: Release Signing Smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_artifact_name:
+        description: Workflow artifact name containing the staged release directory contents
+        required: false
+        default: gnustep-staged-release
+      release_artifact_run_id:
+        description: Workflow run id that produced the staged release artifact
+        required: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  release-signing-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Download staged release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.release_artifact_name }}
+          path: ${{ runner.temp }}/staged-release
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.release_artifact_run_id }}
+
+      - name: Sign and verify release metadata
+        env:
+          GNUSTEP_CLI_RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.GNUSTEP_CLI_RELEASE_SIGNING_PRIVATE_KEY }}
+          GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY: ${{ secrets.GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY }}
+          GNUSTEP_CLI_RELEASE_TRUST_ROOT: ${{ secrets.GNUSTEP_CLI_RELEASE_TRUST_ROOT }}
+        run: |
+          if [ -z "${GNUSTEP_CLI_RELEASE_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "GNUSTEP_CLI_RELEASE_SIGNING_PRIVATE_KEY is required for release signing smoke." >&2
+            exit 3
+          fi
+          if [ -z "${GNUSTEP_CLI_RELEASE_TRUST_ROOT:-}" ]; then
+            echo "GNUSTEP_CLI_RELEASE_TRUST_ROOT is required for release signing smoke." >&2
+            exit 3
+          fi
+
+          release_dir="$RUNNER_TEMP/staged-release"
+          test -f "$release_dir/release-manifest.json"
+          test -f "$release_dir/release-provenance.json"
+          test -f "$release_dir/SHA256SUMS"
+
+          umask 077
+          printf '%s\n' "$GNUSTEP_CLI_RELEASE_SIGNING_PRIVATE_KEY" > "$RUNNER_TEMP/release-signing-private.pem"
+          args=(--json sign-release-metadata --release-dir "$release_dir" --private-key "$RUNNER_TEMP/release-signing-private.pem")
+          if [ -n "${GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY:-}" ]; then
+            printf '%s\n' "$GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY" > "$RUNNER_TEMP/release-signing-public.pem"
+            args+=(--public-key "$RUNNER_TEMP/release-signing-public.pem")
+          fi
+          python3 scripts/internal/build_infra.py "${args[@]}"
+
+          printf '%s\n' "$GNUSTEP_CLI_RELEASE_TRUST_ROOT" > "$RUNNER_TEMP/release-trust-root.pem"
+          python3 scripts/internal/build_infra.py --json release-trust-gate \
+            --release-dir "$release_dir" \
+            --trusted-public-key "$RUNNER_TEMP/release-trust-root.pem"
+          python3 scripts/internal/build_infra.py --json release-key-rotation-drill \
+            --release-dir "$release_dir"
+
+      - name: Upload signed release smoke artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-release-signing-smoke
+          path: |
+            ${{ runner.temp }}/staged-release/release-manifest.json
+            ${{ runner.temp }}/staged-release/release-provenance.json
+            ${{ runner.temp }}/staged-release/SHA256SUMS
+            ${{ runner.temp }}/staged-release/release-manifest.json.sig
+            ${{ runner.temp }}/staged-release/release-provenance.json.sig
+            ${{ runner.temp }}/staged-release/release-signing-public.pem
