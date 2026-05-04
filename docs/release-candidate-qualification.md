@@ -213,6 +213,13 @@ candidate.
   clang64 managed, OpenBSD native packaged, Fedora/Arch GCC interoperability,
   with Windows MSVC, OpenBSD arm64, Debian arm64, and broader Linux managed
   portability deferred.
+- May 4, 2026 final `0.1.0` staging execution:
+  Stage Release run `25342971361` passed for `stable/0.1.0` using the latest
+  successful current-source Linux and Windows producer artifacts. Release
+  Signing Smoke run `25343116683` then passed against that exact staged
+  `0.1.0` artifact. The final staged payload is therefore built, verified, and
+  signing-gate proven, but not published. Release Evidence and stable Release
+  remain blocked on fresh structured OpenBSD and Windows reports for `v0.1.0`.
 
 - Phase 26 release-candidate smoke gate:
   on April 27, 2026, `scripts/dev/run-smoke-tests.py --release-gate release-candidate`

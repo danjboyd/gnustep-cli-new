@@ -233,6 +233,18 @@ May 4, 2026 final-evidence workflow update:
   native packaged, Fedora/Arch GCC interoperability, with Windows MSVC,
   OpenBSD arm64, Debian arm64, and broader Linux portability deferred.
 
+May 4, 2026 final `0.1.0` staging update:
+
+- Stage Release run `25342971361` passed for `stable/0.1.0` using current
+  Linux producer run `25337124179` and Windows producer run `25337124379`.
+  This verifies the final stable-version payload without publishing it.
+- Release Signing Smoke run `25343116683` passed against that exact staged
+  `0.1.0` artifact. The final stable candidate is therefore staged,
+  verify-release clean, and signing/trust/key-rotation smoke proven.
+- Release Evidence, stable Release publication, and published stable
+  install/update/rollback validation remain blocked until fresh structured
+  OpenBSD and Windows `v0.1.0` reports are produced and ingested.
+
 Remaining subphases to project completion:
 
 1. Hosted structured live-host evidence: move OpenBSD and Windows OTVM Tier 1
@@ -246,14 +258,16 @@ Remaining subphases to project completion:
    material with the final CI-held or signing-service release and package-index
    trust path, including rotation, expiry, revocation, and compromised-key
    drills. The package-index signing workflow and non-publishing release
-   signing smoke workflow now pass with CI-held trust material; final stable
-   publication still needs the release workflow run for the chosen stable tag.
+   signing smoke workflow now pass with CI-held trust material; final staged
+   `0.1.0` also passes signing smoke. Stable publication still needs the
+   release workflow run after fresh target evidence exists.
 3. Production artifact rebuild: rebuild final Tier 1 CLI and toolchain
    artifacts from production release lanes and verify their manifests,
    provenance, checksums, and signatures. Dogfood `.32` proves this flow for
    the current Linux and Windows hosted inputs, and stable rehearsal
    `0.1.0-stable-rehearsal.1` proves staging from fresh current-source
-   producer artifacts, not the final stable claim.
+   producer artifacts. Final `stable/0.1.0` staging now also passes, but the
+   public stable claim still waits for fresh target evidence.
 4. Package artifact source-build closure: make every publishable package come
    from declared source provenance plus controlled build jobs, with install,
    smoke, remove, upgrade, and audit evidence per target. `tools-xctest`
@@ -282,8 +296,10 @@ Remaining subphases to project completion:
    qualification, live-host evidence, Release Evidence, Release, and install
    verification. This is complete for dogfood `.32`; repeat it for the final
    stable-channel release. The non-published stable-channel staging/signing
-   rehearsal now passes, but published-URL qualification and full Release were
-   deliberately not run as stable publication.
+   rehearsal now passes, and final `stable/0.1.0` staging/signing also passes.
+   Release Evidence, published-URL qualification, and full Release were
+   deliberately not run as stable publication without fresh structured
+   OpenBSD/Windows reports.
 10. Stable cutover: tag the stable release, publish final artifacts and
     manifests through the production trust path, archive the evidence bundle,
     and record post-release update/rollback validation. This remains blocked

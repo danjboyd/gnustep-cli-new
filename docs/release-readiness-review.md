@@ -250,3 +250,20 @@ The main remaining release-engineering issue is productionizing evidence and tru
   tag candidate rather than a published release until the fresh structured
   OpenBSD and Windows stable evidence exists and the stable Release workflow is
   intentionally dispatched.
+
+## May 4 Final `0.1.0` Staging Update
+
+- Final stable-channel Stage Release run `25342971361` passed for version
+  `0.1.0` using the latest successful current-source Linux producer
+  `25337124179` and Windows producer `25337124379`. This produced and verified
+  the staged `stable/0.1.0` release artifact without publishing a GitHub stable
+  release.
+- Release Signing Smoke run `25343116683` passed against the exact staged
+  `0.1.0` artifact from run `25342971361`, proving CI-held release metadata
+  signing, release trust-root verification, release trust gate, and release
+  key-rotation drill for the final staged version.
+- `Release Evidence`, stable `Release`, and published stable URL validation
+  were deliberately not dispatched because fresh structured OpenBSD and Windows
+  stable reports are still missing. Dispatching those steps with the April 24
+  structured reports would weaken the evidence contract this release is meant
+  to enforce.
