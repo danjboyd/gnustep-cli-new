@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "command": "package-tools-xctest-build-evidence",
+  "ok": true,
+  "status": "ok",
+  "package_id": "org.gnustep.tools-xctest",
+  "artifact_id": "tools-xctest-linux-arm64-clang",
+  "target": "linux-arm64-clang",
+  "source": {
+    "type": "git",
+    "url": "https://github.com/gnustep/tools-xctest.git",
+    "revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3",
+    "sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa"
+  },
+  "patches": [
+    {
+      "id": "add-apple-style-xctest-cli-filters",
+      "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed",
+      "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5"
+    }
+  ],
+  "artifact": {
+    "sha256": "0de76047878737cb78642cba60034651a194fc1c70d05a1a220e2c758bc68285",
+    "format": "tar.gz"
+  },
+  "summary": "tools-xctest Linux arm64 clang artifact is recorded as source-built from pinned upstream revision plus reviewed patch."
+}

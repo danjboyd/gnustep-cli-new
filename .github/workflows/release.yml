@@ -304,6 +304,7 @@ jobs:
             --evidence "${{ inputs.update_all_evidence }}"
           python3 scripts/internal/build_infra.py --json release-evidence-bundle \
             --release-dir "$RELEASE_DIR" \
+            --evidence-dir .artifacts/hosted-release-evidence \
             --smoke-report "${{ inputs.linux_smoke_report }}" \
             --smoke-report "${{ inputs.phase26_openbsd_report }}" \
             --smoke-report "${{ inputs.phase26_windows_report }}" \
@@ -359,6 +360,7 @@ jobs:
           path: |
             dist/${{ inputs.channel }}/${{ inputs.version }}/release-evidence-bundle.json
             dist/${{ inputs.channel }}/${{ inputs.version }}/release-qualification-summary.json
+            .artifacts/hosted-release-evidence/*.json
             ${{ inputs.linux_smoke_report }}
             ${{ inputs.phase26_openbsd_report }}
             ${{ inputs.phase26_windows_report }}

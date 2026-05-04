@@ -151,6 +151,23 @@ May 4, 2026 execution update:
   lane. The remaining roadmap work is now completion hardening and production
   claim maturity rather than failed RC gates.
 
+May 4, 2026 completion-pass update:
+
+- Step 1 advanced: hosted Release Evidence can now persist optional fresh
+  OpenBSD and Windows OTVM live-host smoke summaries and the release evidence
+  bundle records them as supplemental live-host refresh evidence.
+- Step 4 advanced: package artifact publication now requires materialized build
+  evidence and validation evidence for publishable artifacts. The current
+  `tools-xctest` package manifest points at committed build evidence records,
+  and the package publication gate passes.
+- Step 7 advanced: Release now builds its evidence bundle from the hosted
+  evidence directory and uploads all hosted evidence JSON, reducing the manual
+  gap between evidence upload and release qualification.
+- Steps 2, 3, 9, and 10 remain production-operation steps: they require a final
+  stable version decision, final production signing/trust material, production
+  artifact producers, and a stable-channel rehearsal/cutover run. Dogfood `.31`
+  remains the qualified prerelease baseline until those operations are run.
+
 Remaining subphases to project completion:
 
 1. Hosted structured live-host evidence: move OpenBSD and Windows OTVM Tier 1

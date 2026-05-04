@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "command": "package-tools-xctest-build-evidence",
+  "ok": true,
+  "status": "ok",
+  "package_id": "org.gnustep.tools-xctest",
+  "artifact_id": "tools-xctest-linux-amd64-clang",
+  "target": "linux-amd64-clang",
+  "source": {
+    "type": "git",
+    "url": "https://github.com/gnustep/tools-xctest.git",
+    "revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3",
+    "sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa"
+  },
+  "patches": [
+    {
+      "id": "add-apple-style-xctest-cli-filters",
+      "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed",
+      "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5"
+    }
+  ],
+  "artifact": {
+    "sha256": "8f1f2a7d224bb67f318fed31f21024a3eff7504bd3c82028834ee7589923e866",
+    "format": "tar.gz"
+  },
+  "summary": "tools-xctest linux amd64 clang artifact is recorded as source-built from pinned upstream revision plus reviewed patch."
+}

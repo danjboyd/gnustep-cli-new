@@ -1282,6 +1282,14 @@ class BuildInfraTests(unittest.TestCase):
             temp = Path(tempdir)
             release_dir = temp / "release"
             release_dir.mkdir()
+            evidence_dir = temp / "evidence"
+            evidence_dir.mkdir()
+            (evidence_dir / "otvm-openbsd-7.8-fvwm-smoke.json").write_text(
+                '{"ok": true, "profile": "openbsd-7.8-fvwm", "summary": "fresh OpenBSD smoke passed"}'
+            )
+            (evidence_dir / "otvm-windows-2022-smoke.json").write_text(
+                '{"ok": true, "profile": "windows-2022", "summary": "fresh Windows smoke passed"}'
+            )
             smoke_report = temp / "smoke.json"
             smoke_report.write_text(json.dumps(evidence_smoke_report(
                 suite_id="tier1-core",
@@ -1313,6 +1321,7 @@ class BuildInfraTests(unittest.TestCase):
 
             bundle = write_release_evidence_bundle(
                 release_dir,
+                evidence_dir=evidence_dir,
                 smoke_report_paths=[smoke_report],
                 update_all_evidence_path=update_all,
                 release_trust_root=release_root,
@@ -1320,7 +1329,52 @@ class BuildInfraTests(unittest.TestCase):
             )
             self.assertTrue(bundle["ok"])
             self.assertEqual({entry["id"] for entry in bundle["trust_roots"]}, {"release-trust-root", "package-index-trust-root"})
-            self.assertIn("update-all-production-like", {entry["id"] for entry in bundle["evidence"]})
+            evidence_ids = {entry["id"] for entry in bundle["evidence"]}
+            self.assertIn("update-all-production-like", evidence_ids)
+            self.assertIn("openbsd-live-host-refresh", evidence_ids)
+            self.assertIn("windows-live-host-refresh", evidence_ids)
+
+    def test_package_artifact_publication_gate_requires_materialized_build_and_validation_evidence(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            packages = temp / "packages"
+            package = packages / "org.example.tool"
+            package.mkdir(parents=True)
+            (package / "package.json").write_text(json.dumps({
+                "schema_version": 1,
+                "id": "org.example.tool",
+                "name": "example",
+                "version": "1.0.0",
+                "kind": "cli-tool",
+                "source": {
+                    "type": "git",
+                    "url": "https://example.invalid/repo.git",
+                    "sha256": "a" * 64,
+                    "revision": "abc123",
+                },
+                "patches": [],
+                "artifacts": [{
+                    "id": "example-linux-amd64-clang",
+                    "os": "linux",
+                    "arch": "amd64",
+                    "compiler_family": "clang",
+                    "toolchain_flavor": "clang",
+                    "url": "dist/example.tar.gz",
+                    "sha256": "b" * 64,
+                    "publish": True,
+                    "build_evidence": "docs/missing-build.json",
+                    "validation_evidence": "docs/missing-validation.json",
+                }],
+            }))
+            gate = package_artifact_publication_gate(packages)
+            blockers = {
+                blocker["code"]
+                for check in gate["checks"]
+                for blocker in check.get("payload", {}).get("policy_blockers", [])
+            }
+            self.assertFalse(gate["ok"])
+            self.assertIn("missing_build_evidence", blockers)
+            self.assertIn("missing_validation_evidence", blockers)
 
     def test_release_qualification_summary_records_workflow_runs_and_digests(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -2023,6 +2077,8 @@ class BuildInfraTests(unittest.TestCase):
             packages_dir = Path(tempdir) / "packages"
             package_dir = packages_dir / "org.example.clean"
             package_dir.mkdir(parents=True)
+            (package_dir / "build.json").write_text('{"ok": true}\n')
+            (package_dir / "validation.json").write_text('{"ok": true}\n')
             manifest = {
                 "schema_version": 1,
                 "id": "org.example.clean",
@@ -2044,6 +2100,8 @@ class BuildInfraTests(unittest.TestCase):
                         "toolchain_flavor": "clang",
                         "url": "https://example.invalid/packages/clean-linux-amd64-clang.tar.gz",
                         "sha256": "b" * 64,
+                        "build_evidence": "build.json",
+                        "validation_evidence": "validation.json",
                     }
                 ],
             }
@@ -2178,6 +2236,8 @@ class BuildInfraTests(unittest.TestCase):
             packages_dir = Path(tempdir) / "packages"
             package_dir = packages_dir / "org.example.clean"
             package_dir.mkdir(parents=True)
+            (package_dir / "build.json").write_text('{"ok": true}\n')
+            (package_dir / "validation.json").write_text('{"ok": true}\n')
             (package_dir / "package.json").write_text(json.dumps({
                 "schema_version": 1,
                 "id": "org.example.clean",
@@ -2194,6 +2254,8 @@ class BuildInfraTests(unittest.TestCase):
                     "toolchain_flavor": "clang",
                     "url": "https://example.invalid/pkg.tar.gz",
                     "sha256": "b" * 64,
+                    "build_evidence": "build.json",
+                    "validation_evidence": "validation.json",
                 }],
             }) + "\n")
             payload = package_artifact_publication_gate(packages_dir)

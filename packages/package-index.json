@@ -116,7 +116,7 @@
           ],
           "portability_policy": "distribution-scoped",
           "supported_os_versions": [],
-          "build_evidence": "dist/dogfood/packages/build-linux-amd64-clang/package-result.json",
+          "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-linux-amd64-clang-build.json",
           "validation_evidence": "docs/validation/tools-xctest-debian-13-20260420/tools-xctest-linux-amd64-clang.json",
           "source": {
             "type": "git",
@@ -174,7 +174,7 @@
           "supported_os_versions": [
             "ubuntu-24.04"
           ],
-          "build_evidence": "dist/dogfood/packages/build-linux-ubuntu2404-amd64-clang/package-result.json",
+          "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-linux-ubuntu2404-amd64-clang-build.json",
           "validation_evidence": "docs/validation/tools-xctest-ubuntu-2404-20260420/tools-xctest-linux-ubuntu2404-amd64-clang.json",
           "source": {
             "type": "git",
@@ -225,7 +225,7 @@
           "format": "tar.gz",
           "status": "validated_openbsd78_amd64_with_declared_patch_launcher_and_linker_workaround",
           "notes": "Built on OpenBSD 7.8 amd64 with clang/libobjc2 from OpenBSD packages, upstream tools-xctest revision plus PR #5 patch, package-local launcher, and OpenBSD libXCTest linker-name workaround. Validated with native CLI install/remove, xctest --help, and a minimal XCTest bundle run.",
-          "build_evidence": "dist/dogfood/packages/tools-xctest-openbsd-amd64-clang-0.1.0.tar.gz",
+          "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-openbsd-amd64-clang-build.json",
           "validation_evidence": "docs/validation/tools-xctest-openbsd-78-20260420/tools-xctest-openbsd-amd64-clang.json",
           "source": {
             "type": "git",
@@ -281,7 +281,7 @@
           "publish": true,
           "status": "validated_ubuntu2404_aarch64_managed_clang_with_declared_patch_and_launcher",
           "notes": "Built on OTVM ubuntu-24.04-aarch64 against the Phase 16.B2 managed Clang/libobjc2 toolchain from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes a bin/xctest launcher that sets package-local and managed-root library paths before execing libexec/xctest.",
-          "build_evidence": "dist/dogfood/packages/tools-xctest-linux-arm64-clang-0.1.0.tar.gz",
+          "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-linux-arm64-clang-build.json",
           "validation_evidence": "docs/validation/tools-xctest-linux-arm64-ubuntu-2404-20260421/tools-xctest-linux-arm64-clang.json",
           "supported_os_versions": [
             "ubuntu-24.04"
@@ -336,7 +336,7 @@
           "status": "validated_windows_msys2_clang64_with_declared_patch_and_launcher",
           "notes": "Built on Windows Server 2022/MSYS2 clang64 from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes cmd.exe and MSYS shell launchers that put package-local XCTest DLLs and the managed MSYS2 clang64 toolchain on PATH before execing xctest.exe.",
           "validation_evidence": "docs/validation/tools-xctest-windows-msys2-20260421/tools-xctest-windows-amd64-msys2-clang64.json",
-          "build_evidence": "dist/dogfood/packages/tools-xctest-windows-amd64-msys2-clang64-0.1.0.zip",
+          "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-windows-amd64-msys2-clang64-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/gnustep/tools-xctest.git",

@@ -33,6 +33,18 @@ on:
       windows_current_source_marker_sha256:
         description: SHA256 for Windows current-source marker JSON
         required: true
+      openbsd_live_smoke_url:
+        description: Optional URL for a fresh OpenBSD OTVM live-host smoke summary JSON
+        required: false
+      openbsd_live_smoke_sha256:
+        description: SHA256 for the optional OpenBSD OTVM live-host smoke summary JSON
+        required: false
+      windows_live_smoke_url:
+        description: Optional URL for a fresh Windows OTVM live-host smoke summary JSON
+        required: false
+      windows_live_smoke_sha256:
+        description: SHA256 for the optional Windows OTVM live-host smoke summary JSON
+        required: false
 
 jobs:
   release-evidence:
@@ -70,6 +82,8 @@ jobs:
           fetch_evidence update-all "${{ inputs.update_all_evidence_url }}" "${{ inputs.update_all_evidence_sha256 }}" "$RUNNER_TEMP/release-evidence/update-all-production-like.json"
           fetch_evidence linux-smoke "${{ inputs.linux_smoke_url }}" "${{ inputs.linux_smoke_sha256 }}" "$RUNNER_TEMP/release-evidence/linux-smoke-report.json"
           fetch_evidence windows-current-source-marker "${{ inputs.windows_current_source_marker_url }}" "${{ inputs.windows_current_source_marker_sha256 }}" "$RUNNER_TEMP/release-evidence/windows-current-source-artifact.json"
+          fetch_evidence openbsd-live-smoke "${{ inputs.openbsd_live_smoke_url }}" "${{ inputs.openbsd_live_smoke_sha256 }}" "$RUNNER_TEMP/release-evidence/otvm-openbsd-7.8-fvwm-smoke.json"
+          fetch_evidence windows-live-smoke "${{ inputs.windows_live_smoke_url }}" "${{ inputs.windows_live_smoke_sha256 }}" "$RUNNER_TEMP/release-evidence/otvm-windows-2022-smoke.json"
 
       - name: Upload release evidence
         uses: actions/upload-artifact@v4

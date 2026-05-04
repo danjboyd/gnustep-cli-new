@@ -3249,6 +3249,16 @@ def write_release_evidence_bundle(
         for evidence_id, path in evidence_files.items():
             entries.append(_file_evidence_entry(evidence_id, path))
 
+    supplemental_live_evidence = {
+        "openbsd-live-host-refresh": evidence_root / "otvm-openbsd-7.8-fvwm-smoke.json",
+        "windows-live-host-refresh": evidence_root / "otvm-windows-2022-smoke.json",
+    }
+    existing_entry_paths = {entry.get("path") for entry in entries}
+    for evidence_id, path in supplemental_live_evidence.items():
+        resolved = str(path.resolve())
+        if path.exists() and resolved not in existing_entry_paths:
+            entries.append(_file_evidence_entry(evidence_id, path.resolve()))
+
     marker_path = evidence_root / "windows-current-source-artifact.json"
     if marker_path.exists():
         entries.append(_file_evidence_entry("windows-current-source-artifact", marker_path))
@@ -4591,6 +4601,8 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
         build = manifest.get("build", {}) or {}
         source_sha = source.get("sha256")
         source_url = source.get("url")
+        package_root = manifest_path.parent
+        repo_root = root.parent
         package_blockers: list[str] = []
         if not source_url:
             package_blockers.append("missing_source_url")
@@ -4617,6 +4629,21 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
                 artifact_blockers.append("missing_artifact_url")
             if artifact_publishable and (not artifact_sha or str(artifact_sha).endswith("tbd") or "placeholder" in str(artifact_sha).lower() or "published-artifact-checksum-tbd" == str(artifact_sha)):
                 artifact_blockers.append("missing_published_artifact_digest")
+            for evidence_field, blocker_code in (
+                ("build_evidence", "missing_build_evidence"),
+                ("validation_evidence", "missing_validation_evidence"),
+            ):
+                evidence_value = artifact.get(evidence_field)
+                if artifact_publishable and not evidence_value:
+                    artifact_blockers.append(blocker_code)
+                elif artifact_publishable:
+                    evidence_path = Path(str(evidence_value))
+                    candidates = [
+                        evidence_path if evidence_path.is_absolute() else repo_root / evidence_path,
+                        package_root / evidence_path,
+                    ]
+                    if not any(candidate.exists() for candidate in candidates):
+                        artifact_blockers.append(blocker_code)
             for blocker in artifact_blockers:
                 if blocker not in package_blockers:
                     plan_blockers.append({"package": package_id, "artifact": artifact["id"], "code": blocker})

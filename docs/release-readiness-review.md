@@ -154,3 +154,25 @@ The main remaining release-engineering issue is productionizing evidence and tru
   April 24 Phase 26 OpenBSD/Windows reports for the formal scenario evidence.
   The May 4 fresh OTVM reruns are simpler live-host smoke refreshes that prove
   the immediate Windows bootstrap fix and OpenBSD packaged compile/run lane.
+
+## May 4 Completion-Pass Update
+
+- `Release Evidence` now accepts optional fresh OpenBSD and Windows live-host
+  smoke summary URLs and checksums, downloads them into the hosted evidence
+  artifact, and preserves them as supplemental evidence rather than pretending
+  they are full structured Phase 26 scenario reports.
+- The consolidated `Release` workflow now builds `release-evidence-bundle.json`
+  with `.artifacts/hosted-release-evidence` as the evidence root and uploads
+  all hosted evidence JSON files with the release evidence artifact. This
+  removes the previous gap where fresh simple OTVM reruns could be proven
+  locally but not persisted in the hosted release evidence bundle.
+- Package artifact source-build closure is now stricter: publishable package
+  artifacts must carry materialized build evidence and validation evidence
+  paths. The `tools-xctest` package manifest now points build evidence at
+  committed records under `docs/validation/tools-xctest-build-evidence/`, and
+  `package-artifact-publication-gate` passes with those records present.
+- Production trust and stable cutover remain gated by the final operator
+  decision to run a stable-channel release with final CI-held signing material
+  or a signing service. The repository now enforces the trust-root path in the
+  Release workflow, but this document should not claim stable production
+  publication until that final run exists.

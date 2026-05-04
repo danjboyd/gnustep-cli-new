@@ -333,6 +333,26 @@ Remaining external production blockers:
 - Finish native `doctor` deep-detection parity before claiming full native diagnostic replacement.
 - Build every final Tier 1 full-CLI artifact from production build lanes rather than reusing staged or prerelease evidence.
 
+May 4 completion-pass update:
+
+- Hosted evidence persistence now covers supplemental live-host refreshes. The
+  `Release Evidence` workflow accepts optional fresh OpenBSD and Windows OTVM
+  smoke summary URLs and stores them as
+  `otvm-openbsd-7.8-fvwm-smoke.json` and `otvm-windows-2022-smoke.json`.
+  `release-evidence-bundle` includes those files as
+  `openbsd-live-host-refresh` and `windows-live-host-refresh` entries when
+  present, while keeping the formal Phase 26 gate tied to structured scenario
+  reports.
+- Package artifact publication now checks that publishable artifacts have both
+  materialized build evidence and validation evidence. The committed
+  `tools-xctest` build evidence records under
+  `docs/validation/tools-xctest-build-evidence/` close the durable provenance
+  gap for the current package manifest.
+- The remaining production blockers are now final production operation
+  blockers rather than dogfood RC blockers: run the final stable-channel
+  release with final trust roots, production artifact producers, hosted
+  structured live-host evidence, and post-release update/rollback validation.
+
 ## April 27 Phase 12/13 Production-Like Update
 
 Local production-like hardening now passes the Phase 12 and Phase 13 gates with explicit release and package-index trust roots, signed metadata, the existing OpenBSD and Windows Tier 1 smoke reports, and `gnustep update all --yes` evidence at `.artifacts/phase13-local-production-like/evidence/update-all-production-like.json`.
