@@ -200,6 +200,19 @@ candidate.
   reports. The accepted April 24 structured reports and May 4 supplemental
   refreshes remain sufficient for dogfood RC proof, but not for replacing the
   final hosted stable evidence requirement.
+- May 4, 2026 final-evidence workflow execution:
+  `Structured Smoke Evidence` was added as the hosted checksum-pinned handoff
+  for OpenBSD and Windows structured reports. Run `25338906779` passed using
+  the accepted existing `.32` structured reports against the
+  `release-candidate` gate, which validates the ingestion path but is not fresh
+  stable evidence. `Package tools-xctest Hosted Linux` was also added and run
+  `25338857779` passed for `linux-amd64-clang` and
+  `linux-ubuntu2404-amd64-clang`.
+- The stable tag candidate is `v0.1.0`. The support claim set for that tag is
+  frozen pending final evidence: Debian/Ubuntu managed Linux, Windows MSYS2
+  clang64 managed, OpenBSD native packaged, Fedora/Arch GCC interoperability,
+  with Windows MSVC, OpenBSD arm64, Debian arm64, and broader Linux managed
+  portability deferred.
 
 - Phase 26 release-candidate smoke gate:
   on April 27, 2026, `scripts/dev/run-smoke-tests.py --release-gate release-candidate`

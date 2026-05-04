@@ -235,3 +235,18 @@ The main remaining release-engineering issue is productionizing evidence and tru
   rebuilds beyond hosted Linux, final stable version/tag selection, and the
   actual stable Release workflow/publication plus post-publication install,
   update, and rollback validation.
+
+## May 4 Final-Evidence Workflow Update
+
+- Added `Structured Smoke Evidence`, a hosted workflow for checksum-pinned
+  OpenBSD and Windows structured smoke report ingestion and smoke-gate
+  evaluation. Run `25338906779` passed against the accepted existing `.32`
+  structured reports for the `release-candidate` gate, proving the ingestion
+  path. Fresh stable evidence still requires new target-host report URLs.
+- Added `Package tools-xctest Hosted Linux`, a hosted Linux package rebuild
+  matrix. Run `25338857779` passed for both `linux-amd64-clang` and
+  `linux-ubuntu2404-amd64-clang`.
+- The intended stable version/tag is `0.1.0` / `v0.1.0`, but this remains a
+  tag candidate rather than a published release until the fresh structured
+  OpenBSD and Windows stable evidence exists and the stable Release workflow is
+  intentionally dispatched.

@@ -5,6 +5,11 @@ targets the project is actively discussing.
 
 ## Current Snapshot
 
+Stable `v0.1.0` support claims are frozen around the target set below pending
+fresh structured OpenBSD and Windows stable evidence. The current dogfood RC
+baseline remains `v0.1.0-dev-hosted.32`; `v0.1.0` is the intended stable tag
+candidate, not a published stable release yet.
+
 - `openbsd-amd64-clang`
   status: `validated_native_preferred`
   notes: packaged OpenBSD GNUstep is currently treated as the preferred native

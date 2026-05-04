@@ -71,20 +71,18 @@ The repository currently contains:
 
 ### Still Blocked Or Pending
 
-- publish a fresh dogfood/release-candidate candidate from the fixed release
-  manifest URL generator; the immutable `v0.1.0-dev-hosted.1` dogfood manifest
-  contains malformed GitHub asset URLs and should remain historical evidence,
-  not a passing published-URL qualification target
-- use current-source Windows artifacts for the next candidate and remove the
-  stale-Windows artifact exception before making release-candidate or stable
-  Windows claims
-- collect fresh published-URL Linux qualification plus Windows and OpenBSD live
-  smoke reports for the exact candidate and feed those reports through the
-  release evidence workflow
-- release provenance and OpenSSL-backed metadata signatures are generated,
-  published, locally gate-verified, and wired into the controlled release gate;
-  production still requires CI-held trust roots or a signing service plus key
-  rotation/revocation procedures before any production security claim
+- dogfood candidate `v0.1.0-dev-hosted.32` is the current qualified RC baseline;
+  the immutable `v0.1.0-dev-hosted.1` dogfood manifest remains historical
+  evidence only because it contains malformed GitHub asset URLs
+- the intended stable tag candidate is `v0.1.0`, but public stable publication
+  is intentionally blocked until fresh hosted structured OpenBSD and Windows
+  Tier 1 reports are collected for the stable candidate
+- Linux and Windows current-source producer lanes, signed package-index
+  generation, stable-channel staging rehearsal, and release-signing smoke now
+  pass with hosted evidence and CI-held trust material
+- structured OpenBSD/Windows smoke-report ingestion is available through the
+  `Structured Smoke Evidence` workflow; it has been validated with the accepted
+  existing structured reports, but those reports are not fresh stable evidence
 - finish native Objective-C `doctor` deep-detection parity with the shared model
   before claiming the full CLI as the authoritative diagnostic implementation
 - repaired Linux managed artifact portability beyond the explicitly scoped
@@ -93,7 +91,9 @@ The repository currently contains:
   Clang/libobjc2 artifacts are built and validated
 - package-index trust metadata, provenance generation, signing, trust-gate
   validation, and signed-index enforcement in package-index consumer paths are
-  implemented for the official package repository path
+  implemented for the official package repository path; hosted Linux
+  `tools-xctest` rebuilds pass, while target-native package rebuilds for
+  OpenBSD, Windows, and arm64 remain to be completed or explicitly deferred
 - OpenBSD `amd64` release claims are native packaged GNUstep claims; managed
   OpenBSD artifact publication is optional future work, not a current
   release-candidate blocker

@@ -214,13 +214,34 @@ May 4, 2026 production-rehearsal update:
   release still requires the final stable version/tag decision and the fresh
   hosted structured OpenBSD and Windows Tier 1 scenario reports.
 
+May 4, 2026 final-evidence workflow update:
+
+- Added `Structured Smoke Evidence`, a hosted workflow that downloads
+  checksum-pinned OpenBSD and Windows structured Tier 1 reports, evaluates the
+  selected smoke release gate, and uploads the evidence artifact. Run
+  `25338906779` validated the workflow with the accepted existing `.32`
+  OpenBSD and Windows structured reports against the `release-candidate` gate.
+  This proves the ingestion path; it does not satisfy the fresh stable evidence
+  requirement.
+- Added `Package tools-xctest Hosted Linux`, a hosted Linux package rebuild
+  matrix for `linux-amd64-clang` and `linux-ubuntu2404-amd64-clang`. Run
+  `25338857779` passed for both targets and uploaded package artifacts.
+- The intended first stable version/tag is now `0.1.0` / `v0.1.0`, pending
+  fresh structured OpenBSD/Windows stable evidence and final publication
+  approval. Support claims are frozen around the current evidence-backed target
+  set: Debian/Ubuntu managed Linux, Windows MSYS2 clang64 managed, OpenBSD
+  native packaged, Fedora/Arch GCC interoperability, with Windows MSVC,
+  OpenBSD arm64, Debian arm64, and broader Linux portability deferred.
+
 Remaining subphases to project completion:
 
 1. Hosted structured live-host evidence: move OpenBSD and Windows OTVM Tier 1
    scenario reruns fully into hosted, downloadable evidence artifacts instead
    of relying on operator-run local `.artifacts` refreshes. Supplemental hosted
    live-host refreshes are now persisted, but they do not replace the full
-   structured Tier 1 scenario reruns.
+   structured Tier 1 scenario reruns. The structured evidence ingestion
+   workflow now exists and passes with accepted existing reports; the fresh
+   target-host runs still remain.
 2. Production trust-root and signing path: replace dogfood/provisional signing
    material with the final CI-held or signing-service release and package-index
    trust path, including rotation, expiry, revocation, and compromised-key
@@ -238,7 +259,8 @@ Remaining subphases to project completion:
    smoke, remove, upgrade, and audit evidence per target. `tools-xctest`
    now satisfies the materialized build/validation evidence gate for current
    publishable artifacts, and the hosted Linux package rebuild workflow passes;
-   remaining target-specific hosted package rebuilds still need completion.
+   remaining target-native OpenBSD, Windows, and arm64 package rebuilds still
+   need completion or explicit stable deferral.
 5. Native `doctor` parity closure: finish Objective-C deep detection and
    compatibility output parity with the shared model, including feature flags,
    runtime/ABI classification, compile/link/run probes, and remediation.
@@ -253,7 +275,8 @@ Remaining subphases to project completion:
 8. Support-claims audit: align README, support matrix, roadmap, and release
    notes with the final evidence-backed target set, especially OpenBSD native
    packaged support, Debian/Ubuntu managed support, Fedora/Arch GCC
-   interoperability, and deferred Windows MSVC.
+   interoperability, and deferred Windows MSVC. The stable support claim set is
+   frozen for `v0.1.0` pending the final evidence bundle.
 9. Final RC rehearsal: run a clean candidate rehearsal from an empty release
    workspace through hosted producers, staged release, published-URL
    qualification, live-host evidence, Release Evidence, Release, and install
@@ -263,7 +286,8 @@ Remaining subphases to project completion:
    deliberately not run as stable publication.
 10. Stable cutover: tag the stable release, publish final artifacts and
     manifests through the production trust path, archive the evidence bundle,
-    and record post-release update/rollback validation.
+    and record post-release update/rollback validation. This remains blocked
+    until fresh structured OpenBSD and Windows stable evidence exists.
 
 ## Phase 1. Foundation And Specifications
 
