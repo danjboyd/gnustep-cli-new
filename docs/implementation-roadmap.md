@@ -36,28 +36,25 @@ existence.
 
 Current priority order:
 
-1. Stage and publish the next dogfood candidate from the fixed manifest
-   generator. The previously published `v0.1.0-dev-hosted.1` manifest has bad
-   GitHub asset URLs and must remain historical evidence, not a passing
-   published-URL qualification target.
-2. Use current-source Windows artifacts for the next candidate, not the
-   documented stale-Windows dogfood exception. The stale artifact exception is
-   allowed only for dogfood diagnostics and must not carry into release-candidate
-   or stable claims.
-3. Run published-URL Linux qualification against the new candidate, collect
-   fresh Windows and OpenBSD live smoke reports for that exact candidate, feed
-   those reports through `Release Evidence`, and rerun `Release` without the
-   stale-Windows exception.
-4. Complete Phase 12/13 production hardening: CI-held production signing keys
+1. Promote `v0.1.0-dev-hosted.31` as the current dogfood candidate baseline.
+   It was staged from the fixed manifest generator, uses current-source Linux
+   and Windows artifact producers, passed published-URL Linux qualification,
+   and passed the consolidated Release workflow without the stale-Windows
+   exception on May 4, 2026.
+2. Convert the remaining May 4 simple OpenBSD and Windows OTVM refreshes into
+   repeatable hosted structured Tier 1 scenario evidence. The formal Release
+   gate is green with the accepted structured April 24 Phase 26 reports, but
+   the newest live reruns are simpler smoke summaries.
+3. Complete Phase 12/13 production hardening: CI-held production signing keys
    or signing service, automated host-backed release qualification, controlled
    signed package artifact build jobs, and real release-lane `gnustep update all
    --yes` evidence for the candidate under test.
-5. Finish native Objective-C `doctor` deep-detection parity with the shared
+4. Finish native Objective-C `doctor` deep-detection parity with the shared
    Python model before claiming the full CLI is the authoritative diagnostic
    implementation.
-6. Rebuild final Tier 1 full-CLI artifacts from production build lanes rather
+5. Rebuild final Tier 1 full-CLI artifacts from production build lanes rather
    than relying on local, staged, or prerelease evidence.
-7. Keep package, setup, update, and release trust gates green while converting
+6. Keep package, setup, update, and release trust gates green while converting
    remaining operator-run validation into repeatable automation.
 
 Non-blocking for the immediate release unless this roadmap is revised:
@@ -135,6 +132,60 @@ workflow. It may remain visible while Windows managed-toolchain validation needs
 it, but product docs and release claims should continue to center the portable
 core commands: `setup`, `doctor`, `build`, `clean`, `run`, `new`, `install`,
 `remove`, and `update`.
+
+May 4, 2026 execution update:
+
+- Executed the prior ten-step RC blocker plan. The flat Windows CLI archive
+  bootstrap defect was fixed in `scripts/bootstrap/gnustep-bootstrap.ps1` and
+  covered by `tests/test_bootstrap_ps1.py`; commit
+  `5273786c17bcd6acc7dd518d56d9acc8c6514e8b` is the qualified source
+  revision.
+- Fresh OpenBSD and Windows OTVM live-host reruns passed and left zero active
+  leases. The Windows rerun specifically proved PowerShell bootstrap setup from
+  a flat `bin/gnustep.exe` CLI zip after the fix.
+- Hosted producer, staging, published-URL qualification, Release Evidence, and
+  consolidated Release workflows passed for `v0.1.0-dev-hosted.31`. Release
+  run `25331629057` published the prerelease and generated an `ok:true`
+  qualification summary with `stale_windows_allowed:false`.
+- The previous immediate RC blockers are no longer blocking the dogfood RC
+  lane. The remaining roadmap work is now completion hardening and production
+  claim maturity rather than failed RC gates.
+
+Remaining subphases to project completion:
+
+1. Hosted structured live-host evidence: move OpenBSD and Windows OTVM Tier 1
+   scenario reruns fully into hosted, downloadable evidence artifacts instead
+   of relying on operator-run local `.artifacts` refreshes.
+2. Production trust-root and signing path: replace dogfood/provisional signing
+   material with the final CI-held or signing-service release and package-index
+   trust path, including rotation, expiry, revocation, and compromised-key
+   drills.
+3. Production artifact rebuild: rebuild final Tier 1 CLI and toolchain
+   artifacts from production release lanes and verify their manifests,
+   provenance, checksums, and signatures.
+4. Package artifact source-build closure: make every publishable package come
+   from declared source provenance plus controlled build jobs, with install,
+   smoke, remove, upgrade, and audit evidence per target.
+5. Native `doctor` parity closure: finish Objective-C deep detection and
+   compatibility output parity with the shared model, including feature flags,
+   runtime/ABI classification, compile/link/run probes, and remediation.
+6. Setup/update lifecycle hardening: keep rollback, freeze, downgrade,
+   revoked-artifact, expired-metadata, and `update all --yes` evidence green
+   against production manifests and production-signed metadata.
+7. Release workflow consolidation: remove remaining manual publication and
+   evidence-upload steps so one controlled release lane produces, verifies,
+   signs, qualifies, publishes, and persists evidence.
+8. Support-claims audit: align README, support matrix, roadmap, and release
+   notes with the final evidence-backed target set, especially OpenBSD native
+   packaged support, Debian/Ubuntu managed support, Fedora/Arch GCC
+   interoperability, and deferred Windows MSVC.
+9. Final RC rehearsal: run a clean candidate rehearsal from an empty release
+   workspace through hosted producers, staged release, published-URL
+   qualification, live-host evidence, Release Evidence, Release, and install
+   verification.
+10. Stable cutover: tag the stable release, publish final artifacts and
+    manifests through the production trust path, archive the evidence bundle,
+    and record post-release update/rollback validation.
 
 ## Phase 1. Foundation And Specifications
 

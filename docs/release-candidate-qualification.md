@@ -112,6 +112,46 @@ candidate.
 
 ## Host Qualification
 
+- May 4, 2026 hosted RC refresh:
+  `v0.1.0-dev-hosted.31` is the current qualified dogfood candidate. Commit
+  `5273786c17bcd6acc7dd518d56d9acc8c6514e8b` fixed the Windows bootstrap
+  installer so flat CLI archives with `bin/gnustep.exe` are not unwrapped into
+  an invalid release root. The fix passed targeted PowerShell bootstrap
+  regression, combined POSIX/PowerShell bootstrap regression, build-infra tests,
+  full Python unittest discovery with 258 tests, and the native Objective-C
+  suite.
+- Hosted qualification for `.31` passed:
+  Linux Current Source Artifacts `25329957149`, Windows Current Source
+  Artifacts `25329956930`, Stage Release `25330301665`, Published URL
+  Qualification `25331121271`, Release Evidence `25331598383`, and
+  consolidated Release `25331629057`. The consolidated Release run passed the
+  full regression suite, package readiness, signed package-index verification,
+  staged release verification, release key-rotation drill, controlled release
+  gate, release-claim consistency gate, Phase 26 RC smoke gate, Phase 12/13
+  hardening gates, immediate RC blocker gate, evidence upload, and GitHub
+  publication without `allow_stale_windows_artifact`.
+- The generated `.31` release qualification summary is `ok:true` and records:
+  release manifest SHA-256
+  `78e38eab7c0f117170ab8e8c644d08e3aa17a03fa036546bfcc5e1e25472737e`,
+  release evidence bundle SHA-256
+  `59d3afef28002e686c4f3524fa967aec1161f0f22147ee5a509f08613bc30cb5`,
+  Linux smoke evidence SHA-256
+  `41efc94904b01a2897d0d82cc917ec8397c44e038e4540e6df60d21be246adcc`,
+  OpenBSD structured evidence SHA-256
+  `f28167b11bace7ebe1aa0f086f880772e68318ac108f1f197ff2875e68d36025`,
+  Windows structured evidence SHA-256
+  `1ee4b0e2cfc5bea1af2dc721318f1a07a07b678668d57a58435f2ca0a732d4f9`,
+  Windows current-source marker SHA-256
+  `10bccd3087c082bdfcbd0df419ce59bc27e182887c81f7819a2a29acf05d7104`,
+  and production-like update-all evidence SHA-256
+  `6b4003eee5de8265e1bae54158264571b24916e71cb8f214c4bcdf749aed9704`.
+- Fresh May 4 OTVM live-host refresh also passed outside the formal hosted
+  Release artifact: OpenBSD `openbsd-7.8-fvwm` packaged GNUstep compile/run
+  smoke and Windows `windows-2022` bootstrap/full-CLI smoke both returned
+  `ok:true`, and the final OTVM lease check reported zero active leases. These
+  refreshes supplement the accepted structured April 24 Phase 26 reports that
+  are still used by the hosted Release gate.
+
 - Phase 26 release-candidate smoke gate:
   on April 27, 2026, `scripts/dev/run-smoke-tests.py --release-gate release-candidate`
   passed with the accepted OpenBSD and Windows Tier 1 reports:

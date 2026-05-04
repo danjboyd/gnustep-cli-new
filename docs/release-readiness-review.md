@@ -1,6 +1,6 @@
 # Release Readiness Review
 
-Current date: 2026-04-27.
+Current date: 2026-05-04.
 
 ## Release-Candidate Position
 
@@ -119,3 +119,38 @@ The main remaining release-engineering issue is productionizing evidence and tru
   manifest generator and current-source Windows artifacts, run published-URL
   Linux qualification against it, collect fresh Windows/OpenBSD live smoke
   reports, and rerun Release without `allow_stale_windows_artifact`.
+
+## May 4 Hosted RC Gate Update
+
+- Immediate RC blockers from the April 28 list are cleared for the current
+  dogfood candidate. Commit `5273786c17bcd6acc7dd518d56d9acc8c6514e8b`
+  fixed Windows PowerShell bootstrap installation from flat CLI archives by
+  preserving known install-layout roots such as `bin/`.
+- Local verification passed after the fix: targeted PowerShell bootstrap
+  regression, POSIX and PowerShell bootstrap regressions, build-infra tests,
+  full Python unittest discovery with 258 tests, and the native Objective-C
+  suite through `scripts/dev/run-native-tests.sh`.
+- Fresh OTVM live-host reruns passed on May 4, 2026:
+  OpenBSD `openbsd-7.8-fvwm` packaged GNUstep compile/run smoke and Windows
+  `windows-2022` bootstrap/full-CLI smoke both returned `ok:true`; the final
+  OTVM cleanup check reported zero active leases.
+- Current-source hosted producers passed for `.31`: Linux Current Source
+  Artifacts run `25329957149`, Windows Current Source Artifacts run
+  `25329956930`, and Stage Release run `25330301665`.
+- Published-URL Linux qualification passed for
+  `v0.1.0-dev-hosted.31` in run `25331121271`.
+- Corrected hosted Release Evidence run `25331598383` passed using structured
+  Phase 26 OpenBSD and Windows reports with SHA-256
+  `f28167b11bace7ebe1aa0f086f880772e68318ac108f1f197ff2875e68d36025` and
+  `1ee4b0e2cfc5bea1af2dc721318f1a07a07b678668d57a58435f2ca0a732d4f9`.
+- Consolidated Release run `25331629057` passed end-to-end without the stale
+  Windows exception and published prerelease
+  `https://github.com/danjboyd/gnustep-cli-new/releases/tag/v0.1.0-dev-hosted.31`.
+  The generated `release-qualification-summary.json` is `ok:true`, records the
+  source revision above, records `stale_windows_allowed:false`, and includes
+  release evidence bundle SHA-256
+  `59d3afef28002e686c4f3524fa967aec1161f0f22147ee5a509f08613bc30cb5`.
+- Remaining caution: the full Release gate still uses the accepted structured
+  April 24 Phase 26 OpenBSD/Windows reports for the formal scenario evidence.
+  The May 4 fresh OTVM reruns are simpler live-host smoke refreshes that prove
+  the immediate Windows bootstrap fix and OpenBSD packaged compile/run lane.
