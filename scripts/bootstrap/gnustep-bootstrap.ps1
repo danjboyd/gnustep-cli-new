@@ -208,6 +208,21 @@ function Get-SingleChildDirectory {
     param([string]$Path)
     $children = Get-ChildItem -Force $Path
     if ($children.Count -eq 1 -and $children[0].PSIsContainer) {
+        $knownLayoutRoots = @(
+            "bin",
+            "etc",
+            "include",
+            "lib",
+            "libexec",
+            "Library",
+            "System",
+            "Tools",
+            "usr",
+            "var"
+        )
+        if ($knownLayoutRoots -contains $children[0].Name) {
+            return $Path
+        }
         return $children[0].FullName
     }
     return $Path

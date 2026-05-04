@@ -77,8 +77,7 @@ class BootstrapPowerShellTests(unittest.TestCase):
 
             cli_zip = release_dir / "gnustep-cli-windows-amd64-msys2-clang64-0.1.0-dev.zip"
             with zipfile.ZipFile(cli_zip, "w") as archive:
-                archive.writestr("gnustep-cli-windows-amd64-msys2-clang64-0.1.0-dev/bin/gnustep.exe", "binary")
-                archive.writestr("gnustep-cli-windows-amd64-msys2-clang64-0.1.0-dev/examples/release-manifest-v1.json", "{}")
+                archive.writestr("bin/gnustep.exe", "binary")
 
             toolchain_zip = release_dir / "gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0-dev.zip"
             long_name = "x" * 120
