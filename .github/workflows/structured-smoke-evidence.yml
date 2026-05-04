@@ -1,0 +1,82 @@
+name: Structured Smoke Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_source:
+        description: Release source URL, release directory description, or channel identifier under test
+        required: true
+      gate:
+        description: Smoke release gate to evaluate
+        required: true
+        default: stable
+      openbsd_report_url:
+        description: URL for the structured OpenBSD Tier 1 smoke report JSON
+        required: true
+      openbsd_report_sha256:
+        description: SHA256 for the structured OpenBSD Tier 1 smoke report JSON
+        required: true
+      windows_report_url:
+        description: URL for the structured Windows Tier 1 smoke report JSON
+        required: true
+      windows_report_sha256:
+        description: SHA256 for the structured Windows Tier 1 smoke report JSON
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  structured-smoke-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Download structured smoke reports
+        run: |
+          set -eu
+          case "${{ inputs.gate }}" in
+            dogfood|release-candidate|stable) ;;
+            *)
+              echo "unsupported smoke gate: ${{ inputs.gate }}" >&2
+              exit 2
+              ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/structured-smoke-evidence"
+
+          fetch_report() {
+            label="$1"
+            url="$2"
+            expected_sha="$3"
+            output="$4"
+            curl --fail --location --show-error --silent "$url" --output "$output"
+            actual_sha=$(sha256sum "$output" | awk '{print $1}')
+            if [ "$actual_sha" != "$expected_sha" ]; then
+              echo "$label checksum mismatch: expected $expected_sha, got $actual_sha" >&2
+              exit 3
+            fi
+            printf '%s  %s\n' "$actual_sha" "$(basename "$output")" > "$output.sha256"
+          }
+
+          fetch_report openbsd "${{ inputs.openbsd_report_url }}" "${{ inputs.openbsd_report_sha256 }}" "$RUNNER_TEMP/structured-smoke-evidence/openbsd-tier1-report.json"
+          fetch_report windows "${{ inputs.windows_report_url }}" "${{ inputs.windows_report_sha256 }}" "$RUNNER_TEMP/structured-smoke-evidence/windows-tier1-report.json"
+
+      - name: Validate structured smoke gate
+        run: |
+          python3 scripts/dev/run-smoke-tests.py \
+            --release-gate "${{ inputs.gate }}" \
+            --release-source "${{ inputs.release_source }}" \
+            --report "$RUNNER_TEMP/structured-smoke-evidence/openbsd-tier1-report.json" \
+            --report "$RUNNER_TEMP/structured-smoke-evidence/windows-tier1-report.json"
+
+      - name: Upload structured smoke evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-structured-smoke-evidence
+          path: ${{ runner.temp }}/structured-smoke-evidence
