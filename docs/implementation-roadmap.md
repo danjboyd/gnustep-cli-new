@@ -187,6 +187,33 @@ May 4, 2026 completion-pass update:
   and a stable-channel cutover run. Dogfood `.32` is the qualified prerelease
   baseline until those operations are run.
 
+May 4, 2026 production-rehearsal update:
+
+- Executed the next production-cutover batch through every non-destructive
+  hosted lane available in this repository. Package Index run `25337125505`
+  passed with CI-held package-index signing material and uploaded signed
+  package-index metadata. Linux Current Source Artifacts run `25337124179` and
+  Windows Current Source Artifacts run `25337124379` both passed from current
+  `master`, including build, smoke, packaging, and artifact upload.
+- Package `tools-xctest` run `25337124709` rebuilt the Linux
+  `linux-amd64-clang` package artifact from declared source and uploaded the
+  controlled package artifact. The remaining package targets still need
+  equivalent target-native controlled jobs or explicit deferrals before a
+  final stable package publication claim.
+- Stage Release run `25337451712` passed as a non-published stable-channel
+  rehearsal for version `0.1.0-stable-rehearsal.1` using the fresh Linux and
+  Windows current-source producer artifacts. This proves staging and
+  `verify-release` for the current hosted artifact set without cutting a public
+  stable release.
+- Added the non-publishing `Release Signing Smoke` workflow and executed run
+  `25337594897` against the staged rehearsal artifact. It passed CI-held
+  release metadata signing, release trust-root verification, release trust
+  gate, release key-rotation drill, and uploaded the signed smoke artifact.
+- Stable public cutover is intentionally still not executed. The repository now
+  has production signing and staging proof, but publishing a stable GitHub
+  release still requires the final stable version/tag decision and the fresh
+  hosted structured OpenBSD and Windows Tier 1 scenario reports.
+
 Remaining subphases to project completion:
 
 1. Hosted structured live-host evidence: move OpenBSD and Windows OTVM Tier 1
@@ -197,16 +224,21 @@ Remaining subphases to project completion:
 2. Production trust-root and signing path: replace dogfood/provisional signing
    material with the final CI-held or signing-service release and package-index
    trust path, including rotation, expiry, revocation, and compromised-key
-   drills.
+   drills. The package-index signing workflow and non-publishing release
+   signing smoke workflow now pass with CI-held trust material; final stable
+   publication still needs the release workflow run for the chosen stable tag.
 3. Production artifact rebuild: rebuild final Tier 1 CLI and toolchain
    artifacts from production release lanes and verify their manifests,
    provenance, checksums, and signatures. Dogfood `.32` proves this flow for
-   the current Linux and Windows hosted inputs, not the final stable claim.
+   the current Linux and Windows hosted inputs, and stable rehearsal
+   `0.1.0-stable-rehearsal.1` proves staging from fresh current-source
+   producer artifacts, not the final stable claim.
 4. Package artifact source-build closure: make every publishable package come
    from declared source provenance plus controlled build jobs, with install,
    smoke, remove, upgrade, and audit evidence per target. `tools-xctest`
    now satisfies the materialized build/validation evidence gate for current
-   publishable artifacts.
+   publishable artifacts, and the hosted Linux package rebuild workflow passes;
+   remaining target-specific hosted package rebuilds still need completion.
 5. Native `doctor` parity closure: finish Objective-C deep detection and
    compatibility output parity with the shared model, including feature flags,
    runtime/ABI classification, compile/link/run probes, and remediation.
@@ -226,7 +258,9 @@ Remaining subphases to project completion:
    workspace through hosted producers, staged release, published-URL
    qualification, live-host evidence, Release Evidence, Release, and install
    verification. This is complete for dogfood `.32`; repeat it for the final
-   stable-channel release.
+   stable-channel release. The non-published stable-channel staging/signing
+   rehearsal now passes, but published-URL qualification and full Release were
+   deliberately not run as stable publication.
 10. Stable cutover: tag the stable release, publish final artifacts and
     manifests through the production trust path, archive the evidence bundle,
     and record post-release update/rollback validation.

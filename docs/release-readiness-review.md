@@ -211,3 +211,27 @@ The main remaining release-engineering issue is productionizing evidence and tru
   `155152c0894f5d0b6d08d4f4b0d7713786e4a6c2a6dc34c40fed149f03808fed`,
   and production-like update-all evidence SHA-256
   `6b4003eee5de8265e1bae54158264571b24916e71cb8f214c4bcdf749aed9704`.
+
+## May 4 Production-Rehearsal Update
+
+- The safe production-cutover lanes were executed without publishing a stable
+  release. Package Index run `25337125505` passed with CI-held package-index
+  signing and trust-root verification.
+- Fresh current-source artifact producers passed on `master`: Linux run
+  `25337124179` and Windows run `25337124379` both built, smoked, packaged,
+  and uploaded artifacts.
+- `tools-xctest` package rebuild run `25337124709` passed for
+  `linux-amd64-clang`, proving the hosted controlled package-build lane for
+  that target.
+- Stage Release run `25337451712` passed as a non-published stable-channel
+  rehearsal for `0.1.0-stable-rehearsal.1` using the fresh Linux and Windows
+  producer artifacts.
+- New non-publishing Release Signing Smoke run `25337594897` passed against
+  that staged rehearsal, proving CI-held release metadata signing, release
+  trust-root verification, release trust gate, and release key-rotation drill
+  without creating a public stable GitHub release.
+- Remaining stable-readiness blockers are now explicit: fresh hosted structured
+  OpenBSD and Windows Tier 1 scenario reruns, target-native controlled package
+  rebuilds beyond hosted Linux, final stable version/tag selection, and the
+  actual stable Release workflow/publication plus post-publication install,
+  update, and rollback validation.

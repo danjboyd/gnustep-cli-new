@@ -185,6 +185,21 @@ candidate.
   `e09f90545d71d48fe37f115f975b5418ce364050` hardened publication by editing
   existing releases and retrying `gh release upload --clobber` one asset at a
   time; the rerun passed and published the dogfood release.
+- May 4, 2026 production-rehearsal execution:
+  the repository now has a non-published stable-channel rehearsal path. Package
+  Index run `25337125505` passed with CI-held package-index signing material;
+  Linux Current Source Artifacts run `25337124179` and Windows Current Source
+  Artifacts run `25337124379` passed; `tools-xctest` package run `25337124709`
+  rebuilt the hosted Linux package artifact; Stage Release run `25337451712`
+  staged and verified `0.1.0-stable-rehearsal.1` on the `stable` channel; and
+  Release Signing Smoke run `25337594897` signed and verified release metadata
+  with CI-held release trust material and ran the release key-rotation drill.
+  This is production-cutover proof without public stable publication.
+- Stable publication remains intentionally unexecuted pending final stable
+  version/tag selection and fresh hosted structured OpenBSD/Windows Tier 1
+  reports. The accepted April 24 structured reports and May 4 supplemental
+  refreshes remain sufficient for dogfood RC proof, but not for replacing the
+  final hosted stable evidence requirement.
 
 - Phase 26 release-candidate smoke gate:
   on April 27, 2026, `scripts/dev/run-smoke-tests.py --release-gate release-candidate`
