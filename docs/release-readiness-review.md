@@ -176,3 +176,38 @@ The main remaining release-engineering issue is productionizing evidence and tru
   or a signing service. The repository now enforces the trust-root path in the
   Release workflow, but this document should not claim stable production
   publication until that final run exists.
+- Follow-up dogfood release `v0.1.0-dev-hosted.32` is now the current hosted
+  RC baseline. It was staged from fresh Linux and Windows current-source
+  producer runs, verified locally before publication, signed for publication
+  using the production-like trust material, published at
+  `https://github.com/danjboyd/gnustep-cli-new/releases/tag/v0.1.0-dev-hosted.32`,
+  qualified through Published URL Qualification run `25334200978`, Release
+  Evidence run `25334309869`, and consolidated Release run `25334690351`.
+- The `.32` consolidated Release run passed on source revision
+  `e09f90545d71d48fe37f115f975b5418ce364050`, including the full regression
+  suite, package artifact readiness, signed package-index verification, staged
+  release verification, release key-rotation drill, controlled release gate,
+  release-claim consistency, Phase 26 RC smoke gate, Phase 12/13 hardening
+  gates, immediate RC blocker gate, release evidence upload, and GitHub
+  publication. The publication path now retries existing-release asset uploads
+  one asset at a time after GitHub returned a transient 504 during the first
+  `.32` Release attempt.
+- The generated `.32` release qualification summary is `ok:true`,
+  `stale_windows_allowed:false`, and records release manifest SHA-256
+  `dbcf51e726b2db700c378c5c6dc9e798683998c801eb6269979cdd108a9ba564` and
+  release evidence bundle SHA-256
+  `3f1126d3e32a5674286fc739b4bb875749a83e24c7de83eb5012b5d6e0974e74`.
+  Its evidence set includes Linux published-URL smoke SHA-256
+  `07b7702a7f1a12892ce94defef135c85268a6a0589946ad5fbc3c0b0371a347a`,
+  OpenBSD structured Tier 1 SHA-256
+  `f28167b11bace7ebe1aa0f086f880772e68318ac108f1f197ff2875e68d36025`,
+  Windows structured Tier 1 SHA-256
+  `1ee4b0e2cfc5bea1af2dc721318f1a07a07b678668d57a58435f2ca0a732d4f9`,
+  supplemental OpenBSD live-host refresh SHA-256
+  `9cf07d6c0c903ea49602e34c208527bb0c935ac26eaf1690bdb3b5e3d8dced18`,
+  supplemental Windows live-host refresh SHA-256
+  `306936aecfe6be8dfbc72b0913e05f924a1b9763addb1e8ebb6052e7f20fbcd3`,
+  Windows current-source marker SHA-256
+  `155152c0894f5d0b6d08d4f4b0d7713786e4a6c2a6dc34c40fed149f03808fed`,
+  and production-like update-all evidence SHA-256
+  `6b4003eee5de8265e1bae54158264571b24916e71cb8f214c4bcdf749aed9704`.

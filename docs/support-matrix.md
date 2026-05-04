@@ -21,9 +21,10 @@ targets the project is actively discussing.
   that a managed OpenBSD toolchain artifact is published or release-blocking.
   A managed OpenBSD artifact may remain useful later, but it is optional while
   the packaged path satisfies the supported workflows. A May 4, 2026 live-host
-  refresh also passed the OpenBSD packaged GNUstep compile/run smoke for the
-  `.31` dogfood candidate; the full formal Tier 1 scenario claim remains backed
-  by the accepted structured April 24 report until the hosted lane emits a fresh
+  refresh also passed the OpenBSD packaged GNUstep compile/run smoke and is
+  now persisted in the `.32` dogfood release evidence bundle as supplemental
+  evidence; the full formal Tier 1 scenario claim remains backed by the
+  accepted structured April 24 report until the hosted lane emits a fresh
   structured replacement.
 - `fedora-amd64-gcc`
   status: `interoperability_only`
@@ -123,11 +124,11 @@ targets the project is actively discussing.
   short-lived Windows lease, republished to the `dogfood` GitHub release, and
   accepted by the Phase 26 release-candidate gate with the Windows MSYS2
   `clang64` Tier 1 report. A May 4, 2026 live-host refresh then proved
-  PowerShell bootstrap and installed full-CLI smoke against the `.31` flat
-  `bin/gnustep.exe` CLI archive after fixing bootstrap archive-root handling.
-  That refresh supplements the accepted structured Tier 1 report; it does not
-  replace the formal scenario report until the hosted evidence lane emits a new
-  structured Windows report.
+  PowerShell bootstrap and installed full-CLI smoke against the fixed flat
+  `bin/gnustep.exe` CLI archive path, and that summary is now persisted in the
+  `.32` dogfood release evidence bundle. That refresh supplements the accepted
+  structured Tier 1 report; it does not replace the formal scenario report
+  until the hosted evidence lane emits a new structured Windows report.
 - `windows-amd64-msvc`
   status: `deferred`
   notes: explicitly deferred for the v0.1.x line

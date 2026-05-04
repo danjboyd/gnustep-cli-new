@@ -113,7 +113,8 @@ candidate.
 ## Host Qualification
 
 - May 4, 2026 hosted RC refresh:
-  `v0.1.0-dev-hosted.31` is the current qualified dogfood candidate. Commit
+  `v0.1.0-dev-hosted.31` was the first qualified dogfood candidate from the
+  May 4 RC refresh. Commit
   `5273786c17bcd6acc7dd518d56d9acc8c6514e8b` fixed the Windows bootstrap
   installer so flat CLI archives with `bin/gnustep.exe` are not unwrapped into
   an invalid release root. The fix passed targeted PowerShell bootstrap
@@ -151,6 +152,39 @@ candidate.
   `ok:true`, and the final OTVM lease check reported zero active leases. These
   refreshes supplement the accepted structured April 24 Phase 26 reports that
   are still used by the hosted Release gate.
+- May 4, 2026 completion-pass refresh:
+  `v0.1.0-dev-hosted.32` supersedes `.31` as the current qualified dogfood RC
+  baseline. Fresh Linux Current Source Artifacts run `25333123033`, Windows
+  Current Source Artifacts run `25333122890`, Package Index run `25333124065`,
+  and Stage Release run `25333443740` produced and staged the release inputs.
+  Published URL Qualification run `25334200978`, Release Evidence run
+  `25334309869`, CI run `25334650310`, and consolidated Release run
+  `25334690351` all passed.
+- The generated `.32` release qualification summary is `ok:true` on source
+  revision `e09f90545d71d48fe37f115f975b5418ce364050` with
+  `stale_windows_allowed:false`. It records release manifest SHA-256
+  `dbcf51e726b2db700c378c5c6dc9e798683998c801eb6269979cdd108a9ba564`,
+  release evidence bundle SHA-256
+  `3f1126d3e32a5674286fc739b4bb875749a83e24c7de83eb5012b5d6e0974e74`,
+  Linux published-URL smoke SHA-256
+  `07b7702a7f1a12892ce94defef135c85268a6a0589946ad5fbc3c0b0371a347a`,
+  OpenBSD structured evidence SHA-256
+  `f28167b11bace7ebe1aa0f086f880772e68318ac108f1f197ff2875e68d36025`,
+  Windows structured evidence SHA-256
+  `1ee4b0e2cfc5bea1af2dc721318f1a07a07b678668d57a58435f2ca0a732d4f9`,
+  OpenBSD supplemental live-host refresh SHA-256
+  `9cf07d6c0c903ea49602e34c208527bb0c935ac26eaf1690bdb3b5e3d8dced18`,
+  Windows supplemental live-host refresh SHA-256
+  `306936aecfe6be8dfbc72b0913e05f924a1b9763addb1e8ebb6052e7f20fbcd3`,
+  Windows current-source marker SHA-256
+  `155152c0894f5d0b6d08d4f4b0d7713786e4a6c2a6dc34c40fed149f03808fed`,
+  and production-like update-all evidence SHA-256
+  `6b4003eee5de8265e1bae54158264571b24916e71cb8f214c4bcdf749aed9704`.
+- The first consolidated Release attempt for `.32` exposed a GitHub asset
+  upload 504 after the release already existed. Commit
+  `e09f90545d71d48fe37f115f975b5418ce364050` hardened publication by editing
+  existing releases and retrying `gh release upload --clobber` one asset at a
+  time; the rerun passed and published the dogfood release.
 
 - Phase 26 release-candidate smoke gate:
   on April 27, 2026, `scripts/dev/run-smoke-tests.py --release-gate release-candidate`

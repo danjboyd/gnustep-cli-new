@@ -36,24 +36,27 @@ existence.
 
 Current priority order:
 
-1. Promote `v0.1.0-dev-hosted.31` as the current dogfood candidate baseline.
-   It was staged from the fixed manifest generator, uses current-source Linux
-   and Windows artifact producers, passed published-URL Linux qualification,
-   and passed the consolidated Release workflow without the stale-Windows
-   exception on May 4, 2026.
+1. Promote `v0.1.0-dev-hosted.32` as the current dogfood candidate baseline.
+   It was staged from current-source Linux and Windows artifact producers,
+   passed published-URL Linux qualification, persisted hosted supplemental
+   OpenBSD and Windows live-host refresh evidence, passed CI, and passed the
+   consolidated Release workflow without the stale-Windows exception on
+   May 4, 2026.
 2. Convert the remaining May 4 simple OpenBSD and Windows OTVM refreshes into
    repeatable hosted structured Tier 1 scenario evidence. The formal Release
    gate is green with the accepted structured April 24 Phase 26 reports, but
    the newest live reruns are simpler smoke summaries.
 3. Complete Phase 12/13 production hardening: CI-held production signing keys
    or signing service, automated host-backed release qualification, controlled
-   signed package artifact build jobs, and real release-lane `gnustep update all
-   --yes` evidence for the candidate under test.
+   signed package artifact build jobs, and final stable-channel `gnustep update
+   all --yes` evidence. The dogfood `.32` release gate now includes
+   production-like update-all evidence.
 4. Finish native Objective-C `doctor` deep-detection parity with the shared
    Python model before claiming the full CLI is the authoritative diagnostic
    implementation.
-5. Rebuild final Tier 1 full-CLI artifacts from production build lanes rather
-   than relying on local, staged, or prerelease evidence.
+5. Rebuild final Tier 1 full-CLI artifacts from production build lanes for the
+   stable claim. Dogfood `.32` proves the current hosted Linux/Windows flow but
+   remains a prerelease baseline.
 6. Keep package, setup, update, and release trust gates green while converting
    remaining operator-run validation into repeatable automation.
 
@@ -156,33 +159,54 @@ May 4, 2026 completion-pass update:
 - Step 1 advanced: hosted Release Evidence can now persist optional fresh
   OpenBSD and Windows OTVM live-host smoke summaries and the release evidence
   bundle records them as supplemental live-host refresh evidence.
+- Step 3 advanced: fresh `.32` Linux and Windows current-source producer runs,
+  Package Index, Stage Release, local staged verification, signing, published
+  dogfood release publication, and Published URL Qualification all passed.
 - Step 4 advanced: package artifact publication now requires materialized build
   evidence and validation evidence for publishable artifacts. The current
   `tools-xctest` package manifest points at committed build evidence records,
   and the package publication gate passes.
+- Step 6 advanced: the hosted Release gate includes the production-like
+  `gnustep update all --yes` evidence and Phase 12/13 lifecycle hardening
+  checks, and `.32` passed them.
 - Step 7 advanced: Release now builds its evidence bundle from the hosted
-  evidence directory and uploads all hosted evidence JSON, reducing the manual
-  gap between evidence upload and release qualification.
-- Steps 2, 3, 9, and 10 remain production-operation steps: they require a final
-  stable version decision, final production signing/trust material, production
-  artifact producers, and a stable-channel rehearsal/cutover run. Dogfood `.31`
-  remains the qualified prerelease baseline until those operations are run.
+  evidence directory, uploads all hosted evidence JSON, and retries
+  existing-release GitHub asset uploads one asset at a time. The `.32`
+  consolidated Release rerun passed after this publication hardening.
+- Step 8 advanced: release readiness, release qualification, support matrix,
+  and roadmap docs now separate dogfood RC evidence from production stable
+  claims and identify supplemental live-host refreshes separately from full
+  structured Phase 26 reports.
+- Step 9 advanced for dogfood RC: consolidated Release run `25334690351`
+  passed for `v0.1.0-dev-hosted.32` with `stale_windows_allowed:false`,
+  `ok:true` qualification, and the persisted evidence bundle. A final
+  stable-channel rehearsal still remains because `.32` is intentionally a
+  dogfood prerelease.
+- Steps 2 and 10 remain production-operation steps: they require a final stable
+  version decision, final production signing/trust material or signing service,
+  and a stable-channel cutover run. Dogfood `.32` is the qualified prerelease
+  baseline until those operations are run.
 
 Remaining subphases to project completion:
 
 1. Hosted structured live-host evidence: move OpenBSD and Windows OTVM Tier 1
    scenario reruns fully into hosted, downloadable evidence artifacts instead
-   of relying on operator-run local `.artifacts` refreshes.
+   of relying on operator-run local `.artifacts` refreshes. Supplemental hosted
+   live-host refreshes are now persisted, but they do not replace the full
+   structured Tier 1 scenario reruns.
 2. Production trust-root and signing path: replace dogfood/provisional signing
    material with the final CI-held or signing-service release and package-index
    trust path, including rotation, expiry, revocation, and compromised-key
    drills.
 3. Production artifact rebuild: rebuild final Tier 1 CLI and toolchain
    artifacts from production release lanes and verify their manifests,
-   provenance, checksums, and signatures.
+   provenance, checksums, and signatures. Dogfood `.32` proves this flow for
+   the current Linux and Windows hosted inputs, not the final stable claim.
 4. Package artifact source-build closure: make every publishable package come
    from declared source provenance plus controlled build jobs, with install,
-   smoke, remove, upgrade, and audit evidence per target.
+   smoke, remove, upgrade, and audit evidence per target. `tools-xctest`
+   now satisfies the materialized build/validation evidence gate for current
+   publishable artifacts.
 5. Native `doctor` parity closure: finish Objective-C deep detection and
    compatibility output parity with the shared model, including feature flags,
    runtime/ABI classification, compile/link/run probes, and remediation.
@@ -191,7 +215,9 @@ Remaining subphases to project completion:
    against production manifests and production-signed metadata.
 7. Release workflow consolidation: remove remaining manual publication and
    evidence-upload steps so one controlled release lane produces, verifies,
-   signs, qualifies, publishes, and persists evidence.
+   signs, qualifies, publishes, and persists evidence. The `.32` lane now
+   persists hosted evidence and retries GitHub asset publication, but the
+   stable cutover still needs a fully controlled production run.
 8. Support-claims audit: align README, support matrix, roadmap, and release
    notes with the final evidence-backed target set, especially OpenBSD native
    packaged support, Debian/Ubuntu managed support, Fedora/Arch GCC
@@ -199,7 +225,8 @@ Remaining subphases to project completion:
 9. Final RC rehearsal: run a clean candidate rehearsal from an empty release
    workspace through hosted producers, staged release, published-URL
    qualification, live-host evidence, Release Evidence, Release, and install
-   verification.
+   verification. This is complete for dogfood `.32`; repeat it for the final
+   stable-channel release.
 10. Stable cutover: tag the stable release, publish final artifacts and
     manifests through the production trust path, archive the evidence bundle,
     and record post-release update/rollback validation.
