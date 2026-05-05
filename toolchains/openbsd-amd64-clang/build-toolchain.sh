@@ -119,6 +119,7 @@ set -u
 unset GNUSTEP_SYSTEM_ROOT GNUSTEP_LOCAL_ROOT GNUSTEP_NETWORK_ROOT
 
 # Expose the managed Objective-C runtime headers through the GNUstep header domain.
+mkdir -p "$PREFIX/Local/Library/Headers"
 ln -sfn "$PREFIX/include/objc" "$PREFIX/Local/Library/Headers/objc"
 cp -f "$PREFIX/include/Block.h" "$PREFIX/Local/Library/Headers/Block.h"
 cp -f "$PREFIX/include/Block_private.h" "$PREFIX/Local/Library/Headers/Block_private.h"
@@ -132,4 +133,3 @@ for lib in libs-base libs-corebase libs-gui libs-back; do
 done
 
 printf "%s\n" "$HOST_OS managed toolchain build completed at $PREFIX"
-

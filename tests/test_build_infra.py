@@ -330,6 +330,7 @@ class BuildInfraTests(unittest.TestCase):
         )
         self.assertIn('HOST_OS="openbsd"', script)
         self.assertIn('AUTOCONF_VERSION=${AUTOCONF_VERSION:-2.72}', script)
+        self.assertIn('mkdir -p "$PREFIX/Local/Library/Headers"', script)
         self.assertIn('"${MAKE:-make}" install', script)
 
     def test_msys2_assembly_script_contains_pacman_install_steps(self):

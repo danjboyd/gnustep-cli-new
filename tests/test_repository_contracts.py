@@ -244,10 +244,14 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertTrue(script.exists())
         content = script.read_text()
         self.assertIn("toolchains/openbsd-amd64-clang/build-toolchain.sh", content)
+        self.assertIn("python%3.12", content)
+        self.assertIn("bash", content)
         self.assertIn("arlen-openbsd-amd64-clang-headless", content)
         self.assertIn("gorm-openbsd-amd64-clang", content)
         self.assertIn("package-managed-source-artifact", content)
         self.assertIn("gorm-openbsd-launch.log", content)
+        build_script = ROOT / "toolchains" / "openbsd-amd64-clang" / "build-toolchain.sh"
+        self.assertIn('mkdir -p "$PREFIX/Local/Library/Headers"', build_script.read_text())
 
     def test_linux_managed_artifacts_workflow_builds_toolchain_and_cli(self):
         workflow = ROOT / ".github" / "workflows" / "linux-managed-artifacts.yml"
