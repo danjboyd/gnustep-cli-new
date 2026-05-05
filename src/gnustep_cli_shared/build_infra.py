@@ -4879,6 +4879,20 @@ def package_managed_source_artifact(
             if patched != text:
                 arlen_route_policy.write_text(patched, encoding="utf-8")
                 commands.append(["patch-source", "windows-arlen-route-policy-winsock"])
+        arlen_services = checkout / "src" / "Arlen" / "Support" / "ALNServices.m"
+        if arlen_services.exists():
+            text = arlen_services.read_text(encoding="utf-8")
+            patched = text.replace(
+                "setsockopt(socketFD, SOL_SOCKET, SO_RCVTIMEO, &timeoutValue, sizeof(timeoutValue))",
+                "setsockopt(socketFD, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeoutValue, sizeof(timeoutValue))",
+            )
+            patched = patched.replace(
+                "setsockopt(socketFD, SOL_SOCKET, SO_SNDTIMEO, &timeoutValue, sizeof(timeoutValue))",
+                "setsockopt(socketFD, SOL_SOCKET, SO_SNDTIMEO, (const char *)&timeoutValue, sizeof(timeoutValue))",
+            )
+            if patched != text:
+                arlen_services.write_text(patched, encoding="utf-8")
+                commands.append(["patch-source", "windows-arlen-setsockopt-timeout-cast"])
     if is_openbsd and package_id == "io.github.danjboyd.arlen":
         arlen_makefile = checkout / "GNUmakefile"
         if arlen_makefile.exists():
@@ -4887,6 +4901,16 @@ def package_managed_source_artifact(
             if patched != text:
                 arlen_makefile.write_text(patched, encoding="utf-8")
                 commands.append(["patch-source", "openbsd-arlen-drop-libdl"])
+        arlen_route_policy = checkout / "src" / "Arlen" / "MVC" / "Middleware" / "ALNRoutePolicyMiddleware.m"
+        if arlen_route_policy.exists():
+            text = arlen_route_policy.read_text(encoding="utf-8")
+            patched = text.replace(
+                "#include <arpa/inet.h>",
+                "#include <netinet/in.h>\n#include <arpa/inet.h>",
+            )
+            if patched != text:
+                arlen_route_policy.write_text(patched, encoding="utf-8")
+                commands.append(["patch-source", "openbsd-arlen-netinet-in"])
     if is_windows and package_id == "org.gnustep.gorm":
         formatter_dir = checkout / "Applications" / "Gorm" / "Palettes" / "6Formatters"
         formatter_import = (

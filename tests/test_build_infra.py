@@ -2259,11 +2259,20 @@ class BuildInfraTests(unittest.TestCase):
                 "#include <arpa/inet.h>\n",
                 encoding="utf-8",
             )
+            (source / "src" / "Arlen" / "Support").mkdir(parents=True)
+            (source / "src" / "Arlen" / "Support" / "ALNServices.m").write_text(
+                "void f(void) {\n"
+                "  setsockopt(socketFD, SOL_SOCKET, SO_RCVTIMEO, &timeoutValue, sizeof(timeoutValue));\n"
+                "  setsockopt(socketFD, SOL_SOCKET, SO_SNDTIMEO, &timeoutValue, sizeof(timeoutValue));\n"
+                "}\n",
+                encoding="utf-8",
+            )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "tools/arlen.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/Core/ALNApplication.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/HTTP/ALNHTTPServer.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/MVC/Middleware/ALNRoutePolicyMiddleware.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "src/Arlen/Support/ALNServices.m"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
             payload = package_managed_source_artifact(
@@ -2285,7 +2294,10 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("CC=clang OBJC=clang", build_command)
             self.assertNotIn("/usr/bin/clang", build_command)
             self.assertIn(["patch-source", "openbsd-arlen-drop-libdl"], payload["commands"])
+            self.assertIn(["patch-source", "openbsd-arlen-netinet-in"], payload["commands"])
             self.assertIn("ARLEN_PLATFORM_LINK_LIBS :=", (source / "GNUmakefile").read_text())
+            route_policy = (source / "src" / "Arlen" / "MVC" / "Middleware" / "ALNRoutePolicyMiddleware.m").read_text()
+            self.assertIn("#include <netinet/in.h>\n#include <arpa/inet.h>", route_policy)
             self.assertTrue((root / "out" / "managed-tool-shims" / "sha256sum").exists())
 
     def test_package_managed_source_artifact_uses_windows_msys2_layout(self):
@@ -2355,11 +2367,20 @@ class BuildInfraTests(unittest.TestCase):
                 "#include <arpa/inet.h>\n",
                 encoding="utf-8",
             )
+            (source / "src" / "Arlen" / "Support").mkdir(parents=True)
+            (source / "src" / "Arlen" / "Support" / "ALNServices.m").write_text(
+                "void f(void) {\n"
+                "  setsockopt(socketFD, SOL_SOCKET, SO_RCVTIMEO, &timeoutValue, sizeof(timeoutValue));\n"
+                "  setsockopt(socketFD, SOL_SOCKET, SO_SNDTIMEO, &timeoutValue, sizeof(timeoutValue));\n"
+                "}\n",
+                encoding="utf-8",
+            )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "tools/arlen.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/Core/ALNApplication.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/HTTP/ALNHTTPServer.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/MVC/Middleware/ALNRoutePolicyMiddleware.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "src/Arlen/Support/ALNServices.m"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
             payload = package_managed_source_artifact(
@@ -2382,6 +2403,7 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn(["patch-source", "windows-arlen-resource-limit"], payload["commands"])
             self.assertIn(["patch-source", "windows-arlen-console-handler-type"], payload["commands"])
             self.assertIn(["patch-source", "windows-arlen-route-policy-winsock"], payload["commands"])
+            self.assertIn(["patch-source", "windows-arlen-setsockopt-timeout-cast"], payload["commands"])
             self.assertIn("_sleep((unsigned long)(interval * 1000.0));", (source / "tools" / "arlen.m").read_text())
             arlen_application = (source / "src" / "Arlen" / "Core" / "ALNApplication.m").read_text()
             self.assertIn("#if !defined(_WIN32)\n#include <sys/resource.h>\n#endif", arlen_application)
@@ -2391,6 +2413,8 @@ class BuildInfraTests(unittest.TestCase):
             route_policy = (source / "src" / "Arlen" / "MVC" / "Middleware" / "ALNRoutePolicyMiddleware.m").read_text()
             self.assertIn("#include <winsock2.h>", route_policy)
             self.assertIn("#include <ws2tcpip.h>", route_policy)
+            arlen_services = (source / "src" / "Arlen" / "Support" / "ALNServices.m").read_text()
+            self.assertIn("(const char *)&timeoutValue", arlen_services)
 
     def test_package_managed_source_artifact_patches_windows_gorm_foundation_imports(self):
         with tempfile.TemporaryDirectory() as tempdir:
