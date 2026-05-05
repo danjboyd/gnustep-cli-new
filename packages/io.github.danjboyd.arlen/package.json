@@ -1,0 +1,244 @@
+{
+  "schema_version": 1,
+  "id": "io.github.danjboyd.arlen",
+  "name": "Arlen",
+  "version": "0.1.0-snapshot.20260505",
+  "kind": "framework",
+  "summary": "GNUstep web application framework and command-line tooling.",
+  "license": "LGPL-2.0-or-later",
+  "maintainers": [
+    {
+      "name": "Daniel Boyd"
+    }
+  ],
+  "source": {
+    "type": "git-archive",
+    "url": "https://github.com/danjboyd/Arlen/archive/7561910f3cdb249d8d8805aed88c7a250d227028.tar.gz",
+    "sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
+    "revision": "7561910f3cdb249d8d8805aed88c7a250d227028",
+    "upstream": "danjboyd/Arlen",
+    "upstream_url": "https://github.com/danjboyd/Arlen",
+    "tracking_strategy": "reviewed-commit-snapshot-with-externalized-submodules",
+    "update_cadence": "manual-until-first-stable-package-release",
+    "channel_policy": "dogfood snapshots may track reviewed commits; stable should track a tagged Arlen release or approved package exception.",
+    "submodule_policy": "do-not-inline",
+    "externalized_submodules": [
+      {
+        "path": "vendor/tools-xctest",
+        "url": "https://github.com/gnustep/tools-xctest.git",
+        "revision": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
+        "package": "org.gnustep.tools-xctest",
+        "relationship": "build-test-dependency",
+        "notes": "Arlen's tools-xctest patch is delivered by the org.gnustep.tools-xctest package."
+      },
+      {
+        "path": "vendor/gnustep-cli-new",
+        "url": "https://github.com/danjboyd/gnustep-cli-new.git",
+        "revision": "5b83862fc81968d3614ebc2d92301a56354d7c15",
+        "relationship": "build-tooling",
+        "notes": "The GNUstep CLI is supplied by the official package build environment, not vendored into Arlen."
+      }
+    ]
+  },
+  "requirements": {
+    "supported_os": [
+      "linux",
+      "openbsd",
+      "windows"
+    ],
+    "supported_arch": [
+      "amd64",
+      "arm64"
+    ],
+    "supported_compiler_families": [
+      "clang"
+    ],
+    "supported_objc_runtimes": [
+      "libobjc2"
+    ],
+    "supported_objc_abi": [
+      "modern"
+    ],
+    "required_features": [
+      "blocks"
+    ],
+    "forbidden_features": [],
+    "gnustep_make": true,
+    "runtime_components": [
+      "org.gnustep.runtime.base"
+    ],
+    "headless_supported": true,
+    "optional_runtime_components": [
+      {
+        "id": "arlen-gui-adapters",
+        "components": [
+          "org.gnustep.runtime.gui",
+          "org.gnustep.runtime.back"
+        ],
+        "install_by_default": false
+      }
+    ],
+    "test_dependencies": [
+      {
+        "id": "org.gnustep.tools-xctest",
+        "minimum_version": "0.1.0",
+        "required_patch": "add-apple-style-xctest-cli-filters"
+      }
+    ]
+  },
+  "dependencies": [],
+  "artifacts": [
+    {
+      "id": "arlen-linux-amd64-clang-headless",
+      "os": "linux",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "supported_distributions": [
+        "debian"
+      ],
+      "portability_policy": "distribution-scoped",
+      "runtime_profile": "headless-base",
+      "runtime_components": [
+        "org.gnustep.runtime.base"
+      ],
+      "format": "tar.gz",
+      "publish": true,
+      "status": "published_linux_amd64_clang_headless",
+      "filename": "arlen-arlen-linux-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/arlen-arlen-linux-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
+      "artifact_path": ".artifacts/package-output/source-built-linux-20260505/arlen-arlen-linux-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
+      "sha256": "3f4bf13ca589bd4c79486a45425880a0406ff776efb312ed3b86f74dee632487",
+      "size": 5208775,
+      "notes": "Headless Arlen package must not require GNUstep GUI or Back. OracleTestVMs source-built Linux Clang/libobjc2 lane builds this artifact successfully, local install/remove validation passes, and the artifact is hosted on the v0.1.0 release with a verified digest.",
+      "build_blockers": [],
+      "build_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-build-probe.json",
+      "managed_build_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-managed-build-probe.json",
+      "otvm_managed_preflight_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-otvm-managed-preflight.json",
+      "source_built_toolchain_evidence": "docs/validation/package-build-boundary-20260505/linux-amd64-clang-source-built-toolchain-otvm-package.json",
+      "source_built_build_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-source-built-otvm-build.json",
+      "validation_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-local-install-remove.json"
+    },
+    {
+      "id": "arlen-linux-ubuntu2404-amd64-clang-headless",
+      "os": "linux",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "supported_distributions": [
+        "ubuntu"
+      ],
+      "supported_os_versions": [
+        "ubuntu-24.04"
+      ],
+      "portability_policy": "distribution-scoped",
+      "runtime_profile": "headless-base",
+      "runtime_components": [
+        "org.gnustep.runtime.base"
+      ],
+      "format": "tar.gz",
+      "publish": false,
+      "status": "planned_manifest_only_no_controlled_binary_yet"
+    },
+    {
+      "id": "arlen-linux-arm64-clang-headless",
+      "os": "linux",
+      "arch": "arm64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "supported_distributions": [
+        "debian",
+        "ubuntu"
+      ],
+      "portability_policy": "debian-family-interim-host-validated",
+      "runtime_profile": "headless-base",
+      "runtime_components": [
+        "org.gnustep.runtime.base"
+      ],
+      "format": "tar.gz",
+      "publish": false,
+      "status": "planned_manifest_only_no_controlled_binary_yet"
+    },
+    {
+      "id": "arlen-openbsd-amd64-clang-headless",
+      "os": "openbsd",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "runtime_profile": "headless-base",
+      "runtime_components": [
+        "org.gnustep.runtime.base"
+      ],
+      "format": "tar.gz",
+      "publish": false,
+      "status": "planned_manifest_only_no_controlled_binary_yet"
+    },
+    {
+      "id": "arlen-windows-amd64-msys2-clang64-headless",
+      "os": "windows",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "msys2-clang64",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "runtime_profile": "headless-base",
+      "runtime_components": [
+        "org.gnustep.runtime.base"
+      ],
+      "format": "zip",
+      "publish": false,
+      "status": "planned_manifest_only_no_controlled_binary_yet"
+    }
+  ],
+  "install": {
+    "strategy": "archive",
+    "prefix_layout": "gnustep",
+    "executables": [
+      "arlen",
+      "arlen-doctor"
+    ],
+    "frameworks": [
+      "Arlen"
+    ]
+  },
+  "patches": [],
+  "build": {
+    "backend": "gnustep-cli",
+    "build_system": "gnustep-make",
+    "configure": [],
+    "build": [
+      "gnustep",
+      "build",
+      "--build-system",
+      "gnustep-make"
+    ],
+    "install": [
+      "make",
+      "install"
+    ],
+    "builder_policy": "official artifacts must be produced by project-controlled builders using this CLI workflow; Arlen submodules are externalized as declared package/build dependencies"
+  }
+}

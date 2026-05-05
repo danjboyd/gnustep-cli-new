@@ -30,6 +30,8 @@ class PackageRepositoryTests(unittest.TestCase):
         payload = generate_package_index(ROOT / "packages")
         package_ids = {record["id"] for record in payload["packages"]}
         self.assertIn("org.gnustep.tools-xctest", package_ids)
+        self.assertIn("org.gnustep.gorm", package_ids)
+        self.assertIn("io.github.danjboyd.arlen", package_ids)
 
 
     def test_package_index_has_trust_metadata(self):
@@ -45,6 +47,57 @@ class PackageRepositoryTests(unittest.TestCase):
         self.assertEqual(artifact["source"]["tracking_strategy"], "commit-with-submitted-downstream-patch")
         self.assertEqual(artifact["patches"][0]["id"], "add-apple-style-xctest-cli-filters")
         self.assertEqual(artifact["patches"][0]["upstream_status"], "submitted")
+
+    def test_package_index_records_runtime_component_profiles(self):
+        payload = generate_package_index(ROOT / "packages")
+        packages = {package["id"]: package for package in payload["packages"]}
+        valid_components = {
+            "org.gnustep.runtime.base",
+            "org.gnustep.runtime.gui",
+            "org.gnustep.runtime.back",
+        }
+        arlen = packages["io.github.danjboyd.arlen"]
+        gorm = packages["org.gnustep.gorm"]
+
+        self.assertEqual(arlen["requirements"]["runtime_components"], ["org.gnustep.runtime.base"])
+        self.assertTrue(arlen["requirements"]["headless_supported"])
+        self.assertEqual(
+            set(gorm["requirements"]["runtime_components"]),
+            {"org.gnustep.runtime.base", "org.gnustep.runtime.gui", "org.gnustep.runtime.back"},
+        )
+        self.assertFalse(gorm["requirements"]["headless_supported"])
+        for package in packages.values():
+            components = package["requirements"].get("runtime_components", [])
+            self.assertLessEqual(set(components), valid_components)
+            for artifact in package["artifacts"]:
+                self.assertLessEqual(set(artifact.get("runtime_components", [])), valid_components)
+
+    def test_arlen_and_gorm_artifacts_record_build_and_boundary_evidence(self):
+        payload = generate_package_index(ROOT / "packages")
+        packages = {package["id"]: package for package in payload["packages"]}
+        arlen_artifact = next(artifact for artifact in packages["io.github.danjboyd.arlen"]["artifacts"] if artifact["id"] == "arlen-linux-amd64-clang-headless")
+        gorm_artifact = next(artifact for artifact in packages["org.gnustep.gorm"]["artifacts"] if artifact["id"] == "gorm-linux-amd64-clang")
+
+        self.assertTrue(arlen_artifact["publish"])
+        self.assertEqual(arlen_artifact["status"], "published_linux_amd64_clang_headless")
+        self.assertIn("https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/", arlen_artifact["url"])
+        self.assertEqual(arlen_artifact["build_blockers"], [])
+        self.assertEqual(len(arlen_artifact["sha256"]), 64)
+        self.assertTrue((ROOT / arlen_artifact["artifact_path"]).exists())
+        self.assertTrue((ROOT / arlen_artifact["build_evidence"]).exists())
+        self.assertTrue((ROOT / arlen_artifact["managed_build_evidence"]).exists())
+        self.assertTrue((ROOT / arlen_artifact["source_built_build_evidence"]).exists())
+        self.assertTrue((ROOT / arlen_artifact["validation_evidence"]).exists())
+        self.assertTrue(gorm_artifact["publish"])
+        self.assertEqual(gorm_artifact["status"], "published_linux_amd64_clang")
+        self.assertIn("https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/", gorm_artifact["url"])
+        self.assertEqual(gorm_artifact["build_blockers"], [])
+        self.assertEqual(len(gorm_artifact["sha256"]), 64)
+        self.assertTrue((ROOT / gorm_artifact["artifact_path"]).exists())
+        self.assertTrue((ROOT / gorm_artifact["build_evidence"]).exists())
+        self.assertTrue((ROOT / gorm_artifact["managed_build_evidence"]).exists())
+        self.assertTrue((ROOT / gorm_artifact["source_built_build_evidence"]).exists())
+        self.assertTrue((ROOT / gorm_artifact["validation_evidence"]).exists())
 
     def test_package_index_unsigned_trust_gate_requires_provenance(self):
         with tempfile.TemporaryDirectory() as tempdir:

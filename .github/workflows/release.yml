@@ -49,11 +49,11 @@ on:
       phase26_openbsd_report:
         description: Path to the OpenBSD Tier 1 smoke report JSON
         required: true
-        default: .artifacts/phase26-openbsd-tier1-20260424/openbsd-tier1-report.json
+        default: .artifacts/hosted-release-evidence/openbsd-full-tier1-core-report.json
       phase26_windows_report:
         description: Path to the Windows Tier 1 smoke report JSON
         required: true
-        default: .artifacts/phase26-windows-gorm-patched-20260424/windows-tier1-report-patched-gorm.json
+        default: .artifacts/hosted-release-evidence/windows-full-tier1-core-report.json
       linux_smoke_report:
         description: Path to Linux hosted smoke report JSON
         required: true

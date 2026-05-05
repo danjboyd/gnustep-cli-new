@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "command": "release-evidence-bundle",
+  "ok": true,
+  "status": "ok",
+  "summary": "Release evidence bundle is complete.",
+  "release_dir": "/home/danboyd/gnustep-cli-new/.artifacts/final-staged-0.1.0-25342971361",
+  "evidence_dir": "/home/danboyd/gnustep-cli-new/docs/validation/release-0.1.0-evidence",
+  "generated_at": "2026-05-05T18:46:37.538058Z",
+  "evidence": [
+    {
+      "id": "phase26-smoke-report-1",
+      "ok": true,
+      "required": true,
+      "summary": "Linux published-URL bootstrap, doctor, new/build/run smoke passed.",
+      "path": "/home/danboyd/gnustep-cli-new/docs/validation/release-0.1.0-evidence/linux-smoke-report.json",
+      "sha256": "07b7702a7f1a12892ce94defef135c85268a6a0589946ad5fbc3c0b0371a347a",
+      "payload_command": null
+    },
+    {
+      "id": "phase26-smoke-report-2",
+      "ok": true,
+      "required": true,
+      "summary": "openbsd-full-tier1-core-report.json evidence loaded",
+      "path": "/home/danboyd/gnustep-cli-new/docs/validation/release-0.1.0-evidence/openbsd-full-tier1-core-report.json",
+      "sha256": "67204aa244d4870d651cbc773fbea8570d73b1ffe48e157b61b847fd67ace139",
+      "payload_command": null
+    },
+    {
+      "id": "phase26-smoke-report-3",
+      "ok": true,
+      "required": true,
+      "summary": "windows-full-tier1-core-report.json evidence loaded",
+      "path": "/home/danboyd/gnustep-cli-new/docs/validation/release-0.1.0-evidence/windows-full-tier1-core-report.json",
+      "sha256": "312ab3a4c075955fcd889f24b775d5a16ff974cc0a3844b9a317005d3161e8d2",
+      "payload_command": null
+    },
+    {
+      "id": "windows-current-source-artifact",
+      "ok": true,
+      "required": true,
+      "summary": "Windows CLI artifact was built from the current workflow source revision.",
+      "path": "/home/danboyd/gnustep-cli-new/docs/validation/release-0.1.0-evidence/windows-current-source-artifact.json",
+      "sha256": "10bccd3087c082bdfcbd0df419ce59bc27e182887c81f7819a2a29acf05d7104",
+      "payload_command": "windows-current-source-marker"
+    },
+    {
+      "id": "update-all-production-like",
+      "ok": true,
+      "required": true,
+      "summary": "gnustep update all --yes passed on a production-like managed install.",
+      "path": "/home/danboyd/gnustep-cli-new/docs/validation/release-0.1.0-evidence/update-all-production-like.json",
+      "sha256": "6b4003eee5de8265e1bae54158264571b24916e71cb8f214c4bcdf749aed9704",
+      "payload_command": "gnustep update all --yes"
+    }
+  ],
+  "trust_roots": [
+    {
+      "id": "release-trust-root",
+      "ok": true,
+      "required": true,
+      "summary": "trust root is present",
+      "path": "/home/danboyd/gnustep-cli-new/.artifacts/production-like-trust/release-trust-root.pem",
+      "sha256": "3cf6239b08c80195adc322f1df4807d468210ab81e57ba5328b8e82d5cbebd51"
+    },
+    {
+      "id": "package-index-trust-root",
+      "ok": true,
+      "required": true,
+      "summary": "trust root is present",
+      "path": "/home/danboyd/gnustep-cli-new/.artifacts/production-like-trust/package-index-trust-root.pem",
+      "sha256": "597c2cfc8ca6ec909fa6d3fea06765ce61a7a2e904be2ef2f6cd14b3fbf5e6b2"
+    }
+  ]
+}

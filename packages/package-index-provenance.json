@@ -1,0 +1,272 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-05-05T18:59:59.045818Z",
+  "builder_identity": "local",
+  "package_index": {
+    "filename": "package-index.json",
+    "sha256": "5abc9bc699b03dacbc76d562189031ad8f079a2d0c22be84229047e566972f98",
+    "channel": "stable",
+    "metadata_version": 1,
+    "expires_at": "TBD"
+  },
+  "packages": [
+    {
+      "id": "io.github.danjboyd.arlen",
+      "version": "0.1.0-snapshot.20260505",
+      "kind": "framework",
+      "source": {
+        "type": "git-archive",
+        "url": "https://github.com/danjboyd/Arlen/archive/7561910f3cdb249d8d8805aed88c7a250d227028.tar.gz",
+        "sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
+        "revision": "7561910f3cdb249d8d8805aed88c7a250d227028",
+        "upstream": "danjboyd/Arlen",
+        "upstream_url": "https://github.com/danjboyd/Arlen",
+        "tracking_strategy": "reviewed-commit-snapshot-with-externalized-submodules",
+        "update_cadence": "manual-until-first-stable-package-release",
+        "channel_policy": "dogfood snapshots may track reviewed commits; stable should track a tagged Arlen release or approved package exception.",
+        "submodule_policy": "do-not-inline",
+        "externalized_submodules": [
+          {
+            "path": "vendor/tools-xctest",
+            "url": "https://github.com/gnustep/tools-xctest.git",
+            "revision": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
+            "package": "org.gnustep.tools-xctest",
+            "relationship": "build-test-dependency",
+            "notes": "Arlen's tools-xctest patch is delivered by the org.gnustep.tools-xctest package."
+          },
+          {
+            "path": "vendor/gnustep-cli-new",
+            "url": "https://github.com/danjboyd/gnustep-cli-new.git",
+            "revision": "5b83862fc81968d3614ebc2d92301a56354d7c15",
+            "relationship": "build-tooling",
+            "notes": "The GNUstep CLI is supplied by the official package build environment, not vendored into Arlen."
+          }
+        ]
+      },
+      "patches": [],
+      "artifact_count": 5,
+      "build": {
+        "backend": "gnustep-cli",
+        "build_system": "gnustep-make",
+        "configure": [],
+        "build": [
+          "gnustep",
+          "build",
+          "--build-system",
+          "gnustep-make"
+        ],
+        "install": [
+          "make",
+          "install"
+        ],
+        "builder_policy": "official artifacts must be produced by project-controlled builders using this CLI workflow; Arlen submodules are externalized as declared package/build dependencies"
+      },
+      "artifact_digests": [
+        {
+          "id": "arlen-linux-amd64-clang-headless",
+          "sha256": "3f4bf13ca589bd4c79486a45425880a0406ff776efb312ed3b86f74dee632487",
+          "source_sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
+          "patches": []
+        },
+        {
+          "id": "arlen-linux-ubuntu2404-amd64-clang-headless",
+          "sha256": null,
+          "source_sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
+          "patches": []
+        },
+        {
+          "id": "arlen-linux-arm64-clang-headless",
+          "sha256": null,
+          "source_sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
+          "patches": []
+        },
+        {
+          "id": "arlen-openbsd-amd64-clang-headless",
+          "sha256": null,
+          "source_sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
+          "patches": []
+        },
+        {
+          "id": "arlen-windows-amd64-msys2-clang64-headless",
+          "sha256": null,
+          "source_sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
+          "patches": []
+        }
+      ]
+    },
+    {
+      "id": "org.gnustep.gorm",
+      "version": "1.5.0-snapshot.20260505",
+      "kind": "gui-application",
+      "source": {
+        "type": "git-archive",
+        "url": "https://github.com/gnustep/apps-gorm/archive/f792db193db59fa9504acee2ec4cc3799c363918.tar.gz",
+        "sha256": "76832519ce69080420f6f67ad318688dfe1fe8b5ec1ae8373692bd25ecfa8b6a",
+        "revision": "f792db193db59fa9504acee2ec4cc3799c363918",
+        "upstream": "gnustep/apps-gorm",
+        "upstream_url": "https://github.com/gnustep/apps-gorm",
+        "tracking_strategy": "reviewed-commit-snapshot",
+        "update_cadence": "manual-until-first-stable-package-release",
+        "channel_policy": "dogfood snapshots may track reviewed commits; stable should track an upstream tag or approved package exception."
+      },
+      "patches": [],
+      "artifact_count": 4,
+      "build": {
+        "backend": "gnustep-cli",
+        "build_system": "gnustep-make",
+        "configure": [],
+        "build": [
+          "gnustep",
+          "build",
+          "--build-system",
+          "gnustep-make"
+        ],
+        "install": [
+          "make",
+          "install"
+        ],
+        "builder_policy": "official artifacts must be produced by project-controlled builders using this CLI workflow"
+      },
+      "artifact_digests": [
+        {
+          "id": "gorm-linux-amd64-clang",
+          "sha256": "7b55d822a419466e55d5fc2d56b31c88618eedfa1abf6174faeea501d11c4062",
+          "source_sha256": "76832519ce69080420f6f67ad318688dfe1fe8b5ec1ae8373692bd25ecfa8b6a",
+          "patches": []
+        },
+        {
+          "id": "gorm-linux-ubuntu2404-amd64-clang",
+          "sha256": null,
+          "source_sha256": "76832519ce69080420f6f67ad318688dfe1fe8b5ec1ae8373692bd25ecfa8b6a",
+          "patches": []
+        },
+        {
+          "id": "gorm-openbsd-amd64-clang",
+          "sha256": null,
+          "source_sha256": "76832519ce69080420f6f67ad318688dfe1fe8b5ec1ae8373692bd25ecfa8b6a",
+          "patches": []
+        },
+        {
+          "id": "gorm-windows-amd64-msys2-clang64",
+          "sha256": null,
+          "source_sha256": "76832519ce69080420f6f67ad318688dfe1fe8b5ec1ae8373692bd25ecfa8b6a",
+          "patches": []
+        }
+      ]
+    },
+    {
+      "id": "org.gnustep.tools-xctest",
+      "version": "0.1.0",
+      "kind": "cli-tool",
+      "source": {
+        "type": "git",
+        "url": "https://github.com/gnustep/tools-xctest.git",
+        "sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+        "revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3",
+        "upstream": "gnustep/tools-xctest",
+        "upstream_url": "https://github.com/gnustep/tools-xctest",
+        "tracking_strategy": "commit-with-submitted-downstream-patch",
+        "update_cadence": "manual-for-dogfood-until-first-stable-package-release",
+        "channel_policy": "dogfood snapshots may track reviewed commits; stable must track an upstream tag or an approved package exception."
+      },
+      "patches": [
+        {
+          "id": "add-apple-style-xctest-cli-filters",
+          "path": "patches/add-apple-style-xctest-cli-filters.patch",
+          "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed"
+        }
+      ],
+      "artifact_count": 6,
+      "build": {
+        "backend": "gnustep-cli",
+        "build_system": "gnustep-make",
+        "configure": [],
+        "build": [
+          "gnustep",
+          "build",
+          "--build-system",
+          "gnustep-make"
+        ],
+        "install": [
+          "make",
+          "install"
+        ],
+        "patch_application": "after-source-verification-before-build",
+        "builder_policy": "official artifacts must be produced by project-controlled builders using this CLI workflow"
+      },
+      "artifact_digests": [
+        {
+          "id": "tools-xctest-linux-amd64-clang",
+          "sha256": "8f1f2a7d224bb67f318fed31f21024a3eff7504bd3c82028834ee7589923e866",
+          "source_sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed"
+            }
+          ]
+        },
+        {
+          "id": "tools-xctest-linux-ubuntu2404-amd64-clang",
+          "sha256": "351311bb3496997edc5cac2fe7f3008cdcd425c166cbe0bca3f1a99699e7e842",
+          "source_sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed"
+            }
+          ]
+        },
+        {
+          "id": "tools-xctest-openbsd-amd64-clang",
+          "sha256": "2a5ddaf9571cab9860eeadc1dba5317e72c9c0db0b9d1cbdcd4731365390e473",
+          "source_sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed"
+            }
+          ]
+        },
+        {
+          "id": "tools-xctest-linux-arm64-clang",
+          "sha256": "0de76047878737cb78642cba60034651a194fc1c70d05a1a220e2c758bc68285",
+          "source_sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed"
+            }
+          ]
+        },
+        {
+          "id": "tools-xctest-windows-amd64-msys2-clang64",
+          "sha256": "6c66cd60bf95006c2429bde211fb7aebe885e8cc635b2a206b6ec7f8b828d27d",
+          "source_sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed"
+            }
+          ]
+        },
+        {
+          "id": "tools-xctest-openbsd-arm64-clang",
+          "sha256": "planned-artifact-checksum-tbd",
+          "source_sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
+          "patches": [
+            {
+              "id": "add-apple-style-xctest-cli-filters",
+              "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "qualification": {
+    "index_generation": "required",
+    "signature_verification": "required_for_release",
+    "artifact_digest_verification": "required_before_install"
+  }
+}

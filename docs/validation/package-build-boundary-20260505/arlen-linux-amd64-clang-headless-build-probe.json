@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "ok": false,
+  "package_id": "io.github.danjboyd.arlen",
+  "artifact_id": "arlen-linux-amd64-clang-headless",
+  "target": "linux-amd64-clang",
+  "runtime_profile": "headless-base",
+  "source_revision": "7561910f3cdb249d8d8805aed88c7a250d227028",
+  "attempted_at": "2026-05-05T16:58:00Z",
+  "host": {
+    "os": "linux",
+    "arch": "amd64",
+    "toolchain_flavor": "debian-packaged-gnustep",
+    "objc_runtime": "legacy"
+  },
+  "command": [
+    "make",
+    "-C",
+    "/tmp/gnustep-package-build-probe/Arlen",
+    "all",
+    "ARLEN_USE_VENDORED_XCTEST=0",
+    "ARLEN_ENABLE_LLHTTP=0"
+  ],
+  "exit_status": 2,
+  "failure": {
+    "code": "legacy_objc_runtime_rejects_arc",
+    "message": "Arlen enforces -fobjc-arc, but the host Objective-C runtime is legacy and clang rejected ARC for that runtime.",
+    "stderr_excerpt": "error: -fobjc-arc is not supported on platforms using the legacy runtime"
+  },
+  "next_actions": [
+    {
+      "kind": "build_in_modern_managed_toolchain",
+      "message": "Run the Arlen package build in the source-built Clang/libobjc2 managed toolchain lane, then package the headless Base-only artifact."
+    },
+    {
+      "kind": "dogfood_headless_install",
+      "message": "After a binary artifact exists, install it with gnustep install --profile server and verify GUI/Back are not required."
+    }
+  ]
+}

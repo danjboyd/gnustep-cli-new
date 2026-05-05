@@ -39,6 +39,13 @@
 - (NSDictionary *)managedChildProcessEnvironment;
 - (NSString *)stringByAppendingToken:(NSString *)token toString:(NSString *)string;
 - (BOOL)packageRequirements:(NSDictionary *)requirements matchEnvironment:(NSDictionary *)environment reason:(NSString **)reason;
+- (NSArray *)providedRuntimeComponentsForEnvironment:(NSDictionary *)environment installProfile:(NSString *)installProfile;
+- (NSArray *)requiredRuntimeComponentsForPackage:(NSDictionary *)packageRecord artifact:(NSDictionary *)artifact;
+- (BOOL)runtimeComponents:(NSArray *)requiredComponents
+     satisfiedByComponents:(NSArray *)providedComponents
+                    reason:(NSString **)reason
+                      data:(NSDictionary **)data
+            installProfile:(NSString *)installProfile;
 - (NSDictionary *)selectedPackageArtifactForPackage:(NSDictionary *)packageRecord environment:(NSDictionary *)environment selectionError:(NSString **)selectionError;
 - (NSDictionary *)packageRecordFromIndexPath:(NSString *)indexPath packageID:(NSString *)packageID error:(NSString **)errorMessage;
 - (NSDictionary *)loadInstalledPackagesState:(NSString *)managedRoot;
@@ -428,7 +435,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     }
   else if ([command isEqualToString: @"install"])
     {
-      printf("  gnustep install [--json] [--root <path>] [--index <path>] <package-id|package-manifest>\n\n");
+      printf("  gnustep install [--json] [--root <path>] [--index <path>] [--profile <server|developer|desktop|ci>] <package-id|package-manifest>\n\n");
     }
   else if ([command isEqualToString: @"remove"])
     {
@@ -3006,6 +3013,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSString *objcABI = @"unknown";
   BOOL gnustepBase = NO;
   BOOL gnustepGUI = NO;
+  NSMutableArray *providedRuntimeComponents = [NSMutableArray array];
 
   if ((compilerFamily == nil || [compilerFamily isEqualToString: @"unknown"]) && windowsManagedHint)
     {
@@ -3051,6 +3059,15 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       gnustepGUI = ([[guiLibs objectForKey: @"exit_status"] intValue] == 0 &&
                     [[guiLibs objectForKey: @"stdout"] rangeOfString: @"-lgnustep-gui"].location != NSNotFound);
     }
+  if (gnustepBase)
+    {
+      [providedRuntimeComponents addObject: @"org.gnustep.runtime.base"];
+    }
+  if (gnustepGUI)
+    {
+      [providedRuntimeComponents addObject: @"org.gnustep.runtime.gui"];
+      [providedRuntimeComponents addObject: @"org.gnustep.runtime.back"];
+    }
 
   return [NSDictionary dictionaryWithObjectsAndKeys:
                         [NSNumber numberWithBool: present], @"present",
@@ -3062,6 +3079,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         [NSNumber numberWithBool: (gnustepConfig != nil || gnustepMakefiles != nil)], @"gnustep_make",
                         [NSNumber numberWithBool: gnustepBase], @"gnustep_base",
                         [NSNumber numberWithBool: gnustepGUI], @"gnustep_gui",
+                        providedRuntimeComponents, @"provided_runtime_components",
                         [probe objectForKey: @"can_compile"], @"can_compile",
                         [probe objectForKey: @"can_link"], @"can_link",
                         [probe objectForKey: @"can_run"], @"can_run",
@@ -4065,6 +4083,170 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       return NO;
     }
   return [values containsObject: candidate];
+}
+
+- (NSString *)normalizedRuntimeComponentID:(NSString *)component
+{
+  if ([component isEqualToString: @"gnustep-base"])
+    {
+      return @"org.gnustep.runtime.base";
+    }
+  if ([component isEqualToString: @"gnustep-gui"])
+    {
+      return @"org.gnustep.runtime.gui";
+    }
+  if ([component isEqualToString: @"gnustep-back"])
+    {
+      return @"org.gnustep.runtime.back";
+    }
+  return component;
+}
+
+- (NSArray *)normalizedRuntimeComponentsFromObject:(id)object
+{
+  NSMutableArray *components = [NSMutableArray array];
+  NSUInteger i = 0;
+
+  if ([object isKindOfClass: [NSArray class]] == NO)
+    {
+      return components;
+    }
+  for (i = 0; i < [object count]; i++)
+    {
+      id entry = [object objectAtIndex: i];
+      NSString *component = nil;
+      if ([entry isKindOfClass: [NSDictionary class]])
+        {
+          component = [entry objectForKey: @"id"];
+        }
+      else if ([entry isKindOfClass: [NSString class]])
+        {
+          component = entry;
+        }
+      component = [self normalizedRuntimeComponentID: component];
+      if (component != nil && [components containsObject: component] == NO)
+        {
+          [components addObject: component];
+        }
+    }
+  return components;
+}
+
+- (NSArray *)defaultRuntimeComponentsForInstallProfile:(NSString *)installProfile
+{
+  if ([installProfile isEqualToString: @"server"] || [installProfile isEqualToString: @"ci"])
+    {
+      return [NSArray arrayWithObject: @"org.gnustep.runtime.base"];
+    }
+  return [NSArray arrayWithObjects:
+                    @"org.gnustep.runtime.base",
+                    @"org.gnustep.runtime.gui",
+                    @"org.gnustep.runtime.back",
+                    nil];
+}
+
+- (NSArray *)providedRuntimeComponentsForEnvironment:(NSDictionary *)environment installProfile:(NSString *)installProfile
+{
+  NSArray *components = nil;
+  NSDictionary *toolchain = nil;
+
+  components = [self normalizedRuntimeComponentsFromObject: [environment objectForKey: @"provided_runtime_components"]];
+  if ([components count] > 0)
+    {
+      return components;
+    }
+  components = [self normalizedRuntimeComponentsFromObject: [environment objectForKey: @"runtime_components"]];
+  if ([components count] > 0)
+    {
+      return components;
+    }
+  toolchain = [environment objectForKey: @"toolchain"];
+  if ([toolchain isKindOfClass: [NSDictionary class]])
+    {
+      components = [self normalizedRuntimeComponentsFromObject: [toolchain objectForKey: @"provided_runtime_components"]];
+      if ([components count] > 0)
+        {
+          return components;
+        }
+      components = [self normalizedRuntimeComponentsFromObject: [toolchain objectForKey: @"runtime_components"]];
+      if ([components count] > 0)
+        {
+          return components;
+        }
+    }
+  return [self defaultRuntimeComponentsForInstallProfile: installProfile];
+}
+
+- (NSArray *)requiredRuntimeComponentsForPackage:(NSDictionary *)packageRecord artifact:(NSDictionary *)artifact
+{
+  NSMutableArray *components = [NSMutableArray array];
+  NSArray *packageComponents = [self normalizedRuntimeComponentsFromObject: [[packageRecord objectForKey: @"requirements"] objectForKey: @"runtime_components"]];
+  NSArray *artifactComponents = [self normalizedRuntimeComponentsFromObject: [artifact objectForKey: @"runtime_components"]];
+  NSUInteger i = 0;
+
+  for (i = 0; i < [packageComponents count]; i++)
+    {
+      if ([components containsObject: [packageComponents objectAtIndex: i]] == NO)
+        {
+          [components addObject: [packageComponents objectAtIndex: i]];
+        }
+    }
+  for (i = 0; i < [artifactComponents count]; i++)
+    {
+      if ([components containsObject: [artifactComponents objectAtIndex: i]] == NO)
+        {
+          [components addObject: [artifactComponents objectAtIndex: i]];
+        }
+    }
+  return components;
+}
+
+- (BOOL)runtimeComponents:(NSArray *)requiredComponents
+     satisfiedByComponents:(NSArray *)providedComponents
+                    reason:(NSString **)reason
+                      data:(NSDictionary **)data
+            installProfile:(NSString *)installProfile
+{
+  NSMutableArray *missing = [NSMutableArray array];
+  NSMutableArray *actions = [NSMutableArray array];
+  NSUInteger i = 0;
+
+  for (i = 0; i < [requiredComponents count]; i++)
+    {
+      NSString *component = [requiredComponents objectAtIndex: i];
+      if ([providedComponents containsObject: component] == NO)
+        {
+          [missing addObject: component];
+        }
+    }
+  if ([missing count] == 0)
+    {
+      return YES;
+    }
+  if ([missing containsObject: @"org.gnustep.runtime.gui"] ||
+      [missing containsObject: @"org.gnustep.runtime.back"])
+    {
+      [actions addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                          @"select_runtime_profile", @"kind",
+                                          @"desktop", @"profile",
+                                          @"Install or select the desktop runtime profile to provide GNUstep GUI and Back.", @"message",
+                                          nil]];
+    }
+  if (reason != NULL)
+    {
+      *reason = @"Package requires unavailable GNUstep runtime components.";
+    }
+  if (data != NULL)
+    {
+      *data = [NSDictionary dictionaryWithObjectsAndKeys:
+                              requiredComponents, @"required_runtime_components",
+                              providedComponents, @"provided_runtime_components",
+                              missing, @"missing_runtime_components",
+                              installProfile, @"install_profile",
+                              actions, @"actions",
+                              nil];
+    }
+  return NO;
 }
 
 - (BOOL)packageRequirements:(NSDictionary *)requirements matchEnvironment:(NSDictionary *)environment reason:(NSString **)reason
@@ -7352,8 +7534,12 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSMutableArray *installedFiles = [NSMutableArray array];
   NSArray *dependencies = [NSArray array];
   NSArray *conflicts = [NSArray array];
+  NSArray *providedRuntimeComponents = [NSArray array];
+  NSArray *requiredRuntimeComponents = [NSArray array];
   NSDictionary *environment = nil;
   NSDictionary *packages = nil;
+  NSDictionary *runtimeComponentErrorData = nil;
+  NSString *installProfile = @"developer";
 
   @try
     {
@@ -7379,6 +7565,24 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
               return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: @"--index requires a value." data: nil];
             }
           indexPath = [arguments objectAtIndex: i + 1];
+          i++;
+        }
+      else if ([argument isEqualToString: @"--profile"])
+        {
+          if (i + 1 >= [arguments count])
+            {
+              *exitCode = 2;
+              return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: @"--profile requires a value." data: nil];
+            }
+          installProfile = [arguments objectAtIndex: i + 1];
+          if (([installProfile isEqualToString: @"server"] ||
+               [installProfile isEqualToString: @"developer"] ||
+               [installProfile isEqualToString: @"desktop"] ||
+               [installProfile isEqualToString: @"ci"]) == NO)
+            {
+              *exitCode = 2;
+              return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: @"--profile must be one of: server, developer, desktop, ci." data: nil];
+            }
           i++;
         }
       else if ([argument hasPrefix: @"--"])
@@ -7441,6 +7645,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                             [existingRecord objectForKey: @"install_root"], @"install_root",
                             [existingRecord objectForKey: @"selected_artifact"] ? [existingRecord objectForKey: @"selected_artifact"] : [NSNull null], @"selected_artifact",
                             [existingRecord objectForKey: @"version"] ? [existingRecord objectForKey: @"version"] : [NSNull null], @"version",
+                            [existingRecord objectForKey: @"install_profile"] ? [existingRecord objectForKey: @"install_profile"] : @"developer", @"install_profile",
+                            [existingRecord objectForKey: @"required_runtime_components"] ? [existingRecord objectForKey: @"required_runtime_components"] : [NSArray array], @"required_runtime_components",
+                            [existingRecord objectForKey: @"provided_runtime_components"] ? [existingRecord objectForKey: @"provided_runtime_components"] : [NSArray array], @"provided_runtime_components",
                             [existingRecord objectForKey: @"dependencies"] ? [existingRecord objectForKey: @"dependencies"] : [NSArray array], @"dependencies",
                             [existingRecord objectForKey: @"installed_files"], @"installed_files",
                             nil];
@@ -7456,6 +7663,18 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       [state release];
       *exitCode = 4;
       return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: requirementsError data: nil];
+    }
+  providedRuntimeComponents = [self providedRuntimeComponentsForEnvironment: environment installProfile: installProfile];
+  requiredRuntimeComponents = [self requiredRuntimeComponentsForPackage: packageRecord artifact: nil];
+  if ([self runtimeComponents: requiredRuntimeComponents
+        satisfiedByComponents: providedRuntimeComponents
+                       reason: &requirementsError
+                         data: &runtimeComponentErrorData
+               installProfile: installProfile] == NO)
+    {
+      [state release];
+      *exitCode = 4;
+      return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: requirementsError data: runtimeComponentErrorData];
     }
 
   [self appendInstallTrace: @"checking dependencies"];
@@ -7532,6 +7751,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       [state release];
       *exitCode = 4;
       return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: selectionError data: nil];
+    }
+  requiredRuntimeComponents = [self requiredRuntimeComponentsForPackage: packageRecord artifact: artifact];
+  if ([self runtimeComponents: requiredRuntimeComponents
+        satisfiedByComponents: providedRuntimeComponents
+                       reason: &requirementsError
+                         data: &runtimeComponentErrorData
+               installProfile: installProfile] == NO)
+    {
+      [state release];
+      *exitCode = 4;
+      return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: requirementsError data: runtimeComponentErrorData];
     }
   if ([artifact objectForKey: @"url"] == nil)
     {
@@ -7656,6 +7886,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                          finalRoot, @"install_root",
                                          [packageRecord objectForKey: @"version"] ? [packageRecord objectForKey: @"version"] : [NSNull null], @"version",
                                          [artifact objectForKey: @"id"], @"selected_artifact",
+                                         installProfile, @"install_profile",
+                                         requiredRuntimeComponents, @"required_runtime_components",
+                                         providedRuntimeComponents, @"provided_runtime_components",
                                          dependencies, @"dependencies",
                                          conflicts, @"conflicts",
                                          installedFiles, @"installed_files",
@@ -7693,6 +7926,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         indexPath ? [indexPath stringByResolvingSymlinksInPath] : [NSNull null], @"index_path",
                         [packageRecord objectForKey: @"version"] ? [packageRecord objectForKey: @"version"] : [NSNull null], @"version",
                         [artifact objectForKey: @"id"], @"selected_artifact",
+                        installProfile, @"install_profile",
+                        requiredRuntimeComponents, @"required_runtime_components",
+                        providedRuntimeComponents, @"provided_runtime_components",
                         dependencies, @"dependencies",
                         conflicts, @"conflicts",
                         installedFiles, @"installed_files",
@@ -8105,6 +8341,16 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       if ([payload objectForKey: @"managed_root"] != nil)
         {
           [lines addObject: [NSString stringWithFormat: @"install: managed_root=%@", [payload objectForKey: @"managed_root"]]];
+        }
+      if ([payload objectForKey: @"install_profile"] != nil)
+        {
+          [lines addObject: [NSString stringWithFormat: @"install: profile=%@", [payload objectForKey: @"install_profile"]]];
+        }
+      if ([[payload objectForKey: @"data"] isKindOfClass: [NSDictionary class]] &&
+          [[[payload objectForKey: @"data"] objectForKey: @"missing_runtime_components"] isKindOfClass: [NSArray class]])
+        {
+          [lines addObject: [NSString stringWithFormat: @"install: missing_runtime_components=%@",
+                                      [[(NSDictionary *)[payload objectForKey: @"data"] objectForKey: @"missing_runtime_components"] componentsJoinedByString: @", "]]];
         }
       [lines addObject: [NSString stringWithFormat: @"install: dependencies=%lu files=%lu",
                           (unsigned long)[dependencies count],

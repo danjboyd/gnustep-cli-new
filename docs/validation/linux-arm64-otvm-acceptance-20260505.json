@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "validated_at": "2026-05-05T19:14:10Z",
+  "tool": "OracleTestVMs",
+  "provider": "oci",
+  "profile": "ubuntu-24.04-aarch64",
+  "status": "passed",
+  "duration_seconds": 139,
+  "preflight": {
+    "ready": true,
+    "shape": "VM.Standard.A1.Flex",
+    "image_display_name": "Canonical-Ubuntu-24.04-aarch64-2026.03.31-0",
+    "image_ocid": "ocid1.image.oc1.phx.aaaaaaaa6m3airkzbr4zy6t3paptakqvluxgsqmgw45li3jfzwcbog2ginva",
+    "availability_domain": "qLty:PHX-AD-1"
+  },
+  "lease": {
+    "lease_id": "lease-20260505191156-s29xph",
+    "instance_ocid": "ocid1.instance.oc1.phx.anyhqljsofscz7qcwaxoi7dwl3odlc3tvrkrs6raxyfetuhxatoqhjpgz2ba",
+    "public_ip": "129.146.26.202",
+    "private_ip": "10.64.0.161",
+    "ssh_username": "ubuntu",
+    "destroyed": true
+  },
+  "checks": [
+    {
+      "name": "ssh_contract",
+      "status": "ok",
+      "details": {
+        "auth": "public-key",
+        "port": 22,
+        "username": "ubuntu"
+      }
+    },
+    {
+      "name": "ssh_post_ready_probe",
+      "status": "ok",
+      "details": {
+        "command": "test \"$(uname -m)\" = aarch64 && cloud-init status --wait >/dev/null 2>&1"
+      }
+    }
+  ],
+  "cleanup": {
+    "destroyed": true
+  }
+}

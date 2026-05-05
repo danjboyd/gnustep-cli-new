@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "ok": false,
+  "command": "package-managed-source-artifact",
+  "package_id": "io.github.danjboyd.arlen",
+  "artifact_id": "arlen-linux-amd64-clang-headless",
+  "target": "arlen-linux-amd64-clang-headless",
+  "attempted_at": "2026-05-05T17:24:00Z",
+  "toolchain_root": "/tmp/gnustep-package-managed-build/toolchain",
+  "source_revision": "7561910f3cdb249d8d8805aed88c7a250d227028",
+  "result": "blocked",
+  "failure": {
+    "code": "managed_lane_still_reports_legacy_objc_runtime",
+    "message": "The managed package builder can clone, verify, and invoke the Arlen build, but the extracted staged toolchain still presents compiler flags that make clang reject -fobjc-arc as a legacy Objective-C runtime build.",
+    "stderr_excerpt": "error: -fobjc-arc is not supported on platforms using the legacy runtime"
+  },
+  "runner_fixes_applied": [
+    "Avoided putting managed System/Library/Libraries on LD_LIBRARY_PATH before invoking host make, because that caused host make to load an incompatible managed libc.",
+    "Added a gnustep-config-only shim so package builds can use managed GNUstep metadata without picking up the staged managed clang wrapper from PATH."
+  ],
+  "next_actions": [
+    {
+      "kind": "build_inside_relocated_managed_root_or_vm",
+      "message": "Run the package builder inside a fully relocated managed install root or fresh VM setup where gnustep-config emits modern libobjc2 runtime flags."
+    },
+    {
+      "kind": "assert_modern_objc_flags_before_build",
+      "message": "Add a preflight check that fails before compilation unless gnustep-config/clang can compile a minimal ARC Objective-C source."
+    }
+  ]
+}

@@ -16,6 +16,33 @@ This document records the current Phase 10-12 baseline.
 - installed package state is tracked under `<managed-root>/state/installed-packages.json`
 - package installs are staged under `<managed-root>/.staging/` before being moved into `<managed-root>/packages/<package-id>/`
 - installed files are recorded for later removal
+- package manifests may distinguish runtime components such as
+  `org.gnustep.runtime.base`, `org.gnustep.runtime.gui`, and
+  `org.gnustep.runtime.back`; headless packages should be allowed to require
+  only Base when they do not need AppKit or display backends
+- component requirements are currently recorded under package `requirements`
+  and artifact-level runtime profile metadata rather than enforced through the
+  `dependencies` array; `dependencies` is still interpreted by the native
+  installer as already-installed package IDs
+- before runtime components become automatic install dependencies, the package
+  manager needs a virtual/provided-package model so a managed toolchain,
+  platform package set, or future split runtime package can satisfy
+  `org.gnustep.runtime.base` without forcing `org.gnustep.runtime.gui` and
+  `org.gnustep.runtime.back`
+
+## Runtime Component Policy
+
+- Support installing GNUstep Base without GNUstep GUI or Back.
+- Treat `org.gnustep.runtime.base` as the minimum runtime component for
+  headless services, command-line tools, frameworks, and server workloads.
+- Treat `org.gnustep.runtime.gui` and `org.gnustep.runtime.back` as explicit
+  GUI/runtime-display requirements, not as implicit dependencies of every
+  GNUstep package.
+- GUI applications such as Gorm should require `org.gnustep.runtime.base`,
+  `org.gnustep.runtime.gui`, and `org.gnustep.runtime.back`.
+- Server-side packages such as the initial Arlen package should default to a
+  headless Base-only runtime profile. GUI adapters or tooling can be modeled as
+  optional features or separate packages that add GUI/Back requirements.
 
 ## Build Infrastructure
 
@@ -26,6 +53,18 @@ This document records the current Phase 10-12 baseline.
 - package artifact publication should record source identity, build identity,
   checksums, signatures, and target compatibility in the generated index or
   associated release metadata
+- the first Arlen and Gorm Linux `amd64/clang` artifacts are now hosted on the
+  `v0.1.0` release, recorded with verified SHA-256 digests, and marked
+  publishable in the generated package index after source-built OTVM package
+  builds plus local install/remove validation
+- signed `package-index.json` and `package-index-provenance.json` assets are
+  hosted on the `v0.1.0` release; the package-index CI signing lane passed on
+  `master`, and should be rerun after the Arlen/Gorm package manifest additions
+  are pushed so CI-held signing reproduces the local package set
+- Linux arm64 VM access is available through the OTVM OCI
+  `ubuntu-24.04-aarch64` profile; May 5, 2026 acceptance lease
+  `lease-20260505191156-s29xph` validated SSH access and `aarch64`
+  architecture and destroyed successfully
 - release manifests can be generated from that matrix
 - the current helpers are scaffolding for controlled artifact publication workflows
 

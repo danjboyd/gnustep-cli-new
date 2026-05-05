@@ -557,6 +557,20 @@ def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = 
             execution_tier="bootstrap_optional",
         ),
         _native_toolchain_check(native_toolchain, interface=interface),
+        CheckResult(
+            id="toolchain.features",
+            title="Detect Objective-C feature flags",
+            status="ok" if environment["toolchain"]["present"] else "not_run",
+            severity="warning",
+            message=(
+                "Objective-C feature flags were normalized for compatibility evaluation."
+                if environment["toolchain"]["present"]
+                else "No toolchain was detected, so Objective-C feature flags were not evaluated."
+            ),
+            interface="bootstrap" if interface == "bootstrap" else "both",
+            execution_tier="bootstrap_optional",
+            details=environment["toolchain"].get("feature_flags", {}),
+        ),
     ]
     if interface == "full":
         checks.append(

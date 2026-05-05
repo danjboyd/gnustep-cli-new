@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "ok": false,
+  "command": "package-managed-source-artifact",
+  "package_id": "org.gnustep.gorm",
+  "artifact_id": "gorm-linux-amd64-clang",
+  "target": "gorm-linux-amd64-clang",
+  "attempted_at": "2026-05-05T17:24:00Z",
+  "toolchain_root": "/tmp/gnustep-package-managed-build/toolchain",
+  "source_revision": "f792db193db59fa9504acee2ec4cc3799c363918",
+  "result": "blocked",
+  "failure": {
+    "code": "managed_lane_falls_back_to_host_gnustep_headers",
+    "message": "The managed package builder can clone, verify, and invoke the Gorm build, but the extracted staged toolchain build still resolves GNUstep Make/Foundation through host paths and fails before reaching the previous NSMassFormatter blocker.",
+    "stderr_excerpt": "/usr/include/x86_64-linux-gnu/GNUstep/Foundation/Foundation.h:30:9: fatal error: 'objc/objc.h' file not found"
+  },
+  "next_actions": [
+    {
+      "kind": "build_inside_relocated_managed_root_or_vm",
+      "message": "Run the Gorm package build after setup has relocated the managed toolchain so GNUstep Make, Foundation, GUI, Back, and Objective-C headers resolve from the managed root rather than host distro paths."
+    },
+    {
+      "kind": "preflight_gnustep_header_origin",
+      "message": "Add a package-build preflight that records gnustep-config --objc-flags and rejects host /usr/include/GNUstep leakage for managed artifacts."
+    }
+  ]
+}

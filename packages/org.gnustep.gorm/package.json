@@ -1,0 +1,170 @@
+{
+  "schema_version": 1,
+  "id": "org.gnustep.gorm",
+  "name": "Gorm",
+  "version": "1.5.0-snapshot.20260505",
+  "kind": "gui-application",
+  "summary": "Interface builder application for GNUstep.",
+  "license": "GPL-3.0-only",
+  "maintainers": [
+    {
+      "name": "GNUstep Project"
+    }
+  ],
+  "source": {
+    "type": "git-archive",
+    "url": "https://github.com/gnustep/apps-gorm/archive/f792db193db59fa9504acee2ec4cc3799c363918.tar.gz",
+    "sha256": "76832519ce69080420f6f67ad318688dfe1fe8b5ec1ae8373692bd25ecfa8b6a",
+    "revision": "f792db193db59fa9504acee2ec4cc3799c363918",
+    "upstream": "gnustep/apps-gorm",
+    "upstream_url": "https://github.com/gnustep/apps-gorm",
+    "tracking_strategy": "reviewed-commit-snapshot",
+    "update_cadence": "manual-until-first-stable-package-release",
+    "channel_policy": "dogfood snapshots may track reviewed commits; stable should track an upstream tag or approved package exception."
+  },
+  "requirements": {
+    "supported_os": [
+      "linux",
+      "openbsd",
+      "windows"
+    ],
+    "supported_arch": [
+      "amd64",
+      "arm64"
+    ],
+    "supported_compiler_families": [
+      "clang"
+    ],
+    "supported_objc_runtimes": [
+      "libobjc2"
+    ],
+    "supported_objc_abi": [
+      "modern"
+    ],
+    "required_features": [
+      "blocks"
+    ],
+    "forbidden_features": [],
+    "gnustep_make": true,
+    "runtime_components": [
+      "org.gnustep.runtime.base",
+      "org.gnustep.runtime.gui",
+      "org.gnustep.runtime.back"
+    ],
+    "headless_supported": false
+  },
+  "dependencies": [],
+  "artifacts": [
+    {
+      "id": "gorm-linux-amd64-clang",
+      "os": "linux",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "supported_distributions": [
+        "debian"
+      ],
+      "portability_policy": "distribution-scoped",
+      "format": "tar.gz",
+      "publish": true,
+      "status": "published_linux_amd64_clang",
+      "filename": "gorm-gorm-linux-amd64-clang-1.5.0-snapshot.20260505.tar.gz",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/gorm-gorm-linux-amd64-clang-1.5.0-snapshot.20260505.tar.gz",
+      "artifact_path": ".artifacts/package-output/source-built-linux-20260505/gorm-gorm-linux-amd64-clang-1.5.0-snapshot.20260505.tar.gz",
+      "sha256": "7b55d822a419466e55d5fc2d56b31c88618eedfa1abf6174faeea501d11c4062",
+      "size": 5542799,
+      "notes": "GUI application package requires GNUstep Base, GUI, and Back runtime components. OracleTestVMs source-built Linux Clang/libobjc2 lane builds this artifact successfully, including Gorm.app, local install/remove validation passes, and the artifact is hosted on the v0.1.0 release with a verified digest.",
+      "build_blockers": [],
+      "build_evidence": "docs/validation/package-build-boundary-20260505/gorm-linux-amd64-clang-build-probe.json",
+      "managed_build_evidence": "docs/validation/package-build-boundary-20260505/gorm-linux-amd64-clang-managed-build-probe.json",
+      "otvm_managed_preflight_evidence": "docs/validation/package-build-boundary-20260505/gorm-linux-amd64-clang-otvm-managed-preflight.json",
+      "source_built_toolchain_evidence": "docs/validation/package-build-boundary-20260505/linux-amd64-clang-source-built-toolchain-otvm-package.json",
+      "source_built_build_evidence": "docs/validation/package-build-boundary-20260505/gorm-linux-amd64-clang-source-built-otvm-build.json",
+      "validation_evidence": "docs/validation/package-build-boundary-20260505/gorm-linux-amd64-clang-local-install-remove.json"
+    },
+    {
+      "id": "gorm-linux-ubuntu2404-amd64-clang",
+      "os": "linux",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "supported_distributions": [
+        "ubuntu"
+      ],
+      "supported_os_versions": [
+        "ubuntu-24.04"
+      ],
+      "portability_policy": "distribution-scoped",
+      "format": "tar.gz",
+      "publish": false,
+      "status": "planned_manifest_only_no_controlled_binary_yet"
+    },
+    {
+      "id": "gorm-openbsd-amd64-clang",
+      "os": "openbsd",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "format": "tar.gz",
+      "publish": false,
+      "status": "planned_manifest_only_no_controlled_binary_yet"
+    },
+    {
+      "id": "gorm-windows-amd64-msys2-clang64",
+      "os": "windows",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "msys2-clang64",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "format": "zip",
+      "publish": false,
+      "status": "planned_manifest_only_no_controlled_binary_yet"
+    }
+  ],
+  "install": {
+    "strategy": "archive",
+    "prefix_layout": "gnustep",
+    "executables": [
+      "Gorm"
+    ],
+    "application_bundles": [
+      "Gorm.app"
+    ]
+  },
+  "patches": [],
+  "build": {
+    "backend": "gnustep-cli",
+    "build_system": "gnustep-make",
+    "configure": [],
+    "build": [
+      "gnustep",
+      "build",
+      "--build-system",
+      "gnustep-make"
+    ],
+    "install": [
+      "make",
+      "install"
+    ],
+    "builder_policy": "official artifacts must be produced by project-controlled builders using this CLI workflow"
+  }
+}

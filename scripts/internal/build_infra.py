@@ -16,6 +16,7 @@ from gnustep_cli_shared.build_infra import build_matrix, release_manifest_from_m
 from gnustep_cli_shared.build_infra import (
     package_artifact_build_plan,
     package_artifact_publication_gate,
+    package_managed_source_artifact,
     package_tools_xctest_artifact,
     tools_xctest_release_gate,
     build_linux_cli_against_managed_toolchain,
@@ -291,6 +292,15 @@ def main() -> int:
     tools_xctest_artifact.add_argument("--version", default="0.1.0")
     tools_xctest_artifact.add_argument("--rebuild", action="store_true")
 
+    managed_package_artifact = subparsers.add_parser("package-managed-source-artifact", add_help=False)
+    managed_package_artifact.add_argument("--packages-dir", required=True)
+    managed_package_artifact.add_argument("--package-id", required=True)
+    managed_package_artifact.add_argument("--target", required=True)
+    managed_package_artifact.add_argument("--output-dir", required=True)
+    managed_package_artifact.add_argument("--toolchain-root", required=True)
+    managed_package_artifact.add_argument("--source-dir")
+    managed_package_artifact.add_argument("--version")
+
     otvm_release_validation = subparsers.add_parser("otvm-release-host-validation-plan", add_help=False)
     otvm_release_validation.add_argument("--release-dir", required=True)
     otvm_release_validation.add_argument("--config-path", default="~/oracletestvms-libvirt.toml")
@@ -556,6 +566,16 @@ def main() -> int:
             target_id=args.target,
             version=args.version,
             rebuild=args.rebuild,
+        )
+    elif args.subcommand == "package-managed-source-artifact":
+        payload = package_managed_source_artifact(
+            args.packages_dir,
+            args.package_id,
+            args.target,
+            args.output_dir,
+            toolchain_root=args.toolchain_root,
+            source_dir=args.source_dir,
+            version=args.version,
         )
     elif args.subcommand == "build-linux-cli-against-managed-toolchain":
         payload = build_linux_cli_against_managed_toolchain(

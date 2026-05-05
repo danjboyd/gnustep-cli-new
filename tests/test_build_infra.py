@@ -42,6 +42,7 @@ from gnustep_cli_shared.build_infra import (
     otvm_release_host_validation_plan,
     package_artifact_build_plan,
     package_artifact_publication_gate,
+    package_managed_source_artifact,
     package_tools_xctest_artifact,
     tools_xctest_release_gate,
     package_source_built_linux_toolchain_artifact,
@@ -1260,13 +1261,12 @@ class BuildInfraTests(unittest.TestCase):
             (evidence_dir / "update-all-production-like.json").write_text(
                 '{"ok": true, "summary": "hosted evidence ok"}'
             )
-            for name in [
-                "openbsd-tier1-report.json",
-                "windows-tier1-report-patched-gorm.json",
-            ]:
-                (evidence_dir / name).write_text(
-                    '{"overall_ok": true, "summary": "hosted smoke evidence ok"}'
-                )
+            (evidence_dir / "openbsd-full-tier1-core-report.json").write_text(
+                '{"overall_ok": true, "summary": "hosted OpenBSD smoke evidence ok"}'
+            )
+            (evidence_dir / "windows-full-tier1-core-report.json").write_text(
+                '{"overall_ok": true, "summary": "hosted Windows smoke evidence ok"}'
+            )
             gate = release_claim_consistency_gate(
                 release_dir,
                 evidence_dir=evidence_dir,
@@ -1275,8 +1275,8 @@ class BuildInfraTests(unittest.TestCase):
             checks = {check["id"]: check for check in gate["checks"]}
             self.assertTrue(gate["ok"])
             self.assertIn("update-all-production-like.json", checks["debian-otvm-smoke"]["path"])
-            self.assertIn("openbsd-tier1-report.json", checks["openbsd-otvm-smoke"]["path"])
-            self.assertIn("windows-tier1-report-patched-gorm.json", checks["windows-otvm-smoke"]["path"])
+            self.assertIn("openbsd-full-tier1-core-report.json", checks["openbsd-otvm-smoke"]["path"])
+            self.assertIn("windows-full-tier1-core-report.json", checks["windows-otvm-smoke"]["path"])
 
     def test_release_evidence_bundle_accepts_modern_gate_inputs(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -2052,8 +2052,130 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("./Library/Libraries/libXCTest.so", names)
             self.assertIn("LD_LIBRARY_PATH", launcher)
             self.assertIn("managed_root", launcher)
-            self.assertIn("System/Library/Libraries", launcher)
-            self.assertIn("libexec/xctest", launcher)
+        self.assertIn("System/Library/Libraries", launcher)
+        self.assertIn("libexec/xctest", launcher)
+
+    def test_package_managed_source_artifact_requires_toolchain_environment(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            payload = package_managed_source_artifact(
+                ROOT / "packages",
+                "io.github.danjboyd.arlen",
+                "arlen-linux-amd64-clang-headless",
+                Path(tempdir) / "out",
+                toolchain_root=Path(tempdir) / "missing-toolchain",
+            )
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["summary"], "Managed GNUstep toolchain environment script is missing.")
+
+    def test_package_managed_source_artifact_rejects_unrelocated_or_legacy_toolchain(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            toolchain = root / "toolchain"
+            makefiles = toolchain / "System" / "Library" / "Makefiles"
+            tools = toolchain / "System" / "Tools"
+            objc = toolchain / "System" / "Sysroot" / "usr" / "include" / "objc"
+            makefiles.mkdir(parents=True)
+            tools.mkdir(parents=True)
+            objc.mkdir(parents=True)
+            (makefiles / "GNUstep.sh").write_text(
+                f"GNUSTEP_MAKEFILES={makefiles}\nexport GNUSTEP_MAKEFILES\n",
+                encoding="utf-8",
+            )
+            (makefiles / "config.make").write_text(
+                f"GNUSTEP_MAKEFILES={MANAGED_PREFIX_PLACEHOLDER}/System/Library/Makefiles\n",
+                encoding="utf-8",
+            )
+            gnustep_config = tools / "gnustep-config"
+            gnustep_config.write_text(
+                "#!/bin/sh\n"
+                "case \"$1\" in\n"
+                "  --objc-flags) echo '-I/usr/include/GNUstep' ;;\n"
+                "  --base-libs) echo '-lgnustep-base -lobjc' ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            gnustep_config.chmod(0o755)
+            (objc / "objc.h").write_text("#define __GNU_LIBOBJC__ 20110608\n", encoding="utf-8")
+
+            payload = package_managed_source_artifact(
+                ROOT / "packages",
+                "io.github.danjboyd.arlen",
+                "arlen-linux-amd64-clang-headless",
+                root / "out",
+                toolchain_root=toolchain,
+            )
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["summary"], "Managed package toolchain preflight failed.")
+            codes = {blocker["code"] for blocker in payload["preflight"]["blockers"]}
+            self.assertIn("unrelocated_toolchain", codes)
+            self.assertIn("host_gnustep_header_leak", codes)
+            self.assertIn("missing_modern_objc_runtime_flags", codes)
+            self.assertIn("gcc_objc_runtime_headers", codes)
+            self.assertIn("missing_blocks_runtime_header", codes)
+
+    def test_package_managed_source_artifact_accepts_source_built_blocks_header_layout(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            packages = root / "packages"
+            package_dir = packages / "fixture"
+            package_dir.mkdir(parents=True)
+            package_dir.joinpath("package.json").write_text(
+                json.dumps(
+                    {
+                        "id": "io.github.danjboyd.arlen",
+                        "version": "1.0.0",
+                        "source": {"type": "git", "upstream_url": "https://example.invalid/arlen.git"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            toolchain = root / "toolchain"
+            makefiles = toolchain / "System" / "Library" / "Makefiles"
+            tools = toolchain / "System" / "Tools"
+            objc = toolchain / "include" / "objc"
+            makefiles.mkdir(parents=True)
+            tools.mkdir(parents=True)
+            objc.mkdir(parents=True)
+            (makefiles / "GNUstep.sh").write_text(
+                f"GNUSTEP_MAKEFILES={makefiles}\nexport GNUSTEP_MAKEFILES\n",
+                encoding="utf-8",
+            )
+            gnustep_config = tools / "gnustep-config"
+            gnustep_config.write_text(
+                "#!/bin/sh\n"
+                "case \"$1\" in\n"
+                f"  --objc-flags) echo '-fobjc-runtime=gnustep-2.2 -fblocks -I{toolchain / 'include'}' ;;\n"
+                f"  --base-libs) echo '-fobjc-runtime=gnustep-2.2 -fblocks -L{toolchain / 'lib'} -lgnustep-base -lobjc' ;;\n"
+                "esac\n",
+                encoding="utf-8",
+            )
+            gnustep_config.chmod(0o755)
+            (objc / "objc.h").write_text("// libobjc2 header fixture\n", encoding="utf-8")
+            (objc / "blocks_runtime.h").write_text("// blocks header fixture\n", encoding="utf-8")
+            source = root / "source"
+            source.mkdir()
+            subprocess.run(["git", "-C", str(source), "init"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.email", "fixture@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.name", "Fixture"], check=True)
+            (source / "GNUmakefile").write_text("all:\n\tfalse\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
+            subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+            payload = package_managed_source_artifact(
+                packages,
+                "io.github.danjboyd.arlen",
+                "arlen-linux-amd64-clang-headless",
+                root / "out",
+                toolchain_root=toolchain,
+                source_dir=source,
+            )
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["summary"], "Managed package build failed.")
+            build_command = payload["commands"][-1][-1]
+            self.assertIn("LD_LIBRARY_PATH=", build_command)
+            self.assertIn("Local/Library/Libraries", build_command)
+            self.assertNotIn("System/Sysroot/lib", build_command)
+            self.assertIn("System/Tools", build_command)
 
     def test_package_artifact_build_plan(self):
         payload = package_artifact_build_plan(ROOT / "packages")

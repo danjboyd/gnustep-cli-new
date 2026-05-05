@@ -36,27 +36,31 @@ existence.
 
 Current priority order:
 
-1. Promote `v0.1.0-dev-hosted.32` as the current dogfood candidate baseline.
-   It was staged from current-source Linux and Windows artifact producers,
-   passed published-URL Linux qualification, persisted hosted supplemental
-   OpenBSD and Windows live-host refresh evidence, passed CI, and passed the
-   consolidated Release workflow without the stale-Windows exception on
-   May 4, 2026.
-2. Convert the remaining May 4 simple OpenBSD and Windows OTVM refreshes into
-   repeatable hosted structured Tier 1 scenario evidence. The formal Release
-   gate is green with the accepted structured April 24 Phase 26 reports, but
-   the newest live reruns are simpler smoke summaries.
-3. Complete Phase 12/13 production hardening: CI-held production signing keys
-   or signing service, automated host-backed release qualification, controlled
-   signed package artifact build jobs, and final stable-channel `gnustep update
-   all --yes` evidence. The dogfood `.32` release gate now includes
-   production-like update-all evidence.
-4. Finish native Objective-C `doctor` deep-detection parity with the shared
-   Python model before claiming the full CLI is the authoritative diagnostic
-   implementation.
+1. Treat the May 5, 2026 staged `0.1.0` candidate in
+   `.artifacts/final-staged-0.1.0-25342971361` as the current local release
+   qualification baseline. Its release metadata and package index verify
+   against production-like trust roots, Phase 12 and Phase 13 hardening gates
+   pass with concrete evidence, and `immediate-rc-blocker-status` reports
+   `ok: true` when supplied the staged release, signed package index, release
+   evidence directory, trust roots, OpenBSD/Windows Tier 1 reports, update-all
+   evidence, and package manifests.
+2. Keep the hosted CI release lane green with the same package metadata that is
+   checked in locally. The hosted Package Index workflow passed with CI-held
+   signing material in run `25396088875`; after the Arlen/Gorm package
+   manifest changes are pushed, that workflow should be rerun so CI reproduces
+   the final local package set.
+3. Publish the signed package index and package artifacts through the official
+   repository path. Arlen and Gorm now have source-built Linux `amd64`
+   artifacts, local install/remove validation, hosted `v0.1.0` package asset
+   URLs, and published package-index entries for the validated Linux artifacts.
+4. Keep native Objective-C `doctor` parity locked with the shared Python model.
+   The shared model and native full CLI now expose the same core check
+   vocabulary, including `toolchain.features`, and the parity is covered by
+   regression tests.
 5. Rebuild final Tier 1 full-CLI artifacts from production build lanes for the
-   stable claim. Dogfood `.32` proves the current hosted Linux/Windows flow but
-   remains a prerelease baseline.
+   stable claim. The local `0.1.0` candidate proves the current staged
+   Linux/Windows flow, and hosted Linux published-URL qualification passed
+   against the final `v0.1.0` manifest in run `25396304950`.
 6. Keep package, setup, update, and release trust gates green while converting
    remaining operator-run validation into repeatable automation.
 
@@ -66,9 +70,55 @@ Non-blocking for the immediate release unless this roadmap is revised:
 - native byte-delta application beyond the current manifest/delta contract
 - Windows `amd64/msvc`
 - OpenBSD `arm64`
-- Debian/Linux `arm64` publication
+- Debian/Linux `arm64` publication; OTVM OCI Ubuntu/aarch64 host validation is
+  now available, but source-built managed artifacts still require publication
+  evidence before `publish: true`
 - broadening Linux managed-artifact portability beyond the explicitly
   distribution-scoped Debian and Ubuntu targets
+
+May 5, 2026 RC execution update:
+
+- Package index metadata was regenerated, provenance was emitted, and
+  `packages/package-index.json` plus `package-index-provenance.json` were
+  signed and verified against the production-like package-index trust root.
+  The Package Index workflow also passed on `master` in run `25396088875`;
+  the local package-index update that includes Arlen/Gorm publication must be
+  pushed before that CI-held signing lane can reproduce the same package set.
+- The staged `0.1.0` release metadata was regenerated, signed, and verified
+  against the production-like release trust root.
+- Release evidence bundling and release qualification summary generation pass
+  for `.artifacts/final-staged-0.1.0-25342971361` using
+  `docs/validation/release-0.1.0-evidence`.
+- Phase 12 production hardening and Phase 13 update hardening now pass when
+  run with the staged release, signed package index, OpenBSD/Windows Tier 1
+  reports, and production-like `update all --yes` evidence. The release key
+  rotation drill requires a workspace-backed temporary directory because the
+  staged release is too large for the default `/tmp` allocation.
+- `immediate-rc-blocker-status` now reports `ok: true` with the same concrete
+  inputs. The release-claim consistency gate now accepts the modern
+  `openbsd-full-tier1-core-report.json` and
+  `windows-full-tier1-core-report.json` evidence names directly, while the
+  Release Evidence workflow still emits legacy aliases for compatibility.
+- Linux published-URL qualification passed against the final stable
+  `v0.1.0` manifest in GitHub Actions run `25396304950`.
+- Arlen and Gorm Linux `amd64` package artifacts were uploaded to the
+  `v0.1.0` release, their hosted digests match the local build evidence, and
+  their package manifests now publish those hosted URLs. The signed package
+  index and package-index provenance were also uploaded to `v0.1.0`.
+- Native doctor parity was tightened by adding the missing shared
+  `toolchain.features` check to the Python doctor model and covering it in the
+  doctor regression suite. The native full CLI already emitted that check.
+- Linux `arm64` OTVM infrastructure validation is cleared through the OCI-backed
+  `ubuntu-24.04-aarch64` profile. On May 5, 2026, preflight selected
+  `Canonical-Ubuntu-24.04-aarch64-2026.03.31-0` for `VM.Standard.A1.Flex`,
+  and live acceptance lease `lease-20260505191156-s29xph` passed SSH contract
+  plus `uname -m = aarch64`/cloud-init validation and destroyed successfully.
+- Linux `arm64` and OpenBSD `arm64` managed targets remain planned with
+  `publish: false` until source builds, full-CLI smoke, package rebuilds, and
+  install/remove validation are available. OpenBSD `arm64` is explicitly not an
+  immediate RC blocker for v1 because the Tier 1 managed-install target set
+  does not include it and `../OracleTestVMs` still has no OpenBSD arm64 profile
+  or equivalent scripted host access.
 
 April 27, 2026 execution update:
 
@@ -739,6 +789,25 @@ Remaining subphases to project completion:
 - Resolve compatible artifacts for the selected environment.
 - Enforce dependency and compatibility rules.
 
+### A2. Runtime Component And Profile Resolution
+- Add virtual runtime component identifiers for GNUstep runtime capabilities:
+  `org.gnustep.runtime.base`, `org.gnustep.runtime.gui`, and
+  `org.gnustep.runtime.back`.
+- Allow managed toolchains, native packaged environments, and future split
+  runtime packages to advertise provided runtime components.
+- Allow package manifests and per-artifact records to require runtime
+  components separately from ordinary package dependencies.
+- Support install profiles such as `server`, `developer`, `desktop`, and `ci`
+  so a headless server install can select Base-only runtime while desktop and
+  GUI workflows can request GUI and Back explicitly.
+- Keep `dependencies` reserved for concrete package IDs until the installer has
+  a first-class virtual/provided dependency model; runtime component
+  requirements should be resolved against environment/toolchain/package
+  capabilities instead of being treated as already-installed package IDs.
+- If a package requires GUI or Back on a headless/Base-only environment, fail
+  with a structured next action such as installing the desktop runtime profile
+  rather than implicitly pulling display backends into server deployments.
+
 ### B. Transactional Package Installation
 - Stage package extraction and integration changes.
 - Finalize only when validation succeeds.
@@ -750,16 +819,28 @@ Remaining subphases to project completion:
 
 ### D. Package State Tracking
 - Track installed packages, selected artifacts, dependency relationships, and owned files.
+- Track provided runtime components and the selected install profile so future
+  installs, removals, updates, repairs, and audits can explain why
+  `org.gnustep.runtime.base`, `org.gnustep.runtime.gui`, or
+  `org.gnustep.runtime.back` is present.
 - Record enough trusted metadata to support revocation, denylisting, and forensic traceability of installed official artifacts later.
 
 ### G. Testing
 - Exhaustive install/remove transaction tests.
 - Dependency satisfaction and rejection tests.
+- Runtime component satisfaction and rejection tests, including Base-only
+  Arlen-style installs on headless roots and GUI/Back rejection or remediation
+  for Gorm-style packages.
+- Profile tests proving that `server` does not install GUI/Back and
+  `desktop`/GUI workflows do.
 - File ownership and cleanup tests.
 - Upgrade/reinstall tests for packages.
 
 ### H. Exit Criteria
 - Users can install and remove reviewed packages safely inside the managed environment.
+- Users can install Base-only packages into headless/server environments without
+  installing GNUstep GUI or Back, while GUI applications still require and
+  clearly request the GUI/Back runtime profile.
 
 ## Phase 12. Official Build Infrastructure
 
@@ -970,7 +1051,9 @@ Remaining subphases to project completion:
 ### B2. Linux `arm64/clang` Debian Managed Toolchain Build
 - Add Debian/aarch64 as a managed build target for the full CLI, managed toolchain, and official packages.
 - Use canonical target id `linux-arm64-clang` and canonical architecture value `arm64`, while documenting Debian/aarch64 as the initial host profile.
-- Prefer `../OracleTestVMs` local libvirt/mac capacity for build and validation leases, falling back to OCI only when local capacity is unavailable.
+- Prefer `../OracleTestVMs` local libvirt/mac capacity for build and validation
+  leases when an image exists; use the OCI-backed `ubuntu-24.04-aarch64`
+  profile for the current Linux arm64 validation path.
 - Keep publication disabled until source-built toolchain, full CLI, package artifacts, and host-backed install/remove validation pass on the target.
 
 ### C. Linux Validation
@@ -994,7 +1077,14 @@ Remaining subphases to project completion:
 - Phase 16D regression coverage includes source-lock validation, MSYS2 input-manifest validation, source-built Linux artifact packaging, release metadata propagation, archive metadata auditing, setup-time managed-prefix relocation, and host-origin GNUstep path leakage detection.
 - The older host-derived Linux assembler remains available only as a transitional non-production path and marks its artifacts `production_eligible = false`.
 - Phase 16 follow-up resolves the immediate Linux portability blocker by making the current `linux-amd64-clang` managed artifact explicitly Debian-scoped in generated release metadata, toolchain manifests, component inventories, and artifact selection. Ubuntu `amd64/clang` is now a separate distro-scoped target (`linux-ubuntu2404-amd64-clang`) with Docker-built managed CLI/toolchain artifacts published to the `v0.1.0-dev` prerelease and April 20, 2026 setup/doctor/package dogfood evidence. Fedora and Arch remain validated GCC/libobjc interoperability targets, and future managed Clang support there requires dependency closure or per-distro artifacts rather than reusing the Debian-scoped artifact.
-- Phase 16.B2 is implemented at metadata/planning level: the build matrix, source lock, toolchain manifest, component inventory, generated build script, package target metadata, and regression coverage now exist for `linux-arm64-clang`. Publication remains disabled until a Debian/aarch64 host-backed build and install/remove validation pass. Interim validation can use the new `../OracleTestVMs` `ubuntu-24.04-aarch64` profile because Ubuntu is close enough to exercise the Debian-family apt/prerequisite and Linux arm64 managed-build path. Blocker for final 16.B2 closeout: `../OracleTestVMs` must provide the in-progress Debian/aarch64 image/profile or we must explicitly revise 16.B2 from Debian/aarch64 to Ubuntu/aarch64.
+- Phase 16.B2 is implemented at metadata/planning level: the build matrix,
+  source lock, toolchain manifest, component inventory, generated build script,
+  package target metadata, and regression coverage now exist for
+  `linux-arm64-clang`. OTVM OCI validation for `ubuntu-24.04-aarch64` passed on
+  May 5, 2026 with lease `lease-20260505191156-s29xph`, clearing the VM-access
+  blocker for Linux arm64 host validation. Publication remains disabled until a
+  source-built Linux arm64 managed toolchain, full CLI smoke, package rebuilds,
+  and install/remove validation pass.
 
 ## Phase 17. Remaining Tier 1 Toolchain Builds
 
@@ -1016,7 +1106,14 @@ Remaining subphases to project completion:
 - Keep publication disabled until source-built toolchain, full CLI, package artifacts, and host-backed install/remove validation pass on the target.
 
 ### Phase 17 Execution Status
-- Phase 17.A2 is implemented at metadata/planning level: the build matrix, source lock, toolchain manifest, component inventory, generated build script, package target metadata, and regression coverage now exist for `openbsd-arm64-clang`. Publication remains disabled until a live OpenBSD/arm64 build, full-CLI smoke, package artifact rebuild, and install/remove validation pass. Blocker: `../OracleTestVMs` must provide the in-progress OpenBSD/arm64 image/profile or equivalent managed access to the available OpenBSD arm64 host for finishing 17.A2.
+- Phase 17.A2 is implemented at metadata/planning level: the build matrix,
+  source lock, toolchain manifest, component inventory, generated build script,
+  package target metadata, and regression coverage now exist for
+  `openbsd-arm64-clang`. It is a deferred expansion target rather than a v1 RC
+  blocker. Publication remains disabled until a live OpenBSD/arm64 build,
+  full-CLI smoke, package artifact rebuild, and install/remove validation pass;
+  `../OracleTestVMs` currently has no OpenBSD/arm64 profile or equivalent
+  scripted host access.
 
 ### B. Windows `amd64/msys2-clang64` Managed Toolchain Assembly
 - Define the pinned MSYS2 package input set for the Windows `clang64` target.
@@ -1563,10 +1660,28 @@ Remaining subphases to project completion:
 - Ensure the generated package index only exposes artifacts that correspond exactly to the declared source revision plus declared patches.
 - Add package provenance evidence including upstream source, applied patches, builder identity, target profile, artifact digest, and install/remove validation result.
 
+### D2. Runtime-Profile-Aware Package Catalog
+- Add official package metadata for Base-only and GUI/Back runtime needs.
+- Keep headless framework/server packages, starting with Arlen, on a
+  Base-only default runtime profile so server deployments do not install
+  `org.gnustep.runtime.gui` or `org.gnustep.runtime.back` unless an optional GUI feature requires them.
+- Mark GUI applications, starting with Gorm, as requiring Base, GUI, and Back.
+- Treat runtime components as capabilities provided by a managed toolchain,
+  native packaged environment, or future split runtime package rather than as
+  implicit global dependencies for every package.
+- Add package-index validation so runtime component requirements are explicit,
+  use stable component IDs, and are consistent with artifact runtime profiles.
+
 ### Phase 24 Execution Status
 - Phase 24.A-D are implemented at repository-tooling level: the `tools-xctest` package manifest records upstream source policy, update cadence, channel policy, submitted PR #5 as a verified downstream patch, and a `gnustep build`-oriented build workflow. Package tooling can now validate and apply declared patches to a source checkout, package build planning exposes build backend/invocation metadata, and generated package indexes/provenance carry package and per-artifact source/patch identity.
 - Phase 24.E-G now have a repository release gate through `scripts/internal/build_infra.py --json tools-xctest-release-gate --packages-dir packages --evidence-dir <evidence-dir>`. The gate now passes with OpenBSD arm64 explicitly deferred as a documented non-release blocker; validated targets have rebuilt `tools-xctest` artifacts from the declared upstream revision plus PR #5 patch with native install/smoke/minimal-bundle/remove evidence.
 - Current blockers: OpenBSD arm64 remains a documented non-release blocker pending an OTVM profile or equivalent scripted access to the OpenBSD arm64 host. Debian Linux amd64, Ubuntu Linux amd64, Linux arm64 on the OTVM Ubuntu/aarch64 managed Clang/libobjc2 path, OpenBSD amd64, and Windows/MSYS2 are rebuilt from the declared upstream revision plus PR #5 patch, published in package metadata, and validated with install/help/minimal-bundle/remove evidence.
+- Gorm and Arlen now have initial package manifests and package-index entries.
+  Their artifacts are intentionally `publish: false` until controlled package
+  builds, checksums, and install/smoke/remove evidence exist. Arlen records a
+  headless Base-only runtime profile and externalizes its tools-xctest
+  submodule as a build/test dependency; Gorm records a GUI application runtime
+  profile that requires Base, GUI, and Back.
 
 ### E. Native CLI Install/Remove Dogfood
 - Use the native full CLI to install `org.gnustep.tools-xctest` from the generated package index on a clean managed root.
@@ -2001,13 +2116,14 @@ Post-RC hardening before a stable production claim:
 
 Deferred expansion tracks:
 
-- Phase 16.B2: Linux `arm64/clang` build and publication, blocked on
-  Debian/aarch64 or accepted Ubuntu/aarch64 host-backed validation.
+- Phase 16.B2: Linux `arm64/clang` build and publication. OTVM
+  Ubuntu/aarch64 host validation is available; publication remains blocked on
+  source-built artifact, package rebuild, and install/remove evidence.
 - Phase 17.A: optional managed OpenBSD `amd64/clang` artifact publication if the
   project later needs a managed OpenBSD path; current release claims should use
   the preferred native packaged path.
-- Phase 17.A2: OpenBSD `arm64/clang` build and publication, blocked on
-  OpenBSD/arm64 host access or OTVM support.
+- Phase 17.A2: OpenBSD `arm64/clang` build and publication, deferred until
+  OpenBSD/arm64 host access or OTVM support exists.
 - Phase 17.C: Windows `amd64/msvc`, explicitly deferred.
 - Phase 24.C/E/G: complete any deferred package artifacts and dogfood evidence
   for non-release-blocking targets such as OpenBSD arm64.

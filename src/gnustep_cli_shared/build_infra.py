@@ -3496,10 +3496,14 @@ def release_claim_consistency_gate(
         ],
         "openbsd-otvm-smoke": [
             evidence_root / "otvm-openbsd-7.8-fvwm-smoke.json",
+            evidence_root / "openbsd-full-tier1-core-report.json",
+            evidence_root / "openbsd-full-release-report.json",
             evidence_root / "openbsd-tier1-report.json",
         ],
         "windows-otvm-smoke": [
             evidence_root / "otvm-windows-2022-smoke.json",
+            evidence_root / "windows-full-tier1-core-report.json",
+            evidence_root / "windows-full-release-report.json",
             evidence_root / "windows-tier1-report-patched-gorm.json",
         ],
     }
@@ -4588,6 +4592,208 @@ def package_tools_xctest_artifact(
         "installed_root": str(install_root),
         "commands": commands,
     }
+
+def _package_manifest_by_id(packages_dir: str | Path, package_id: str) -> tuple[Path, dict[str, Any]] | None:
+    root = Path(packages_dir).resolve()
+    for manifest_path in sorted(root.glob("*/package.json")):
+        manifest = json.loads(manifest_path.read_text())
+        if manifest.get("id") == package_id:
+            return manifest_path, manifest
+    return None
+
+
+def _copy_existing(paths: list[tuple[Path, Path]]) -> list[str]:
+    copied: list[str] = []
+    for source, destination in paths:
+        if not source.exists():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if source.is_dir():
+            if destination.exists():
+                shutil.rmtree(destination)
+            shutil.copytree(source, destination)
+        else:
+            shutil.copy2(source, destination)
+            destination.chmod(source.stat().st_mode)
+        copied.append(str(destination))
+    return copied
+
+
+def _managed_package_toolchain_preflight(toolchain: Path, gnustep_sh: Path, shim_path: Path) -> dict[str, Any]:
+    placeholder_findings: list[str] = []
+    for relative in (
+        Path("System/Library/Makefiles/GNUstep.sh"),
+        Path("System/Library/Makefiles/config.make"),
+        Path("System/Tools/gnustep-config"),
+        Path("etc/GNUstep/GNUstep.conf"),
+    ):
+        candidate = toolchain / relative
+        if not candidate.exists() or not candidate.is_file():
+            continue
+        try:
+            if MANAGED_PREFIX_PLACEHOLDER in candidate.read_text(encoding="utf-8", errors="ignore"):
+                placeholder_findings.append(str(candidate))
+        except OSError:
+            placeholder_findings.append(str(candidate))
+
+    probe_script = (
+        "set -e\n"
+        f"export PATH={shlex.quote(str(toolchain / 'System' / 'Tools'))}:$PATH\n"
+        "set +u\n"
+        f". {shlex.quote(str(gnustep_sh))}\n"
+        "set -u\n"
+        f"export PATH={shlex.quote(str(shim_path))}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n"
+        "printf 'OBJC_FLAGS=%s\\n' \"$(gnustep-config --objc-flags)\"\n"
+        "printf 'BASE_LIBS=%s\\n' \"$(gnustep-config --base-libs)\"\n"
+    )
+    probe = subprocess.run(["sh", "-c", probe_script], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    objc_flags = ""
+    base_libs = ""
+    if probe.returncode == 0:
+        for line in probe.stdout.splitlines():
+            if line.startswith("OBJC_FLAGS="):
+                objc_flags = line.removeprefix("OBJC_FLAGS=")
+            elif line.startswith("BASE_LIBS="):
+                base_libs = line.removeprefix("BASE_LIBS=")
+
+    objc_header = toolchain / "System" / "Sysroot" / "usr" / "include" / "objc" / "objc.h"
+    objc_header_text = objc_header.read_text(encoding="utf-8", errors="ignore") if objc_header.exists() else ""
+    blockers: list[dict[str, str]] = []
+    if placeholder_findings:
+        blockers.append({"code": "unrelocated_toolchain", "message": "Managed toolchain still contains install-root placeholders."})
+    if probe.returncode != 0:
+        blockers.append({"code": "gnustep_environment_unusable", "message": "Managed GNUstep environment could not be activated."})
+    if "/usr/include/GNUstep" in objc_flags or "/usr/local/include/GNUstep" in objc_flags:
+        blockers.append({"code": "host_gnustep_header_leak", "message": "gnustep-config emits host GNUstep header paths."})
+    if "-fobjc-runtime=gnustep-" not in objc_flags and "-fobjc-runtime=gnustep-" not in base_libs:
+        blockers.append({"code": "missing_modern_objc_runtime_flags", "message": "gnustep-config does not emit a modern GNUstep Objective-C runtime flag."})
+    if "__GNU_LIBOBJC__" in objc_header_text:
+        blockers.append({"code": "gcc_objc_runtime_headers", "message": "Managed Objective-C headers are GCC libobjc headers, not libobjc2 headers."})
+    blocks_runtime_candidates = (
+        toolchain / "System" / "Sysroot" / "usr" / "include" / "objc" / "blocks_runtime.h",
+        toolchain / "include" / "objc" / "blocks_runtime.h",
+        toolchain / "Local" / "Library" / "Headers" / "objc" / "blocks_runtime.h",
+    )
+    if not any(candidate.exists() for candidate in blocks_runtime_candidates):
+        blockers.append({"code": "missing_blocks_runtime_header", "message": "Managed Objective-C headers are missing objc/blocks_runtime.h."})
+
+    return {
+        "ok": not blockers,
+        "status": "ok" if not blockers else "error",
+        "toolchain_root": str(toolchain),
+        "objc_flags": objc_flags,
+        "base_libs": base_libs,
+        "placeholder_findings": placeholder_findings,
+        "blockers": blockers,
+        "stdout": probe.stdout,
+        "stderr": probe.stderr,
+    }
+
+
+def package_managed_source_artifact(
+    packages_dir: str | Path,
+    package_id: str,
+    target_id: str,
+    output_dir: str | Path,
+    *,
+    toolchain_root: str | Path,
+    source_dir: str | Path | None = None,
+    version: str | None = None,
+) -> dict[str, Any]:
+    command = "package-managed-source-artifact"
+    out = Path(output_dir).resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    located = _package_manifest_by_id(packages_dir, package_id)
+    if located is None:
+        return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Package manifest not found.", "package_id": package_id}
+    _manifest_path, manifest = located
+    source = manifest.get("source", {})
+    source_url = source.get("upstream_url") or source.get("url")
+    source_revision = source.get("revision")
+    package_version = version or manifest.get("version", "0.1.0")
+    work_root = out / "work"
+    checkout = Path(source_dir).resolve() if source_dir else work_root / f"{package_id}-src"
+    toolchain = Path(toolchain_root).resolve()
+    gnustep_sh = toolchain / "System" / "Library" / "Makefiles" / "GNUstep.sh"
+    tool_path = toolchain / "System" / "Tools"
+    shim_path = out / "managed-tool-shims"
+    commands: list[list[str]] = []
+    if not gnustep_sh.exists():
+        return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed GNUstep toolchain environment script is missing.", "toolchain_root": str(toolchain), "expected": str(gnustep_sh)}
+    shim_path.mkdir(parents=True, exist_ok=True)
+    gnustep_config_shim = shim_path / "gnustep-config"
+    if gnustep_config_shim.exists() or gnustep_config_shim.is_symlink():
+        gnustep_config_shim.unlink()
+    gnustep_config_shim.symlink_to(tool_path / "gnustep-config")
+    preflight = _managed_package_toolchain_preflight(toolchain, gnustep_sh, shim_path)
+    if not preflight["ok"]:
+        return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed package toolchain preflight failed.", "package_id": package_id, "target": target_id, "toolchain_root": str(toolchain), "preflight": preflight, "commands": commands}
+    if not checkout.exists():
+        checkout.parent.mkdir(parents=True, exist_ok=True)
+        commands.append(["git", "clone", str(source_url), str(checkout)])
+        clone = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        if clone.returncode != 0:
+            return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Failed to clone package source.", "stdout": clone.stdout, "stderr": clone.stderr, "commands": commands}
+    if source_revision:
+        commands.append(["git", "-C", str(checkout), "checkout", str(source_revision)])
+        checkout_proc = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        if checkout_proc.returncode != 0:
+            return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Failed to check out package source revision.", "stdout": checkout_proc.stdout, "stderr": checkout_proc.stderr, "commands": commands}
+    revision_proc = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    revision = revision_proc.stdout.strip() if revision_proc.returncode == 0 else source_revision or "unknown"
+    source_archive = out / f"{package_id}-source-{revision[:12]}.tar.gz"
+    archive_command = ["git", "-C", str(checkout), "archive", "--format=tar.gz", "-o", str(source_archive), "HEAD"]
+    commands.append(archive_command)
+    archived = subprocess.run(archive_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    if archived.returncode != 0:
+        return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Failed to archive package source.", "stdout": archived.stdout, "stderr": archived.stderr, "commands": commands}
+    if package_id == "io.github.danjboyd.arlen":
+        build_body = "make -C \"{source}\" clean >/dev/null || true\nmake -C \"{source}\" all CC=/usr/bin/clang OBJC=/usr/bin/clang ARLEN_USE_VENDORED_XCTEST=0 ARLEN_ENABLE_LLHTTP=0\n"
+    else:
+        build_body = "make -C \"{source}\" clean >/dev/null || true\nmake -C \"{source}\" CC=/usr/bin/clang OBJC=/usr/bin/clang\n"
+    build_script = (
+        "set -e\n"
+        f"export PATH={shlex.quote(str(tool_path))}:$PATH\n"
+        f". {shlex.quote(str(gnustep_sh))}\n"
+        f"export PATH={shlex.quote(str(shim_path))}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{shlex.quote(str(toolchain / 'Tools'))}:{shlex.quote(str(toolchain / 'Local' / 'Tools'))}:{shlex.quote(str(tool_path))}\n"
+        f"export LD_LIBRARY_PATH={shlex.quote(str(toolchain / 'Library' / 'Libraries'))}:{shlex.quote(str(toolchain / 'Local' / 'Library' / 'Libraries'))}:{shlex.quote(str(toolchain / 'System' / 'Library' / 'Libraries'))}:{shlex.quote(str(toolchain / 'lib'))}:{shlex.quote(str(toolchain / 'lib64'))}:${{LD_LIBRARY_PATH:-}}\n"
+        + build_body.format(source=shlex.quote(str(checkout)))
+    )
+    commands.append(["sh", "-c", build_script])
+    built = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    if built.returncode != 0:
+        return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed package build failed.", "package_id": package_id, "target": target_id, "source": {"revision": revision, "archive": str(source_archive), "sha256": _sha256(source_archive)}, "toolchain_root": str(toolchain), "exit_status": built.returncode, "stdout": built.stdout, "stderr": built.stderr, "commands": commands}
+    package_root = out / "staging" / package_id
+    if package_root.exists():
+        shutil.rmtree(package_root)
+    if package_id == "io.github.danjboyd.arlen":
+        copied = _copy_existing([
+            (checkout / "build" / "arlen", package_root / "bin" / "arlen"),
+            (checkout / "build" / "boomhauer", package_root / "bin" / "boomhauer"),
+            (checkout / "build" / "lib" / "libArlenFramework.a", package_root / "Library" / "Libraries" / "libArlenFramework.a"),
+            (checkout / "templates", package_root / "Resources" / "templates"),
+            (checkout / "modules", package_root / "Resources" / "modules"),
+            (checkout / "config", package_root / "Resources" / "config"),
+        ])
+    elif package_id == "org.gnustep.gorm":
+        copied = _copy_existing([
+            (checkout / "Applications" / "Gorm" / "Gorm.app", package_root / "Applications" / "Gorm.app"),
+            (checkout / "Applications" / "Gorm" / "obj" / "Gorm.app", package_root / "Applications" / "Gorm.app"),
+            (checkout / "GormCore" / "GormCore.framework", package_root / "Library" / "Frameworks" / "GormCore.framework"),
+            (checkout / "InterfaceBuilder" / "obj" / "libInterfaceBuilder.so", package_root / "Library" / "Libraries" / "libInterfaceBuilder.so"),
+            (checkout / "GormObjCHeaderParser" / "obj" / "libGormObjCHeaderParser.so", package_root / "Library" / "Libraries" / "libGormObjCHeaderParser.so"),
+            (checkout / "Tools" / "gormtool" / "obj" / "gormtool", package_root / "bin" / "gormtool"),
+        ])
+    else:
+        return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "No staging rule exists for package.", "package_id": package_id}
+    if not copied:
+        return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed build succeeded but no package outputs were staged.", "package_id": package_id, "target": target_id, "commands": commands}
+    artifact_filename = f"{package_id.split('.')[-1]}-{target_id}-{package_version}.tar.gz"
+    artifact_path = out / artifact_filename
+    if artifact_path.exists():
+        artifact_path.unlink()
+    _archive_directory(package_root, artifact_path, ".")
+    return {"schema_version": 1, "command": command, "ok": True, "status": "ok", "summary": "Managed package artifact generated.", "package_id": package_id, "version": package_version, "target": target_id, "source": {"type": source.get("type"), "url": source_url, "revision": revision, "archive": str(source_archive), "sha256": _sha256(source_archive)}, "artifact": {"id": target_id, "path": str(artifact_path), "filename": artifact_filename, "sha256": _sha256(artifact_path), "format": "tar.gz"}, "toolchain_root": str(toolchain), "staged_files": copied, "commands": commands}
 
 def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
     root = Path(packages_dir).resolve()

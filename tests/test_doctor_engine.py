@@ -74,6 +74,10 @@ class DoctorEngineTests(unittest.TestCase):
         bootstrap_ids = {check["id"] for check in bootstrap["checks"]}
         full_ids = {check["id"] for check in full["checks"]}
         self.assertEqual(bootstrap_ids, full_ids)
+        self.assertIn("toolchain.features", full_ids)
+        feature_check = {check["id"]: check for check in full["checks"]}["toolchain.features"]
+        self.assertIn("details", feature_check)
+        self.assertIn("blocks", feature_check["details"])
 
     def test_debian_gcc_is_classified_as_interoperability_only(self):
         fake_toolchain = {

@@ -1433,6 +1433,177 @@
   XCTAssertEqualObjects([state objectForKey: @"last_package_index_expires_at"], @"2026-05-20T00:00:00Z");
 }
 
+- (void)testInstallServerProfileAllowsBaseOnlyRuntimePackage
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"install-server-base-only"];
+  NSString *payloadDir = [tempRoot stringByAppendingPathComponent: @"artifact-root"];
+  NSString *archivePath = [tempRoot stringByAppendingPathComponent: @"arlen.tar.gz"];
+  NSString *indexPath = [tempRoot stringByAppendingPathComponent: @"package-index.json"];
+  NSString *managedRoot = [tempRoot stringByAppendingPathComponent: @"managed"];
+  NSDictionary *payload = nil;
+  NSDictionary *state = nil;
+  NSDictionary *record = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  [self ensureDirectory: [payloadDir stringByAppendingPathComponent: @"bin"]];
+  [@"arlen" writeToFile: [payloadDir stringByAppendingPathComponent: @"bin/arlen"]
+               atomically: YES
+                 encoding: NSUTF8StringEncoding
+                    error: NULL];
+  [self archiveDirectory: payloadDir toTarball: archivePath withRunner: runner];
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         @"stable", @"channel",
+                         [NSArray arrayWithObject:
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"io.github.danjboyd.arlen", @"id",
+                                                   @"Arlen", @"name",
+                                                   @"0.1.0", @"version",
+                                                   @"framework", @"kind",
+                                                   @"Headless framework fixture.", @"summary",
+                                                   [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                  [NSArray arrayWithObject: @"linux"], @"supported_os",
+                                                                  [NSArray arrayWithObject: @"amd64"], @"supported_arch",
+                                                                  [NSArray arrayWithObject: @"clang"], @"supported_compiler_families",
+                                                                  [NSArray arrayWithObject: @"libobjc2"], @"supported_objc_runtimes",
+                                                                  [NSArray arrayWithObject: @"modern"], @"supported_objc_abi",
+                                                                  [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                  [NSArray array], @"forbidden_features",
+                                                                  [NSArray arrayWithObject: @"org.gnustep.runtime.base"], @"runtime_components",
+                                                                  nil], @"requirements",
+                                                   [NSArray array], @"dependencies",
+                                                   [NSArray arrayWithObject:
+                                                              [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                             @"arlen-linux-clang-headless", @"id",
+                                                                             @"linux", @"os",
+                                                                             @"amd64", @"arch",
+                                                                             @"clang", @"compiler_family",
+                                                                             @"clang", @"toolchain_flavor",
+                                                                             @"libobjc2", @"objc_runtime",
+                                                                             @"modern", @"objc_abi",
+                                                                             [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                             @"headless-base", @"runtime_profile",
+                                                                             [NSArray arrayWithObject: @"org.gnustep.runtime.base"], @"runtime_components",
+                                                                             [NSString stringWithFormat: @"file://%@", archivePath], @"url",
+                                                                             [runner sha256ForFile: archivePath], @"sha256",
+                                                                             nil]], @"artifacts",
+                                                   nil]], @"packages",
+                         nil]
+                 toPath: indexPath];
+
+  payload = [runner executeInstallForContext:
+                        [GSCommandContext contextWithArguments:
+                                            [NSArray arrayWithObjects:
+                                                       @"install",
+                                                       @"--root",
+                                                       managedRoot,
+                                                       @"--index",
+                                                       indexPath,
+                                                       @"--profile",
+                                                       @"server",
+                                                       @"io.github.danjboyd.arlen",
+                                                       nil]]
+                                  exitCode: &exitCode];
+  state = [NSJSONSerialization JSONObjectWithData:
+                               [NSData dataWithContentsOfFile: [managedRoot stringByAppendingPathComponent: @"state/installed-packages.json"]]
+                                         options: 0
+                                           error: NULL];
+  record = [[state objectForKey: @"packages"] objectForKey: @"io.github.danjboyd.arlen"];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([payload objectForKey: @"install_profile"], @"server");
+  XCTAssertEqualObjects([payload objectForKey: @"provided_runtime_components"], [NSArray arrayWithObject: @"org.gnustep.runtime.base"]);
+  XCTAssertEqualObjects([record objectForKey: @"provided_runtime_components"], [NSArray arrayWithObject: @"org.gnustep.runtime.base"]);
+}
+
+- (void)testInstallServerProfileRejectsGUIRuntimePackage
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"install-server-gui-reject"];
+  NSString *payloadDir = [tempRoot stringByAppendingPathComponent: @"artifact-root"];
+  NSString *archivePath = [tempRoot stringByAppendingPathComponent: @"gorm.tar.gz"];
+  NSString *indexPath = [tempRoot stringByAppendingPathComponent: @"package-index.json"];
+  NSString *managedRoot = [tempRoot stringByAppendingPathComponent: @"managed"];
+  NSDictionary *payload = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  [self ensureDirectory: [payloadDir stringByAppendingPathComponent: @"bin"]];
+  [@"gorm" writeToFile: [payloadDir stringByAppendingPathComponent: @"bin/Gorm"]
+              atomically: YES
+                encoding: NSUTF8StringEncoding
+                   error: NULL];
+  [self archiveDirectory: payloadDir toTarball: archivePath withRunner: runner];
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         @"stable", @"channel",
+                         [NSArray arrayWithObject:
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"org.gnustep.gorm", @"id",
+                                                   @"Gorm", @"name",
+                                                   @"1.5.0", @"version",
+                                                   @"gui-application", @"kind",
+                                                   @"GUI fixture.", @"summary",
+                                                   [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                  [NSArray arrayWithObject: @"linux"], @"supported_os",
+                                                                  [NSArray arrayWithObject: @"amd64"], @"supported_arch",
+                                                                  [NSArray arrayWithObject: @"clang"], @"supported_compiler_families",
+                                                                  [NSArray arrayWithObject: @"libobjc2"], @"supported_objc_runtimes",
+                                                                  [NSArray arrayWithObject: @"modern"], @"supported_objc_abi",
+                                                                  [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                  [NSArray array], @"forbidden_features",
+                                                                  [NSArray arrayWithObjects:
+                                                                             @"org.gnustep.runtime.base",
+                                                                             @"org.gnustep.runtime.gui",
+                                                                             @"org.gnustep.runtime.back",
+                                                                             nil], @"runtime_components",
+                                                                  nil], @"requirements",
+                                                   [NSArray array], @"dependencies",
+                                                   [NSArray arrayWithObject:
+                                                              [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                             @"gorm-linux-clang", @"id",
+                                                                             @"linux", @"os",
+                                                                             @"amd64", @"arch",
+                                                                             @"clang", @"compiler_family",
+                                                                             @"clang", @"toolchain_flavor",
+                                                                             @"libobjc2", @"objc_runtime",
+                                                                             @"modern", @"objc_abi",
+                                                                             [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                             [NSString stringWithFormat: @"file://%@", archivePath], @"url",
+                                                                             [runner sha256ForFile: archivePath], @"sha256",
+                                                                             nil]], @"artifacts",
+                                                   nil]], @"packages",
+                         nil]
+                 toPath: indexPath];
+
+  payload = [runner executeInstallForContext:
+                        [GSCommandContext contextWithArguments:
+                                            [NSArray arrayWithObjects:
+                                                       @"install",
+                                                       @"--root",
+                                                       managedRoot,
+                                                       @"--index",
+                                                       indexPath,
+                                                       @"--profile",
+                                                       @"server",
+                                                       @"org.gnustep.gorm",
+                                                       nil]]
+                                  exitCode: &exitCode];
+
+  XCTAssertEqual(exitCode, 4);
+  XCTAssertFalse([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([payload objectForKey: @"summary"], @"Package requires unavailable GNUstep runtime components.");
+  XCTAssertTrue([[[payload objectForKey: @"data"] objectForKey: @"missing_runtime_components"] containsObject: @"org.gnustep.runtime.gui"]);
+  XCTAssertTrue([[[payload objectForKey: @"data"] objectForKey: @"missing_runtime_components"] containsObject: @"org.gnustep.runtime.back"]);
+  XCTAssertEqualObjects([[payload objectForKey: @"data"] objectForKey: @"install_profile"], @"server");
+  XCTAssertEqualObjects([[[[payload objectForKey: @"data"] objectForKey: @"actions"] objectAtIndex: 0] objectForKey: @"profile"], @"desktop");
+}
+
 - (void)testUpdatePackagesChecksAndAppliesCompatiblePackageUpgrade
 {
   StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
