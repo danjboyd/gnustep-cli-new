@@ -148,7 +148,15 @@
       ],
       "format": "tar.gz",
       "publish": false,
-      "status": "planned_manifest_only_no_controlled_binary_yet"
+      "status": "controlled_binary_built_pending_publication",
+      "filename": "arlen-arlen-linux-ubuntu2404-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
+      "artifact_path": ".artifacts/package-app-arlen-ubuntu2404-25402322391/arlen-arlen-linux-ubuntu2404-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
+      "sha256": "253d4bb8bea2408f0f0389dd6b6295d2cd7fc6e715021c063148e576bf450114",
+      "size": 5225490,
+      "notes": "GitHub Actions Package App Artifact run 25402322391 built this package from the Linux Ubuntu 24.04 amd64 managed toolchain produced by run 25401769317. Publication remains pending release promotion.",
+      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25402322391",
+      "managed_toolchain_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25401769317",
+      "build_blockers": []
     },
     {
       "id": "arlen-linux-arm64-clang-headless",
@@ -172,7 +180,15 @@
       ],
       "format": "tar.gz",
       "publish": false,
-      "status": "planned_manifest_only_no_controlled_binary_yet"
+      "status": "controlled_binary_built_pending_publication",
+      "filename": "arlen-arlen-linux-arm64-clang-headless-0.1.0-snapshot.20260505.2.tar.gz",
+      "artifact_path": ".artifacts/package-app-arlen-arm64-25402206815/arlen-arlen-linux-arm64-clang-headless-0.1.0-snapshot.20260505.2.tar.gz",
+      "sha256": "6d61dd37257dcb87ce493518893e1d779d7fb0ad0f59c79680dbf642bc5bdd39",
+      "size": 5685864,
+      "notes": "GitHub Actions Package App Artifact run 25402206815 built this package from the Linux arm64 managed toolchain produced by run 25401565214. Publication remains pending release promotion.",
+      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25402206815",
+      "managed_toolchain_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25401565214",
+      "build_blockers": []
     },
     {
       "id": "arlen-openbsd-amd64-clang-headless",

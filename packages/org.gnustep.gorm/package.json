@@ -107,7 +107,15 @@
       "portability_policy": "distribution-scoped",
       "format": "tar.gz",
       "publish": false,
-      "status": "planned_manifest_only_no_controlled_binary_yet"
+      "status": "controlled_binary_built_pending_publication",
+      "filename": "gorm-gorm-linux-ubuntu2404-amd64-clang-1.5.0-snapshot.20260505.tar.gz",
+      "artifact_path": ".artifacts/package-app-gorm-ubuntu2404-25402506608/gorm-gorm-linux-ubuntu2404-amd64-clang-1.5.0-snapshot.20260505.tar.gz",
+      "sha256": "9438fe5d8b67eb59c9e98719c6f015f35464429ca88236193f4f90253e38f7d2",
+      "size": 5563831,
+      "notes": "GitHub Actions Package App Artifact run 25402506608 built this package from the Linux Ubuntu 24.04 amd64 managed toolchain produced by run 25401769317. Publication remains pending release promotion.",
+      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25402506608",
+      "managed_toolchain_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25401769317",
+      "build_blockers": []
     },
     {
       "id": "gorm-openbsd-amd64-clang",
