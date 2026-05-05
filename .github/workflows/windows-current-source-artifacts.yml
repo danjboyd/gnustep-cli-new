@@ -18,6 +18,9 @@ on:
         description: SHA256 for existing Windows toolchain zip
         required: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
 

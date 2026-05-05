@@ -1380,8 +1380,8 @@ class BuildInfraTests(unittest.TestCase):
     def test_release_qualification_summary_records_workflow_runs_and_digests(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp = Path(tempdir)
-            release_dir = temp / "release"
-            release_dir.mkdir()
+            release_dir = temp / "stable" / "0.1.0"
+            release_dir.mkdir(parents=True)
             (release_dir / "gnustep-cli-linux-amd64-clang-0.1.0.tar.gz").write_text("cli")
             (release_dir / "release-manifest.json").write_text(json.dumps({
                 "schema_version": 1,
@@ -1414,6 +1414,35 @@ class BuildInfraTests(unittest.TestCase):
             self.assertEqual(summary["workflow_runs"]["release"], "5")
             self.assertEqual(summary["assets"][0]["asset_sha256"], sha256(release_dir / "gnustep-cli-linux-amd64-clang-0.1.0.tar.gz"))
             self.assertTrue((release_dir / "release-qualification-summary.json").exists())
+
+    def test_release_qualification_summary_rejects_local_run_ids_for_stable_release(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            release_dir = temp / "stable" / "0.1.0"
+            release_dir.mkdir(parents=True)
+            (release_dir / "release-manifest.json").write_text(json.dumps({
+                "schema_version": 1,
+                "releases": [{"version": "0.1.0", "artifacts": []}],
+            }))
+            (release_dir / "release-evidence-bundle.json").write_text(json.dumps({
+                "schema_version": 1,
+                "ok": True,
+                "evidence": [],
+            }))
+            (release_dir / "windows-current-source-artifact.json").write_text('{"ok": true, "summary": "ok"}')
+            summary = write_release_qualification_summary(
+                release_dir,
+                release_run_id="local-20260505",
+                release_inputs_run_id="1",
+                stage_release_run_id="2",
+                package_index_run_id="3",
+                release_evidence_run_id="4",
+                source_revision="abc123",
+            )
+            checks = {check["id"]: check for check in summary["checks"]}
+            self.assertFalse(summary["ok"])
+            self.assertFalse(checks["stable-workflow-run-ids-hosted"]["ok"])
+            self.assertEqual(checks["stable-workflow-run-ids-hosted"]["details"]["local_workflow_runs"]["release"], "local-20260505")
 
     def test_release_key_rotation_drill_rejects_cross_signed_metadata(self):
         with tempfile.TemporaryDirectory() as tempdir:

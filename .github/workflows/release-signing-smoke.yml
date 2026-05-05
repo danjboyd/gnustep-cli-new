@@ -11,6 +11,9 @@ on:
         description: Workflow run id that produced the staged release artifact
         required: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   actions: read
   contents: read

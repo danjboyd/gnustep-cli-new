@@ -8,6 +8,9 @@ on:
         required: true
         default: 0.1.0-dev-current
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
 

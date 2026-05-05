@@ -31,6 +31,9 @@ on:
         required: true
         default: /tmp/gnustep-published-url-qualification/install
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
 

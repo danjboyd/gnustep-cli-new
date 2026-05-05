@@ -62,6 +62,9 @@ on:
         description: Path to production-like gnustep update all --yes evidence JSON
         required: true
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   actions: read
   contents: write

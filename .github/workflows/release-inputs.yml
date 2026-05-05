@@ -28,6 +28,9 @@ on:
         description: SHA256 for the Windows toolchain input archive
         required: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   release-inputs:
     runs-on: ubuntu-latest

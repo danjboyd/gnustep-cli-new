@@ -3354,10 +3354,33 @@ def write_release_qualification_summary(
         "package_index": package_index_run_id,
         "release_evidence": release_evidence_run_id,
     }
+    release_version = None
+    if manifest_path.exists():
+        try:
+            release_version = json.loads(manifest_path.read_text(encoding="utf-8-sig")).get("releases", [{}])[0].get("version")
+        except Exception:
+            release_version = None
+    channel = root.parent.name if root.parent.name else None
+    is_stable_release = channel == "stable" and release_version is not None and "-dev" not in str(release_version)
+    local_workflow_runs = {
+        name: value
+        for name, value in workflow_runs.items()
+        if isinstance(value, str) and value.startswith("local-")
+    }
     checks = [
         {"id": "release-manifest-present", "ok": manifest_path.exists(), "message": "release manifest is present"},
         {"id": "release-evidence-bundle-present", "ok": evidence_bundle_path.exists(), "message": "release evidence bundle is present"},
         {"id": "workflow-run-ids-recorded", "ok": all(workflow_runs.values()), "message": "all producer and release workflow run ids are recorded"},
+        {
+            "id": "stable-workflow-run-ids-hosted",
+            "ok": not is_stable_release or not local_workflow_runs,
+            "message": (
+                "stable release workflow run ids are hosted run ids"
+                if not local_workflow_runs
+                else "stable release workflow run ids must not use local placeholders"
+            ),
+            "details": {"local_workflow_runs": local_workflow_runs},
+        },
         {
             "id": "windows-current-source-or-explicit-exception",
             "ok": stale_windows_allowed or (evidence_root / "windows-current-source-artifact.json").exists(),
