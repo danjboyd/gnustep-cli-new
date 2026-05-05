@@ -2228,7 +2228,7 @@ class BuildInfraTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(source), "init"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             subprocess.run(["git", "-C", str(source), "config", "user.email", "fixture@example.invalid"], check=True)
             subprocess.run(["git", "-C", str(source), "config", "user.name", "Fixture"], check=True)
-            (source / "GNUmakefile").write_text("all:\n\tfalse\n", encoding="utf-8")
+            (source / "GNUmakefile").write_text("ARLEN_PLATFORM_LINK_LIBS := -ldl\nall:\n\tfalse\n", encoding="utf-8")
             (source / "tools").mkdir()
             (source / "tools" / "arlen.m").write_text(
                 "void wait_for_reload(double interval) { usleep((useconds_t)(interval * 1000000.0)); }\n",
@@ -2284,6 +2284,9 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("gmake -C", build_command)
             self.assertIn("CC=clang OBJC=clang", build_command)
             self.assertNotIn("/usr/bin/clang", build_command)
+            self.assertIn(["patch-source", "openbsd-arlen-drop-libdl"], payload["commands"])
+            self.assertIn("ARLEN_PLATFORM_LINK_LIBS :=", (source / "GNUmakefile").read_text())
+            self.assertTrue((root / "out" / "managed-tool-shims" / "sha256sum").exists())
 
     def test_package_managed_source_artifact_uses_windows_msys2_layout(self):
         with tempfile.TemporaryDirectory() as tempdir:

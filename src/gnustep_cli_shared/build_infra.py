@@ -4789,6 +4789,10 @@ def package_managed_source_artifact(
         shutil.copy2(tool_path / "gnustep-config", gnustep_config_shim)
     else:
         gnustep_config_shim.symlink_to(tool_path / "gnustep-config")
+    if is_openbsd:
+        sha256sum_shim = shim_path / "sha256sum"
+        sha256sum_shim.write_text("#!/bin/sh\nsha256 -q \"$@\"\n", encoding="utf-8")
+        sha256sum_shim.chmod(0o755)
     preflight = {"ok": True, "status": "ok", "toolchain_root": str(toolchain), "blockers": []} if is_windows else _managed_package_toolchain_preflight(toolchain, gnustep_sh, shim_path)
     if not preflight["ok"]:
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed package toolchain preflight failed.", "package_id": package_id, "target": target_id, "toolchain_root": str(toolchain), "preflight": preflight, "commands": commands}
@@ -4875,6 +4879,14 @@ def package_managed_source_artifact(
             if patched != text:
                 arlen_route_policy.write_text(patched, encoding="utf-8")
                 commands.append(["patch-source", "windows-arlen-route-policy-winsock"])
+    if is_openbsd and package_id == "io.github.danjboyd.arlen":
+        arlen_makefile = checkout / "GNUmakefile"
+        if arlen_makefile.exists():
+            text = arlen_makefile.read_text(encoding="utf-8")
+            patched = text.replace("ARLEN_PLATFORM_LINK_LIBS := -ldl", "ARLEN_PLATFORM_LINK_LIBS :=")
+            if patched != text:
+                arlen_makefile.write_text(patched, encoding="utf-8")
+                commands.append(["patch-source", "openbsd-arlen-drop-libdl"])
     if is_windows and package_id == "org.gnustep.gorm":
         formatter_dir = checkout / "Applications" / "Gorm" / "Palettes" / "6Formatters"
         formatter_import = (
