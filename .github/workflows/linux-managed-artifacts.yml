@@ -51,12 +51,17 @@ jobs:
             libblocksruntime-dev \
             libcurl4-openssl-dev \
             libffi-dev \
+            libfreetype-dev \
             libgnutls28-dev \
             libicu-dev \
             libjpeg-dev \
             libpng-dev \
             libssl-dev \
             libtiff-dev \
+            libx11-dev \
+            libxext-dev \
+            libxft-dev \
+            libxt-dev \
             libxml2-dev \
             libxslt1-dev \
             lld \
