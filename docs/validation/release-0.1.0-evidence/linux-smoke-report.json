@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "suite_id": "tier1-core",
+  "target_id": "linux-amd64-clang",
+  "runner_id": "github-actions-debian-12-container",
+  "release_under_test": {
+    "source": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0-dev-hosted.32/release-manifest.json"
+  },
+  "overall_ok": true,
+  "summary": "Linux published-URL bootstrap, doctor, new/build/run smoke passed.",
+  "scenario_reports": [
+    {
+      "scenario_id": "bootstrap-install-usable-cli",
+      "ok": true,
+      "status": "passed",
+      "summary": "bootstrap-install-usable-cli passed."
+    },
+    {
+      "scenario_id": "new-cli-project-build-run",
+      "ok": true,
+      "status": "passed",
+      "summary": "new-cli-project-build-run passed."
+    }
+  ],
+  "evidence": {
+    "files": [
+      "build.json",
+      "doctor.json",
+      "full-cli-trace.log",
+      "gnustep-bootstrap.sh",
+      "help.txt",
+      "new-project",
+      "new.json",
+      "release-manifest.json",
+      "run.json",
+      "setup.json",
+      "version.txt"
+    ]
+  }
+}

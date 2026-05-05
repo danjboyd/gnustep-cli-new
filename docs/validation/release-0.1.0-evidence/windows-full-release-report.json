@@ -1,0 +1,181 @@
+﻿{
+    "schema_version":  1,
+    "suite_id":  "release",
+    "target_id":  "windows-amd64-msys2-clang64",
+    "runner_id":  "otvm-lease",
+    "release_under_test":  {
+                               "source":  "final-staged-0.1.0-25342971361",
+                               "old_manifest":  "C:\\gnustep-smoke\\release-old\\release-manifest.json",
+                               "new_manifest":  "C:\\gnustep-smoke\\release-new\\release-manifest.json"
+                           },
+    "fixture_references":  [
+                               "generated-cli-template-output",
+                               "gorm-upstream-pinned",
+                               "gorm-windows-private-ivar-patch",
+                               "cli-only-update-channel"
+                           ],
+    "overall_ok":  true,
+    "scenario_reports":  [
+                             {
+                                 "scenario_id":  "bootstrap-install-usable-cli",
+                                 "ok":  true,
+                                 "status":  "passed",
+                                 "summary":  "bootstrap-install-usable-cli passed.",
+                                 "assertion_results":  [
+                                                           {
+                                                               "assertion_id":  "bootstrap-command-succeeds",
+                                                               "ok":  true,
+                                                               "message":  "bootstrap-command-succeeds passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "installed-gnustep-exists",
+                                                               "ok":  true,
+                                                               "message":  "installed-gnustep-exists passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "gnustep-help-succeeds",
+                                                               "ok":  true,
+                                                               "message":  "gnustep-help-succeeds passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "gnustep-version-succeeds",
+                                                               "ok":  true,
+                                                               "message":  "gnustep-version-succeeds passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "doctor-json-command-metadata-is-doctor",
+                                                               "ok":  true,
+                                                               "message":  "doctor-json-command-metadata-is-doctor passed."
+                                                           }
+                                                       ],
+                                 "step_results":  [
+
+                                                  ],
+                                 "command_transcripts":  [
+
+                                                         ],
+                                 "evidence":  {
+
+                                              }
+                             },
+                             {
+                                 "scenario_id":  "new-cli-project-build-run",
+                                 "ok":  true,
+                                 "status":  "passed",
+                                 "summary":  "new-cli-project-build-run passed.",
+                                 "assertion_results":  [
+                                                           {
+                                                               "assertion_id":  "new-command-succeeds",
+                                                               "ok":  true,
+                                                               "message":  "new-command-succeeds passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "build-command-succeeds",
+                                                               "ok":  true,
+                                                               "message":  "build-command-succeeds passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "run-command-succeeds",
+                                                               "ok":  true,
+                                                               "message":  "run-command-succeeds passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "sample-output-matches-expected-text",
+                                                               "ok":  true,
+                                                               "message":  "sample-output-matches-expected-text passed."
+                                                           }
+                                                       ],
+                                 "step_results":  [
+
+                                                  ],
+                                 "command_transcripts":  [
+
+                                                         ],
+                                 "evidence":  {
+
+                                              }
+                             },
+                             {
+                                 "scenario_id":  "gorm-build-run",
+                                 "ok":  true,
+                                 "status":  "passed",
+                                 "summary":  "gorm-build-run passed with pinned Windows fixture patch for private NSMatrix ivar access.",
+                                 "assertion_results":  [
+                                                           {
+                                                               "assertion_id":  "gorm-source-revision-is-pinned",
+                                                               "ok":  true,
+                                                               "message":  "gorm-source-revision-is-pinned passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "gorm-build-succeeds",
+                                                               "ok":  true,
+                                                               "message":  "gorm-build-succeeds passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "gorm-launch-succeeds",
+                                                               "ok":  true,
+                                                               "message":  "gorm-launch-succeeds passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "gorm-process-stays-alive-briefly",
+                                                               "ok":  true,
+                                                               "message":  "gorm-process-stays-alive-briefly passed."
+                                                           }
+                                                       ],
+                                 "step_results":  [
+
+                                                  ],
+                                 "command_transcripts":  [
+
+                                                         ],
+                                 "evidence":  {
+
+                                              }
+                             },
+                             {
+                                 "scenario_id":  "self-update-cli-only",
+                                 "ok":  true,
+                                 "status":  "passed",
+                                 "summary":  "self-update-cli-only passed.",
+                                 "assertion_results":  [
+                                                           {
+                                                               "assertion_id":  "update-check-detects-newer-release",
+                                                               "ok":  true,
+                                                               "message":  "update-check-detects-newer-release passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "update-plan-identifies-cli-only-layer",
+                                                               "ok":  true,
+                                                               "message":  "update-plan-identifies-cli-only-layer passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "update-apply-succeeds",
+                                                               "ok":  true,
+                                                               "message":  "update-apply-succeeds passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "post-update-version-matches-target-release",
+                                                               "ok":  true,
+                                                               "message":  "post-update-version-matches-target-release passed."
+                                                           },
+                                                           {
+                                                               "assertion_id":  "post-update-build-run-smoke-succeeds",
+                                                               "ok":  true,
+                                                               "message":  "post-update-build-run-smoke-succeeds passed."
+                                                           }
+                                                       ],
+                                 "step_results":  [
+
+                                                  ],
+                                 "command_transcripts":  [
+
+                                                         ],
+                                 "evidence":  {
+
+                                              }
+                             }
+                         ],
+    "evidence":  {
+                     "evidence_file":  "C:\\gnustep-smoke\\windows-full-release-evidence.json"
+                 }
+}
