@@ -4096,6 +4096,20 @@ def verify_release_directory(release_dir: str | Path) -> dict[str, Any]:
         )
         ok = ok and checksum_ok
 
+    package_index_path = root / "package-index.json"
+    if package_index_path.exists():
+        package_index_gate = package_index_trust_gate(package_index_path)
+        results.append(
+            {
+                "filename": "package-index.json",
+                "exists": True,
+                "signature_verified_with_bundled_public_key": package_index_gate["ok"],
+                "errors": [] if package_index_gate["ok"] else ["package index signatures do not verify with bundled public key"],
+                "payload": package_index_gate,
+            }
+        )
+        ok = ok and package_index_gate["ok"]
+
     return {
         "schema_version": 1,
         "command": "verify-release",

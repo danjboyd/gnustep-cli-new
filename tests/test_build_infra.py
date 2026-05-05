@@ -1923,6 +1923,46 @@ class BuildInfraTests(unittest.TestCase):
             for path in install_paths:
                 self.assertTrue(path.exists())
 
+    def test_verify_release_requires_promoted_package_index_public_key(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_binary = temp / "gnustep"
+            cli_binary.write_text("binary")
+            cli_bundle = temp / "cli-bundle"
+            bundle_full_cli(cli_binary, cli_bundle, repo_root=ROOT)
+            staged = stage_release_assets(
+                "0.1.0",
+                temp / "dist",
+                "https://github.com/danjboyd/gnustep-cli/releases",
+                cli_inputs={"linux-amd64-clang": cli_bundle},
+            )
+            release_dir = Path(staged["release_dir"])
+            package_index = release_dir / "package-index.json"
+            package_index.write_text(json.dumps({
+                "schema_version": 1,
+                "channel": "stable",
+                "generated_at": "TBD",
+                "metadata_version": 1,
+                "expires_at": "TBD",
+                "trust": {"root_version": 1, "signature_policy": "single-role-v1", "signatures": [], "revoked_packages": []},
+                "packages": [],
+            }) + "\n")
+            package_key = temp / "package-index-key.pem"
+            subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(package_key)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            from gnustep_cli_shared.package_repository import sign_package_index_metadata
+            self.assertTrue(sign_package_index_metadata(package_index, package_key)["ok"])
+
+            verified = verify_release_directory(release_dir)
+            self.assertTrue(verified["ok"])
+            package_result = next(result for result in verified["results"] if result.get("filename") == "package-index.json")
+            self.assertTrue(package_result["signature_verified_with_bundled_public_key"])
+
+            (release_dir / "package-index-signing-public.pem").unlink()
+            missing_key = verify_release_directory(release_dir)
+            self.assertFalse(missing_key["ok"])
+            package_result = next(result for result in missing_key["results"] if result.get("filename") == "package-index.json")
+            self.assertFalse(package_result["signature_verified_with_bundled_public_key"])
+
     def test_qualify_full_cli_handoff(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp = Path(tempdir)

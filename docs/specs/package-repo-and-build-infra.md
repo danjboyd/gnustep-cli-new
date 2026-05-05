@@ -59,14 +59,22 @@ This document records the current Phase 10-12 baseline.
   builds plus local install/remove validation
 - signed `package-index.json` and `package-index-provenance.json` assets are
   hosted on the `v0.1.0` release; the package-index CI signing lane passed on
-  `master`, and should be rerun after the Arlen/Gorm package manifest additions
-  are pushed so CI-held signing reproduces the local package set
+  `master`, and the matching `package-index-signing-public.pem` is also hosted
+  as explicit release trust material so consumers can verify package-index
+  signatures without downloading workflow artifacts
+- the release workflow now promotes the package-index signing public key beside
+  the signed package-index assets, and `verify-release` rejects promoted
+  package-index metadata when it cannot verify with that bundled public key
 - Linux arm64 VM access is available through the OTVM OCI
   `ubuntu-24.04-aarch64` profile; May 5, 2026 acceptance lease
   `lease-20260505191156-s29xph` validated SSH access and `aarch64`
   architecture and destroyed successfully
 - release manifests can be generated from that matrix
-- the current helpers are scaffolding for controlled artifact publication workflows
+- the `Package App Artifact` workflow is the controlled CI entrypoint for
+  managed Unix-style Arlen/Gorm package artifact builds from explicit toolchain
+  URLs and SHA256s; Windows/MSYS2 package artifacts still require a separate
+  Windows target workflow because Gorm publication needs GUI launch/screenshot
+  evidence
 
 ## Upstream And Patch Policy
 

@@ -1085,6 +1085,12 @@ Remaining subphases to project completion:
   blocker for Linux arm64 host validation. Publication remains disabled until a
   source-built Linux arm64 managed toolchain, full CLI smoke, package rebuilds,
   and install/remove validation pass.
+- The package-index release trust boundary is now closed for `v0.1.0`: the
+  package-index CI signing public key is published as
+  `package-index-signing-public.pem` in the hosted release asset set, and
+  `verify-release` fails if promoted package-index metadata cannot verify with
+  that bundled public key. This keeps hosted package-index verification
+  independent of workflow artifact lookup.
 
 ## Phase 17. Remaining Tier 1 Toolchain Builds
 
@@ -1676,12 +1682,20 @@ Remaining subphases to project completion:
 - Phase 24.A-D are implemented at repository-tooling level: the `tools-xctest` package manifest records upstream source policy, update cadence, channel policy, submitted PR #5 as a verified downstream patch, and a `gnustep build`-oriented build workflow. Package tooling can now validate and apply declared patches to a source checkout, package build planning exposes build backend/invocation metadata, and generated package indexes/provenance carry package and per-artifact source/patch identity.
 - Phase 24.E-G now have a repository release gate through `scripts/internal/build_infra.py --json tools-xctest-release-gate --packages-dir packages --evidence-dir <evidence-dir>`. The gate now passes with OpenBSD arm64 explicitly deferred as a documented non-release blocker; validated targets have rebuilt `tools-xctest` artifacts from the declared upstream revision plus PR #5 patch with native install/smoke/minimal-bundle/remove evidence.
 - Current blockers: OpenBSD arm64 remains a documented non-release blocker pending an OTVM profile or equivalent scripted access to the OpenBSD arm64 host. Debian Linux amd64, Ubuntu Linux amd64, Linux arm64 on the OTVM Ubuntu/aarch64 managed Clang/libobjc2 path, OpenBSD amd64, and Windows/MSYS2 are rebuilt from the declared upstream revision plus PR #5 patch, published in package metadata, and validated with install/help/minimal-bundle/remove evidence.
-- Gorm and Arlen now have initial package manifests and package-index entries.
-  Their artifacts are intentionally `publish: false` until controlled package
-  builds, checksums, and install/smoke/remove evidence exist. Arlen records a
-  headless Base-only runtime profile and externalizes its tools-xctest
-  submodule as a build/test dependency; Gorm records a GUI application runtime
-  profile that requires Base, GUI, and Back.
+- Gorm and Arlen now have initial package manifests, package-index entries, and
+  hosted Linux `amd64/clang` artifacts. Target-native expansion remains active
+  work: Linux `arm64/clang`, Ubuntu `amd64/clang`, OpenBSD `amd64/clang`, and
+  Windows `amd64/msys2-clang64` package binaries must be rebuilt by
+  project-controlled target builders before their artifacts are published.
+  Arlen records a headless Base-only runtime profile and externalizes its
+  tools-xctest submodule as a build/test dependency; Gorm records a GUI
+  application runtime profile that requires Base, GUI, and Back.
+- A dedicated `Package App Artifact` workflow now provides the CI boundary for
+  Unix-style managed-toolchain package builds: it accepts an explicit package
+  id, target id, runner label, managed toolchain URL, and toolchain SHA256, then
+  invokes `package-managed-source-artifact` and uploads the package artifact plus
+  JSON build report. Windows package artifact production still requires the
+  Windows/MSYS2 target workflow path with GUI evidence for Gorm.
 
 ### E. Native CLI Install/Remove Dogfood
 - Use the native full CLI to install `org.gnustep.tools-xctest` from the generated package index on a clean managed root.

@@ -1,0 +1,76 @@
+name: Package App Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_id:
+        description: Package id from packages/<id>/package.json
+        required: true
+        type: string
+      target:
+        description: Target id such as linux-amd64-clang or linux-arm64-clang
+        required: true
+        type: string
+      version:
+        description: Optional package artifact version override
+        required: false
+        type: string
+      toolchain_url:
+        description: URL for the managed toolchain archive to build against
+        required: true
+        type: string
+      toolchain_sha256:
+        description: Expected SHA256 of the managed toolchain archive
+        required: true
+        type: string
+      runner_label:
+        description: GitHub runner label for the target host
+        required: false
+        default: ubuntu-latest
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  package-app-artifact:
+    runs-on: ${{ inputs.runner_label }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Download managed toolchain
+        run: |
+          mkdir -p "$RUNNER_TEMP/package-app-toolchain"
+          curl -fsSL "${{ inputs.toolchain_url }}" -o "$RUNNER_TEMP/package-app-toolchain/toolchain.tar.gz"
+          printf '%s  %s\n' "${{ inputs.toolchain_sha256 }}" "$RUNNER_TEMP/package-app-toolchain/toolchain.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/package-app-toolchain/root"
+          tar -xzf "$RUNNER_TEMP/package-app-toolchain/toolchain.tar.gz" -C "$RUNNER_TEMP/package-app-toolchain/root"
+
+      - name: Build package artifact
+        run: |
+          mkdir -p "$RUNNER_TEMP/package-app-output"
+          args=(--json package-managed-source-artifact
+            --packages-dir packages
+            --package-id "${{ inputs.package_id }}"
+            --target "${{ inputs.target }}"
+            --output-dir "$RUNNER_TEMP/package-app-output"
+            --toolchain-root "$RUNNER_TEMP/package-app-toolchain/root")
+          if [ -n "${{ inputs.version }}" ]; then
+            args+=(--version "${{ inputs.version }}")
+          fi
+          python3 scripts/internal/build_infra.py "${args[@]}" | tee "$RUNNER_TEMP/package-app-output/package-build-report.json"
+          python3 -c 'import json,sys; payload=json.load(open(sys.argv[1])); raise SystemExit(0 if payload.get("ok") else 1)' "$RUNNER_TEMP/package-app-output/package-build-report.json"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-package-app-${{ inputs.package_id }}-${{ inputs.target }}
+          path: |
+            ${{ runner.temp }}/package-app-output/*.tar.gz
+            ${{ runner.temp }}/package-app-output/package-build-report.json

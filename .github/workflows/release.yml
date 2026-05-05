@@ -209,6 +209,7 @@ jobs:
           if [ -n "${GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY:-}" ]; then
             printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PUBLIC_KEY" > /tmp/gnustep-cli-package-index-signing-public.pem
             args+=(--sign-public-key /tmp/gnustep-cli-package-index-signing-public.pem)
+            cp /tmp/gnustep-cli-package-index-signing-public.pem /tmp/package-index-trust/package-index-signing-public.pem
           fi
           args+=(/tmp/package-index-trust/package-index.json)
           python3 scripts/internal/package_repo.py "${args[@]}"
@@ -229,10 +230,12 @@ jobs:
           test -f /tmp/package-index-trust/package-index-provenance.json
           test -f /tmp/package-index-trust/package-index.json.sig
           test -f /tmp/package-index-trust/package-index-provenance.json.sig
+          test -f /tmp/package-index-trust/package-index-signing-public.pem
           cp /tmp/package-index-trust/package-index.json "$RELEASE_DIR/package-index.json"
           cp /tmp/package-index-trust/package-index-provenance.json "$RELEASE_DIR/package-index-provenance.json"
           cp /tmp/package-index-trust/package-index.json.sig "$RELEASE_DIR/package-index.json.sig"
           cp /tmp/package-index-trust/package-index-provenance.json.sig "$RELEASE_DIR/package-index-provenance.json.sig"
+          cp /tmp/package-index-trust/package-index-signing-public.pem "$RELEASE_DIR/package-index-signing-public.pem"
 
       - name: Verify staged release contents
         run: |
