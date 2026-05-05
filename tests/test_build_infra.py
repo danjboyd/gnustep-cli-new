@@ -2233,8 +2233,24 @@ class BuildInfraTests(unittest.TestCase):
                 "void wait_for_reload(double interval) { usleep((useconds_t)(interval * 1000000.0)); }\n",
                 encoding="utf-8",
             )
+            (source / "src" / "Arlen" / "Core").mkdir(parents=True)
+            (source / "src" / "Arlen" / "Core" / "ALNApplication.m").write_text(
+                "#include <sys/resource.h>\n"
+                "static NSInteger ALNCurrentProcessFDSoftLimit(void) {\n"
+                "  struct rlimit limit;\n"
+                "  if (getrlimit(RLIMIT_NOFILE, &limit) != 0) {\n"
+                "    return -1;\n"
+                "  }\n"
+                "  if (limit.rlim_cur == RLIM_INFINITY) {\n"
+                "    return -1;\n"
+                "  }\n"
+                "  return (NSInteger)limit.rlim_cur;\n"
+                "}\n",
+                encoding="utf-8",
+            )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "tools/arlen.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "src/Arlen/Core/ALNApplication.m"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
             payload = package_managed_source_artifact(
@@ -2298,8 +2314,24 @@ class BuildInfraTests(unittest.TestCase):
                 "void wait_for_reload(double interval) { usleep((useconds_t)(interval * 1000000.0)); }\n",
                 encoding="utf-8",
             )
+            (source / "src" / "Arlen" / "Core").mkdir(parents=True)
+            (source / "src" / "Arlen" / "Core" / "ALNApplication.m").write_text(
+                "#include <sys/resource.h>\n"
+                "static NSInteger ALNCurrentProcessFDSoftLimit(void) {\n"
+                "  struct rlimit limit;\n"
+                "  if (getrlimit(RLIMIT_NOFILE, &limit) != 0) {\n"
+                "    return -1;\n"
+                "  }\n"
+                "  if (limit.rlim_cur == RLIM_INFINITY) {\n"
+                "    return -1;\n"
+                "  }\n"
+                "  return (NSInteger)limit.rlim_cur;\n"
+                "}\n",
+                encoding="utf-8",
+            )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "tools/arlen.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "src/Arlen/Core/ALNApplication.m"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
             payload = package_managed_source_artifact(
@@ -2319,7 +2351,74 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("/usr/bin", build_command)
             self.assertIn("CC=clang OBJC=clang", build_command)
             self.assertIn(["patch-source", "windows-arlen-usleep"], payload["commands"])
+            self.assertIn(["patch-source", "windows-arlen-resource-limit"], payload["commands"])
             self.assertIn("_sleep((unsigned long)(interval * 1000.0));", (source / "tools" / "arlen.m").read_text())
+            arlen_application = (source / "src" / "Arlen" / "Core" / "ALNApplication.m").read_text()
+            self.assertIn("#if !defined(_WIN32)\n#include <sys/resource.h>\n#endif", arlen_application)
+            self.assertIn("#if defined(_WIN32)\n  return -1;\n#else", arlen_application)
+
+    def test_package_managed_source_artifact_patches_windows_gorm_foundation_imports(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            packages = root / "packages"
+            package_dir = packages / "fixture"
+            package_dir.mkdir(parents=True)
+            package_dir.joinpath("package.json").write_text(
+                json.dumps(
+                    {
+                        "id": "org.gnustep.gorm",
+                        "version": "1.0.0",
+                        "source": {"type": "git", "upstream_url": "https://example.invalid/gorm.git"},
+                        "artifacts": [{"id": "gorm-windows-amd64-msys2-clang64", "os": "windows"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            toolchain = root / "toolchain"
+            makefiles = toolchain / "clang64" / "share" / "GNUstep" / "Makefiles"
+            tools = toolchain / "clang64" / "bin"
+            usr_bin = toolchain / "usr" / "bin"
+            makefiles.mkdir(parents=True)
+            tools.mkdir(parents=True)
+            usr_bin.mkdir(parents=True)
+            (makefiles / "GNUstep.sh").write_text("export GNUSTEP_MAKEFILES=/clang64/share/GNUstep/Makefiles\n", encoding="utf-8")
+            gnustep_config = tools / "gnustep-config"
+            gnustep_config.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            gnustep_config.chmod(0o755)
+            bash = usr_bin / "bash.exe"
+            bash.write_text("#!/bin/sh\nexit 7\n", encoding="utf-8")
+            bash.chmod(0o755)
+            source = root / "source"
+            source.mkdir()
+            subprocess.run(["git", "-C", str(source), "init"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.email", "fixture@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.name", "Fixture"], check=True)
+            (source / "GNUmakefile").write_text("all:\n\tfalse\n", encoding="utf-8")
+            formatter_dir = source / "Applications" / "Gorm" / "Palettes" / "6Formatters"
+            formatter_dir.mkdir(parents=True)
+            (formatter_dir / "FormatterPalette.m").write_text(
+                "#import <Foundation/Foundation.h>\n#import \"FormatterPalette.h\"\n"
+                "NSMassFormatter *massFormatter;\n",
+                encoding="utf-8",
+            )
+            subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "Applications/Gorm/Palettes/6Formatters/FormatterPalette.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+            payload = package_managed_source_artifact(
+                packages,
+                "org.gnustep.gorm",
+                "gorm-windows-amd64-msys2-clang64",
+                root / "out",
+                toolchain_root=toolchain,
+                source_dir=source,
+            )
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["summary"], "Managed package build failed.")
+            self.assertIn(["patch-source", "windows-gorm-nsmassformatter-import"], payload["commands"])
+            formatter_text = (formatter_dir / "FormatterPalette.m").read_text()
+            self.assertIn("#import <Foundation/NSMassFormatter.h>", formatter_text)
+            self.assertIn("__MINGW64__", formatter_text)
 
     def test_package_artifact_build_plan(self):
         payload = package_artifact_build_plan(ROOT / "packages")

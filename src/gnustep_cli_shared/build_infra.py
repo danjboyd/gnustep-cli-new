@@ -4814,6 +4814,57 @@ def package_managed_source_artifact(
             if patched != text:
                 arlen_tool.write_text(patched, encoding="utf-8")
                 commands.append(["patch-source", "windows-arlen-usleep"])
+        arlen_application = checkout / "src" / "Arlen" / "Core" / "ALNApplication.m"
+        if arlen_application.exists():
+            text = arlen_application.read_text(encoding="utf-8")
+            patched = text.replace(
+                "#include <sys/resource.h>",
+                "#if !defined(_WIN32)\n#include <sys/resource.h>\n#endif",
+            )
+            patched = patched.replace(
+                "static NSInteger ALNCurrentProcessFDSoftLimit(void) {\n"
+                "  struct rlimit limit;\n"
+                "  if (getrlimit(RLIMIT_NOFILE, &limit) != 0) {\n"
+                "    return -1;\n"
+                "  }\n"
+                "  if (limit.rlim_cur == RLIM_INFINITY) {\n"
+                "    return -1;\n"
+                "  }\n"
+                "  return (NSInteger)limit.rlim_cur;\n"
+                "}",
+                "static NSInteger ALNCurrentProcessFDSoftLimit(void) {\n"
+                "#if defined(_WIN32)\n"
+                "  return -1;\n"
+                "#else\n"
+                "  struct rlimit limit;\n"
+                "  if (getrlimit(RLIMIT_NOFILE, &limit) != 0) {\n"
+                "    return -1;\n"
+                "  }\n"
+                "  if (limit.rlim_cur == RLIM_INFINITY) {\n"
+                "    return -1;\n"
+                "  }\n"
+                "  return (NSInteger)limit.rlim_cur;\n"
+                "#endif\n"
+                "}",
+            )
+            if patched != text:
+                arlen_application.write_text(patched, encoding="utf-8")
+                commands.append(["patch-source", "windows-arlen-resource-limit"])
+    if is_windows and package_id == "org.gnustep.gorm":
+        formatter_palette = checkout / "Applications" / "Gorm" / "Palettes" / "6Formatters" / "FormatterPalette.m"
+        if formatter_palette.exists():
+            text = formatter_palette.read_text(encoding="utf-8")
+            patched = text.replace(
+                "#import <Foundation/Foundation.h>\n#import \"FormatterPalette.h\"",
+                "#import <Foundation/Foundation.h>\n"
+                "#if defined(__MINGW32__) || defined(__MINGW64__)\n"
+                "#import <Foundation/NSMassFormatter.h>\n"
+                "#endif\n"
+                "#import \"FormatterPalette.h\"",
+            )
+            if patched != text:
+                formatter_palette.write_text(patched, encoding="utf-8")
+                commands.append(["patch-source", "windows-gorm-nsmassformatter-import"])
     revision_proc = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
     revision = revision_proc.stdout.strip() if revision_proc.returncode == 0 else source_revision or "unknown"
     source_archive = out / f"{package_id}-source-{revision[:12]}.tar.gz"
