@@ -4850,21 +4850,42 @@ def package_managed_source_artifact(
             if patched != text:
                 arlen_application.write_text(patched, encoding="utf-8")
                 commands.append(["patch-source", "windows-arlen-resource-limit"])
-    if is_windows and package_id == "org.gnustep.gorm":
-        formatter_palette = checkout / "Applications" / "Gorm" / "Palettes" / "6Formatters" / "FormatterPalette.m"
-        if formatter_palette.exists():
-            text = formatter_palette.read_text(encoding="utf-8")
+        arlen_http_server = checkout / "src" / "Arlen" / "HTTP" / "ALNHTTPServer.m"
+        if arlen_http_server.exists():
+            text = arlen_http_server.read_text(encoding="utf-8")
             patched = text.replace(
-                "#import <Foundation/Foundation.h>\n#import \"FormatterPalette.h\"",
-                "#import <Foundation/Foundation.h>\n"
-                "#if defined(__MINGW32__) || defined(__MINGW64__)\n"
-                "#import <Foundation/NSMassFormatter.h>\n"
-                "#endif\n"
-                "#import \"FormatterPalette.h\"",
+                "static BOOL WINAPI ALNConsoleControlHandler(DWORD controlType)",
+                "static WINBOOL WINAPI ALNConsoleControlHandler(DWORD controlType)",
             )
             if patched != text:
-                formatter_palette.write_text(patched, encoding="utf-8")
-                commands.append(["patch-source", "windows-gorm-nsmassformatter-import"])
+                arlen_http_server.write_text(patched, encoding="utf-8")
+                commands.append(["patch-source", "windows-arlen-console-handler-type"])
+    if is_windows and package_id == "org.gnustep.gorm":
+        formatter_dir = checkout / "Applications" / "Gorm" / "Palettes" / "6Formatters"
+        formatter_import = (
+            "#if defined(__MINGW32__) || defined(__MINGW64__)\n"
+            "#import <Foundation/NSMassFormatter.h>\n"
+            "#endif"
+        )
+        patched_formatter_imports = False
+        for relative_path, foundation_import in [
+            ("FormatterPalette.m", "#import <Foundation/Foundation.h>"),
+            ("GormMassFormatterInspector.m", "#import \"GormMassFormatterInspector.h\""),
+            ("inspectors.m", "#include <Foundation/Foundation.h>"),
+        ]:
+            formatter_source = formatter_dir / relative_path
+            if formatter_source.exists():
+                text = formatter_source.read_text(encoding="utf-8")
+                patched = text.replace(
+                    foundation_import,
+                    foundation_import + "\n" + formatter_import,
+                    1,
+                )
+                if patched != text:
+                    formatter_source.write_text(patched, encoding="utf-8")
+                    patched_formatter_imports = True
+        if patched_formatter_imports:
+            commands.append(["patch-source", "windows-gorm-nsmassformatter-import"])
     revision_proc = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
     revision = revision_proc.stdout.strip() if revision_proc.returncode == 0 else source_revision or "unknown"
     source_archive = out / f"{package_id}-source-{revision[:12]}.tar.gz"

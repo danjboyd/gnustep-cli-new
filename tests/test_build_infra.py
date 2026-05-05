@@ -2248,9 +2248,15 @@ class BuildInfraTests(unittest.TestCase):
                 "}\n",
                 encoding="utf-8",
             )
+            (source / "src" / "Arlen" / "HTTP").mkdir(parents=True)
+            (source / "src" / "Arlen" / "HTTP" / "ALNHTTPServer.m").write_text(
+                "static BOOL WINAPI ALNConsoleControlHandler(DWORD controlType) { return TRUE; }\n",
+                encoding="utf-8",
+            )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "tools/arlen.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/Core/ALNApplication.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "src/Arlen/HTTP/ALNHTTPServer.m"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
             payload = package_managed_source_artifact(
@@ -2329,9 +2335,15 @@ class BuildInfraTests(unittest.TestCase):
                 "}\n",
                 encoding="utf-8",
             )
+            (source / "src" / "Arlen" / "HTTP").mkdir(parents=True)
+            (source / "src" / "Arlen" / "HTTP" / "ALNHTTPServer.m").write_text(
+                "static BOOL WINAPI ALNConsoleControlHandler(DWORD controlType) { return TRUE; }\n",
+                encoding="utf-8",
+            )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "tools/arlen.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/Core/ALNApplication.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "src/Arlen/HTTP/ALNHTTPServer.m"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
             payload = package_managed_source_artifact(
@@ -2352,10 +2364,13 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("CC=clang OBJC=clang", build_command)
             self.assertIn(["patch-source", "windows-arlen-usleep"], payload["commands"])
             self.assertIn(["patch-source", "windows-arlen-resource-limit"], payload["commands"])
+            self.assertIn(["patch-source", "windows-arlen-console-handler-type"], payload["commands"])
             self.assertIn("_sleep((unsigned long)(interval * 1000.0));", (source / "tools" / "arlen.m").read_text())
             arlen_application = (source / "src" / "Arlen" / "Core" / "ALNApplication.m").read_text()
             self.assertIn("#if !defined(_WIN32)\n#include <sys/resource.h>\n#endif", arlen_application)
             self.assertIn("#if defined(_WIN32)\n  return -1;\n#else", arlen_application)
+            arlen_http_server = (source / "src" / "Arlen" / "HTTP" / "ALNHTTPServer.m").read_text()
+            self.assertIn("static WINBOOL WINAPI ALNConsoleControlHandler", arlen_http_server)
 
     def test_package_managed_source_artifact_patches_windows_gorm_foundation_imports(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -2401,8 +2416,18 @@ class BuildInfraTests(unittest.TestCase):
                 "NSMassFormatter *massFormatter;\n",
                 encoding="utf-8",
             )
+            (formatter_dir / "GormMassFormatterInspector.m").write_text(
+                "#import \"GormMassFormatterInspector.h\"\nNSMassFormatter *formatter;\n",
+                encoding="utf-8",
+            )
+            (formatter_dir / "inspectors.m").write_text(
+                "#include <Foundation/Foundation.h>\n@implementation NSMassFormatter (IBObjectAdditions)\n@end\n",
+                encoding="utf-8",
+            )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "Applications/Gorm/Palettes/6Formatters/FormatterPalette.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "Applications/Gorm/Palettes/6Formatters/GormMassFormatterInspector.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "Applications/Gorm/Palettes/6Formatters/inspectors.m"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
             payload = package_managed_source_artifact(
@@ -2419,6 +2444,10 @@ class BuildInfraTests(unittest.TestCase):
             formatter_text = (formatter_dir / "FormatterPalette.m").read_text()
             self.assertIn("#import <Foundation/NSMassFormatter.h>", formatter_text)
             self.assertIn("__MINGW64__", formatter_text)
+            inspector_text = (formatter_dir / "GormMassFormatterInspector.m").read_text()
+            self.assertIn("#import <Foundation/NSMassFormatter.h>", inspector_text)
+            category_text = (formatter_dir / "inspectors.m").read_text()
+            self.assertIn("#import <Foundation/NSMassFormatter.h>", category_text)
 
     def test_package_artifact_build_plan(self):
         payload = package_artifact_build_plan(ROOT / "packages")
