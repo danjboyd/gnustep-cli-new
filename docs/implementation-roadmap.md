@@ -1091,6 +1091,15 @@ Remaining subphases to project completion:
   `verify-release` fails if promoted package-index metadata cannot verify with
   that bundled public key. This keeps hosted package-index verification
   independent of workflow artifact lookup.
+- A dedicated `Linux Managed Artifacts` workflow now exists for
+  `linux-arm64-clang`, `linux-amd64-clang`, and
+  `linux-ubuntu2404-amd64-clang`. It runs the checked-in source-build script on
+  an explicit target runner, enforces `uname -m` against the target id, packages
+  the managed toolchain with `package-source-built-linux-toolchain`, builds the
+  full CLI with `build-linux-cli-against-managed-toolchain`, and uploads the
+  toolchain archive, CLI archive, checksums, and JSON build reports. Linux arm64
+  publication is still pending a successful arm64 workflow run and hosted
+  qualification evidence.
 
 ## Phase 17. Remaining Tier 1 Toolchain Builds
 
@@ -1694,8 +1703,11 @@ Remaining subphases to project completion:
   Unix-style managed-toolchain package builds: it accepts an explicit package
   id, target id, runner label, managed toolchain URL, and toolchain SHA256, then
   invokes `package-managed-source-artifact` and uploads the package artifact plus
-  JSON build report. Windows package artifact production still requires the
-  Windows/MSYS2 target workflow path with GUI evidence for Gorm.
+  JSON build report. It can also consume a managed toolchain archive from a
+  previous workflow artifact run, which is the intended handoff from `Linux
+  Managed Artifacts` into Arlen/Gorm package builds. Windows package artifact
+  production still requires the Windows/MSYS2 target workflow path with GUI
+  evidence for Gorm.
 
 ### E. Native CLI Install/Remove Dogfood
 - Use the native full CLI to install `org.gnustep.tools-xctest` from the generated package index on a clean managed root.

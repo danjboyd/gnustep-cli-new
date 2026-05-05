@@ -17,11 +17,19 @@ on:
         type: string
       toolchain_url:
         description: URL for the managed toolchain archive to build against
-        required: true
+        required: false
         type: string
       toolchain_sha256:
         description: Expected SHA256 of the managed toolchain archive
-        required: true
+        required: false
+        type: string
+      toolchain_artifact_run_id:
+        description: Workflow run id that uploaded a managed toolchain artifact
+        required: false
+        type: string
+      toolchain_artifact_name:
+        description: Workflow artifact name containing gnustep-toolchain-*.tar.gz
+        required: false
         type: string
       runner_label:
         description: GitHub runner label for the target host
@@ -31,6 +39,10 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  actions: read
+  contents: read
 
 jobs:
   package-app-artifact:
@@ -44,11 +56,36 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Download managed toolchain
+      - name: Download managed toolchain from workflow artifact
+        if: ${{ inputs.toolchain_artifact_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.toolchain_artifact_name }}
+          path: ${{ runner.temp }}/package-app-toolchain/artifact
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.toolchain_artifact_run_id }}
+
+      - name: Download managed toolchain from URL
+        if: ${{ inputs.toolchain_artifact_run_id == '' }}
         run: |
+          if [ -z "${{ inputs.toolchain_url }}" ] || [ -z "${{ inputs.toolchain_sha256 }}" ]; then
+            echo "toolchain_url and toolchain_sha256 are required when toolchain_artifact_run_id is not supplied" >&2
+            exit 2
+          fi
           mkdir -p "$RUNNER_TEMP/package-app-toolchain"
           curl -fsSL "${{ inputs.toolchain_url }}" -o "$RUNNER_TEMP/package-app-toolchain/toolchain.tar.gz"
           printf '%s  %s\n' "${{ inputs.toolchain_sha256 }}" "$RUNNER_TEMP/package-app-toolchain/toolchain.tar.gz" | sha256sum -c -
+
+      - name: Extract managed toolchain
+        run: |
+          if [ -n "${{ inputs.toolchain_artifact_run_id }}" ]; then
+            toolchain_archive="$(find "$RUNNER_TEMP/package-app-toolchain/artifact" -maxdepth 1 -type f -name 'gnustep-toolchain-*.tar.gz' | head -1)"
+            if [ -z "$toolchain_archive" ]; then
+              echo "Downloaded workflow artifact did not contain gnustep-toolchain-*.tar.gz" >&2
+              exit 3
+            fi
+            cp "$toolchain_archive" "$RUNNER_TEMP/package-app-toolchain/toolchain.tar.gz"
+          fi
           mkdir -p "$RUNNER_TEMP/package-app-toolchain/root"
           tar -xzf "$RUNNER_TEMP/package-app-toolchain/toolchain.tar.gz" -C "$RUNNER_TEMP/package-app-toolchain/root"
 

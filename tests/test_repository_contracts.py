@@ -208,10 +208,29 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("target", content)
         self.assertIn("toolchain_url", content)
         self.assertIn("toolchain_sha256", content)
+        self.assertIn("toolchain_artifact_run_id", content)
+        self.assertIn("toolchain_artifact_name", content)
+        self.assertIn("actions: read", content)
+        self.assertIn("actions/download-artifact@v4", content)
         self.assertIn("runner_label", content)
         self.assertIn("package-managed-source-artifact", content)
         self.assertIn("--toolchain-root", content)
         self.assertIn("sha256sum -c -", content)
+        self.assertIn("gnustep-toolchain-*.tar.gz", content)
+        self.assertIn("actions/upload-artifact@v4", content)
+
+    def test_linux_managed_artifacts_workflow_builds_toolchain_and_cli(self):
+        workflow = ROOT / ".github" / "workflows" / "linux-managed-artifacts.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("linux-arm64-clang", content)
+        self.assertIn("ubuntu-24.04-arm", content)
+        self.assertIn("uname -m", content)
+        self.assertIn("toolchains/${{ inputs.target }}/build-toolchain.sh", content)
+        self.assertIn("package-source-built-linux-toolchain", content)
+        self.assertIn("build-linux-cli-against-managed-toolchain", content)
+        self.assertIn("gnustep-toolchain-${{ inputs.target }}-${{ inputs.version }}.tar.gz", content)
+        self.assertIn("gnustep-cli-${{ inputs.target }}-${{ inputs.version }}.tar.gz", content)
         self.assertIn("actions/upload-artifact@v4", content)
 
     def test_release_evidence_workflow_publishes_verified_evidence_artifact(self):

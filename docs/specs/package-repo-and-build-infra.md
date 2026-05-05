@@ -72,9 +72,15 @@ This document records the current Phase 10-12 baseline.
 - release manifests can be generated from that matrix
 - the `Package App Artifact` workflow is the controlled CI entrypoint for
   managed Unix-style Arlen/Gorm package artifact builds from explicit toolchain
-  URLs and SHA256s; Windows/MSYS2 package artifacts still require a separate
-  Windows target workflow because Gorm publication needs GUI launch/screenshot
-  evidence
+  URLs and SHA256s, or from a prior workflow artifact containing
+  `gnustep-toolchain-*.tar.gz`; Windows/MSYS2 package artifacts still require a
+  separate Windows target workflow because Gorm publication needs GUI
+  launch/screenshot evidence
+- the `Linux Managed Artifacts` workflow is the controlled CI entrypoint for
+  source-built Linux managed toolchain plus full CLI artifact production. It
+  supports Linux amd64, Ubuntu 24.04 amd64, and Linux arm64 target ids, enforces
+  runner architecture before building, and uploads the managed toolchain, full
+  CLI, SHA256SUMS, and build reports for downstream package builds.
 
 ## Upstream And Patch Policy
 
