@@ -108,6 +108,7 @@ jobs:
           python -c "import json,sys; payload=json.load(open(sys.argv[1])); raise SystemExit(0 if payload.get('ok') else 1)" (Join-Path $env:OUTPUT_ROOT 'package-build-report.json')
 
       - name: Upload package artifact
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: gnustep-windows-package-app-${{ inputs.package_id }}-${{ inputs.target }}

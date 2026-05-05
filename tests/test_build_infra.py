@@ -2228,7 +2228,13 @@ class BuildInfraTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(source), "config", "user.email", "fixture@example.invalid"], check=True)
             subprocess.run(["git", "-C", str(source), "config", "user.name", "Fixture"], check=True)
             (source / "GNUmakefile").write_text("all:\n\tfalse\n", encoding="utf-8")
+            (source / "tools").mkdir()
+            (source / "tools" / "arlen.m").write_text(
+                "void wait_for_reload(double interval) { usleep((useconds_t)(interval * 1000000.0)); }\n",
+                encoding="utf-8",
+            )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "tools/arlen.m"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
             payload = package_managed_source_artifact(
@@ -2287,7 +2293,13 @@ class BuildInfraTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(source), "config", "user.email", "fixture@example.invalid"], check=True)
             subprocess.run(["git", "-C", str(source), "config", "user.name", "Fixture"], check=True)
             (source / "GNUmakefile").write_text("all:\n\tfalse\n", encoding="utf-8")
+            (source / "tools").mkdir()
+            (source / "tools" / "arlen.m").write_text(
+                "void wait_for_reload(double interval) { usleep((useconds_t)(interval * 1000000.0)); }\n",
+                encoding="utf-8",
+            )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "tools/arlen.m"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
             payload = package_managed_source_artifact(
@@ -2306,6 +2318,8 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("/clang64/bin", build_command)
             self.assertIn("/usr/bin", build_command)
             self.assertIn("CC=clang OBJC=clang", build_command)
+            self.assertIn(["patch-source", "windows-arlen-usleep"], payload["commands"])
+            self.assertIn("_sleep((unsigned long)(interval * 1000.0));", (source / "tools" / "arlen.m").read_text())
 
     def test_package_artifact_build_plan(self):
         payload = package_artifact_build_plan(ROOT / "packages")

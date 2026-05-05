@@ -232,6 +232,7 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("Normalize Windows toolchain root", content)
         self.assertIn("package-managed-source-artifact", content)
         self.assertIn("*.zip", content)
+        self.assertIn("always()", content)
         self.assertIn("gnustep-windows-package-app", content)
         toolchain_script = ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "assemble-toolchain.ps1"
         toolchain_content = toolchain_script.read_text()

@@ -4803,6 +4803,17 @@ def package_managed_source_artifact(
         checkout_proc = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
         if checkout_proc.returncode != 0:
             return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Failed to check out package source revision.", "stdout": checkout_proc.stdout, "stderr": checkout_proc.stderr, "commands": commands}
+    if is_windows and package_id == "io.github.danjboyd.arlen":
+        arlen_tool = checkout / "tools" / "arlen.m"
+        if arlen_tool.exists():
+            text = arlen_tool.read_text(encoding="utf-8")
+            patched = text.replace(
+                "usleep((useconds_t)(interval * 1000000.0));",
+                "_sleep((unsigned long)(interval * 1000.0));",
+            )
+            if patched != text:
+                arlen_tool.write_text(patched, encoding="utf-8")
+                commands.append(["patch-source", "windows-arlen-usleep"])
     revision_proc = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
     revision = revision_proc.stdout.strip() if revision_proc.returncode == 0 else source_revision or "unknown"
     source_archive = out / f"{package_id}-source-{revision[:12]}.tar.gz"
