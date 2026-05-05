@@ -89,6 +89,20 @@ jobs:
           mkdir -p "$RUNNER_TEMP/package-app-toolchain/root"
           tar -xzf "$RUNNER_TEMP/package-app-toolchain/toolchain.tar.gz" -C "$RUNNER_TEMP/package-app-toolchain/root"
 
+      - name: Relocate managed toolchain
+        run: |
+          root="$RUNNER_TEMP/package-app-toolchain/root"
+          placeholder="__GNUSTEP_CLI_INSTALL_ROOT__"
+          escaped_root="$(printf '%s' "$root" | sed 's/[\&|]/\\&/g')"
+          find "$root" -type f 2>/dev/null | while IFS= read -r file; do
+            if LC_ALL=C grep -Iq "$placeholder" "$file" 2>/dev/null; then
+              temp_file="$file.relocating.$$"
+              sed "s|$placeholder|$escaped_root|g" "$file" >"$temp_file"
+              cat "$temp_file" >"$file"
+              rm -f "$temp_file"
+            fi
+          done
+
       - name: Build package artifact
         run: |
           mkdir -p "$RUNNER_TEMP/package-app-output"

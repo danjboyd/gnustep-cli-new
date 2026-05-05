@@ -217,6 +217,8 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("--toolchain-root", content)
         self.assertIn("sha256sum -c -", content)
         self.assertIn("gnustep-toolchain-*.tar.gz", content)
+        self.assertIn("Relocate managed toolchain", content)
+        self.assertIn("__GNUSTEP_CLI_INSTALL_ROOT__", content)
         self.assertIn("actions/upload-artifact@v4", content)
 
     def test_linux_managed_artifacts_workflow_builds_toolchain_and_cli(self):
