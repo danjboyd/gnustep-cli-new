@@ -223,6 +223,17 @@ jobs:
           test -f "$RELEASE_DIR/release-manifest.json"
           test -f "$RELEASE_DIR/SHA256SUMS"
 
+      - name: Promote signed package index into release assets
+        run: |
+          test -f /tmp/package-index-trust/package-index.json
+          test -f /tmp/package-index-trust/package-index-provenance.json
+          test -f /tmp/package-index-trust/package-index.json.sig
+          test -f /tmp/package-index-trust/package-index-provenance.json.sig
+          cp /tmp/package-index-trust/package-index.json "$RELEASE_DIR/package-index.json"
+          cp /tmp/package-index-trust/package-index-provenance.json "$RELEASE_DIR/package-index-provenance.json"
+          cp /tmp/package-index-trust/package-index.json.sig "$RELEASE_DIR/package-index.json.sig"
+          cp /tmp/package-index-trust/package-index-provenance.json.sig "$RELEASE_DIR/package-index-provenance.json.sig"
+
       - name: Verify staged release contents
         run: |
           python3 scripts/internal/build_infra.py --json verify-release \
