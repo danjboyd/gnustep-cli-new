@@ -246,6 +246,7 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("toolchains/openbsd-amd64-clang/build-toolchain.sh", content)
         self.assertIn("python%3.12", content)
         self.assertIn("bash", content)
+        self.assertIn("ln -sf /usr/local/bin/bash /bin/bash", content)
         self.assertIn("arlen-openbsd-amd64-clang-headless", content)
         self.assertIn("gorm-openbsd-amd64-clang", content)
         self.assertIn("package-managed-source-artifact", content)

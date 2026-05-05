@@ -2254,10 +2254,16 @@ class BuildInfraTests(unittest.TestCase):
                 "static BOOL WINAPI ALNConsoleControlHandler(DWORD controlType) { return TRUE; }\n",
                 encoding="utf-8",
             )
+            (source / "src" / "Arlen" / "MVC" / "Middleware").mkdir(parents=True)
+            (source / "src" / "Arlen" / "MVC" / "Middleware" / "ALNRoutePolicyMiddleware.m").write_text(
+                "#include <arpa/inet.h>\n",
+                encoding="utf-8",
+            )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "tools/arlen.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/Core/ALNApplication.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/HTTP/ALNHTTPServer.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "src/Arlen/MVC/Middleware/ALNRoutePolicyMiddleware.m"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
             payload = package_managed_source_artifact(
@@ -2341,10 +2347,16 @@ class BuildInfraTests(unittest.TestCase):
                 "static BOOL WINAPI ALNConsoleControlHandler(DWORD controlType) { return TRUE; }\n",
                 encoding="utf-8",
             )
+            (source / "src" / "Arlen" / "MVC" / "Middleware").mkdir(parents=True)
+            (source / "src" / "Arlen" / "MVC" / "Middleware" / "ALNRoutePolicyMiddleware.m").write_text(
+                "#include <arpa/inet.h>\n",
+                encoding="utf-8",
+            )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "tools/arlen.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/Core/ALNApplication.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/HTTP/ALNHTTPServer.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "src/Arlen/MVC/Middleware/ALNRoutePolicyMiddleware.m"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
 
             payload = package_managed_source_artifact(
@@ -2366,12 +2378,16 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn(["patch-source", "windows-arlen-usleep"], payload["commands"])
             self.assertIn(["patch-source", "windows-arlen-resource-limit"], payload["commands"])
             self.assertIn(["patch-source", "windows-arlen-console-handler-type"], payload["commands"])
+            self.assertIn(["patch-source", "windows-arlen-route-policy-winsock"], payload["commands"])
             self.assertIn("_sleep((unsigned long)(interval * 1000.0));", (source / "tools" / "arlen.m").read_text())
             arlen_application = (source / "src" / "Arlen" / "Core" / "ALNApplication.m").read_text()
             self.assertIn("#if !defined(_WIN32)\n#include <sys/resource.h>\n#endif", arlen_application)
             self.assertIn("#if defined(_WIN32)\n  return -1;\n#else", arlen_application)
             arlen_http_server = (source / "src" / "Arlen" / "HTTP" / "ALNHTTPServer.m").read_text()
             self.assertIn("static WINBOOL WINAPI ALNConsoleControlHandler", arlen_http_server)
+            route_policy = (source / "src" / "Arlen" / "MVC" / "Middleware" / "ALNRoutePolicyMiddleware.m").read_text()
+            self.assertIn("#include <winsock2.h>", route_policy)
+            self.assertIn("#include <ws2tcpip.h>", route_policy)
 
     def test_package_managed_source_artifact_patches_windows_gorm_foundation_imports(self):
         with tempfile.TemporaryDirectory() as tempdir:

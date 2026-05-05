@@ -13,6 +13,9 @@ mkdir -p "$OUTPUT_ROOT"
 
 doas pkg_add -I python%3.12 bash gmake git cmake ninja autoconf%2.72 automake%1.17 \
   gnustep-make gnustep-base gnustep-gui gnustep-back gnustep-libobjc2 >/tmp/gnustep-openbsd-package-pkg-add.log 2>&1 || true
+if [ -x /usr/local/bin/bash ] && [ ! -x /bin/bash ]; then
+  doas ln -sf /usr/local/bin/bash /bin/bash
+fi
 doas mkdir -p "$TOOLCHAIN_ROOT"
 doas chown "$(id -un)" "$TOOLCHAIN_ROOT"
 

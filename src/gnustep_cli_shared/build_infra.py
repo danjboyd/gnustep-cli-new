@@ -4860,6 +4860,21 @@ def package_managed_source_artifact(
             if patched != text:
                 arlen_http_server.write_text(patched, encoding="utf-8")
                 commands.append(["patch-source", "windows-arlen-console-handler-type"])
+        arlen_route_policy = checkout / "src" / "Arlen" / "MVC" / "Middleware" / "ALNRoutePolicyMiddleware.m"
+        if arlen_route_policy.exists():
+            text = arlen_route_policy.read_text(encoding="utf-8")
+            patched = text.replace(
+                "#include <arpa/inet.h>",
+                "#if defined(_WIN32)\n"
+                "#include <winsock2.h>\n"
+                "#include <ws2tcpip.h>\n"
+                "#else\n"
+                "#include <arpa/inet.h>\n"
+                "#endif",
+            )
+            if patched != text:
+                arlen_route_policy.write_text(patched, encoding="utf-8")
+                commands.append(["patch-source", "windows-arlen-route-policy-winsock"])
     if is_windows and package_id == "org.gnustep.gorm":
         formatter_dir = checkout / "Applications" / "Gorm" / "Palettes" / "6Formatters"
         formatter_import = (
