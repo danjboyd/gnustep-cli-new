@@ -236,7 +236,7 @@ class RepositoryContractsTests(unittest.TestCase):
         toolchain_script = ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "assemble-toolchain.ps1"
         toolchain_content = toolchain_script.read_text()
         self.assertIn("generic_win_base.h", toolchain_content)
-        self.assertIn("_MODE_T_DEFINED", toolchain_content)
+        self.assertIn("mode_t is provided by MinGW sys/types.h", toolchain_content)
 
     def test_openbsd_package_artifact_script_builds_packages_and_gorm_evidence(self):
         script = ROOT / "scripts" / "dev" / "openbsd-package-artifacts.sh"

@@ -107,7 +107,7 @@ $genericWinBase = Join-Path $Prefix 'clang64\include\os\generic_win_base.h'
 if (Test-Path $genericWinBase) {
   $genericWinBaseText = Get-Content -Path $genericWinBase -Raw
   if ($genericWinBaseText -match 'typedef int mode_t;') {
-    $genericWinBaseText = $genericWinBaseText -replace 'typedef int mode_t;', "#if !defined(_MODE_T_DEFINED) && !defined(_MODE_T_DECLARED)`r`ntypedef int mode_t;`r`n#endif"
+    $genericWinBaseText = $genericWinBaseText -replace 'typedef int mode_t;', "/* mode_t is provided by MinGW sys/types.h in this managed toolchain. */"
     Set-Content -Path $genericWinBase -Value $genericWinBaseText -Encoding ASCII
   }
 }
