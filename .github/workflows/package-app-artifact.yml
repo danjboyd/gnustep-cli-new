@@ -124,4 +124,5 @@ jobs:
           name: gnustep-package-app-${{ inputs.package_id }}-${{ inputs.target }}
           path: |
             ${{ runner.temp }}/package-app-output/*.tar.gz
+            ${{ runner.temp }}/package-app-output/*.zip
             ${{ runner.temp }}/package-app-output/package-build-report.json

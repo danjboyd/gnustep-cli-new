@@ -220,6 +220,29 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("Relocate managed toolchain", content)
         self.assertIn("__GNUSTEP_CLI_INSTALL_ROOT__", content)
         self.assertIn("actions/upload-artifact@v4", content)
+        self.assertIn("*.zip", content)
+
+    def test_windows_package_app_artifact_workflow_builds_msys2_packages(self):
+        workflow = ROOT / ".github" / "workflows" / "windows-package-app-artifact.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        self.assertIn("windows-latest", content)
+        self.assertIn("assemble-msys2", content)
+        self.assertIn("toolchains\\windows-amd64-msys2-clang64\\assemble-toolchain.ps1", content)
+        self.assertIn("Normalize Windows toolchain root", content)
+        self.assertIn("package-managed-source-artifact", content)
+        self.assertIn("*.zip", content)
+        self.assertIn("gnustep-windows-package-app", content)
+
+    def test_openbsd_package_artifact_script_builds_packages_and_gorm_evidence(self):
+        script = ROOT / "scripts" / "dev" / "openbsd-package-artifacts.sh"
+        self.assertTrue(script.exists())
+        content = script.read_text()
+        self.assertIn("toolchains/openbsd-amd64-clang/build-toolchain.sh", content)
+        self.assertIn("arlen-openbsd-amd64-clang-headless", content)
+        self.assertIn("gorm-openbsd-amd64-clang", content)
+        self.assertIn("package-managed-source-artifact", content)
+        self.assertIn("gorm-openbsd-launch.log", content)
 
     def test_linux_managed_artifacts_workflow_builds_toolchain_and_cli(self):
         workflow = ROOT / ".github" / "workflows" / "linux-managed-artifacts.yml"

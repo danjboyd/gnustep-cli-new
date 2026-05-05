@@ -1877,6 +1877,15 @@ def _archive_directory(source_dir: Path, archive_path: Path, root_name: str) -> 
         archive.add(source_dir, arcname=root_name)
 
 
+def _msys_path(path: Path) -> str:
+    text = str(path.resolve())
+    if re.match(r"^[A-Za-z]:\\", text):
+        drive = text[0].lower()
+        rest = text[2:].replace("\\", "/")
+        return f"/{drive}{rest}"
+    return text.replace("\\", "/")
+
+
 def _is_supported_archive(path: Path) -> bool:
     name = path.name.lower()
     if name.endswith(".tar.gz") or name.endswith(".zip"):
@@ -4744,6 +4753,13 @@ def package_managed_source_artifact(
     if located is None:
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Package manifest not found.", "package_id": package_id}
     _manifest_path, manifest = located
+    artifact_record = next(
+        (artifact for artifact in manifest.get("artifacts", []) if artifact.get("id") == target_id),
+        {},
+    )
+    target_os = artifact_record.get("os", "windows" if "windows" in target_id else "openbsd" if "openbsd" in target_id else "linux")
+    is_windows = target_os == "windows"
+    is_openbsd = target_os == "openbsd"
     source = manifest.get("source", {})
     source_url = source.get("upstream_url") or source.get("url")
     source_revision = source.get("revision")
@@ -4751,18 +4767,29 @@ def package_managed_source_artifact(
     work_root = out / "work"
     checkout = Path(source_dir).resolve() if source_dir else work_root / f"{package_id}-src"
     toolchain = Path(toolchain_root).resolve()
-    gnustep_sh = toolchain / "System" / "Library" / "Makefiles" / "GNUstep.sh"
-    tool_path = toolchain / "System" / "Tools"
+    if is_windows:
+        gnustep_sh = toolchain / "clang64" / "share" / "GNUstep" / "Makefiles" / "GNUstep.sh"
+        tool_path = toolchain / "clang64" / "bin"
+        bash = toolchain / "usr" / "bin" / "bash.exe"
+    else:
+        gnustep_sh = toolchain / "System" / "Library" / "Makefiles" / "GNUstep.sh"
+        tool_path = toolchain / "System" / "Tools"
+        bash = Path("sh")
     shim_path = out / "managed-tool-shims"
     commands: list[list[str]] = []
     if not gnustep_sh.exists():
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed GNUstep toolchain environment script is missing.", "toolchain_root": str(toolchain), "expected": str(gnustep_sh)}
+    if is_windows and not bash.exists():
+        return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed MSYS2 bash is missing.", "toolchain_root": str(toolchain), "expected": str(bash)}
     shim_path.mkdir(parents=True, exist_ok=True)
     gnustep_config_shim = shim_path / "gnustep-config"
     if gnustep_config_shim.exists() or gnustep_config_shim.is_symlink():
         gnustep_config_shim.unlink()
-    gnustep_config_shim.symlink_to(tool_path / "gnustep-config")
-    preflight = _managed_package_toolchain_preflight(toolchain, gnustep_sh, shim_path)
+    if is_windows:
+        shutil.copy2(tool_path / "gnustep-config", gnustep_config_shim)
+    else:
+        gnustep_config_shim.symlink_to(tool_path / "gnustep-config")
+    preflight = {"ok": True, "status": "ok", "toolchain_root": str(toolchain), "blockers": []} if is_windows else _managed_package_toolchain_preflight(toolchain, gnustep_sh, shim_path)
     if not preflight["ok"]:
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed package toolchain preflight failed.", "package_id": package_id, "target": target_id, "toolchain_root": str(toolchain), "preflight": preflight, "commands": commands}
     if not checkout.exists():
@@ -4784,19 +4811,37 @@ def package_managed_source_artifact(
     archived = subprocess.run(archive_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
     if archived.returncode != 0:
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Failed to archive package source.", "stdout": archived.stdout, "stderr": archived.stderr, "commands": commands}
+    make_cmd = "gmake" if is_openbsd else "make"
+    compiler = "clang"
     if package_id == "io.github.danjboyd.arlen":
-        build_body = "make -C \"{source}\" clean >/dev/null || true\nmake -C \"{source}\" all CC=/usr/bin/clang OBJC=/usr/bin/clang ARLEN_USE_VENDORED_XCTEST=0 ARLEN_ENABLE_LLHTTP=0\n"
+        build_body = f"{make_cmd} -C \"{{source}}\" clean >/dev/null || true\n{make_cmd} -C \"{{source}}\" all CC={compiler} OBJC={compiler} ARLEN_USE_VENDORED_XCTEST=0 ARLEN_ENABLE_LLHTTP=0\n"
     else:
-        build_body = "make -C \"{source}\" clean >/dev/null || true\nmake -C \"{source}\" CC=/usr/bin/clang OBJC=/usr/bin/clang\n"
-    build_script = (
-        "set -e\n"
-        f"export PATH={shlex.quote(str(tool_path))}:$PATH\n"
-        f". {shlex.quote(str(gnustep_sh))}\n"
-        f"export PATH={shlex.quote(str(shim_path))}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{shlex.quote(str(toolchain / 'Tools'))}:{shlex.quote(str(toolchain / 'Local' / 'Tools'))}:{shlex.quote(str(tool_path))}\n"
-        f"export LD_LIBRARY_PATH={shlex.quote(str(toolchain / 'Library' / 'Libraries'))}:{shlex.quote(str(toolchain / 'Local' / 'Library' / 'Libraries'))}:{shlex.quote(str(toolchain / 'System' / 'Library' / 'Libraries'))}:{shlex.quote(str(toolchain / 'lib'))}:{shlex.quote(str(toolchain / 'lib64'))}:${{LD_LIBRARY_PATH:-}}\n"
-        + build_body.format(source=shlex.quote(str(checkout)))
-    )
-    commands.append(["sh", "-c", build_script])
+        build_body = f"{make_cmd} -C \"{{source}}\" clean >/dev/null || true\n{make_cmd} -C \"{{source}}\" CC={compiler} OBJC={compiler}\n"
+    if is_windows:
+        msys_toolchain = _msys_path(toolchain)
+        msys_tool_path = _msys_path(tool_path)
+        msys_shim = _msys_path(shim_path)
+        msys_gnustep_sh = _msys_path(gnustep_sh)
+        msys_checkout = _msys_path(checkout)
+        build_script = (
+            "set -e\n"
+            f"export PATH={shlex.quote(msys_tool_path)}:/usr/bin:$PATH\n"
+            f". {shlex.quote(msys_gnustep_sh)}\n"
+            f"export PATH={shlex.quote(msys_shim)}:{shlex.quote(msys_tool_path)}:/usr/bin:/bin:$PATH\n"
+            f"export PATH={shlex.quote(msys_toolchain + '/clang64/bin')}:{shlex.quote(msys_toolchain + '/usr/bin')}:$PATH\n"
+            + build_body.format(source=shlex.quote(msys_checkout))
+        )
+        commands.append([str(bash), "-lc", build_script])
+    else:
+        build_script = (
+            "set -e\n"
+            f"export PATH={shlex.quote(str(tool_path))}:$PATH\n"
+            f". {shlex.quote(str(gnustep_sh))}\n"
+            f"export PATH={shlex.quote(str(shim_path))}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:{shlex.quote(str(toolchain / 'Tools'))}:{shlex.quote(str(toolchain / 'Local' / 'Tools'))}:{shlex.quote(str(tool_path))}\n"
+            f"export LD_LIBRARY_PATH={shlex.quote(str(toolchain / 'Library' / 'Libraries'))}:{shlex.quote(str(toolchain / 'Local' / 'Library' / 'Libraries'))}:{shlex.quote(str(toolchain / 'System' / 'Library' / 'Libraries'))}:{shlex.quote(str(toolchain / 'lib'))}:{shlex.quote(str(toolchain / 'lib64'))}:${{LD_LIBRARY_PATH:-}}\n"
+            + build_body.format(source=shlex.quote(str(checkout)))
+        )
+        commands.append(["sh", "-c", build_script])
     built = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
     if built.returncode != 0:
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed package build failed.", "package_id": package_id, "target": target_id, "source": {"revision": revision, "archive": str(source_archive), "sha256": _sha256(source_archive)}, "toolchain_root": str(toolchain), "exit_status": built.returncode, "stdout": built.stdout, "stderr": built.stderr, "commands": commands}
@@ -4825,12 +4870,13 @@ def package_managed_source_artifact(
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "No staging rule exists for package.", "package_id": package_id}
     if not copied:
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed build succeeded but no package outputs were staged.", "package_id": package_id, "target": target_id, "commands": commands}
-    artifact_filename = f"{package_id.split('.')[-1]}-{target_id}-{package_version}.tar.gz"
+    artifact_format = "zip" if is_windows else "tar.gz"
+    artifact_filename = f"{package_id.split('.')[-1]}-{target_id}-{package_version}.{artifact_format}"
     artifact_path = out / artifact_filename
     if artifact_path.exists():
         artifact_path.unlink()
     _archive_directory(package_root, artifact_path, ".")
-    return {"schema_version": 1, "command": command, "ok": True, "status": "ok", "summary": "Managed package artifact generated.", "package_id": package_id, "version": package_version, "target": target_id, "source": {"type": source.get("type"), "url": source_url, "revision": revision, "archive": str(source_archive), "sha256": _sha256(source_archive)}, "artifact": {"id": target_id, "path": str(artifact_path), "filename": artifact_filename, "sha256": _sha256(artifact_path), "format": "tar.gz"}, "toolchain_root": str(toolchain), "staged_files": copied, "commands": commands}
+    return {"schema_version": 1, "command": command, "ok": True, "status": "ok", "summary": "Managed package artifact generated.", "package_id": package_id, "version": package_version, "target": target_id, "source": {"type": source.get("type"), "url": source_url, "revision": revision, "archive": str(source_archive), "sha256": _sha256(source_archive)}, "artifact": {"id": target_id, "path": str(artifact_path), "filename": artifact_filename, "sha256": _sha256(artifact_path), "format": artifact_format}, "toolchain_root": str(toolchain), "staged_files": copied, "commands": commands}
 
 def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
     root = Path(packages_dir).resolve()

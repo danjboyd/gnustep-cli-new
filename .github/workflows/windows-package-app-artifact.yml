@@ -1,0 +1,116 @@
+name: Windows Package App Artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_id:
+        description: Package id from packages/<id>/package.json
+        required: true
+        type: string
+      target:
+        description: Target id such as arlen-windows-amd64-msys2-clang64-headless
+        required: true
+        type: string
+      version:
+        description: Optional package artifact version override
+        required: false
+        type: string
+      toolchain_source:
+        description: "Toolchain source: assemble-msys2 or existing-zip"
+        required: true
+        default: assemble-msys2
+        type: string
+      toolchain_zip_url:
+        description: Existing Windows toolchain zip URL when toolchain_source is existing-zip
+        required: false
+        type: string
+      toolchain_zip_sha256:
+        description: SHA256 for existing Windows toolchain zip
+        required: false
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  windows-package-app-artifact:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Prepare paths
+        shell: pwsh
+        run: |
+          "TOOLCHAIN_ROOT=$env:RUNNER_TEMP\package-app-toolchain" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "OUTPUT_ROOT=$env:RUNNER_TEMP\package-app-output" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Assemble or download Windows toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path $env:TOOLCHAIN_ROOT, $env:OUTPUT_ROOT | Out-Null
+          if ('${{ inputs.toolchain_source }}' -eq 'existing-zip') {
+            if (-not '${{ inputs.toolchain_zip_url }}' -or -not '${{ inputs.toolchain_zip_sha256 }}') {
+              throw 'toolchain_zip_url and toolchain_zip_sha256 are required for existing-zip'
+            }
+            $zip = Join-Path $env:RUNNER_TEMP 'windows-toolchain.zip'
+            Invoke-WebRequest -UseBasicParsing -Uri '${{ inputs.toolchain_zip_url }}' -OutFile $zip
+            $actual = (Get-FileHash -Algorithm SHA256 -Path $zip).Hash.ToLowerInvariant()
+            if ($actual -ne '${{ inputs.toolchain_zip_sha256 }}'.ToLowerInvariant()) {
+              throw "toolchain checksum mismatch: expected ${{ inputs.toolchain_zip_sha256 }}, got $actual"
+            }
+            Expand-Archive -Path $zip -DestinationPath $env:TOOLCHAIN_ROOT -Force
+          } elseif ('${{ inputs.toolchain_source }}' -eq 'assemble-msys2') {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File toolchains\windows-amd64-msys2-clang64\assemble-toolchain.ps1 -Prefix $env:TOOLCHAIN_ROOT -CacheDir "$env:RUNNER_TEMP\msys2-cache"
+          } else {
+            throw 'unsupported toolchain_source: ${{ inputs.toolchain_source }}'
+          }
+
+      - name: Normalize Windows toolchain root
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bash = Get-ChildItem -Path $env:TOOLCHAIN_ROOT -Filter bash.exe -Recurse |
+            Where-Object { $_.FullName -like '*\usr\bin\bash.exe' } |
+            Select-Object -First 1
+          if (-not $bash) { throw "managed bash not found under $env:TOOLCHAIN_ROOT" }
+          $bin = Split-Path -Parent $bash.FullName
+          $usr = Split-Path -Parent $bin
+          $root = Split-Path -Parent $usr
+          "TOOLCHAIN_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "Using TOOLCHAIN_ROOT=$root"
+
+      - name: Build package artifact
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $args = @(
+            '--json', 'package-managed-source-artifact',
+            '--packages-dir', 'packages',
+            '--package-id', '${{ inputs.package_id }}',
+            '--target', '${{ inputs.target }}',
+            '--output-dir', $env:OUTPUT_ROOT,
+            '--toolchain-root', $env:TOOLCHAIN_ROOT
+          )
+          if ('${{ inputs.version }}') {
+            $args += @('--version', '${{ inputs.version }}')
+          }
+          python scripts\internal\build_infra.py @args | Tee-Object -FilePath (Join-Path $env:OUTPUT_ROOT 'package-build-report.json')
+          python -c "import json,sys; payload=json.load(open(sys.argv[1])); raise SystemExit(0 if payload.get('ok') else 1)" (Join-Path $env:OUTPUT_ROOT 'package-build-report.json')
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-windows-package-app-${{ inputs.package_id }}-${{ inputs.target }}
+          path: |
+            ${{ runner.temp }}\package-app-output\*.zip
+            ${{ runner.temp }}\package-app-output\package-build-report.json

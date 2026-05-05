@@ -2194,6 +2194,7 @@ class BuildInfraTests(unittest.TestCase):
                         "id": "io.github.danjboyd.arlen",
                         "version": "1.0.0",
                         "source": {"type": "git", "upstream_url": "https://example.invalid/arlen.git"},
+                        "artifacts": [{"id": "arlen-openbsd-amd64-clang-headless", "os": "openbsd"}],
                     }
                 ),
                 encoding="utf-8",
@@ -2233,7 +2234,7 @@ class BuildInfraTests(unittest.TestCase):
             payload = package_managed_source_artifact(
                 packages,
                 "io.github.danjboyd.arlen",
-                "arlen-linux-amd64-clang-headless",
+                "arlen-openbsd-amd64-clang-headless",
                 root / "out",
                 toolchain_root=toolchain,
                 source_dir=source,
@@ -2245,6 +2246,66 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("Local/Library/Libraries", build_command)
             self.assertNotIn("System/Sysroot/lib", build_command)
             self.assertIn("System/Tools", build_command)
+            self.assertIn("gmake -C", build_command)
+            self.assertIn("CC=clang OBJC=clang", build_command)
+            self.assertNotIn("/usr/bin/clang", build_command)
+
+    def test_package_managed_source_artifact_uses_windows_msys2_layout(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            packages = root / "packages"
+            package_dir = packages / "fixture"
+            package_dir.mkdir(parents=True)
+            package_dir.joinpath("package.json").write_text(
+                json.dumps(
+                    {
+                        "id": "io.github.danjboyd.arlen",
+                        "version": "1.0.0",
+                        "source": {"type": "git", "upstream_url": "https://example.invalid/arlen.git"},
+                        "artifacts": [{"id": "arlen-windows-amd64-msys2-clang64-headless", "os": "windows"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            toolchain = root / "toolchain"
+            makefiles = toolchain / "clang64" / "share" / "GNUstep" / "Makefiles"
+            tools = toolchain / "clang64" / "bin"
+            usr_bin = toolchain / "usr" / "bin"
+            makefiles.mkdir(parents=True)
+            tools.mkdir(parents=True)
+            usr_bin.mkdir(parents=True)
+            (makefiles / "GNUstep.sh").write_text("export GNUSTEP_MAKEFILES=/clang64/share/GNUstep/Makefiles\n", encoding="utf-8")
+            gnustep_config = tools / "gnustep-config"
+            gnustep_config.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            gnustep_config.chmod(0o755)
+            bash = usr_bin / "bash.exe"
+            bash.write_text("#!/bin/sh\nexit 7\n", encoding="utf-8")
+            bash.chmod(0o755)
+            source = root / "source"
+            source.mkdir()
+            subprocess.run(["git", "-C", str(source), "init"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.email", "fixture@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.name", "Fixture"], check=True)
+            (source / "GNUmakefile").write_text("all:\n\tfalse\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
+            subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+            payload = package_managed_source_artifact(
+                packages,
+                "io.github.danjboyd.arlen",
+                "arlen-windows-amd64-msys2-clang64-headless",
+                root / "out",
+                toolchain_root=toolchain,
+                source_dir=source,
+            )
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["summary"], "Managed package build failed.")
+            self.assertEqual(payload["commands"][-1][0], str(bash))
+            self.assertEqual(payload["commands"][-1][1], "-lc")
+            build_command = payload["commands"][-1][-1]
+            self.assertIn("/clang64/bin", build_command)
+            self.assertIn("/usr/bin", build_command)
+            self.assertIn("CC=clang OBJC=clang", build_command)
 
     def test_package_artifact_build_plan(self):
         payload = package_artifact_build_plan(ROOT / "packages")
