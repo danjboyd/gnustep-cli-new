@@ -233,6 +233,10 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("package-managed-source-artifact", content)
         self.assertIn("*.zip", content)
         self.assertIn("gnustep-windows-package-app", content)
+        toolchain_script = ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "assemble-toolchain.ps1"
+        toolchain_content = toolchain_script.read_text()
+        self.assertIn("generic_win_base.h", toolchain_content)
+        self.assertIn("_MODE_T_DEFINED", toolchain_content)
 
     def test_openbsd_package_artifact_script_builds_packages_and_gorm_evidence(self):
         script = ROOT / "scripts" / "dev" / "openbsd-package-artifacts.sh"
