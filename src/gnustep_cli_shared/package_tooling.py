@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-VALID_KINDS = {"gui-app", "cli-tool", "library", "template"}
+VALID_KINDS = {"gui-app", "gui-application", "cli-tool", "library", "framework", "template"}
 CORE_REQUIRED_FIELDS = {
     "schema_version",
     "id",
@@ -129,19 +129,18 @@ def _selected_patches(patches: list[dict[str, Any]], target_id: str | None = Non
 def apply_package_patches(manifest_path: str | Path, source_dir: str | Path, target_id: str | None = None) -> dict[str, Any]:
     manifest = Path(manifest_path).resolve()
     source_root = Path(source_dir).resolve()
-    validation = validate_package_manifest(manifest)
-    if not validation.get("ok"):
+    if not manifest.exists():
         return {
             "schema_version": 1,
             "command": "package-apply-patches",
             "ok": False,
             "status": "error",
-            "summary": "Package manifest validation failed before patch application.",
+            "summary": "Package manifest not found.",
             "manifest_path": str(manifest),
             "source_dir": str(source_root),
             "target_id": target_id,
             "applied_patches": [],
-            "errors": validation.get("errors", []),
+            "errors": [{"code": "manifest_missing", "message": "Package manifest not found."}],
         }
     if not source_root.exists() or not source_root.is_dir():
         return {
@@ -243,18 +242,18 @@ def validate_package_manifest(manifest_path: str | Path) -> dict[str, Any]:
 
     install = payload.get("install", {})
     integration = payload.get("integration", {})
-    if kind == "gui-app":
+    if kind in {"gui-app", "gui-application"}:
         for field in ("display_name", "icon", "categories", "launcher"):
             if field not in integration:
                 errors.append({"code": "missing_integration_field", "message": f"Missing gui-app integration field '{field}'."})
-        if "primary_executable" not in install:
-            errors.append({"code": "missing_install_field", "message": "Missing gui-app install field 'primary_executable'."})
+        if "primary_executable" not in install and "executables" not in install and "application_bundles" not in install:
+            errors.append({"code": "missing_install_field", "message": "Missing gui-app install field 'primary_executable', 'executables', or 'application_bundles'."})
     elif kind == "cli-tool":
         if "executables" not in install:
             errors.append({"code": "missing_install_field", "message": "Missing cli-tool install field 'executables'."})
-    elif kind == "library":
-        if "library_files" not in install:
-            errors.append({"code": "missing_install_field", "message": "Missing library install field 'library_files'."})
+    elif kind in {"library", "framework"}:
+        if "library_files" not in install and "frameworks" not in install:
+            errors.append({"code": "missing_install_field", "message": "Missing library install field 'library_files' or 'frameworks'."})
     elif kind == "template":
         if "template_root" not in install:
             errors.append({"code": "missing_install_field", "message": "Missing template install field 'template_root'."})
@@ -315,4 +314,3 @@ def validate_package_manifest(manifest_path: str | Path) -> dict[str, Any]:
         "errors": errors,
         "warnings": warnings,
     }
-
