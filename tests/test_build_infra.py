@@ -2342,6 +2342,13 @@ class BuildInfraTests(unittest.TestCase):
                 "void wait_for_reload(double interval) { usleep((useconds_t)(interval * 1000000.0)); }\n",
                 encoding="utf-8",
             )
+            (source / "tools" / "boomhauer.m").write_text(
+                "void inspect(NSString *path) {\n"
+                "      if (stat([path fileSystemRepresentation], &fileStat) == 0) {\n"
+                "      }\n"
+                "}\n",
+                encoding="utf-8",
+            )
             (source / "src" / "Arlen" / "Core").mkdir(parents=True)
             (source / "src" / "Arlen" / "Core" / "ALNApplication.m").write_text(
                 "#include <sys/resource.h>\n"
@@ -2377,6 +2384,7 @@ class BuildInfraTests(unittest.TestCase):
             )
             subprocess.run(["git", "-C", str(source), "add", "GNUmakefile"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "tools/arlen.m"], check=True)
+            subprocess.run(["git", "-C", str(source), "add", "tools/boomhauer.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/Core/ALNApplication.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/HTTP/ALNHTTPServer.m"], check=True)
             subprocess.run(["git", "-C", str(source), "add", "src/Arlen/MVC/Middleware/ALNRoutePolicyMiddleware.m"], check=True)
@@ -2404,7 +2412,11 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn(["patch-source", "windows-arlen-console-handler-type"], payload["commands"])
             self.assertIn(["patch-source", "windows-arlen-route-policy-winsock"], payload["commands"])
             self.assertIn(["patch-source", "windows-arlen-setsockopt-timeout-cast"], payload["commands"])
+            self.assertIn(["patch-source", "windows-arlen-boomhauer-stat-path"], payload["commands"])
             self.assertIn("_sleep((unsigned long)(interval * 1000.0));", (source / "tools" / "arlen.m").read_text())
+            boomhauer = (source / "tools" / "boomhauer.m").read_text()
+            self.assertIn("const char *fileSystemPath = [path UTF8String];", boomhauer)
+            self.assertIn("stat(fileSystemPath, &fileStat)", boomhauer)
             arlen_application = (source / "src" / "Arlen" / "Core" / "ALNApplication.m").read_text()
             self.assertIn("#if !defined(_WIN32)\n#include <sys/resource.h>\n#endif", arlen_application)
             self.assertIn("#if defined(_WIN32)\n  return -1;\n#else", arlen_application)

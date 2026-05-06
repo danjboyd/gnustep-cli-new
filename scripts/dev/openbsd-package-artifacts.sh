@@ -43,10 +43,13 @@ for target in $TARGETS; do
   python3 -c 'import json,sys; payload=json.load(open(sys.argv[1])); raise SystemExit(0 if payload.get("ok") else 1)' "$OUTPUT_ROOT/$target-report.json"
 done
 
-if [ -d "$OUTPUT_ROOT/gorm-openbsd-amd64-clang/work/org.gnustep.gorm-src" ]; then
+gorm_source="$OUTPUT_ROOT/gorm-openbsd-amd64-clang/work/org.gnustep.gorm-src"
+if [ -d "$gorm_source" ]; then
+  gorm_launch_library_path="$TOOLCHAIN_ROOT/lib:$TOOLCHAIN_ROOT/lib64:$TOOLCHAIN_ROOT/Local/Library/Libraries:$TOOLCHAIN_ROOT/System/Library/Libraries:$gorm_source/GormCore/GormCore.framework/Versions/0:$gorm_source/InterfaceBuilder/obj:$gorm_source/GormObjCHeaderParser/obj"
   set +e
-  env DISPLAY="${DISPLAY:-:1}" "$TOOLCHAIN_ROOT/System/Tools/openapp" \
-    "$OUTPUT_ROOT/gorm-openbsd-amd64-clang/work/org.gnustep.gorm-src/Applications/Gorm/Gorm.app" \
+  doas -u tester env HOME=/home/tester DISPLAY="${DISPLAY:-:1}" LD_LIBRARY_PATH="$gorm_launch_library_path" \
+    "$TOOLCHAIN_ROOT/System/Tools/openapp" \
+    "$gorm_source/Applications/Gorm/Gorm.app" \
     > "$OUTPUT_ROOT/gorm-openbsd-launch.log" 2>&1 &
   gorm_pid=$!
   sleep 5

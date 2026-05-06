@@ -4893,6 +4893,21 @@ def package_managed_source_artifact(
             if patched != text:
                 arlen_services.write_text(patched, encoding="utf-8")
                 commands.append(["patch-source", "windows-arlen-setsockopt-timeout-cast"])
+        arlen_boomhauer = checkout / "tools" / "boomhauer.m"
+        if arlen_boomhauer.exists():
+            text = arlen_boomhauer.read_text(encoding="utf-8")
+            patched = text.replace(
+                "if (stat([path fileSystemRepresentation], &fileStat) == 0) {",
+                "#if defined(_WIN32)\n"
+                "      const char *fileSystemPath = [path UTF8String];\n"
+                "#else\n"
+                "      const char *fileSystemPath = [path fileSystemRepresentation];\n"
+                "#endif\n"
+                "      if (fileSystemPath != NULL && stat(fileSystemPath, &fileStat) == 0) {",
+            )
+            if patched != text:
+                arlen_boomhauer.write_text(patched, encoding="utf-8")
+                commands.append(["patch-source", "windows-arlen-boomhauer-stat-path"])
     if is_openbsd and package_id == "io.github.danjboyd.arlen":
         arlen_makefile = checkout / "GNUmakefile"
         if arlen_makefile.exists():

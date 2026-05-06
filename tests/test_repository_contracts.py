@@ -251,6 +251,11 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("gorm-openbsd-amd64-clang", content)
         self.assertIn("package-managed-source-artifact", content)
         self.assertIn("gorm-openbsd-launch.log", content)
+        self.assertIn("doas -u tester", content)
+        self.assertIn("LD_LIBRARY_PATH", content)
+        self.assertIn("GormCore.framework/Versions/0", content)
+        self.assertIn("InterfaceBuilder/obj", content)
+        self.assertIn("GormObjCHeaderParser/obj", content)
         build_script = ROOT / "toolchains" / "openbsd-amd64-clang" / "build-toolchain.sh"
         self.assertIn('mkdir -p "$PREFIX/Local/Library/Headers"', build_script.read_text())
 
