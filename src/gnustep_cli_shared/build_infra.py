@@ -4797,6 +4797,17 @@ def package_managed_source_artifact(
     preflight = {"ok": True, "status": "ok", "toolchain_root": str(toolchain), "blockers": []} if is_windows else _managed_package_toolchain_preflight(toolchain, gnustep_sh, shim_path)
     if not preflight["ok"]:
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed package toolchain preflight failed.", "package_id": package_id, "target": target_id, "toolchain_root": str(toolchain), "preflight": preflight, "commands": commands}
+    if is_windows:
+        generic_win_base = toolchain / "clang64" / "include" / "os" / "generic_win_base.h"
+        if generic_win_base.exists():
+            text = generic_win_base.read_text(encoding="utf-8")
+            patched = text.replace(
+                "typedef int mode_t;",
+                "/* mode_t is provided by MSYS2 sys/types.h. */",
+            )
+            if patched != text:
+                generic_win_base.write_text(patched, encoding="utf-8")
+                commands.append(["patch-toolchain", "windows-libdispatch-mode-t-conflict"])
     if not checkout.exists():
         checkout.parent.mkdir(parents=True, exist_ok=True)
         commands.append(["git", "clone", str(source_url), str(checkout)])

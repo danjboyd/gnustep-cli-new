@@ -2325,6 +2325,9 @@ class BuildInfraTests(unittest.TestCase):
             makefiles.mkdir(parents=True)
             tools.mkdir(parents=True)
             usr_bin.mkdir(parents=True)
+            dispatch_header = toolchain / "clang64" / "include" / "os" / "generic_win_base.h"
+            dispatch_header.parent.mkdir(parents=True)
+            dispatch_header.write_text("typedef int mode_t;\n", encoding="utf-8")
             (makefiles / "GNUstep.sh").write_text("export GNUSTEP_MAKEFILES=/clang64/share/GNUstep/Makefiles\n", encoding="utf-8")
             gnustep_config = tools / "gnustep-config"
             gnustep_config.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -2414,6 +2417,8 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn(["patch-source", "windows-arlen-route-policy-winsock"], payload["commands"])
             self.assertIn(["patch-source", "windows-arlen-setsockopt-timeout-cast"], payload["commands"])
             self.assertIn(["patch-source", "windows-arlen-boomhauer-stat-path"], payload["commands"])
+            self.assertIn(["patch-toolchain", "windows-libdispatch-mode-t-conflict"], payload["commands"])
+            self.assertNotIn("typedef int mode_t;", dispatch_header.read_text())
             self.assertIn("_sleep((unsigned long)(interval * 1000.0));", (source / "tools" / "arlen.m").read_text())
             boomhauer = (source / "tools" / "boomhauer.m").read_text()
             self.assertIn("const char *fileSystemPath = [path UTF8String];", boomhauer)
