@@ -3,6 +3,7 @@ param(
   [string]$WorkRoot = "C:\gnustep-gorm-validation",
   [string]$ToolchainZip = "C:\gnustep-gorm-validation\gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0.zip",
   [string]$GormPackageZip = "C:\gnustep-gorm-validation\gorm-gorm-windows-amd64-msys2-clang64-1.5.0-snapshot.20260505.zip",
+  [string]$ToolchainRoot = "C:\gnustep-gorm-validation\toolchain",
   [string]$OutputDir = "C:\gnustep-gorm-validation\output"
 )
 
@@ -43,15 +44,28 @@ function Get-ProcessWindows([string]$ProcessName) {
 }
 
 New-Directory $OutputDir
-$toolchainRoot = Join-Path $WorkRoot 'toolchain'
+$toolchainRoot = $ToolchainRoot.TrimEnd('\')
 $packageRoot = Join-Path $WorkRoot 'package'
 $progressLog = Join-Path $OutputDir 'progress.log'
 Set-Content -Path $progressLog -Value 'starting validation' -Encoding UTF8
-if (-not (Test-Path (Join-Path $toolchainRoot 'bin'))) {
+$requiredToolchainPaths = @(
+  (Join-Path $toolchainRoot 'clang64\bin'),
+  (Join-Path $toolchainRoot 'clang64\share\GNUstep\Makefiles\GNUstep.sh'),
+  (Join-Path $toolchainRoot 'usr\bin\bash.exe')
+)
+if (($requiredToolchainPaths | Where-Object { -not (Test-Path $_) }).Count -gt 0) {
   Remove-Item -Recurse -Force $toolchainRoot -ErrorAction SilentlyContinue
   New-Directory $toolchainRoot
   Add-Content -Path $progressLog -Value 'expanding toolchain'
   Expand-Archive -Force -LiteralPath $ToolchainZip -DestinationPath $toolchainRoot
+}
+foreach ($link in @('clang64', 'usr', 'bin')) {
+  $target = Join-Path $toolchainRoot $link
+  $linkPath = "C:\$link"
+  if ((Test-Path $target) -and -not (Test-Path $linkPath)) {
+    Add-Content -Path $progressLog -Value "creating junction $linkPath -> $target"
+    cmd /c "mklink /J `"$linkPath`" `"$target`"" | Out-Null
+  }
 }
 Remove-Item -Recurse -Force $packageRoot -ErrorAction SilentlyContinue
 New-Directory $packageRoot
@@ -59,9 +73,8 @@ Add-Content -Path $progressLog -Value 'expanding Gorm package'
 Expand-Archive -Force -LiteralPath $GormPackageZip -DestinationPath $packageRoot
 
 $env:PATH = "$toolchainRoot\bin;$toolchainRoot\clang64\bin;$toolchainRoot\usr\bin;$packageRoot\Applications\Gorm.app;$packageRoot\Library\Frameworks\GormCore.framework;$packageRoot\Library\Libraries;" + $env:PATH
-$env:GNUSTEP_SYSTEM_ROOT = $toolchainRoot
-$env:GNUSTEP_LOCAL_ROOT = $toolchainRoot
-$env:GNUSTEP_NETWORK_ROOT = $toolchainRoot
+$env:GNUSTEP_MAKEFILES = Join-Path $toolchainRoot 'clang64\share\GNUstep\Makefiles'
+$env:GNUSTEP_CONFIG_FILE = Join-Path $toolchainRoot 'clang64\etc\GNUstep\GNUstep.conf'
 $env:GNUSTEP_USER_ROOT = (Join-Path $WorkRoot 'user')
 New-Directory $env:GNUSTEP_USER_ROOT
 
@@ -69,13 +82,27 @@ Get-Process | Where-Object { $_.ProcessName -eq 'Gorm' } | Stop-Process -Force -
 $stdout = Join-Path $OutputDir 'gorm.stdout.log'
 $stderr = Join-Path $OutputDir 'gorm.stderr.log'
 $exe = Join-Path $packageRoot 'Applications\Gorm.app\Gorm.exe'
-$process = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+$bash = Join-Path $toolchainRoot 'usr\bin\bash.exe'
+if (Test-Path $bash) {
+  $msysPackage = $packageRoot -replace '\\', '/'
+  $msysPackage = $msysPackage -replace '^C:', '/c'
+  $launchScript = Join-Path $OutputDir 'launch-gorm.sh'
+  @(
+    '. /clang64/share/GNUstep/Makefiles/GNUstep.sh',
+    "export PATH=/bin:/clang64/bin:/usr/bin:$msysPackage/Applications/Gorm.app:$msysPackage/Library/Frameworks/GormCore.framework:$msysPackage/Library/Libraries:`$PATH",
+    "cd $msysPackage/Applications/Gorm.app",
+    'exec ./Gorm.exe'
+  ) | Set-Content -Path $launchScript -Encoding ASCII
+  $process = Start-Process -FilePath $bash -ArgumentList @($launchScript) -WorkingDirectory (Split-Path $exe) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+} else {
+  $process = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+}
 Add-Content -Path $progressLog -Value "started Gorm pid=$($process.Id)"
 Start-Sleep -Seconds 8
 Add-Content -Path $progressLog -Value 'collecting window handles'
 $windows = @(Get-ProcessWindows -ProcessName 'Gorm')
 $visible = @($windows | Where-Object { $_.visible })
-$processStillRunning = -not $process.HasExited
+$processStillRunning = (-not $process.HasExited) -or (@(Get-Process | Where-Object { $_.ProcessName -eq 'Gorm' }).Count -gt 0)
 $screenshot = Join-Path $OutputDir 'gorm-window.png'
 Add-Content -Path $progressLog -Value "process_still_running=$processStillRunning visible_windows=$(@($visible).Count)"
 try {
@@ -88,6 +115,7 @@ try {
 if ($processStillRunning) {
   Add-Content -Path $progressLog -Value 'stopping Gorm'
   Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+  Get-Process | Where-Object { $_.ProcessName -eq 'Gorm' } | Stop-Process -Force -ErrorAction SilentlyContinue
 }
 Add-Content -Path $progressLog -Value 'writing summary'
 

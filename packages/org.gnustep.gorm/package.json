@@ -129,16 +129,18 @@
         "blocks"
       ],
       "format": "tar.gz",
-      "publish": false,
-      "status": "controlled_binary_built_pending_publication",
+      "publish": true,
+      "status": "published_openbsd_amd64_clang",
       "filename": "gorm-gorm-openbsd-amd64-clang-1.5.0-snapshot.20260505.tar.gz",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/gorm-gorm-openbsd-amd64-clang-1.5.0-snapshot.20260505.tar.gz",
       "artifact_path": ".artifacts/openbsd-package-lease-20260506164218-znrs4m/gorm-openbsd-amd64-clang/gorm-gorm-openbsd-amd64-clang-1.5.0-snapshot.20260505.tar.gz",
       "sha256": "9e53657926b4c82b40274ad355db87f6a0b1bf3c7c201f8792adbbe6a443d7b5",
       "size": 5581878,
-      "notes": "OracleTestVMs OpenBSD 7.8 FVWM lease lease-20260506164218-znrs4m built this GUI package from the OpenBSD amd64 Clang/libobjc2 managed toolchain path and captured Gorm launch evidence under the tester X session. Publication remains pending release promotion.",
+      "notes": "OracleTestVMs OpenBSD 7.8 FVWM lease lease-20260506164218-znrs4m built this GUI package from the OpenBSD amd64 Clang/libobjc2 managed toolchain path and captured Gorm launch evidence under the tester X session. Install/remove validation passed and the artifact is hosted on the v0.1.0 release with a verified digest.",
       "build_evidence": ".artifacts/openbsd-package-lease-20260506164218-znrs4m/gorm-openbsd-amd64-clang-report.json",
       "launch_evidence": ".artifacts/openbsd-package-lease-20260506164218-znrs4m/gorm-openbsd-launch.log",
       "validation_evidence": ".artifacts/openbsd-package-lease-20260506164218-znrs4m/openbsd-package-artifacts-summary.json",
+      "install_remove_evidence": "docs/validation/package-install-remove-20260506/gorm-openbsd-amd64-clang-install-remove.json",
       "build_blockers": []
     },
     {
@@ -156,11 +158,16 @@
       "publish": false,
       "status": "controlled_binary_built_pending_gui_validation",
       "filename": "gorm-gorm-windows-amd64-msys2-clang64-1.5.0-snapshot.20260505.zip",
-      "artifact_path": ".artifacts/windows-gorm-25405366302/gnustep-windows-package-app-org.gnustep.gorm-gorm-windows-amd64-msys2-clang64/gorm-gorm-windows-amd64-msys2-clang64-1.5.0-snapshot.20260505.zip",
-      "sha256": "202dc1a423a2cfd4836e68679412dde55d809da563925eea400189ab666308c5",
-      "notes": "GitHub Actions Windows Package App Artifact run 25405366302 built this package from the Windows amd64 MSYS2 clang64 managed toolchain assembly path. Publication remains pending Windows GUI launch/window evidence through the windows-2022 OTVM profile.",
-      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25405366302",
-      "build_blockers": []
+      "artifact_path": ".artifacts/windows-gorm-25450804505/gnustep-windows-package-app-org.gnustep.gorm-gorm-windows-amd64-msys2-clang64/gorm-gorm-windows-amd64-msys2-clang64-1.5.0-snapshot.20260505.zip",
+      "sha256": "b2bc9713ec9e88fd6b2ba882e325ad7a447bba80ab29553069151e5200983fef",
+      "size": 2118611,
+      "notes": "GitHub Actions Windows Package App Artifact run 25450804505 rebuilt this package with the required Gorm support DLLs. OracleTestVMs windows-2022 lease lease-20260506170706-iava3r proved the package starts under the managed GNUstep Back runtime, but GUI validation still fails while loading the Gorm model with `expected char and got object`; publication remains blocked.",
+      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25450804505",
+      "launch_evidence": ".artifacts/windows-gorm-gui-lease-20260506170706-iava3r/output/summary.json",
+      "install_remove_evidence": "docs/validation/package-install-remove-20260506/gorm-windows-amd64-msys2-clang64-install-remove.json",
+      "build_blockers": [
+        "windows_gorm_model_load_failure"
+      ]
     }
   ],
   "install": {

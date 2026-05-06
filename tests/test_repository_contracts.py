@@ -272,6 +272,16 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("gorm-window.png", content)
         self.assertIn("process_still_running_after_wait", content)
 
+    def test_package_release_asset_verifier_checks_release_digest_and_downloads(self):
+        script = ROOT / "scripts" / "dev" / "verify-package-release-assets.sh"
+        self.assertTrue(script.exists())
+        content = script.read_text()
+        self.assertIn("gh release view", content)
+        self.assertIn("gh release download", content)
+        self.assertIn("release_asset_digest_ok", content)
+        self.assertIn("download_sha256_ok", content)
+        self.assertIn("publish", content)
+
     def test_linux_managed_artifacts_workflow_builds_toolchain_and_cli(self):
         workflow = ROOT / ".github" / "workflows" / "linux-managed-artifacts.yml"
         self.assertTrue(workflow.exists())
