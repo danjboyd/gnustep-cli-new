@@ -55,7 +55,8 @@ if [ -d "$gorm_source" ]; then
   sleep 5
   if kill -0 "$gorm_pid" 2>/dev/null; then
     gorm_launch_ok=true
-    kill "$gorm_pid" 2>/dev/null || true
+    doas kill "$gorm_pid" 2>/dev/null || kill "$gorm_pid" 2>/dev/null || true
+    doas pkill -u tester Gorm 2>/dev/null || true
   else
     wait "$gorm_pid"
     status=$?

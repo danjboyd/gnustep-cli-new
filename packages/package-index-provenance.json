@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-05T22:32:23.539364Z",
+  "generated_at": "2026-05-06T16:54:51.885626Z",
   "builder_identity": "local",
   "package_index": {
     "filename": "package-index.json",
-    "sha256": "c0df9ee3eba8b4b1d50b29dd16543462008af2c4add3eb0daba015189a05720b",
+    "sha256": "fcaa0177cdd94c45e7e542149c2a772df5d999fccdc7d9c1df818b3ef1fee867",
     "channel": "stable",
     "metadata_version": 1,
     "expires_at": "TBD"
@@ -82,13 +82,13 @@
         },
         {
           "id": "arlen-openbsd-amd64-clang-headless",
-          "sha256": null,
+          "sha256": "e0d653b2eef87fb50b3d9e3cfee09c7a16fc7ea3052a83fe3eb0103c67ef0564",
           "source_sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
           "patches": []
         },
         {
           "id": "arlen-windows-amd64-msys2-clang64-headless",
-          "sha256": null,
+          "sha256": "d5349dc4fc3932b9c8091b27e14316c64c074fa2446150291378cb3aa4006111",
           "source_sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
           "patches": []
         }
@@ -142,7 +142,7 @@
         },
         {
           "id": "gorm-openbsd-amd64-clang",
-          "sha256": null,
+          "sha256": "9e53657926b4c82b40274ad355db87f6a0b1bf3c7c201f8792adbbe6a443d7b5",
           "source_sha256": "76832519ce69080420f6f67ad318688dfe1fe8b5ec1ae8373692bd25ecfa8b6a",
           "patches": []
         },

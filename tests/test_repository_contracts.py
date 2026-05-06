@@ -256,6 +256,7 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("GormCore.framework/Versions/0", content)
         self.assertIn("InterfaceBuilder/obj", content)
         self.assertIn("GormObjCHeaderParser/obj", content)
+        self.assertIn("doas pkill -u tester Gorm", content)
         build_script = ROOT / "toolchains" / "openbsd-amd64-clang" / "build-toolchain.sh"
         self.assertIn('mkdir -p "$PREFIX/Local/Library/Headers"', build_script.read_text())
 
