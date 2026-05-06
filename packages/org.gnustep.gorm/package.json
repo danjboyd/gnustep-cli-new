@@ -156,18 +156,16 @@
       ],
       "format": "zip",
       "publish": false,
-      "status": "controlled_binary_built_pending_gui_validation",
+      "status": "controlled_binary_built_gui_validated_pending_publication",
       "filename": "gorm-gorm-windows-amd64-msys2-clang64-1.5.0-snapshot.20260505.zip",
-      "artifact_path": ".artifacts/windows-gorm-25450804505/gnustep-windows-package-app-org.gnustep.gorm-gorm-windows-amd64-msys2-clang64/gorm-gorm-windows-amd64-msys2-clang64-1.5.0-snapshot.20260505.zip",
-      "sha256": "b2bc9713ec9e88fd6b2ba882e325ad7a447bba80ab29553069151e5200983fef",
-      "size": 2118611,
-      "notes": "GitHub Actions Windows Package App Artifact run 25450804505 rebuilt this package with the required Gorm support DLLs. OracleTestVMs windows-2022 lease lease-20260506170706-iava3r proved the package starts under the managed GNUstep Back runtime, but GUI validation still fails while loading the Gorm model with `expected char and got object`; publication remains blocked pending a rebuilt artifact with the declared Windows formatter-palette exclusion patch.",
-      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25450804505",
-      "launch_evidence": ".artifacts/windows-gorm-gui-lease-20260506170706-iava3r/output/summary.json",
+      "artifact_path": ".artifacts/windows-gorm-25458527191/gnustep-windows-package-app-org.gnustep.gorm-gorm-windows-amd64-msys2-clang64/gorm-gorm-windows-amd64-msys2-clang64-1.5.0-snapshot.20260505.zip",
+      "sha256": "7b1e26a2d94620b82d926f95dc98f5f01765d2dc4d3fc1652bf7cb18b1e686c5",
+      "size": 1836703,
+      "notes": "GitHub Actions Windows Package App Artifact run 25458527191 rebuilt this package with the required support DLLs and the declared Windows palette-exclusion patch. OracleTestVMs windows-2022 lease lease-20260506193205-xdf6dm validated the CI-produced package through an interactive Administrator console task: Gorm launched under the managed GNUstep Back runtime, stderr was empty, and Windows reported a visible Controls window. Publication remains pending release promotion.",
+      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25458527191",
+      "launch_evidence": ".artifacts/windows-gorm-gui-lease-20260506193205-xdf6dm/output-interactive-ci-25458527191/summary.json",
       "install_remove_evidence": "docs/validation/package-install-remove-20260506/gorm-windows-amd64-msys2-clang64-install-remove.json",
-      "build_blockers": [
-        "windows_gorm_model_load_failure"
-      ]
+      "build_blockers": []
     }
   ],
   "install": {
