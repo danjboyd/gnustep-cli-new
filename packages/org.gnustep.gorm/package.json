@@ -137,9 +137,9 @@
       "sha256": "9e53657926b4c82b40274ad355db87f6a0b1bf3c7c201f8792adbbe6a443d7b5",
       "size": 5581878,
       "notes": "OracleTestVMs OpenBSD 7.8 FVWM lease lease-20260506164218-znrs4m built this GUI package from the OpenBSD amd64 Clang/libobjc2 managed toolchain path and captured Gorm launch evidence under the tester X session. Install/remove validation passed and the artifact is hosted on the v0.1.0 release with a verified digest.",
-      "build_evidence": ".artifacts/openbsd-package-lease-20260506164218-znrs4m/gorm-openbsd-amd64-clang-report.json",
+      "build_evidence": "docs/validation/package-publication-20260506/gorm-openbsd-amd64-clang-build.json",
       "launch_evidence": ".artifacts/openbsd-package-lease-20260506164218-znrs4m/gorm-openbsd-launch.log",
-      "validation_evidence": ".artifacts/openbsd-package-lease-20260506164218-znrs4m/openbsd-package-artifacts-summary.json",
+      "validation_evidence": "docs/validation/package-install-remove-20260506/gorm-openbsd-amd64-clang-install-remove.json",
       "install_remove_evidence": "docs/validation/package-install-remove-20260506/gorm-openbsd-amd64-clang-install-remove.json",
       "build_blockers": []
     },

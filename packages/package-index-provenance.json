@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-06T18:28:47.875376Z",
+  "generated_at": "2026-05-06T18:37:47.359386Z",
   "builder_identity": "local",
   "package_index": {
     "filename": "package-index.json",
-    "sha256": "be508f14470cac43dc578e8f6e8d0e178af67d8acd13517dde3b3379a91808d1",
+    "sha256": "9238da7546655f75d17389101deeb53207fd215c7a75e06aca2dc6cf3e2dfde4",
     "channel": "stable",
     "metadata_version": 1,
     "expires_at": "TBD"

@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "command": "package-publication-build-evidence",
+  "package_id": "io.github.danjboyd.arlen",
+  "artifact_id": "arlen-openbsd-amd64-clang-headless",
+  "ok": true,
+  "status": "ok",
+  "summary": "OpenBSD Arlen headless package was built on OracleTestVMs OpenBSD 7.8 FVWM lease lease-20260506164218-znrs4m.",
+  "source_artifact": ".artifacts/openbsd-package-lease-20260506164218-znrs4m/arlen-openbsd-amd64-clang-headless/arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
+  "sha256": "e0d653b2eef87fb50b3d9e3cfee09c7a16fc7ea3052a83fe3eb0103c67ef0564"
+}
