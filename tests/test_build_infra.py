@@ -2506,6 +2506,98 @@ class BuildInfraTests(unittest.TestCase):
             category_text = (formatter_dir / "inspectors.m").read_text()
             self.assertIn("#import <Foundation/NSMassFormatter.h>", category_text)
 
+    def test_package_managed_source_artifact_applies_declared_target_patches(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            packages = root / "packages"
+            package_dir = packages / "fixture"
+            patch_dir = package_dir / "patches"
+            patch_dir.mkdir(parents=True)
+            patch_text = (
+                "diff --git a/Applications/Gorm/Palettes/GNUmakefile b/Applications/Gorm/Palettes/GNUmakefile\n"
+                "index 1486774..5e6f672 100644\n"
+                "--- a/Applications/Gorm/Palettes/GNUmakefile\n"
+                "+++ b/Applications/Gorm/Palettes/GNUmakefile\n"
+                "@@ -1,3 +1,2 @@\n"
+                " SUBPROJECTS = \\\\\n"
+                "-\t6Formatters \\\\\n"
+                " \t5Toolbar \\\\\n"
+            )
+            patch_file = patch_dir / "windows-disable-formatters-palette.patch"
+            patch_file.write_text(patch_text, encoding="utf-8")
+            package_dir.joinpath("package.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "id": "org.gnustep.gorm",
+                        "name": "Gorm",
+                        "version": "1.0.0",
+                        "kind": "gui-app",
+                        "summary": "Fixture",
+                        "license": "GPL-2.0-or-later",
+                        "maintainers": [{"name": "Fixture"}],
+                        "source": {
+                            "type": "git",
+                            "upstream_url": "https://example.invalid/gorm.git",
+                            "tracking_strategy": "tag",
+                            "update_cadence": "manual",
+                            "channel_policy": "stable",
+                        },
+                        "requirements": {},
+                        "artifacts": [{"id": "gorm-windows-amd64-msys2-clang64", "os": "windows"}],
+                        "integration": {"display_name": "Gorm", "icon": "Gorm", "categories": ["Development"], "launcher": "Gorm"},
+                        "install": {"primary_executable": "Gorm"},
+                        "patches": [
+                            {
+                                "id": "windows-disable-formatters-palette",
+                                "path": "patches/windows-disable-formatters-palette.patch",
+                                "sha256": hashlib.sha256(patch_text.encode("utf-8")).hexdigest(),
+                                "strip": 1,
+                                "applies_to": ["gorm-windows-amd64-msys2-clang64"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            toolchain = root / "toolchain"
+            makefiles = toolchain / "clang64" / "share" / "GNUstep" / "Makefiles"
+            tools = toolchain / "clang64" / "bin"
+            usr_bin = toolchain / "usr" / "bin"
+            makefiles.mkdir(parents=True)
+            tools.mkdir(parents=True)
+            usr_bin.mkdir(parents=True)
+            (makefiles / "GNUstep.sh").write_text("export GNUSTEP_MAKEFILES=/clang64/share/GNUstep/Makefiles\n", encoding="utf-8")
+            gnustep_config = tools / "gnustep-config"
+            gnustep_config.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            gnustep_config.chmod(0o755)
+            bash = usr_bin / "bash.exe"
+            bash.write_text("#!/bin/sh\nexit 7\n", encoding="utf-8")
+            bash.chmod(0o755)
+            source = root / "source"
+            source.mkdir()
+            subprocess.run(["git", "-C", str(source), "init"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.email", "fixture@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.name", "Fixture"], check=True)
+            palette_makefile = source / "Applications" / "Gorm" / "Palettes" / "GNUmakefile"
+            palette_makefile.parent.mkdir(parents=True)
+            palette_makefile.write_text("SUBPROJECTS = \\\\\n\t6Formatters \\\\\n\t5Toolbar \\\\\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(source), "add", "Applications/Gorm/Palettes/GNUmakefile"], check=True)
+            subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+            payload = package_managed_source_artifact(
+                packages,
+                "org.gnustep.gorm",
+                "gorm-windows-amd64-msys2-clang64",
+                root / "out",
+                toolchain_root=toolchain,
+                source_dir=source,
+            )
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["summary"], "Managed package build failed.")
+            self.assertIn(["package-apply-patches", "windows-disable-formatters-palette"], payload["commands"])
+            self.assertNotIn("6Formatters", palette_makefile.read_text())
+
     def test_package_managed_source_artifact_stages_windows_gorm_support_dlls(self):
         with tempfile.TemporaryDirectory() as tempdir:
             root = Path(tempdir)

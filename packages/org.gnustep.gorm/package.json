@@ -161,7 +161,7 @@
       "artifact_path": ".artifacts/windows-gorm-25450804505/gnustep-windows-package-app-org.gnustep.gorm-gorm-windows-amd64-msys2-clang64/gorm-gorm-windows-amd64-msys2-clang64-1.5.0-snapshot.20260505.zip",
       "sha256": "b2bc9713ec9e88fd6b2ba882e325ad7a447bba80ab29553069151e5200983fef",
       "size": 2118611,
-      "notes": "GitHub Actions Windows Package App Artifact run 25450804505 rebuilt this package with the required Gorm support DLLs. OracleTestVMs windows-2022 lease lease-20260506170706-iava3r proved the package starts under the managed GNUstep Back runtime, but GUI validation still fails while loading the Gorm model with `expected char and got object`; publication remains blocked.",
+      "notes": "GitHub Actions Windows Package App Artifact run 25450804505 rebuilt this package with the required Gorm support DLLs. OracleTestVMs windows-2022 lease lease-20260506170706-iava3r proved the package starts under the managed GNUstep Back runtime, but GUI validation still fails while loading the Gorm model with `expected char and got object`; publication remains blocked pending a rebuilt artifact with the declared Windows formatter-palette exclusion patch.",
       "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25450804505",
       "launch_evidence": ".artifacts/windows-gorm-gui-lease-20260506170706-iava3r/output/summary.json",
       "install_remove_evidence": "docs/validation/package-install-remove-20260506/gorm-windows-amd64-msys2-clang64-install-remove.json",
@@ -180,7 +180,19 @@
       "Gorm.app"
     ]
   },
-  "patches": [],
+  "patches": [
+    {
+      "id": "windows-disable-formatters-palette",
+      "path": "patches/windows-disable-formatters-palette.patch",
+      "sha256": "dab3ad06319d11ba3cd631cd44fe49e44b93691174bb28ef642d254afc8c1f9d",
+      "strip": 1,
+      "applies_to": [
+        "gorm-windows-amd64-msys2-clang64"
+      ],
+      "upstream_status": "downstream",
+      "rationale": "Temporarily omit the post-1.5.0 formatter palette from the Windows package because its archived resources fail during Gorm startup under the managed Windows GNUstep runtime."
+    }
+  ],
   "build": {
     "backend": "gnustep-cli",
     "build_system": "gnustep-make",

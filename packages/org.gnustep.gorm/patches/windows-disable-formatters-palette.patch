@@ -1,0 +1,14 @@
+diff --git a/Applications/Gorm/Palettes/GNUmakefile b/Applications/Gorm/Palettes/GNUmakefile
+index 1486774..5e6f672 100644
+--- a/Applications/Gorm/Palettes/GNUmakefile
++++ b/Applications/Gorm/Palettes/GNUmakefile
+@@ -29,8 +29,7 @@ SUBPROJECTS = \
+ 	2Controls \
+ 	3Containers \
+ 	4Data \
+-	5Toolbar \
+-	6Formatters \
++	5Toolbar \
+ 
+ -include GNUmakefile.preamble
+ 

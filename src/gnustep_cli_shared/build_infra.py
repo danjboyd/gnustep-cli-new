@@ -18,6 +18,7 @@ from zipfile import ZIP_DEFLATED, ZipFile, is_zipfile
 
 from .setup_planner import execute_setup
 from .package_repository import package_index_trust_gate
+from .package_tooling import apply_package_patches
 from .smoke_harness import evaluate_release_gate, phase26_exit_status
 
 
@@ -4752,7 +4753,7 @@ def package_managed_source_artifact(
     located = _package_manifest_by_id(packages_dir, package_id)
     if located is None:
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Package manifest not found.", "package_id": package_id}
-    _manifest_path, manifest = located
+    manifest_path, manifest = located
     artifact_record = next(
         (artifact for artifact in manifest.get("artifacts", []) if artifact.get("id") == target_id),
         {},
@@ -4807,6 +4808,26 @@ def package_managed_source_artifact(
         checkout_proc = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
         if checkout_proc.returncode != 0:
             return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Failed to check out package source revision.", "stdout": checkout_proc.stdout, "stderr": checkout_proc.stderr, "commands": commands}
+    if manifest.get("patches"):
+        declared_patch_result = apply_package_patches(manifest_path, checkout, target_id=target_id)
+        if not declared_patch_result.get("ok"):
+            return {
+                "schema_version": 1,
+                "command": command,
+                "ok": False,
+                "status": "error",
+                "summary": "Declared package patch application failed.",
+                "package_id": package_id,
+                "target": target_id,
+                "source_dir": str(checkout),
+                "patch_result": declared_patch_result,
+                "commands": commands,
+            }
+        if declared_patch_result.get("applied_patches"):
+            commands.append([
+                "package-apply-patches",
+                *[str(patch.get("id")) for patch in declared_patch_result.get("applied_patches", [])],
+            ])
     if is_windows and package_id == "io.github.danjboyd.arlen":
         arlen_tool = checkout / "tools" / "arlen.m"
         if arlen_tool.exists():
@@ -5072,6 +5093,13 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
             plan_blockers.append({"package": package_id, "artifact": "", "code": blocker})
         artifacts = []
         for artifact in manifest.get("artifacts", []):
+            artifact_id = artifact["id"]
+            selected_patches = [
+                patch
+                for patch in patches
+                if isinstance(patch, dict)
+                and (not patch.get("applies_to") or artifact_id in patch.get("applies_to", []))
+            ]
             artifact_sha = artifact.get("sha256")
             artifact_publishable = artifact.get("publish", True) is not False
             artifact_blockers = list(package_blockers) if artifact_publishable else []
@@ -5100,7 +5128,7 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
             artifact_ready = (not artifact_publishable) or len(artifact_blockers) == 0
             artifacts.append(
                 {
-                    "id": artifact["id"],
+                    "id": artifact_id,
                     "os": artifact["os"],
                     "arch": artifact["arch"],
                     "compiler_family": artifact["compiler_family"],
@@ -5108,7 +5136,7 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
                     "format": artifact.get("format", "tar.gz" if artifact.get("os") != "windows" else "zip"),
                     "source_manifest": str(manifest_path),
                     "source": source,
-                    "patches": patches,
+                    "patches": selected_patches,
                     "build": build,
                     "build_backend": build.get("backend", "unspecified"),
                     "build_invocation": build.get("build", []),
