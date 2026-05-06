@@ -184,13 +184,13 @@
     {
       "id": "windows-disable-formatters-palette",
       "path": "patches/windows-disable-formatters-palette.patch",
-      "sha256": "dab3ad06319d11ba3cd631cd44fe49e44b93691174bb28ef642d254afc8c1f9d",
+      "sha256": "ba09bfed0782f45b40cc4661eebed26711b78fd05be3a5fc319c36bdbf6d571a",
       "strip": 1,
       "applies_to": [
         "gorm-windows-amd64-msys2-clang64"
       ],
       "upstream_status": "downstream",
-      "rationale": "Temporarily omit the post-1.5.0 formatter palette from the Windows package because its archived resources fail during Gorm startup under the managed Windows GNUstep runtime."
+      "rationale": "Temporarily omit the toolbar and post-1.5.0 formatter palettes from the Windows package because their archived resources fail during Gorm startup under the managed Windows GNUstep runtime."
     }
   ],
   "build": {

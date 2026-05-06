@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-06T18:37:47.359386Z",
+  "generated_at": "2026-05-06T20:02:33.801860Z",
   "builder_identity": "local",
   "package_index": {
     "filename": "package-index.json",
-    "sha256": "9238da7546655f75d17389101deeb53207fd215c7a75e06aca2dc6cf3e2dfde4",
+    "sha256": "9f95fa1ed3a5e054771aefe81a3726433eb5a0dc228e04233cd601d028b8d786",
     "channel": "stable",
     "metadata_version": 1,
     "expires_at": "TBD"
@@ -109,7 +109,13 @@
         "update_cadence": "manual-until-first-stable-package-release",
         "channel_policy": "dogfood snapshots may track reviewed commits; stable should track an upstream tag or approved package exception."
       },
-      "patches": [],
+      "patches": [
+        {
+          "id": "windows-disable-formatters-palette",
+          "path": "patches/windows-disable-formatters-palette.patch",
+          "sha256": "ba09bfed0782f45b40cc4661eebed26711b78fd05be3a5fc319c36bdbf6d571a"
+        }
+      ],
       "artifact_count": 4,
       "build": {
         "backend": "gnustep-cli",
@@ -150,7 +156,12 @@
           "id": "gorm-windows-amd64-msys2-clang64",
           "sha256": "b2bc9713ec9e88fd6b2ba882e325ad7a447bba80ab29553069151e5200983fef",
           "source_sha256": "76832519ce69080420f6f67ad318688dfe1fe8b5ec1ae8373692bd25ecfa8b6a",
-          "patches": []
+          "patches": [
+            {
+              "id": "windows-disable-formatters-palette",
+              "sha256": "ba09bfed0782f45b40cc4661eebed26711b78fd05be3a5fc319c36bdbf6d571a"
+            }
+          ]
         }
       ]
     },

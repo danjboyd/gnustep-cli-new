@@ -2523,10 +2523,10 @@ class BuildInfraTests(unittest.TestCase):
                 "index 1486774..5e6f672 100644\n"
                 "--- a/Applications/Gorm/Palettes/GNUmakefile\n"
                 "+++ b/Applications/Gorm/Palettes/GNUmakefile\n"
-                "@@ -1,3 +1,2 @@\n"
+                "@@ -1,3 +1,1 @@\n"
                 " SUBPROJECTS = \\\\\n"
                 "-\t6Formatters \\\\\n"
-                " \t5Toolbar \\\\\n"
+                "-\t5Toolbar \\\\\n"
             )
             patch_file = patch_dir / "windows-disable-formatters-palette.patch"
             patch_file.write_text(patch_text, encoding="utf-8")
@@ -2602,6 +2602,7 @@ class BuildInfraTests(unittest.TestCase):
             self.assertEqual(payload["summary"], "Managed package build failed.")
             self.assertIn(["package-apply-patches", "windows-disable-formatters-palette"], payload["commands"])
             self.assertNotIn("6Formatters", palette_makefile.read_text())
+            self.assertNotIn("5Toolbar", palette_makefile.read_text())
 
     def test_package_managed_source_artifact_stages_windows_gorm_support_dlls(self):
         with tempfile.TemporaryDirectory() as tempdir:
