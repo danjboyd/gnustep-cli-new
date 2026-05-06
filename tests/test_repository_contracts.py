@@ -260,6 +260,18 @@ class RepositoryContractsTests(unittest.TestCase):
         build_script = ROOT / "toolchains" / "openbsd-amd64-clang" / "build-toolchain.sh"
         self.assertIn('mkdir -p "$PREFIX/Local/Library/Headers"', build_script.read_text())
 
+    def test_windows_gorm_package_gui_validation_script_captures_window_evidence(self):
+        script = ROOT / "scripts" / "dev" / "windows-gorm-package-gui-validation.ps1"
+        self.assertTrue(script.exists())
+        content = script.read_text()
+        self.assertIn("windows-gorm-package-gui-validation", content)
+        self.assertIn("Expand-Archive", content)
+        self.assertIn("Gorm.app\\Gorm.exe", content)
+        self.assertIn("Get-ProcessWindows -ProcessName 'Gorm'", content)
+        self.assertIn("visible_windows", content)
+        self.assertIn("gorm-window.png", content)
+        self.assertIn("process_still_running_after_wait", content)
+
     def test_linux_managed_artifacts_workflow_builds_toolchain_and_cli(self):
         workflow = ROOT / ".github" / "workflows" / "linux-managed-artifacts.yml"
         self.assertTrue(workflow.exists())

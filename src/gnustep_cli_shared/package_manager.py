@@ -88,6 +88,58 @@ def _extract_artifact(artifact_path: Path, staging: Path, artifact: dict[str, An
         archive.extractall(staging, filter="data")
 
 
+def _normalized_runtime_components(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    components: list[str] = []
+    aliases = {
+        "base": "org.gnustep.runtime.base",
+        "libs-base": "org.gnustep.runtime.base",
+        "gui": "org.gnustep.runtime.gui",
+        "libs-gui": "org.gnustep.runtime.gui",
+        "back": "org.gnustep.runtime.back",
+        "libs-back": "org.gnustep.runtime.back",
+    }
+    for entry in value:
+        component = entry.get("id") if isinstance(entry, dict) else entry
+        if not isinstance(component, str):
+            continue
+        normalized = aliases.get(component, component)
+        if normalized not in components:
+            components.append(normalized)
+    return components
+
+
+def _default_runtime_components_for_profile(install_profile: str) -> list[str]:
+    if install_profile in {"server", "ci"}:
+        return ["org.gnustep.runtime.base"]
+    return ["org.gnustep.runtime.base", "org.gnustep.runtime.gui", "org.gnustep.runtime.back"]
+
+
+def _required_runtime_components(payload: dict[str, Any], artifact: dict[str, Any]) -> list[str]:
+    components: list[str] = []
+    for component in _normalized_runtime_components(payload.get("requirements", {}).get("runtime_components")):
+        if component not in components:
+            components.append(component)
+    for component in _normalized_runtime_components(artifact.get("runtime_components")):
+        if component not in components:
+            components.append(component)
+    return components
+
+
+def _runtime_component_actions(missing: list[str]) -> list[dict[str, str]]:
+    actions = []
+    if "org.gnustep.runtime.gui" in missing or "org.gnustep.runtime.back" in missing:
+        actions.append(
+            {
+                "kind": "select_runtime_profile",
+                "profile": "desktop",
+                "message": "Install or select the desktop runtime profile to provide GNUstep GUI and Back.",
+            }
+        )
+    return actions
+
+
 def _write_package_record_as_manifest(package_record: dict[str, Any], root: Path) -> Path:
     scratch = root / ".staging" / ".resolved-manifests"
     scratch.mkdir(parents=True, exist_ok=True)
@@ -104,6 +156,8 @@ def _package_from_index(
     operation: str,
     require_signed_index: bool = True,
     trusted_public_key_path: str | Path | None = None,
+    install_profile: str = "desktop",
+    provided_runtime_components: list[str] | None = None,
 ) -> tuple[dict[str, Any], int]:
     index_file = Path(index_path).resolve()
     root = Path(managed_root).resolve()
@@ -127,9 +181,19 @@ def _package_from_index(
         if package_record.get("id") == package_id:
             manifest_path = _write_package_record_as_manifest(package_record, root)
             if operation == "upgrade":
-                result, code = upgrade_package(manifest_path, root)
+                result, code = upgrade_package(
+                    manifest_path,
+                    root,
+                    install_profile=install_profile,
+                    provided_runtime_components=provided_runtime_components,
+                )
             else:
-                result, code = install_package(manifest_path, root)
+                result, code = install_package(
+                    manifest_path,
+                    root,
+                    install_profile=install_profile,
+                    provided_runtime_components=provided_runtime_components,
+                )
             result["package_index"] = str(index_file)
             result["trust"] = {"ok": True, "require_signed_index": require_signed_index}
             return result, code
@@ -154,6 +218,8 @@ def install_package_from_index(
     *,
     require_signed_index: bool = True,
     trusted_public_key_path: str | Path | None = None,
+    install_profile: str = "desktop",
+    provided_runtime_components: list[str] | None = None,
 ) -> tuple[dict[str, Any], int]:
     return _package_from_index(
         index_path,
@@ -162,6 +228,8 @@ def install_package_from_index(
         operation="install",
         require_signed_index=require_signed_index,
         trusted_public_key_path=trusted_public_key_path,
+        install_profile=install_profile,
+        provided_runtime_components=provided_runtime_components,
     )
 
 
@@ -172,6 +240,8 @@ def upgrade_package_from_index(
     *,
     require_signed_index: bool = True,
     trusted_public_key_path: str | Path | None = None,
+    install_profile: str = "desktop",
+    provided_runtime_components: list[str] | None = None,
 ) -> tuple[dict[str, Any], int]:
     return _package_from_index(
         index_path,
@@ -180,10 +250,19 @@ def upgrade_package_from_index(
         operation="upgrade",
         require_signed_index=require_signed_index,
         trusted_public_key_path=trusted_public_key_path,
+        install_profile=install_profile,
+        provided_runtime_components=provided_runtime_components,
     )
 
 
-def _install_or_upgrade_package(manifest_path: str | Path, managed_root: str | Path, *, allow_upgrade: bool) -> tuple[dict[str, Any], int]:
+def _install_or_upgrade_package(
+    manifest_path: str | Path,
+    managed_root: str | Path,
+    *,
+    allow_upgrade: bool,
+    install_profile: str = "desktop",
+    provided_runtime_components: list[str] | None = None,
+) -> tuple[dict[str, Any], int]:
     manifest_file = Path(manifest_path).resolve()
     root = Path(managed_root).resolve()
     payload = json.loads(manifest_file.read_text())
@@ -206,6 +285,32 @@ def _install_or_upgrade_package(manifest_path: str | Path, managed_root: str | P
         )
 
     artifact = payload["artifacts"][0]
+    required_components = _required_runtime_components(payload, artifact)
+    provided_components = (
+        _normalized_runtime_components(provided_runtime_components)
+        if provided_runtime_components is not None
+        else _default_runtime_components_for_profile(install_profile)
+    )
+    missing_components = [component for component in required_components if component not in provided_components]
+    if missing_components:
+        return (
+            {
+                "schema_version": 1,
+                "command": "upgrade" if operation == "upgrade" else "install",
+                "ok": False,
+                "status": "error",
+                "summary": "Package requires unavailable GNUstep runtime components.",
+                "package_id": package_id,
+                "data": {
+                    "required_runtime_components": required_components,
+                    "provided_runtime_components": provided_components,
+                    "missing_runtime_components": missing_components,
+                    "install_profile": install_profile,
+                    "actions": _runtime_component_actions(missing_components),
+                },
+            },
+            4,
+        )
     artifact_path = _resolve_artifact(artifact)
     if not artifact_path.exists():
         return (
@@ -268,6 +373,9 @@ def _install_or_upgrade_package(manifest_path: str | Path, managed_root: str | P
             "install_root": str(final_root),
             "installed_files": installed_files,
             "version": payload.get("version"),
+            "required_runtime_components": required_components,
+            "provided_runtime_components": provided_components,
+            "install_profile": install_profile,
         }
         _save_state(root, state)
         if backup.exists():
@@ -292,18 +400,45 @@ def _install_or_upgrade_package(manifest_path: str | Path, managed_root: str | P
             "summary": "Package installed." if operation == "install" else "Package upgraded.",
             "package_id": package_id,
             "installed_files": installed_files,
+            "required_runtime_components": required_components,
+            "provided_runtime_components": provided_components,
+            "install_profile": install_profile,
             "transaction": {"path": str(transaction), "completed": True},
         },
         0,
     )
 
 
-def install_package(manifest_path: str | Path, managed_root: str | Path) -> tuple[dict[str, Any], int]:
-    return _install_or_upgrade_package(manifest_path, managed_root, allow_upgrade=False)
+def install_package(
+    manifest_path: str | Path,
+    managed_root: str | Path,
+    *,
+    install_profile: str = "desktop",
+    provided_runtime_components: list[str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    return _install_or_upgrade_package(
+        manifest_path,
+        managed_root,
+        allow_upgrade=False,
+        install_profile=install_profile,
+        provided_runtime_components=provided_runtime_components,
+    )
 
 
-def upgrade_package(manifest_path: str | Path, managed_root: str | Path) -> tuple[dict[str, Any], int]:
-    return _install_or_upgrade_package(manifest_path, managed_root, allow_upgrade=True)
+def upgrade_package(
+    manifest_path: str | Path,
+    managed_root: str | Path,
+    *,
+    install_profile: str = "desktop",
+    provided_runtime_components: list[str] | None = None,
+) -> tuple[dict[str, Any], int]:
+    return _install_or_upgrade_package(
+        manifest_path,
+        managed_root,
+        allow_upgrade=True,
+        install_profile=install_profile,
+        provided_runtime_components=provided_runtime_components,
+    )
 
 
 

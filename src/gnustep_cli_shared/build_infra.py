@@ -5012,7 +5012,9 @@ def package_managed_source_artifact(
             (checkout / "Applications" / "Gorm" / "obj" / "Gorm.app", package_root / "Applications" / "Gorm.app"),
             (checkout / "GormCore" / "GormCore.framework", package_root / "Library" / "Frameworks" / "GormCore.framework"),
             (checkout / "InterfaceBuilder" / "obj" / "libInterfaceBuilder.so", package_root / "Library" / "Libraries" / "libInterfaceBuilder.so"),
+            (checkout / "InterfaceBuilder" / "obj" / "InterfaceBuilder-1.dll", package_root / "Library" / "Libraries" / "InterfaceBuilder-1.dll"),
             (checkout / "GormObjCHeaderParser" / "obj" / "libGormObjCHeaderParser.so", package_root / "Library" / "Libraries" / "libGormObjCHeaderParser.so"),
+            (checkout / "GormObjCHeaderParser" / "obj" / "GormObjCHeaderParser-0.dll", package_root / "Library" / "Libraries" / "GormObjCHeaderParser-0.dll"),
             (checkout / "Tools" / "gormtool" / "obj" / "gormtool", package_root / "bin" / "gormtool"),
         ])
     else:

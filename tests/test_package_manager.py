@@ -94,6 +94,69 @@ class PackageManagerTests(unittest.TestCase):
             self.assertTrue(payload["ok"])
             self.assertTrue((root / "managed" / "packages" / "org.example.hello" / "bin" / "hello.cmd").exists())
 
+    def test_server_profile_installs_headless_base_package_without_gui_back(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            artifact = self._make_artifact(root, "arlen")
+            manifest = root / "package.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "id": "io.github.danjboyd.arlen",
+                        "version": "0.1.0",
+                        "requirements": {
+                            "runtime_components": ["org.gnustep.runtime.base"],
+                            "headless_supported": True,
+                        },
+                        "artifacts": [
+                            {
+                                "url": f"file://{artifact}",
+                                "sha256": self._sha256(artifact),
+                                "runtime_components": ["org.gnustep.runtime.base"],
+                            }
+                        ],
+                    }
+                )
+            )
+            payload, code = install_package(manifest, root / "managed", install_profile="server")
+            state = json.loads((root / "managed" / "state" / "installed-packages.json").read_text())
+            record = state["packages"]["io.github.danjboyd.arlen"]
+            self.assertEqual(code, 0)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["provided_runtime_components"], ["org.gnustep.runtime.base"])
+            self.assertEqual(record["provided_runtime_components"], ["org.gnustep.runtime.base"])
+
+    def test_server_profile_rejects_gui_back_package(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            artifact = self._make_artifact(root, "gorm")
+            manifest = root / "package.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "id": "org.gnustep.gorm",
+                        "version": "1.5.0",
+                        "requirements": {
+                            "runtime_components": [
+                                "org.gnustep.runtime.base",
+                                "org.gnustep.runtime.gui",
+                                "org.gnustep.runtime.back",
+                            ],
+                            "headless_supported": False,
+                        },
+                        "artifacts": [{"url": f"file://{artifact}", "sha256": self._sha256(artifact)}],
+                    }
+                )
+            )
+            payload, code = install_package(manifest, root / "managed", install_profile="server")
+            self.assertEqual(code, 4)
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["summary"], "Package requires unavailable GNUstep runtime components.")
+            self.assertEqual(payload["data"]["provided_runtime_components"], ["org.gnustep.runtime.base"])
+            self.assertIn("org.gnustep.runtime.gui", payload["data"]["missing_runtime_components"])
+            self.assertIn("org.gnustep.runtime.back", payload["data"]["missing_runtime_components"])
+            self.assertEqual(payload["data"]["actions"][0]["profile"], "desktop")
+
 
     def test_install_from_unsigned_index_requires_dev_override(self):
         with tempfile.TemporaryDirectory() as tempdir:

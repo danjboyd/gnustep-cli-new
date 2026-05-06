@@ -5,6 +5,7 @@ import json
 import tarfile
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -2504,6 +2505,72 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("#import <Foundation/NSMassFormatter.h>", inspector_text)
             category_text = (formatter_dir / "inspectors.m").read_text()
             self.assertIn("#import <Foundation/NSMassFormatter.h>", category_text)
+
+    def test_package_managed_source_artifact_stages_windows_gorm_support_dlls(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            packages = root / "packages"
+            package_dir = packages / "fixture"
+            package_dir.mkdir(parents=True)
+            package_dir.joinpath("package.json").write_text(
+                json.dumps(
+                    {
+                        "id": "org.gnustep.gorm",
+                        "version": "1.0.0",
+                        "source": {"type": "git", "upstream_url": "https://example.invalid/gorm.git"},
+                        "artifacts": [{"id": "gorm-windows-amd64-msys2-clang64", "os": "windows"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            toolchain = root / "toolchain"
+            makefiles = toolchain / "clang64" / "share" / "GNUstep" / "Makefiles"
+            tools = toolchain / "clang64" / "bin"
+            usr_bin = toolchain / "usr" / "bin"
+            makefiles.mkdir(parents=True)
+            tools.mkdir(parents=True)
+            usr_bin.mkdir(parents=True)
+            (makefiles / "GNUstep.sh").write_text("export GNUSTEP_MAKEFILES=/clang64/share/GNUstep/Makefiles\n", encoding="utf-8")
+            gnustep_config = tools / "gnustep-config"
+            gnustep_config.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            gnustep_config.chmod(0o755)
+            bash = usr_bin / "bash.exe"
+            bash.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            bash.chmod(0o755)
+            source = root / "source"
+            source.mkdir()
+            subprocess.run(["git", "-C", str(source), "init"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.email", "fixture@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.name", "Fixture"], check=True)
+            (source / "GNUmakefile").write_text("all:\n\ttrue\n", encoding="utf-8")
+            (source / "Applications" / "Gorm" / "Gorm.app").mkdir(parents=True)
+            (source / "Applications" / "Gorm" / "Gorm.app" / "Gorm.exe").write_text("exe", encoding="utf-8")
+            (source / "GormCore" / "GormCore.framework").mkdir(parents=True)
+            (source / "GormCore" / "GormCore.framework" / "GormCore-0.dll").write_text("core", encoding="utf-8")
+            (source / "InterfaceBuilder" / "obj").mkdir(parents=True)
+            (source / "InterfaceBuilder" / "obj" / "InterfaceBuilder-1.dll").write_text("ib", encoding="utf-8")
+            (source / "GormObjCHeaderParser" / "obj").mkdir(parents=True)
+            (source / "GormObjCHeaderParser" / "obj" / "GormObjCHeaderParser-0.dll").write_text("parser", encoding="utf-8")
+            subprocess.run(["git", "-C", str(source), "add", "."], check=True)
+            subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+
+            payload = package_managed_source_artifact(
+                packages,
+                "org.gnustep.gorm",
+                "gorm-windows-amd64-msys2-clang64",
+                root / "out",
+                toolchain_root=toolchain,
+                source_dir=source,
+            )
+
+            self.assertTrue(payload["ok"])
+            staged_files = "\n".join(payload["staged_files"])
+            self.assertIn("InterfaceBuilder-1.dll", staged_files)
+            self.assertIn("GormObjCHeaderParser-0.dll", staged_files)
+            with zipfile.ZipFile(payload["artifact"]["path"]) as archive:
+                names = set(archive.namelist())
+            self.assertIn("Library/Libraries/InterfaceBuilder-1.dll", names)
+            self.assertIn("Library/Libraries/GormObjCHeaderParser-0.dll", names)
 
     def test_package_artifact_build_plan(self):
         payload = package_artifact_build_plan(ROOT / "packages")

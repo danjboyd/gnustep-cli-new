@@ -34,6 +34,8 @@ def main() -> int:
     parser.add_argument("--upgrade", action="store_true")
     parser.add_argument("--recover-transactions", action="store_true")
     parser.add_argument("--apply-recovery", action="store_true")
+    parser.add_argument("--profile", default="desktop", choices=["desktop", "server", "ci"])
+    parser.add_argument("--runtime-component", action="append", dest="runtime_components")
     parser.add_argument("manifest_path", nargs="?")
     args = parser.parse_args()
 
@@ -56,6 +58,8 @@ def main() -> int:
                 root,
                 require_signed_index=not args.allow_unsigned_index,
                 trusted_public_key_path=args.trusted_public_key,
+                install_profile=args.profile,
+                provided_runtime_components=args.runtime_components,
             )
         else:
             payload, exit_code = install_package_from_index(
@@ -64,12 +68,14 @@ def main() -> int:
                 root,
                 require_signed_index=not args.allow_unsigned_index,
                 trusted_public_key_path=args.trusted_public_key,
+                install_profile=args.profile,
+                provided_runtime_components=args.runtime_components,
             )
     else:
         if args.upgrade:
-            payload, exit_code = upgrade_package(args.manifest_path, root)
+            payload, exit_code = upgrade_package(args.manifest_path, root, install_profile=args.profile, provided_runtime_components=args.runtime_components)
         else:
-            payload, exit_code = install_package(args.manifest_path, root)
+            payload, exit_code = install_package(args.manifest_path, root, install_profile=args.profile, provided_runtime_components=args.runtime_components)
     if args.json:
         print(json.dumps(payload, separators=(",", ":")))
     else:
