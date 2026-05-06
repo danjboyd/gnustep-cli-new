@@ -172,7 +172,7 @@ def apply_package_patches(manifest_path: str | Path, source_dir: str | Path, tar
             break
         strip = int(patch_entry.get("strip", 1))
         proc = subprocess.run(
-            ["patch", "--batch", "--forward", f"-p{strip}", "-i", str(patch_path)],
+            ["git", "apply", "--whitespace=nowarn", f"-p{strip}", str(patch_path)],
             cwd=source_root,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -192,7 +192,7 @@ def apply_package_patches(manifest_path: str | Path, source_dir: str | Path, tar
             errors.append({
                 "code": "patch_apply_failed",
                 "patch": patch_entry.get("id"),
-                "message": "Patch command failed.",
+                "message": "git apply failed.",
                 "returncode": proc.returncode,
                 "stdout": proc.stdout,
                 "stderr": proc.stderr,
