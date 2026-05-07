@@ -16,6 +16,8 @@
                                    exitCode:(int *)exitCode;
 - (NSDictionary *)executeSetupForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSDictionary *)executeUpdateForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
+- (NSDictionary *)executeListForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
+- (NSDictionary *)executeSearchForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSDictionary *)buildUpdatePlanForScope:(NSString *)scope manifest:(NSString *)manifestPath installRoot:(NSString *)installRoot exitCode:(int *)exitCode;
 - (NSDictionary *)installedLifecycleStateForInstallRoot:(NSString *)installRoot;
 - (NSDictionary *)executeInstallForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
@@ -1433,6 +1435,375 @@
   XCTAssertEqualObjects([state objectForKey: @"last_package_index_expires_at"], @"2026-05-20T00:00:00Z");
 }
 
+- (void)testListPackagesFromIndex
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"list-packages"];
+  NSString *indexPath = [tempRoot stringByAppendingPathComponent: @"package-index.json"];
+  GSCommandContext *context = nil;
+  NSDictionary *payload = nil;
+  NSArray *packages = nil;
+  int exitCode = 0;
+
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         @"stable", @"channel",
+                         [NSArray arrayWithObjects:
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"org.gnustep.tools-xctest", @"id",
+                                                   @"tools-xctest", @"name",
+                                                   [NSArray arrayWithObject: @"xctest"], @"aliases",
+                                                   @"0.1.0", @"version",
+                                                   @"cli-tool", @"kind",
+                                                   @"XCTest runner for GNUstep tool development.", @"summary",
+                                                   [NSArray arrayWithObjects: @"test", @"developer", nil], @"tags",
+                                                   [NSArray array], @"artifacts",
+                                                   nil],
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"io.github.danjboyd.arlen", @"id",
+                                                   @"Arlen", @"name",
+                                                   [NSArray arrayWithObject: @"arlen"], @"aliases",
+                                                   @"0.1.0", @"version",
+                                                   @"application", @"kind",
+                                                   @"Headless-capable Arlen app runtime.", @"summary",
+                                                   [NSArray arrayWithObjects: @"server", @"app", nil], @"tags",
+                                                   [NSArray array], @"artifacts",
+                                                   nil],
+                                    nil], @"packages",
+                         nil]
+                 toPath: indexPath];
+
+  context = [GSCommandContext contextWithArguments:
+                              [NSArray arrayWithObjects:
+                                         @"list",
+                                         @"--index",
+                                         indexPath,
+                                         nil]];
+  payload = [runner executeListForContext: context exitCode: &exitCode];
+  packages = [payload objectForKey: @"packages"];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([payload objectForKey: @"command"], @"list");
+  XCTAssertEqual([packages count], (NSUInteger)2);
+  XCTAssertEqualObjects([[packages objectAtIndex: 0] objectForKey: @"id"], @"org.gnustep.tools-xctest");
+  XCTAssertEqualObjects([[packages objectAtIndex: 1] objectForKey: @"id"], @"io.github.danjboyd.arlen");
+  XCTAssertEqualObjects([[packages objectAtIndex: 1] objectForKey: @"aliases"], [NSArray arrayWithObject: @"arlen"]);
+}
+
+- (void)testListPackagesUsesConfiguredDefaultIndex
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"list-default-index"];
+  NSString *managedRoot = [tempRoot stringByAppendingPathComponent: @"managed"];
+  NSString *indexPath = [tempRoot stringByAppendingPathComponent: @"package-index.json"];
+  NSString *statePath = [[managedRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+  GSCommandContext *context = nil;
+  NSDictionary *payload = nil;
+  int exitCode = 0;
+
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         indexPath, @"package_index_url",
+                         nil]
+                 toPath: statePath];
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         [NSArray arrayWithObject:
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"io.github.danjboyd.arlen", @"id",
+                                                   @"Arlen", @"name",
+                                                   @"0.1.0", @"version",
+                                                   @"application", @"kind",
+                                                   @"Headless-capable Arlen app runtime.", @"summary",
+                                                   [NSArray array], @"artifacts",
+                                                   nil]], @"packages",
+                         nil]
+                 toPath: indexPath];
+
+  context = [GSCommandContext contextWithArguments:
+                              [NSArray arrayWithObjects:
+                                         @"list",
+                                         @"--root",
+                                         managedRoot,
+                                         nil]];
+  payload = [runner executeListForContext: context exitCode: &exitCode];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([payload objectForKey: @"index_path"], indexPath);
+  XCTAssertEqualObjects([[[payload objectForKey: @"packages"] objectAtIndex: 0] objectForKey: @"id"], @"io.github.danjboyd.arlen");
+}
+
+- (void)testSearchPackagesMatchesSummaryAndTags
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"search-packages"];
+  NSString *indexPath = [tempRoot stringByAppendingPathComponent: @"package-index.json"];
+  GSCommandContext *context = nil;
+  NSDictionary *payload = nil;
+  NSArray *packages = nil;
+  int exitCode = 0;
+
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         [NSArray arrayWithObjects:
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"org.gnustep.tools-xctest", @"id",
+                                                   @"tools-xctest", @"name",
+                                                   @"0.1.0", @"version",
+                                                   @"cli-tool", @"kind",
+                                                   @"XCTest runner for GNUstep tool development.", @"summary",
+                                                   [NSArray arrayWithObject: @"developer"], @"tags",
+                                                   [NSArray array], @"artifacts",
+                                                   nil],
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"io.github.danjboyd.arlen", @"id",
+                                                   @"Arlen", @"name",
+                                                   @"0.1.0", @"version",
+                                                   @"application", @"kind",
+                                                   @"Headless-capable Arlen app runtime.", @"summary",
+                                                   [NSArray arrayWithObject: @"server"], @"tags",
+                                                   [NSArray array], @"artifacts",
+                                                   nil],
+                                    nil], @"packages",
+                         nil]
+                 toPath: indexPath];
+
+  context = [GSCommandContext contextWithArguments:
+                              [NSArray arrayWithObjects:
+                                         @"search",
+                                         @"--index",
+                                         indexPath,
+                                         @"server",
+                                         nil]];
+  payload = [runner executeSearchForContext: context exitCode: &exitCode];
+  packages = [payload objectForKey: @"packages"];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([payload objectForKey: @"query"], @"server");
+  XCTAssertEqual([packages count], (NSUInteger)1);
+  XCTAssertEqualObjects([[packages objectAtIndex: 0] objectForKey: @"id"], @"io.github.danjboyd.arlen");
+}
+
+- (void)testSearchPackagesMatchesAliasesCaseInsensitively
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"search-package-alias"];
+  NSString *indexPath = [tempRoot stringByAppendingPathComponent: @"package-index.json"];
+  GSCommandContext *context = nil;
+  NSDictionary *payload = nil;
+  NSArray *packages = nil;
+  int exitCode = 0;
+
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         [NSArray arrayWithObject:
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"io.github.danjboyd.arlen", @"id",
+                                                   @"Arlen", @"name",
+                                                   [NSArray arrayWithObject: @"arlen"], @"aliases",
+                                                   @"0.1.0", @"version",
+                                                   @"framework", @"kind",
+                                                   @"Headless-capable Arlen app runtime.", @"summary",
+                                                   [NSArray array], @"artifacts",
+                                                   nil]], @"packages",
+                         nil]
+                 toPath: indexPath];
+
+  context = [GSCommandContext contextWithArguments:
+                              [NSArray arrayWithObjects:
+                                         @"search",
+                                         @"--index",
+                                         indexPath,
+                                         @"ARLEN",
+                                         nil]];
+  payload = [runner executeSearchForContext: context exitCode: &exitCode];
+  packages = [payload objectForKey: @"packages"];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqual([packages count], (NSUInteger)1);
+  XCTAssertEqualObjects([[packages objectAtIndex: 0] objectForKey: @"id"], @"io.github.danjboyd.arlen");
+}
+
+- (void)testInstallFromIndexAcceptsCaseInsensitivePackageAlias
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"install-alias"];
+  NSString *payloadDir = [tempRoot stringByAppendingPathComponent: @"artifact-root"];
+  NSString *arlenPath = [payloadDir stringByAppendingPathComponent: @"bin/arlen"];
+  NSString *archivePath = [tempRoot stringByAppendingPathComponent: @"arlen.tar.gz"];
+  NSString *indexPath = [tempRoot stringByAppendingPathComponent: @"package-index.json"];
+  NSString *managedRoot = [tempRoot stringByAppendingPathComponent: @"managed"];
+  NSString *managedArlenLink = [managedRoot stringByAppendingPathComponent: @"bin/arlen"];
+  NSDictionary *payload = nil;
+  NSDictionary *state = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  [self ensureDirectory: [payloadDir stringByAppendingPathComponent: @"bin"]];
+  [@"arlen" writeToFile: arlenPath
+               atomically: YES
+                 encoding: NSUTF8StringEncoding
+                    error: NULL];
+  [[NSFileManager defaultManager] setAttributes:
+                                      [NSDictionary dictionaryWithObject: [NSNumber numberWithUnsignedLong: 0755]
+                                                                  forKey: NSFilePosixPermissions]
+                                  ofItemAtPath: arlenPath
+                                         error: NULL];
+  [self archiveDirectory: payloadDir toTarball: archivePath withRunner: runner];
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         @"stable", @"channel",
+                         [NSArray arrayWithObject:
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"io.github.danjboyd.arlen", @"id",
+                                                   @"Arlen", @"name",
+                                                   [NSArray arrayWithObject: @"arlen"], @"aliases",
+                                                   @"0.1.0", @"version",
+                                                   @"framework", @"kind",
+                                                   @"Headless framework fixture.", @"summary",
+                                                   [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                  [NSArray arrayWithObject: @"linux"], @"supported_os",
+                                                                  [NSArray arrayWithObject: @"amd64"], @"supported_arch",
+                                                                  [NSArray arrayWithObject: @"clang"], @"supported_compiler_families",
+                                                                  [NSArray arrayWithObject: @"libobjc2"], @"supported_objc_runtimes",
+                                                                  [NSArray arrayWithObject: @"modern"], @"supported_objc_abi",
+                                                                  [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                  [NSArray array], @"forbidden_features",
+                                                                  [NSArray arrayWithObject: @"org.gnustep.runtime.base"], @"runtime_components",
+                                                                  nil], @"requirements",
+                                                   [NSArray array], @"dependencies",
+                                                   [NSArray arrayWithObject:
+                                                              [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                             @"arlen-linux-clang-headless", @"id",
+                                                                             @"linux", @"os",
+                                                                             @"amd64", @"arch",
+                                                                             @"clang", @"compiler_family",
+                                                                             @"clang", @"toolchain_flavor",
+                                                                             @"libobjc2", @"objc_runtime",
+                                                                             @"modern", @"objc_abi",
+                                                                             [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                             @"headless-base", @"runtime_profile",
+                                                                             [NSArray arrayWithObject: @"org.gnustep.runtime.base"], @"runtime_components",
+                                                                             [NSString stringWithFormat: @"file://%@", archivePath], @"url",
+                                                                             [runner sha256ForFile: archivePath], @"sha256",
+                                                                             nil]], @"artifacts",
+                                                   nil]], @"packages",
+                         nil]
+                 toPath: indexPath];
+
+  payload = [runner executeInstallForContext:
+                        [GSCommandContext contextWithArguments:
+                                            [NSArray arrayWithObjects:
+                                                       @"install",
+                                                       @"--root",
+                                                       managedRoot,
+                                                       @"--index",
+                                                       indexPath,
+                                                       @"--profile",
+                                                       @"server",
+                                                       @"ARLEN",
+                                                       nil]]
+                                  exitCode: &exitCode];
+  state = [NSJSONSerialization JSONObjectWithData:
+                               [NSData dataWithContentsOfFile: [managedRoot stringByAppendingPathComponent: @"state/installed-packages.json"]]
+                                         options: 0
+                                           error: NULL];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([payload objectForKey: @"package_id"], @"io.github.danjboyd.arlen");
+  XCTAssertNotNil([[state objectForKey: @"packages"] objectForKey: @"io.github.danjboyd.arlen"]);
+  XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: managedArlenLink]);
+  XCTAssertEqualObjects([[[payload objectForKey: @"executable_links"] objectAtIndex: 0] objectForKey: @"name"], @"arlen");
+}
+
+- (void)testListCompatibleFiltersByDetectedEnvironment
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"list-compatible-packages"];
+  NSString *indexPath = [tempRoot stringByAppendingPathComponent: @"package-index.json"];
+  GSCommandContext *context = nil;
+  NSDictionary *payload = nil;
+  NSArray *packages = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         [NSArray arrayWithObjects:
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"org.example.compatible", @"id",
+                                                   @"compatible", @"name",
+                                                   @"0.1.0", @"version",
+                                                   @"library", @"kind",
+                                                   @"Compatible package.", @"summary",
+                                                   [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                  [NSArray arrayWithObject: @"linux"], @"supported_os",
+                                                                  [NSArray arrayWithObject: @"amd64"], @"supported_arch",
+                                                                  [NSArray arrayWithObject: @"clang"], @"supported_compiler_families",
+                                                                  [NSArray arrayWithObject: @"libobjc2"], @"supported_objc_runtimes",
+                                                                  [NSArray arrayWithObject: @"modern"], @"supported_objc_abi",
+                                                                  [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                  [NSArray array], @"forbidden_features",
+                                                                  nil], @"requirements",
+                                                   [NSArray arrayWithObject:
+                                                              [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                             @"compatible-linux-clang", @"id",
+                                                                             @"linux", @"os",
+                                                                             @"amd64", @"arch",
+                                                                             @"clang", @"compiler_family",
+                                                                             @"clang", @"toolchain_flavor",
+                                                                             @"libobjc2", @"objc_runtime",
+                                                                             @"modern", @"objc_abi",
+                                                                             [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                             @"file:///tmp/compatible.tar.gz", @"url",
+                                                                             nil]], @"artifacts",
+                                                   nil],
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"org.example.incompatible", @"id",
+                                                   @"incompatible", @"name",
+                                                   @"0.1.0", @"version",
+                                                   @"library", @"kind",
+                                                   @"Incompatible package.", @"summary",
+                                                   [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                  [NSArray arrayWithObject: @"windows"], @"supported_os",
+                                                                  [NSArray arrayWithObject: @"amd64"], @"supported_arch",
+                                                                  nil], @"requirements",
+                                                   [NSArray array], @"artifacts",
+                                                   nil],
+                                    nil], @"packages",
+                         nil]
+                 toPath: indexPath];
+
+  context = [GSCommandContext contextWithArguments:
+                              [NSArray arrayWithObjects:
+                                         @"list",
+                                         @"--index",
+                                         indexPath,
+                                         @"--compatible",
+                                         nil]];
+  payload = [runner executeListForContext: context exitCode: &exitCode];
+  packages = [payload objectForKey: @"packages"];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertTrue([[payload objectForKey: @"compatible_only"] boolValue]);
+  XCTAssertEqual([packages count], (NSUInteger)1);
+  XCTAssertEqualObjects([[packages objectAtIndex: 0] objectForKey: @"id"], @"org.example.compatible");
+  XCTAssertEqualObjects([[packages objectAtIndex: 0] objectForKey: @"selected_artifact"], @"compatible-linux-clang");
+}
+
 - (void)testInstallServerProfileAllowsBaseOnlyRuntimePackage
 {
   StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
@@ -2436,6 +2807,8 @@
   NSString *tempRoot = [self temporaryPathComponent: @"remove-installed-root"];
   NSString *managedRoot = [tempRoot stringByAppendingPathComponent: @"managed"];
   NSString *installRoot = [managedRoot stringByAppendingPathComponent: @"packages/org.gnustep.tools-xctest"];
+  NSString *managedBin = [managedRoot stringByAppendingPathComponent: @"bin"];
+  NSString *linkPath = [managedBin stringByAppendingPathComponent: @"xctest"];
   NSString *statePath = [managedRoot stringByAppendingPathComponent: @"state/installed-packages.json"];
   NSDictionary *state = nil;
   GSCommandContext *context = nil;
@@ -2447,6 +2820,15 @@
                   atomically: YES
                     encoding: NSUTF8StringEncoding
                        error: NULL];
+  [[NSFileManager defaultManager] setAttributes:
+                                      [NSDictionary dictionaryWithObject: [NSNumber numberWithUnsignedLong: 0755]
+                                                                  forKey: NSFilePosixPermissions]
+                                  ofItemAtPath: [installRoot stringByAppendingPathComponent: @"bin/xctest"]
+                                         error: NULL];
+  [self ensureDirectory: managedBin];
+  [[NSFileManager defaultManager] createSymbolicLinkAtPath: linkPath
+                                       withDestinationPath: @"../packages/org.gnustep.tools-xctest/bin/xctest"
+                                                     error: NULL];
   [self writeJSONStringObject:
           [NSDictionary dictionaryWithObjectsAndKeys:
                          [NSNumber numberWithInt: 1], @"schema_version",
@@ -2455,6 +2837,13 @@
                                                        installRoot, @"install_root",
                                                        [NSArray array], @"dependencies",
                                                        [NSArray arrayWithObject: @"packages/org.gnustep.tools-xctest/bin/xctest"], @"installed_files",
+                                                       [NSArray arrayWithObject:
+                                                                  [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                                 @"xctest", @"name",
+                                                                                 linkPath, @"path",
+                                                                                 @"../packages/org.gnustep.tools-xctest/bin/xctest", @"target",
+                                                                                 @"packages/org.gnustep.tools-xctest/bin/xctest", @"source",
+                                                                                 nil]], @"executable_links",
                                                        nil], @"org.gnustep.tools-xctest",
                                         nil], @"packages",
                          nil]
@@ -2477,6 +2866,8 @@
   XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
   XCTAssertEqualObjects([payload objectForKey: @"summary"], @"Package removed.");
   XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: installRoot]);
+  XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: linkPath]);
+  XCTAssertEqualObjects([[[payload objectForKey: @"removed_executable_links"] objectAtIndex: 0] objectForKey: @"name"], @"xctest");
   XCTAssertNil([[state objectForKey: @"packages"] objectForKey: @"org.gnustep.tools-xctest"]);
 }
 

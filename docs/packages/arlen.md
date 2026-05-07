@@ -13,8 +13,10 @@ This package is suitable for headless server deployment. Installing Arlen with t
 ## Install
 
 ```sh
-gnustep install io.github.danjboyd.arlen --profile server
+gnustep install arlen --profile server
 ```
+
+Canonical package ID: `io.github.danjboyd.arlen`
 
 ## Validation Status
 

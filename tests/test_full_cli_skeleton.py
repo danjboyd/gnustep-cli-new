@@ -20,7 +20,7 @@ class FullCliSkeletonTests(unittest.TestCase):
 
     def test_runner_lists_expected_commands(self):
         content = (FULL_CLI / "GSCommandRunner.m").read_text()
-        for command in ("setup", "doctor", "build", "clean", "run", "new", "install", "remove"):
+        for command in ("setup", "doctor", "build", "clean", "run", "new", "list", "search", "install", "remove"):
             with self.subTest(command=command):
                 self.assertIn(command, content)
 
@@ -39,6 +39,8 @@ class FullCliSkeletonTests(unittest.TestCase):
         self.assertIn("executeCleanForContext", content)
         self.assertIn("executeRunForContext", content)
         self.assertIn("executeNewForContext", content)
+        self.assertIn("executeListForContext", content)
+        self.assertIn("executeSearchForContext", content)
         self.assertIn("executeInstallForContext", content)
         self.assertIn("executeRemoveForContext", content)
         self.assertIn('[command isEqualToString: @"setup"]', content)
@@ -70,6 +72,7 @@ class FullCliSkeletonTests(unittest.TestCase):
         self.assertIn('streamOutput: streamOutput', content)
         self.assertIn('selectedPackageArtifactForPackage:', content)
         self.assertIn('packageRecordFromIndexPath:', content)
+        self.assertIn('packageDiscoveryPayloadForCommand:', content)
         self.assertIn('@"install_mode"', content)
         self.assertIn('@"use_existing_toolchain"', content)
         self.assertIn('@"selected_artifact"', content)

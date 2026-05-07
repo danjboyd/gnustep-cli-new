@@ -27,6 +27,8 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("build", proc.stdout)
         self.assertIn("shell", proc.stdout)
         self.assertIn("remove", proc.stdout)
+        self.assertIn("list", proc.stdout)
+        self.assertIn("search", proc.stdout)
         self.assertIn("update", proc.stdout)
 
     def test_unknown_option_fails_with_usage_code(self):
@@ -97,6 +99,7 @@ class BootstrapShTests(unittest.TestCase):
     def test_openbsd_prerequisites_include_native_gnustep_runtime(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")
         self.assertIn("gnustep-make gnustep-base gnustep-gui gnustep-back gnustep-libobjc2", content)
+        self.assertIn("bash gmake", content)
         self.assertIn("doas \"$@\"", content)
         self.assertIn("bootstrap_user_home", content)
         self.assertIn("bootstrap_user_name", content)

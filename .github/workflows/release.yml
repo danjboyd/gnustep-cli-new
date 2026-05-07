@@ -76,6 +76,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Prepare workspace temp directory
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.artifacts/tmp"
+          echo "TMPDIR=$GITHUB_WORKSPACE/.artifacts/tmp" >> "$GITHUB_ENV"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

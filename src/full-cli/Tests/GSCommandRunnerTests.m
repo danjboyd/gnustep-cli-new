@@ -145,6 +145,8 @@
                                   @"run",
                                   @"shell",
                                   @"new",
+                                  @"list",
+                                  @"search",
                                   @"install",
                                   @"remove",
                                   @"update",

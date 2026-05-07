@@ -456,6 +456,8 @@ Commands:
   run        Unavailable in bootstrap. Install the full interface first.
   shell      Unavailable in bootstrap. Install the full interface first.
   new        Unavailable in bootstrap. Install the full interface first.
+  list       Unavailable in bootstrap. Install the full interface first.
+  search     Unavailable in bootstrap. Install the full interface first.
   install    Unavailable in bootstrap. Install the full interface first.
   remove     Unavailable in bootstrap. Install the full interface first.
   update     Unavailable in bootstrap. Install the full interface first.
@@ -916,6 +918,8 @@ switch ($command) {
     "run" { Invoke-UnsupportedCommand "run" }
     "shell" { Invoke-UnsupportedCommand "shell" }
     "new" { Invoke-UnsupportedCommand "new" }
+    "list" { Invoke-UnsupportedCommand "list" }
+    "search" { Invoke-UnsupportedCommand "search" }
     "install" { Invoke-UnsupportedCommand "install" }
     "remove" { Invoke-UnsupportedCommand "remove" }
     "update" { Invoke-UnsupportedCommand "update" }

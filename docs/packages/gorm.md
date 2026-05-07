@@ -13,8 +13,10 @@ The package manager must reject Gorm for `server` and `ci` profiles unless those
 ## Install
 
 ```sh
-gnustep install org.gnustep.gorm --profile desktop
+gnustep install gorm --profile desktop
 ```
+
+Canonical package ID: `org.gnustep.gorm`
 
 ## Validation Status
 

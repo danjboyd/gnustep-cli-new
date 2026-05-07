@@ -198,7 +198,7 @@ def _detect_objc_runtime_and_abi(compiler_family: str | None, present: bool, *, 
     if compiler_family == "gcc":
         return "gcc_libobjc", "legacy"
     if compiler_family == "clang":
-        return "unknown", "unknown"
+        return "libobjc2", "modern"
     return "unknown", "unknown"
 
 
@@ -224,6 +224,18 @@ def _detect_feature_flags(
                     "associated_objects": True,
                 }
             )
+        return feature_flags
+
+    if compiler_family == "clang":
+        feature_flags.update(
+            {
+                "objc2_syntax": True,
+                "blocks": True,
+                "arc": True,
+                "nonfragile_abi": True,
+                "associated_objects": True,
+            }
+        )
         return feature_flags
 
     feature_flags["objc2_syntax"] = _compile_probe(

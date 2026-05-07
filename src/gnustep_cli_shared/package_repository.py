@@ -42,6 +42,7 @@ def generate_package_index(packages_root: str | Path, channel: str = "stable") -
             {
                 "id": payload["id"],
                 "name": payload["name"],
+                "aliases": payload.get("aliases", []),
                 "version": payload["version"],
                 "kind": payload["kind"],
                 "summary": payload.get("summary", ""),

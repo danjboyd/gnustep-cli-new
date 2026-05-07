@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-06T20:24:35.660335Z",
+  "generated_at": "2026-05-07T18:33:24.229280Z",
   "builder_identity": "local",
   "package_index": {
     "filename": "package-index.json",
-    "sha256": "7ed9f481f81b741a3137ce2d813bbcc8b5777b46b2f9a643c55b3165239320b9",
+    "sha256": "2d508d4b85379d49110082a006701c0f56664a5cb7ac8c0269da827797b7de7b",
     "channel": "stable",
     "metadata_version": 1,
     "expires_at": "TBD"
@@ -12,7 +12,7 @@
   "packages": [
     {
       "id": "io.github.danjboyd.arlen",
-      "version": "0.1.0-snapshot.20260505",
+      "version": "0.1.0-snapshot.20260507.1",
       "kind": "framework",
       "source": {
         "type": "git-archive",
@@ -82,7 +82,7 @@
         },
         {
           "id": "arlen-openbsd-amd64-clang-headless",
-          "sha256": "e0d653b2eef87fb50b3d9e3cfee09c7a16fc7ea3052a83fe3eb0103c67ef0564",
+          "sha256": "7dcbfcb6658d4cdb8be044a116edd3656bde9bf1db50fb6e7875096b14abe1dd",
           "source_sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
           "patches": []
         },

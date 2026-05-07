@@ -13,7 +13,10 @@
     {
       "id": "io.github.danjboyd.arlen",
       "name": "Arlen",
-      "version": "0.1.0-snapshot.20260505",
+      "aliases": [
+        "arlen"
+      ],
+      "version": "0.1.0-snapshot.20260507.1",
       "kind": "framework",
       "summary": "GNUstep web application framework and command-line tooling.",
       "source": {
@@ -320,12 +323,12 @@
           "format": "tar.gz",
           "publish": true,
           "status": "published_openbsd_amd64_clang_headless",
-          "filename": "arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
-          "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
-          "artifact_path": ".artifacts/openbsd-package-lease-20260506164218-znrs4m/arlen-openbsd-amd64-clang-headless/arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
-          "sha256": "e0d653b2eef87fb50b3d9e3cfee09c7a16fc7ea3052a83fe3eb0103c67ef0564",
-          "size": 5400173,
-          "notes": "OracleTestVMs OpenBSD 7.8 FVWM lease lease-20260506164218-znrs4m built this headless package from the OpenBSD amd64 Clang/libobjc2 managed toolchain path. Install/remove validation passed and the artifact is hosted on the v0.1.0 release with a verified digest.",
+          "filename": "arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
+          "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0-dev/arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
+          "artifact_path": ".artifacts/openbsd-arlen-native-20260507-clean/arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
+          "sha256": "7dcbfcb6658d4cdb8be044a116edd3656bde9bf1db50fb6e7875096b14abe1dd",
+          "size": 4863380,
+          "notes": "OracleTestVMs OpenBSD 7.8 FVWM lease lease-20260506205333-u7tgwm rebuilt this headless package against the native OpenBSD GNUstep/libobjc2 runtime under /usr/local. The OpenBSD package build replaces Arlen's dispatch_once-only libdispatch usage with a local pthread-backed shim, so installed package executables do not load libdispatch/libBlocksRuntime and do not emit the libBlocksRuntime/libobjc2 symbol-size warning.",
           "build_evidence": "docs/validation/package-publication-20260506/arlen-openbsd-amd64-clang-headless-build.json",
           "validation_evidence": "docs/validation/package-install-remove-20260506/arlen-openbsd-amd64-clang-headless-install-remove.json",
           "install_remove_evidence": "docs/validation/package-install-remove-20260506/arlen-openbsd-amd64-clang-headless-install-remove.json",
@@ -426,6 +429,9 @@
     {
       "id": "org.gnustep.gorm",
       "name": "Gorm",
+      "aliases": [
+        "gorm"
+      ],
       "version": "1.5.0-snapshot.20260505",
       "kind": "gui-application",
       "summary": "Interface builder application for GNUstep.",
@@ -679,6 +685,7 @@
     {
       "id": "org.gnustep.tools-xctest",
       "name": "tools-xctest",
+      "aliases": [],
       "version": "0.1.0",
       "kind": "cli-tool",
       "summary": "XCTest runner and harness for native GNUstep Objective-C unit tests.",

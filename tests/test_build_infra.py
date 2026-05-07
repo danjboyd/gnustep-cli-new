@@ -1465,6 +1465,25 @@ class BuildInfraTests(unittest.TestCase):
             self.assertTrue(checks["new-root-rejects-old-signature"]["ok"])
             self.assertTrue(checks["old-root-rejects-new-signature"]["ok"])
 
+    def test_release_key_rotation_drill_uses_release_adjacent_temp_space_by_default(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_binary = temp / "gnustep"
+            cli_binary.write_text("binary")
+            cli_bundle = temp / "cli-bundle"
+            bundle_full_cli(cli_binary, cli_bundle, repo_root=ROOT)
+            payload = stage_release_assets(
+                "0.1.0",
+                temp / "dist",
+                "https://example.invalid/releases",
+                cli_inputs={"linux-amd64-clang": cli_bundle},
+            )
+            drill = release_key_rotation_drill(payload["release_dir"])
+
+            self.assertTrue(drill["ok"])
+            self.assertIsNone(drill["work_dir"])
+            self.assertTrue((Path(payload["release_dir"]).parent / ".tmp").is_dir())
+
     def test_phase12_status_reports_missing_host_backed_smoke(self):
         payload = phase12_production_hardening_status()
         checks = {check["id"]: check for check in payload["checks"]}
@@ -2294,9 +2313,12 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("gmake -C", build_command)
             self.assertIn("CC=clang OBJC=clang", build_command)
             self.assertNotIn("/usr/bin/clang", build_command)
-            self.assertIn(["patch-source", "openbsd-arlen-drop-libdl"], payload["commands"])
+            self.assertIn(["patch-source", "openbsd-arlen-native-linkage"], payload["commands"])
             self.assertIn(["patch-source", "openbsd-arlen-netinet-in"], payload["commands"])
+            self.assertIn(["patch-source", "openbsd-arlen-dispatch-once-shim"], payload["commands"])
             self.assertIn("ARLEN_PLATFORM_LINK_LIBS :=", (source / "GNUmakefile").read_text())
+            self.assertNotIn("-ldispatch", (source / "GNUmakefile").read_text())
+            self.assertIn("EXTRA_OBJC_FLAGS=-include", build_command)
             route_policy = (source / "src" / "Arlen" / "MVC" / "Middleware" / "ALNRoutePolicyMiddleware.m").read_text()
             self.assertIn("#include <netinet/in.h>\n#include <arpa/inet.h>", route_policy)
             self.assertTrue((root / "out" / "managed-tool-shims" / "sha256sum").exists())

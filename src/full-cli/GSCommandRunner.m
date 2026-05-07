@@ -47,9 +47,37 @@
                       data:(NSDictionary **)data
             installProfile:(NSString *)installProfile;
 - (NSDictionary *)selectedPackageArtifactForPackage:(NSDictionary *)packageRecord environment:(NSDictionary *)environment selectionError:(NSString **)selectionError;
-- (NSDictionary *)packageRecordFromIndexPath:(NSString *)indexPath packageID:(NSString *)packageID error:(NSString **)errorMessage;
+- (NSArray *)packageLookupKeysForRecord:(NSDictionary *)record;
+- (NSDictionary *)packageRecordFromIndexPath:(NSString *)indexPath packageSpecifier:(NSString *)packageSpecifier error:(NSString **)errorMessage;
+- (NSDictionary *)packageIndexFromPath:(NSString *)indexPath error:(NSString **)errorMessage;
+- (NSString *)normalizedPackageIndexReference:(NSString *)indexPath;
+- (NSString *)defaultPackageIndexPathForManagedRoot:(NSString *)managedRoot preferredIndex:(NSString *)indexPath;
+- (NSString *)packageIndexPathFromManifest:(NSString *)manifestPath;
+- (NSDictionary *)packageDiscoveryPayloadForCommand:(NSString *)command
+                                          indexPath:(NSString *)indexPath
+                                               root:(NSString *)root
+                                             query:(NSString *)query
+                                           profile:(NSString *)profile
+                                compatibleOnly:(BOOL)compatibleOnly
+                                         exitCode:(int *)exitCode;
+- (NSDictionary *)executeListForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
+- (NSDictionary *)executeSearchForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSDictionary *)loadInstalledPackagesState:(NSString *)managedRoot;
 - (BOOL)saveInstalledPackagesState:(NSDictionary *)state managedRoot:(NSString *)managedRoot;
+- (BOOL)activatePackageExecutablesForPackageID:(NSString *)packageID
+                                   installRoot:(NSString *)installRoot
+                                installedFiles:(NSArray *)installedFiles
+                                   managedRoot:(NSString *)managedRoot
+                                         links:(NSArray **)links
+                                         error:(NSString **)errorMessage;
+- (NSArray *)expectedExecutableLinksForPackageID:(NSString *)packageID
+                                     managedRoot:(NSString *)managedRoot
+                                  installedFiles:(NSArray *)installedFiles;
+- (NSArray *)removePackageExecutableLinksForPackageID:(NSString *)packageID
+                                          managedRoot:(NSString *)managedRoot
+                                          installRoot:(NSString *)installRoot
+                                       installedFiles:(NSArray *)installedFiles
+                                         recordedLinks:(NSArray *)recordedLinks;
 - (NSString *)resolvedArtifactPathFromURLString:(NSString *)urlString;
 - (void)appendInstallTrace:(NSString *)message;
 - (BOOL)writeString:(NSString *)content toPath:(NSString *)path;
@@ -346,6 +374,8 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                     @"run",
                     @"shell",
                     @"new",
+                    @"list",
+                    @"search",
                     @"install",
                     @"remove",
                     @"update",
@@ -386,6 +416,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   if ([command isEqualToString: @"new"])
     {
       return @"Create a new GNUstep project from a curated template.";
+    }
+  if ([command isEqualToString: @"list"])
+    {
+      return @"List GNUstep packages from a package index.";
+    }
+  if ([command isEqualToString: @"search"])
+    {
+      return @"Search GNUstep packages in a package index.";
     }
   if ([command isEqualToString: @"install"])
     {
@@ -433,9 +471,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       printf("  gnustep new [--json] [--list-templates] <template> <destination> [--name <name>]\n\n");
     }
+  else if ([command isEqualToString: @"list"])
+    {
+      printf("  gnustep list [--json] [--root <path>] [--index <path>] [--profile <server|developer|desktop|ci>] [--compatible]\n\n");
+    }
+  else if ([command isEqualToString: @"search"])
+    {
+      printf("  gnustep search [--json] [--root <path>] [--index <path>] [--profile <server|developer|desktop|ci>] [--compatible] <query>\n\n");
+    }
   else if ([command isEqualToString: @"install"])
     {
-      printf("  gnustep install [--json] [--root <path>] [--index <path>] [--profile <server|developer|desktop|ci>] <package-id|package-manifest>\n\n");
+      printf("  gnustep install [--json] [--root <path>] [--index <path>] [--profile <server|developer|desktop|ci>] <package|package-manifest>\n\n");
     }
   else if ([command isEqualToString: @"remove"])
     {
@@ -813,6 +859,43 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       return NO;
     }
   return YES;
+}
+
+- (NSArray *)removePackageExecutableLinksForPackageID:(NSString *)packageID
+                                          managedRoot:(NSString *)managedRoot
+                                          installRoot:(NSString *)installRoot
+                                       installedFiles:(NSArray *)installedFiles
+                                        recordedLinks:(NSArray *)recordedLinks
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSMutableArray *candidateLinks = [NSMutableArray array];
+  NSMutableArray *removedLinks = [NSMutableArray array];
+  NSUInteger i = 0;
+
+  if ([recordedLinks isKindOfClass: [NSArray class]])
+    {
+      [candidateLinks addObjectsFromArray: recordedLinks];
+    }
+  [candidateLinks addObjectsFromArray: [self expectedExecutableLinksForPackageID: packageID managedRoot: managedRoot installedFiles: installedFiles]];
+  for (i = 0; i < [candidateLinks count]; i++)
+    {
+      NSDictionary *entry = [candidateLinks objectAtIndex: i];
+      NSString *linkPath = [entry objectForKey: @"path"];
+      NSString *targetPath = [entry objectForKey: @"target"];
+      NSString *existingTarget = nil;
+
+      if (linkPath == nil || targetPath == nil)
+        {
+          continue;
+        }
+      existingTarget = [manager pathContentOfSymbolicLinkAtPath: linkPath];
+      if ([existingTarget isEqualToString: targetPath])
+        {
+          [manager removeItemAtPath: linkPath error: NULL];
+          [removedLinks addObject: entry];
+        }
+    }
+  return removedLinks;
 }
 
 - (NSString *)resolvedExecutablePathForCommand:(NSString *)command
@@ -4447,11 +4530,108 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return nil;
 }
 
-- (NSDictionary *)packageRecordFromIndexPath:(NSString *)indexPath packageID:(NSString *)packageID error:(NSString **)errorMessage
+- (NSArray *)packageLookupKeysForRecord:(NSDictionary *)record
+{
+  NSMutableArray *keys = [NSMutableArray array];
+  NSString *packageID = [record objectForKey: @"id"];
+  NSString *name = [record objectForKey: @"name"];
+  NSArray *aliases = [[record objectForKey: @"aliases"] isKindOfClass: [NSArray class]] ? [record objectForKey: @"aliases"] : [NSArray array];
+  NSUInteger i = 0;
+
+  if ([packageID isKindOfClass: [NSString class]] && [packageID length] > 0)
+    {
+      [keys addObject: packageID];
+    }
+  if ([name isKindOfClass: [NSString class]] && [name length] > 0)
+    {
+      [keys addObject: name];
+    }
+  for (i = 0; i < [aliases count]; i++)
+    {
+      id alias = [aliases objectAtIndex: i];
+      if ([alias isKindOfClass: [NSString class]] && [alias length] > 0)
+        {
+          [keys addObject: alias];
+        }
+    }
+  return keys;
+}
+
+- (NSDictionary *)packageRecordFromIndexPath:(NSString *)indexPath packageSpecifier:(NSString *)packageSpecifier error:(NSString **)errorMessage
+{
+  NSDictionary *index = [self packageIndexFromPath: indexPath error: errorMessage];
+  NSArray *packages = nil;
+  NSMutableArray *matches = [NSMutableArray array];
+  NSMutableSet *matchedPackageIDs = [NSMutableSet set];
+  NSString *normalizedSpecifier = [packageSpecifier lowercaseString];
+  NSUInteger i = 0;
+
+  if (index == nil)
+    {
+      return nil;
+    }
+  packages = [index objectForKey: @"packages"];
+  for (i = 0; i < [packages count]; i++)
+    {
+      NSDictionary *record = [packages objectAtIndex: i];
+      NSString *packageID = [record objectForKey: @"id"];
+      if ([packageID isEqualToString: packageSpecifier])
+        {
+          return record;
+        }
+    }
+  for (i = 0; i < [packages count]; i++)
+    {
+      NSDictionary *record = [packages objectAtIndex: i];
+      NSString *packageID = [record objectForKey: @"id"];
+      NSArray *keys = [self packageLookupKeysForRecord: record];
+      NSUInteger keyIndex = 0;
+      for (keyIndex = 0; keyIndex < [keys count]; keyIndex++)
+        {
+          NSString *key = [keys objectAtIndex: keyIndex];
+          if ([[key lowercaseString] isEqualToString: normalizedSpecifier])
+            {
+              if (packageID != nil && [matchedPackageIDs containsObject: packageID] == NO)
+                {
+                  [matches addObject: record];
+                  [matchedPackageIDs addObject: packageID];
+                }
+              break;
+            }
+        }
+    }
+  if ([matches count] == 1)
+    {
+      return [matches objectAtIndex: 0];
+    }
+  if ([matches count] > 1)
+    {
+      NSMutableArray *ids = [NSMutableArray array];
+      for (i = 0; i < [matches count]; i++)
+        {
+          NSString *matchedID = [[matches objectAtIndex: i] objectForKey: @"id"];
+          if (matchedID != nil)
+            {
+              [ids addObject: matchedID];
+            }
+        }
+      if (errorMessage != NULL)
+        {
+          *errorMessage = [NSString stringWithFormat: @"Package name '%@' is ambiguous; use one of: %@.", packageSpecifier, [ids componentsJoinedByString: @", "]];
+        }
+      return nil;
+    }
+  if (errorMessage != NULL)
+    {
+      *errorMessage = [NSString stringWithFormat: @"Package '%@' was not found in the package index.", packageSpecifier];
+    }
+  return nil;
+}
+
+- (NSDictionary *)packageIndexFromPath:(NSString *)indexPath error:(NSString **)errorMessage
 {
   NSDictionary *index = [self readJSONFile: indexPath error: errorMessage];
   NSArray *packages = nil;
-  NSUInteger i = 0;
 
   if (index == nil)
     {
@@ -4474,18 +4654,109 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         }
       return nil;
     }
-  for (i = 0; i < [packages count]; i++)
+  return index;
+}
+
+- (NSString *)normalizedPackageIndexReference:(NSString *)indexPath
+{
+  if (indexPath == nil || indexPath == (id)[NSNull null])
     {
-      NSDictionary *record = [packages objectAtIndex: i];
-      if ([[record objectForKey: @"id"] isEqualToString: packageID])
+      return nil;
+    }
+  if ([indexPath hasPrefix: @"http://"] || [indexPath hasPrefix: @"https://"] || [indexPath hasPrefix: @"file://"])
+    {
+      return indexPath;
+    }
+  return [indexPath stringByResolvingSymlinksInPath];
+}
+
+- (NSString *)packageIndexPathFromManifest:(NSString *)manifestPath
+{
+  NSDictionary *manifest = nil;
+  NSDictionary *release = nil;
+  NSArray *artifacts = nil;
+  NSUInteger i = 0;
+  NSString *errorMessage = nil;
+
+  if (manifestPath == nil || manifestPath == (id)[NSNull null])
+    {
+      return nil;
+    }
+  manifest = [self validateAndLoadManifest: manifestPath error: &errorMessage];
+  if (manifest == nil)
+    {
+      return nil;
+    }
+  release = [self selectReleaseFromManifest: manifest];
+  artifacts = [release objectForKey: @"artifacts"];
+  for (i = 0; i < [artifacts count]; i++)
+    {
+      NSDictionary *artifact = [artifacts objectAtIndex: i];
+      if ([[artifact objectForKey: @"kind"] isEqualToString: @"package-index"])
         {
-          return record;
+          NSString *url = [artifact objectForKey: @"url"];
+          NSString *filename = [artifact objectForKey: @"filename"];
+          if (url != nil && url != (id)[NSNull null])
+            {
+              return url;
+            }
+          if (filename != nil && filename != (id)[NSNull null] &&
+              ![manifestPath hasPrefix: @"http://"] &&
+              ![manifestPath hasPrefix: @"https://"])
+            {
+              return [[manifestPath stringByDeletingLastPathComponent] stringByAppendingPathComponent: filename];
+            }
         }
     }
-  if (errorMessage != NULL)
+  return nil;
+}
+
+- (NSString *)defaultPackageIndexPathForManagedRoot:(NSString *)managedRoot preferredIndex:(NSString *)indexPath
+{
+  NSString *root = [self normalizedManagedInstallRootPath: managedRoot ? managedRoot : [self defaultManagedRoot]];
+  NSDictionary *packageState = nil;
+  NSDictionary *installState = nil;
+  NSString *candidate = nil;
+  NSString *manifestPath = nil;
+  NSString *repositoryIndex = nil;
+
+  if (indexPath != nil && indexPath != (id)[NSNull null] && [indexPath length] > 0)
     {
-      *errorMessage = [NSString stringWithFormat: @"Package '%@' was not found in the package index.", packageID];
+      return indexPath;
     }
+
+  packageState = [self loadInstalledPackagesState: root];
+  candidate = [packageState objectForKey: @"last_package_index_path"];
+  if (candidate != nil && candidate != (id)[NSNull null] && [candidate length] > 0)
+    {
+      return candidate;
+    }
+
+  installState = [self installedLifecycleStateForInstallRoot: root];
+  candidate = [installState objectForKey: @"package_index_url"];
+  if (candidate != nil && candidate != (id)[NSNull null] && [candidate length] > 0)
+    {
+      return candidate;
+    }
+  candidate = [installState objectForKey: @"package_index_path"];
+  if (candidate != nil && candidate != (id)[NSNull null] && [candidate length] > 0)
+    {
+      return candidate;
+    }
+
+  manifestPath = [self resolvedManifestPathForInstallRoot: root preferredManifest: nil];
+  candidate = [self packageIndexPathFromManifest: manifestPath];
+  if (candidate != nil && [candidate length] > 0)
+    {
+      return candidate;
+    }
+
+  repositoryIndex = [[[self repositoryRoot] stringByAppendingPathComponent: @"packages"] stringByAppendingPathComponent: @"package-index.json"];
+  if ([[NSFileManager defaultManager] fileExistsAtPath: repositoryIndex])
+    {
+      return repositoryIndex;
+    }
+
   return nil;
 }
 
@@ -6126,6 +6397,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       NSString *stateDir = [installPath stringByAppendingPathComponent: @"state"];
       NSString *statePath = [stateDir stringByAppendingPathComponent: @"cli-state.json"];
+      NSString *packageIndexPath = [self packageIndexPathFromManifest: [[payload objectForKey: @"plan"] objectForKey: @"manifest_path"]];
       NSString *writeError = nil;
       [manager createDirectoryAtPath: stateDir withIntermediateDirectories: YES attributes: nil error: NULL];
       [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
@@ -6145,6 +6417,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                                    [manifest objectForKey: @"metadata_version"] ? [manifest objectForKey: @"metadata_version"] : [NSNull null], @"last_manifest_metadata_version",
                                                    [manifest objectForKey: @"generated_at"] ? [manifest objectForKey: @"generated_at"] : [NSNull null], @"last_manifest_generated_at",
                                                    [manifest objectForKey: @"expires_at"] ? [manifest objectForKey: @"expires_at"] : [NSNull null], @"last_manifest_expires_at",
+                                                   packageIndexPath ? packageIndexPath : [NSNull null], @"package_index_url",
                                                    [[payload objectForKey: @"plan"] objectForKey: @"selected_artifacts"], @"selected_artifacts",
                                                    upgradeMode ? @"upgrade" : @"setup", @"last_action",
                                                    @"healthy", @"status",
@@ -6221,6 +6494,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                        exitCode:(int *)exitCode
 {
   NSString *managedRoot = (root != nil ? root : [self defaultManagedRoot]);
+  NSString *resolvedIndexPath = [self defaultPackageIndexPathForManagedRoot: managedRoot preferredIndex: indexPath];
   NSDictionary *state = [self loadInstalledPackagesState: managedRoot];
   NSDictionary *installedPackages = [state objectForKey: @"packages"] ? [state objectForKey: @"packages"] : [NSDictionary dictionary];
   NSDictionary *environment = [self currentEnvironmentForInterface: @"full"];
@@ -6233,7 +6507,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       NSString *packageID = [packageIDs objectAtIndex: i];
       NSDictionary *installedRecord = [installedPackages objectForKey: packageID];
-      NSString *sourceIndex = indexPath;
+      NSString *sourceIndex = resolvedIndexPath;
       NSString *installedVersion = [installedRecord objectForKey: @"version"];
       NSMutableDictionary *entry = [NSMutableDictionary dictionary];
       NSString *errorMessage = nil;
@@ -6262,11 +6536,11 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         {
           blocked = YES;
           [entry setObject: @"package_index_missing" forKey: @"blocker"];
-          [entry setObject: @"Installed package does not record a package index; pass --index to check updates." forKey: @"message"];
+          [entry setObject: @"No package index is configured; pass --index <path-or-url> or update from a release manifest that advertises a package-index artifact." forKey: @"message"];
         }
       else
         {
-          packageRecord = [self packageRecordFromIndexPath: sourceIndex packageID: packageID error: &errorMessage];
+          packageRecord = [self packageRecordFromIndexPath: sourceIndex packageSpecifier: packageID error: &errorMessage];
           if (packageRecord == nil)
             {
               blocked = YES;
@@ -7481,6 +7755,406 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return [self writeJSONStringObject: state toPath: statePath error: NULL];
 }
 
+- (NSArray *)expectedExecutableLinksForPackageID:(NSString *)packageID
+                                     managedRoot:(NSString *)managedRoot
+                                  installedFiles:(NSArray *)installedFiles
+{
+  NSMutableArray *links = [NSMutableArray array];
+  NSString *packageBinPrefix = [[@"packages" stringByAppendingPathComponent: packageID] stringByAppendingPathComponent: @"bin"];
+  NSString *expandedRoot = [managedRoot stringByExpandingTildeInPath];
+  NSUInteger i = 0;
+
+  for (i = 0; i < [installedFiles count]; i++)
+    {
+      NSString *relativePath = [installedFiles objectAtIndex: i];
+      NSString *fullPath = [expandedRoot stringByAppendingPathComponent: relativePath];
+      NSString *linkName = nil;
+      NSString *linkPath = nil;
+      NSString *targetPath = nil;
+
+      if ([relativePath hasPrefix: [packageBinPrefix stringByAppendingString: @"/"]] == NO ||
+          [[NSFileManager defaultManager] isExecutableFileAtPath: fullPath] == NO)
+        {
+          continue;
+        }
+      linkName = [relativePath lastPathComponent];
+      linkPath = [[expandedRoot stringByAppendingPathComponent: @"bin"] stringByAppendingPathComponent: linkName];
+      targetPath = [[@".." stringByAppendingPathComponent: relativePath] stringByStandardizingPath];
+      [links addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                        linkName, @"name",
+                                        linkPath, @"path",
+                                        targetPath, @"target",
+                                        relativePath, @"source",
+                                        nil]];
+    }
+  return links;
+}
+
+- (BOOL)activatePackageExecutablesForPackageID:(NSString *)packageID
+                                   installRoot:(NSString *)installRoot
+                                installedFiles:(NSArray *)installedFiles
+                                   managedRoot:(NSString *)managedRoot
+                                         links:(NSArray **)links
+                                         error:(NSString **)errorMessage
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *binRoot = [[managedRoot stringByExpandingTildeInPath] stringByAppendingPathComponent: @"bin"];
+  NSArray *expectedLinks = [self expectedExecutableLinksForPackageID: packageID managedRoot: managedRoot installedFiles: installedFiles];
+  NSMutableArray *activatedLinks = [NSMutableArray array];
+  NSUInteger i = 0;
+
+  [manager createDirectoryAtPath: binRoot withIntermediateDirectories: YES attributes: nil error: NULL];
+  for (i = 0; i < [expectedLinks count]; i++)
+    {
+      NSDictionary *entry = [expectedLinks objectAtIndex: i];
+      NSString *linkPath = [entry objectForKey: @"path"];
+      NSString *targetPath = [entry objectForKey: @"target"];
+      NSString *existingTarget = nil;
+      BOOL isDir = NO;
+
+      if ([manager fileExistsAtPath: linkPath isDirectory: &isDir])
+        {
+          existingTarget = [manager pathContentOfSymbolicLinkAtPath: linkPath];
+          if ([existingTarget isEqualToString: targetPath])
+            {
+              [activatedLinks addObject: entry];
+              continue;
+            }
+          if (errorMessage != NULL)
+            {
+              *errorMessage = [NSString stringWithFormat: @"Cannot expose package executable '%@'; %@ already exists.", [entry objectForKey: @"name"], linkPath];
+            }
+          return NO;
+        }
+      if ([manager createSymbolicLinkAtPath: linkPath withDestinationPath: targetPath error: NULL] == NO)
+        {
+          if (errorMessage != NULL)
+            {
+              *errorMessage = [NSString stringWithFormat: @"Cannot expose package executable '%@' at %@.", [entry objectForKey: @"name"], linkPath];
+            }
+          return NO;
+        }
+      [activatedLinks addObject: entry];
+    }
+  if (links != NULL)
+    {
+      *links = activatedLinks;
+    }
+  return YES;
+}
+
+- (NSDictionary *)packageDiscoveryPayloadForCommand:(NSString *)command
+                                          indexPath:(NSString *)indexPath
+                                               root:(NSString *)root
+                                             query:(NSString *)query
+                                           profile:(NSString *)profile
+                                    compatibleOnly:(BOOL)compatibleOnly
+                                         exitCode:(int *)exitCode
+{
+  NSString *errorMessage = nil;
+  NSString *resolvedIndexPath = [self defaultPackageIndexPathForManagedRoot: root preferredIndex: indexPath];
+  NSDictionary *index = nil;
+  NSArray *packages = nil;
+  NSMutableArray *results = [NSMutableArray array];
+  NSString *normalizedQuery = [query lowercaseString];
+  NSDictionary *environment = nil;
+  NSArray *providedRuntimeComponents = nil;
+  NSUInteger i = 0;
+
+  if (resolvedIndexPath == nil)
+    {
+      *exitCode = 2;
+      return [self payloadWithCommand: command ok: NO status: @"error" summary: @"No package index is configured; pass --index <path-or-url> or update from a release manifest that advertises a package-index artifact." data: nil];
+    }
+  if ([command isEqualToString: @"search"] && (query == nil || [query length] == 0))
+    {
+      *exitCode = 2;
+      return [self payloadWithCommand: command ok: NO status: @"error" summary: @"A search query is required." data: nil];
+    }
+
+  index = [self packageIndexFromPath: resolvedIndexPath error: &errorMessage];
+  if (index == nil)
+    {
+      *exitCode = 1;
+      return [self payloadWithCommand: command
+                                   ok: NO
+                               status: @"error"
+                              summary: errorMessage ? errorMessage : @"Package index could not be loaded."
+                                 data: nil];
+    }
+
+  packages = [index objectForKey: @"packages"];
+  if (compatibleOnly)
+    {
+      environment = [self currentEnvironmentForInterface: @"full"];
+      providedRuntimeComponents = [self providedRuntimeComponentsForEnvironment: environment installProfile: profile];
+    }
+
+  for (i = 0; i < [packages count]; i++)
+    {
+      NSDictionary *record = [packages objectAtIndex: i];
+      NSString *packageID = [record objectForKey: @"id"];
+      NSString *name = [record objectForKey: @"name"];
+      NSString *version = [record objectForKey: @"version"];
+      NSString *kind = [record objectForKey: @"kind"];
+      NSString *summary = [record objectForKey: @"summary"];
+      NSString *description = [record objectForKey: @"description"];
+      NSArray *tags = [[record objectForKey: @"tags"] isKindOfClass: [NSArray class]] ? [record objectForKey: @"tags"] : [NSArray array];
+      NSArray *aliases = [[record objectForKey: @"aliases"] isKindOfClass: [NSArray class]] ? [record objectForKey: @"aliases"] : [NSArray array];
+      BOOL matchesQuery = YES;
+      BOOL compatible = YES;
+      NSString *compatibilityReason = nil;
+      NSDictionary *artifact = nil;
+      NSString *selectionError = nil;
+      NSMutableDictionary *entry = nil;
+
+      if ([command isEqualToString: @"search"])
+        {
+          NSMutableArray *fields = [NSMutableArray array];
+          NSUInteger fieldIndex = 0;
+          matchesQuery = NO;
+          if (packageID != nil) { [fields addObject: packageID]; }
+          if (name != nil) { [fields addObject: name]; }
+          if (summary != nil) { [fields addObject: summary]; }
+          if (description != nil) { [fields addObject: description]; }
+          for (fieldIndex = 0; fieldIndex < [aliases count]; fieldIndex++)
+            {
+              id alias = [aliases objectAtIndex: fieldIndex];
+              if ([alias isKindOfClass: [NSString class]])
+                {
+                  [fields addObject: alias];
+                }
+            }
+          for (fieldIndex = 0; fieldIndex < [tags count]; fieldIndex++)
+            {
+              id tag = [tags objectAtIndex: fieldIndex];
+              if ([tag isKindOfClass: [NSString class]])
+                {
+                  [fields addObject: tag];
+                }
+            }
+          for (fieldIndex = 0; fieldIndex < [fields count]; fieldIndex++)
+            {
+              if ([[[fields objectAtIndex: fieldIndex] lowercaseString] rangeOfString: normalizedQuery].location != NSNotFound)
+                {
+                  matchesQuery = YES;
+                  break;
+                }
+            }
+        }
+      if (!matchesQuery)
+        {
+          continue;
+        }
+
+      if (compatibleOnly)
+        {
+          NSArray *requiredRuntimeComponents = nil;
+          NSDictionary *runtimeComponentData = nil;
+          if ([self packageRequirements: [record objectForKey: @"requirements"]
+                       matchEnvironment: environment
+                                 reason: &compatibilityReason] == NO)
+            {
+              compatible = NO;
+            }
+          if (compatible)
+            {
+              artifact = [self selectedPackageArtifactForPackage: record environment: environment selectionError: &selectionError];
+              if (artifact == nil)
+                {
+                  compatible = NO;
+                  compatibilityReason = selectionError ? selectionError : @"No compatible package artifact was found.";
+                }
+            }
+          if (compatible)
+            {
+              requiredRuntimeComponents = [self requiredRuntimeComponentsForPackage: record artifact: artifact];
+              if ([self runtimeComponents: requiredRuntimeComponents
+                    satisfiedByComponents: providedRuntimeComponents
+                                   reason: &compatibilityReason
+                                     data: &runtimeComponentData
+                           installProfile: profile] == NO)
+                {
+                  compatible = NO;
+                }
+            }
+          if (!compatible)
+            {
+              continue;
+            }
+        }
+
+      entry = [NSMutableDictionary dictionary];
+      if (packageID != nil) { [entry setObject: packageID forKey: @"id"]; }
+      if (name != nil) { [entry setObject: name forKey: @"name"]; }
+      if (version != nil) { [entry setObject: version forKey: @"version"]; }
+      if (kind != nil) { [entry setObject: kind forKey: @"kind"]; }
+      if (summary != nil) { [entry setObject: summary forKey: @"summary"]; }
+      if ([aliases count] > 0) { [entry setObject: aliases forKey: @"aliases"]; }
+      if ([tags count] > 0) { [entry setObject: tags forKey: @"tags"]; }
+      if (compatibleOnly)
+        {
+          [entry setObject: [NSNumber numberWithBool: compatible] forKey: @"compatible"];
+          if (artifact != nil && [artifact objectForKey: @"id"] != nil)
+            {
+              [entry setObject: [artifact objectForKey: @"id"] forKey: @"selected_artifact"];
+            }
+        }
+      if (compatibilityReason != nil)
+        {
+          [entry setObject: compatibilityReason forKey: @"compatibility_reason"];
+        }
+      [results addObject: entry];
+    }
+
+  *exitCode = 0;
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+                        [NSNumber numberWithInt: 1], @"schema_version",
+                        command, @"command",
+                        [NSNumber numberWithBool: YES], @"ok",
+                        @"ok", @"status",
+                        [NSString stringWithFormat: @"%lu package%@ %@.",
+                                  (unsigned long)[results count],
+                                  [results count] == 1 ? @"" : @"s",
+                                  [command isEqualToString: @"search"] ? @"matched" : @"listed"], @"summary",
+                        [self normalizedPackageIndexReference: resolvedIndexPath], @"index_path",
+                        [NSNumber numberWithBool: compatibleOnly], @"compatible_only",
+                        profile, @"install_profile",
+                        query ? query : (id)[NSNull null], @"query",
+                        [NSNumber numberWithUnsignedInteger: [results count]], @"package_count",
+                        results, @"packages",
+                        nil];
+}
+
+- (NSDictionary *)executeListForContext:(GSCommandContext *)context exitCode:(int *)exitCode
+{
+  NSArray *arguments = [context commandArguments];
+  NSString *indexPath = nil;
+  NSString *root = [self defaultManagedRoot];
+  NSString *profile = @"desktop";
+  BOOL compatibleOnly = NO;
+  NSUInteger i = 0;
+
+  for (i = 0; i < [arguments count]; i++)
+    {
+      NSString *argument = [arguments objectAtIndex: i];
+      if ([argument isEqualToString: @"--index"])
+        {
+          if (i + 1 >= [arguments count])
+            {
+              *exitCode = 2;
+              return [self payloadWithCommand: @"list" ok: NO status: @"error" summary: @"--index requires a value." data: nil];
+            }
+          indexPath = [arguments objectAtIndex: i + 1];
+          i++;
+        }
+      else if ([argument isEqualToString: @"--root"])
+        {
+          if (i + 1 >= [arguments count])
+            {
+              *exitCode = 2;
+              return [self payloadWithCommand: @"list" ok: NO status: @"error" summary: @"--root requires a value." data: nil];
+            }
+          root = [arguments objectAtIndex: i + 1];
+          i++;
+        }
+      else if ([argument isEqualToString: @"--profile"])
+        {
+          if (i + 1 >= [arguments count])
+            {
+              *exitCode = 2;
+              return [self payloadWithCommand: @"list" ok: NO status: @"error" summary: @"--profile requires a value." data: nil];
+            }
+          profile = [arguments objectAtIndex: i + 1];
+          i++;
+        }
+      else if ([argument isEqualToString: @"--compatible"])
+        {
+          compatibleOnly = YES;
+        }
+      else
+        {
+          *exitCode = 2;
+          return [self payloadWithCommand: @"list" ok: NO status: @"error" summary: [NSString stringWithFormat: @"Unknown list option: %@", argument] data: nil];
+        }
+    }
+
+  return [self packageDiscoveryPayloadForCommand: @"list"
+                                       indexPath: indexPath
+                                            root: root
+                                           query: nil
+                                         profile: profile
+                                  compatibleOnly: compatibleOnly
+                                        exitCode: exitCode];
+}
+
+- (NSDictionary *)executeSearchForContext:(GSCommandContext *)context exitCode:(int *)exitCode
+{
+  NSArray *arguments = [context commandArguments];
+  NSString *indexPath = nil;
+  NSString *root = [self defaultManagedRoot];
+  NSString *profile = @"desktop";
+  BOOL compatibleOnly = NO;
+  NSMutableArray *queryParts = [NSMutableArray array];
+  NSUInteger i = 0;
+
+  for (i = 0; i < [arguments count]; i++)
+    {
+      NSString *argument = [arguments objectAtIndex: i];
+      if ([argument isEqualToString: @"--index"])
+        {
+          if (i + 1 >= [arguments count])
+            {
+              *exitCode = 2;
+              return [self payloadWithCommand: @"search" ok: NO status: @"error" summary: @"--index requires a value." data: nil];
+            }
+          indexPath = [arguments objectAtIndex: i + 1];
+          i++;
+        }
+      else if ([argument isEqualToString: @"--root"])
+        {
+          if (i + 1 >= [arguments count])
+            {
+              *exitCode = 2;
+              return [self payloadWithCommand: @"search" ok: NO status: @"error" summary: @"--root requires a value." data: nil];
+            }
+          root = [arguments objectAtIndex: i + 1];
+          i++;
+        }
+      else if ([argument isEqualToString: @"--profile"])
+        {
+          if (i + 1 >= [arguments count])
+            {
+              *exitCode = 2;
+              return [self payloadWithCommand: @"search" ok: NO status: @"error" summary: @"--profile requires a value." data: nil];
+            }
+          profile = [arguments objectAtIndex: i + 1];
+          i++;
+        }
+      else if ([argument isEqualToString: @"--compatible"])
+        {
+          compatibleOnly = YES;
+        }
+      else if ([argument hasPrefix: @"--"])
+        {
+          *exitCode = 2;
+          return [self payloadWithCommand: @"search" ok: NO status: @"error" summary: [NSString stringWithFormat: @"Unknown search option: %@", argument] data: nil];
+        }
+      else
+        {
+          [queryParts addObject: argument];
+        }
+    }
+
+  return [self packageDiscoveryPayloadForCommand: @"search"
+                                       indexPath: indexPath
+                                            root: root
+                                           query: [queryParts componentsJoinedByString: @" "]
+                                         profile: profile
+                                  compatibleOnly: compatibleOnly
+                                        exitCode: exitCode];
+}
+
 - (NSString *)resolvedArtifactPathFromURLString:(NSString *)urlString
 {
   if (urlString == nil || [urlString length] == 0)
@@ -7528,6 +8202,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSString *finalRoot = nil;
   NSString *selectionError = nil;
   NSString *requirementsError = nil;
+  NSString *activationError = nil;
   NSString *downloadError = nil;
   NSString *extractError = nil;
   NSFileManager *manager = [NSFileManager defaultManager];
@@ -7536,6 +8211,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSArray *conflicts = [NSArray array];
   NSArray *providedRuntimeComponents = [NSArray array];
   NSArray *requiredRuntimeComponents = [NSArray array];
+  NSArray *executableLinks = [NSArray array];
   NSDictionary *environment = nil;
   NSDictionary *packages = nil;
   NSDictionary *runtimeComponentErrorData = nil;
@@ -7601,13 +8277,17 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   if (packageSpecifier == nil)
     {
       *exitCode = 2;
-      return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: @"A package ID or package manifest path is required." data: nil];
+      return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: @"A package name, package ID, or package manifest path is required." data: nil];
     }
 
   [self appendInstallTrace: @"loading package record"];
+  if (indexPath == nil && [[NSFileManager defaultManager] fileExistsAtPath: packageSpecifier] == NO)
+    {
+      indexPath = [self defaultPackageIndexPathForManagedRoot: root preferredIndex: nil];
+    }
   if (indexPath != nil)
     {
-      packageRecord = [self packageRecordFromIndexPath: indexPath packageID: packageSpecifier error: &selectionError];
+      packageRecord = [self packageRecordFromIndexPath: indexPath packageSpecifier: packageSpecifier error: &selectionError];
       if (packageRecord == nil)
         {
           *exitCode = 1;
@@ -7633,6 +8313,28 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   if ([[state objectForKey: @"packages"] objectForKey: packageID] != nil)
     {
       NSDictionary *existingRecord = [[state objectForKey: @"packages"] objectForKey: packageID];
+      NSArray *existingFiles = [existingRecord objectForKey: @"installed_files"] ? [existingRecord objectForKey: @"installed_files"] : [NSArray array];
+      NSArray *activatedLinks = nil;
+      if ([self activatePackageExecutablesForPackageID: packageID
+                                           installRoot: [existingRecord objectForKey: @"install_root"]
+                                        installedFiles: existingFiles
+                                           managedRoot: root
+                                                 links: &activatedLinks
+                                                 error: &activationError] == NO)
+        {
+          [state release];
+          *exitCode = 1;
+          return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: activationError data: nil];
+        }
+      if (activatedLinks != nil)
+        {
+          NSMutableDictionary *existingMutable = [[existingRecord mutableCopy] autorelease];
+          NSMutableDictionary *statePackages = [[[state objectForKey: @"packages"] mutableCopy] autorelease];
+          [existingMutable setObject: activatedLinks forKey: @"executable_links"];
+          [statePackages setObject: existingMutable forKey: packageID];
+          [state setObject: statePackages forKey: @"packages"];
+          [self saveInstalledPackagesState: state managedRoot: root];
+        }
       *exitCode = 0;
       return [NSDictionary dictionaryWithObjectsAndKeys:
                             [NSNumber numberWithInt: 1], @"schema_version",
@@ -7650,6 +8352,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                             [existingRecord objectForKey: @"provided_runtime_components"] ? [existingRecord objectForKey: @"provided_runtime_components"] : [NSArray array], @"provided_runtime_components",
                             [existingRecord objectForKey: @"dependencies"] ? [existingRecord objectForKey: @"dependencies"] : [NSArray array], @"dependencies",
                             [existingRecord objectForKey: @"installed_files"], @"installed_files",
+                            activatedLinks ? activatedLinks : [NSArray array], @"executable_links",
                             nil];
     }
 
@@ -7880,9 +8583,22 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       }
 
     NSMutableDictionary *packages = [[[state objectForKey: @"packages"] mutableCopy] autorelease];
+    if ([self activatePackageExecutablesForPackageID: packageID
+                                         installRoot: finalRoot
+                                      installedFiles: installedFiles
+                                         managedRoot: root
+                                               links: &executableLinks
+                                               error: &activationError] == NO)
+      {
+        [manager removeItemAtPath: staging error: NULL];
+        [manager removeItemAtPath: finalRoot error: NULL];
+        [state release];
+        *exitCode = 1;
+        return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: activationError data: nil];
+      }
     [packages setObject: [NSDictionary dictionaryWithObjectsAndKeys:
                                          manifestPath ? [manifestPath stringByResolvingSymlinksInPath] : [NSNull null], @"manifest_path",
-                                         indexPath ? [indexPath stringByResolvingSymlinksInPath] : [NSNull null], @"index_path",
+                                         [self normalizedPackageIndexReference: indexPath] ? [self normalizedPackageIndexReference: indexPath] : [NSNull null], @"index_path",
                                          finalRoot, @"install_root",
                                          [packageRecord objectForKey: @"version"] ? [packageRecord objectForKey: @"version"] : [NSNull null], @"version",
                                          [artifact objectForKey: @"id"], @"selected_artifact",
@@ -7892,6 +8608,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                          dependencies, @"dependencies",
                                          conflicts, @"conflicts",
                                          installedFiles, @"installed_files",
+                                         executableLinks, @"executable_links",
                                          nil]
                  forKey: packageID];
     [state setObject: packages forKey: @"packages"];
@@ -7900,7 +8617,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         NSDictionary *packageIndex = [self readJSONFile: indexPath error: NULL];
         if ([packageIndex isKindOfClass: [NSDictionary class]])
           {
-            [state setObject: [indexPath stringByResolvingSymlinksInPath] forKey: @"last_package_index_path"];
+            [state setObject: [self normalizedPackageIndexReference: indexPath] forKey: @"last_package_index_path"];
             [state setObject: [packageIndex objectForKey: @"metadata_version"] ? [packageIndex objectForKey: @"metadata_version"] : [NSNull null] forKey: @"last_package_index_metadata_version"];
             [state setObject: [packageIndex objectForKey: @"generated_at"] ? [packageIndex objectForKey: @"generated_at"] : [NSNull null] forKey: @"last_package_index_generated_at"];
             [state setObject: [packageIndex objectForKey: @"expires_at"] ? [packageIndex objectForKey: @"expires_at"] : [NSNull null] forKey: @"last_package_index_expires_at"];
@@ -7923,7 +8640,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         root, @"managed_root",
                         finalRoot, @"install_root",
                         manifestPath ? [manifestPath stringByResolvingSymlinksInPath] : [NSNull null], @"manifest_path",
-                        indexPath ? [indexPath stringByResolvingSymlinksInPath] : [NSNull null], @"index_path",
+                        [self normalizedPackageIndexReference: indexPath] ? [self normalizedPackageIndexReference: indexPath] : [NSNull null], @"index_path",
                         [packageRecord objectForKey: @"version"] ? [packageRecord objectForKey: @"version"] : [NSNull null], @"version",
                         [artifact objectForKey: @"id"], @"selected_artifact",
                         installProfile, @"install_profile",
@@ -7932,6 +8649,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         dependencies, @"dependencies",
                         conflicts, @"conflicts",
                         installedFiles, @"installed_files",
+                        executableLinks, @"executable_links",
                         nil];
     }
   @catch (NSException *exception)
@@ -8052,7 +8770,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   {
     NSArray *removedFiles = [record objectForKey: @"installed_files"] ? [record objectForKey: @"installed_files"] : [NSArray array];
+    NSArray *removedLinks = nil;
     NSString *installRoot = [record objectForKey: @"install_root"];
+  [self appendInstallTrace: @"remove deleting executable links"];
+  removedLinks = [self removePackageExecutableLinksForPackageID: packageID
+                                                    managedRoot: root
+                                                    installRoot: installRoot
+                                                 installedFiles: removedFiles
+                                                  recordedLinks: [record objectForKey: @"executable_links"]];
   [self appendInstallTrace: @"remove deleting install root"];
   [[NSFileManager defaultManager] removeItemAtPath: [record objectForKey: @"install_root"] error: NULL];
   [self appendInstallTrace: @"remove deleted install root"];
@@ -8074,6 +8799,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         root, @"managed_root",
                         installRoot ? installRoot : [NSNull null], @"removed_install_root",
                         removedFiles, @"removed_files",
+                        removedLinks ? removedLinks : [NSArray array], @"removed_executable_links",
                         nil];
   }
 }
@@ -8320,6 +9046,38 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         }
       return [payload objectForKey: @"summary"];
     }
+  if ([command isEqualToString: @"list"] || [command isEqualToString: @"search"])
+    {
+      NSMutableArray *lines = [NSMutableArray array];
+      NSArray *packages = [payload objectForKey: @"packages"] ? [payload objectForKey: @"packages"] : [NSArray array];
+      NSUInteger i = 0;
+      [lines addObject: [NSString stringWithFormat: @"%@: %@", command, [payload objectForKey: @"summary"]]];
+      if ([payload objectForKey: @"index_path"] != nil)
+        {
+          [lines addObject: [NSString stringWithFormat: @"%@: index=%@", command, [payload objectForKey: @"index_path"]]];
+        }
+      if ([command isEqualToString: @"search"] && [payload objectForKey: @"query"] != nil && [payload objectForKey: @"query"] != [NSNull null])
+        {
+          [lines addObject: [NSString stringWithFormat: @"search: query=%@", [payload objectForKey: @"query"]]];
+        }
+      for (i = 0; i < [packages count]; i++)
+        {
+          NSDictionary *package = [packages objectAtIndex: i];
+          NSString *packageID = [package objectForKey: @"id"] ? [package objectForKey: @"id"] : @"unknown";
+          NSString *version = [package objectForKey: @"version"] ? [package objectForKey: @"version"] : @"unknown";
+          NSString *summary = [package objectForKey: @"summary"] ? [package objectForKey: @"summary"] : @"";
+          NSString *artifact = [package objectForKey: @"selected_artifact"];
+          if ([artifact length] > 0)
+            {
+              [lines addObject: [NSString stringWithFormat: @"%@: package=%@ version=%@ artifact=%@ %@", command, packageID, version, artifact, summary]];
+            }
+          else
+            {
+              [lines addObject: [NSString stringWithFormat: @"%@: package=%@ version=%@ %@", command, packageID, version, summary]];
+            }
+        }
+      return [lines componentsJoinedByString: @"\n"];
+    }
   if ([command isEqualToString: @"install"])
     {
       NSMutableArray *lines = [NSMutableArray array];
@@ -8458,6 +9216,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   else if ([command isEqualToString: @"new"])
     {
       payload = [self executeNewForContext: context exitCode: &exitCode];
+    }
+  else if ([command isEqualToString: @"list"])
+    {
+      payload = [self executeListForContext: context exitCode: &exitCode];
+    }
+  else if ([command isEqualToString: @"search"])
+    {
+      payload = [self executeSearchForContext: context exitCode: &exitCode];
     }
   else if ([command isEqualToString: @"install"])
     {

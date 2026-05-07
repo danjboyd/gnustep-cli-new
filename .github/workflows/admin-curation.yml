@@ -1,0 +1,137 @@
+name: Admin Curation
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      release_dir:
+        description: Local staged release directory to validate, when available
+        required: false
+        type: string
+      evidence_dir:
+        description: Local final evidence directory to validate, when available
+        required: false
+        type: string
+      package_index:
+        description: Package index path
+        required: false
+        default: packages/package-index.json
+        type: string
+      update_all_evidence:
+        description: Production-like update all evidence path
+        required: false
+        type: string
+      smoke_reports:
+        description: Newline-separated smoke evidence paths
+        required: false
+        type: string
+      doctor_parity_evidence:
+        description: Native doctor parity evidence path
+        required: false
+        type: string
+      fetch_upstream:
+        description: Fetch upstream Git HEAD revisions during upstream-check
+        required: false
+        default: true
+        type: boolean
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  admin-curation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Prepare workspace temp directory
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.artifacts/tmp"
+          echo "TMPDIR=$GITHUB_WORKSPACE/.artifacts/tmp" >> "$GITHUB_ENV"
+
+      - name: Run admin inventory
+        run: |
+          mkdir -p .artifacts/admin-curation
+          scripts/internal/admin.py --json inventory \
+            --package-index "${{ inputs.package_index || 'packages/package-index.json' }}" \
+            > .artifacts/admin-curation/inventory.json
+
+      - name: Run upstream freshness check
+        env:
+          FETCH_UPSTREAM: ${{ github.event_name == 'schedule' || inputs.fetch_upstream }}
+        run: |
+          upstream_args=(--json upstream-check)
+          if [ "$FETCH_UPSTREAM" = "true" ]; then
+            upstream_args+=(--fetch)
+          fi
+          scripts/internal/admin.py "${upstream_args[@]}" \
+            > .artifacts/admin-curation/upstream-check.json
+          scripts/internal/admin.py --json upstream-sources \
+            > .artifacts/admin-curation/upstream-sources.json
+
+      - name: Write scheduler evidence
+        run: |
+          python3 - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          payload = {
+              "schema_version": 1,
+              "command": "admin-curation-scheduled",
+              "ok": True,
+              "status": "ok",
+              "summary": "Scheduled GitHub Actions admin curation ran inventory, upstream-check, and gap-report.",
+              "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+          }
+          Path(".artifacts/admin-curation/scheduler-evidence.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+          PY
+
+      - name: Run admin gap report
+        env:
+          GNUSTEP_CLI_RELEASE_TRUST_ROOT: ${{ secrets.GNUSTEP_CLI_RELEASE_TRUST_ROOT }}
+          GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT: ${{ secrets.GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT }}
+        run: |
+          args=(--json gap-report
+            --package-index "${{ inputs.package_index || 'packages/package-index.json' }}"
+            --scheduler-evidence .artifacts/admin-curation/scheduler-evidence.json)
+          if [ -n "${{ inputs.release_dir }}" ]; then
+            args+=(--release-dir "${{ inputs.release_dir }}")
+          fi
+          if [ -n "${{ inputs.evidence_dir }}" ]; then
+            args+=(--evidence-dir "${{ inputs.evidence_dir }}")
+          fi
+          if [ -n "${{ inputs.update_all_evidence }}" ]; then
+            args+=(--update-all-evidence "${{ inputs.update_all_evidence }}")
+          fi
+          if [ -n "${{ inputs.doctor_parity_evidence }}" ]; then
+            args+=(--doctor-parity-evidence "${{ inputs.doctor_parity_evidence }}")
+          fi
+          if [ -n "${GNUSTEP_CLI_RELEASE_TRUST_ROOT:-}" ]; then
+            printf '%s\n' "$GNUSTEP_CLI_RELEASE_TRUST_ROOT" > "$RUNNER_TEMP/release-trust-root.pem"
+            args+=(--release-trust-root "$RUNNER_TEMP/release-trust-root.pem")
+          fi
+          if [ -n "${GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT:-}" ]; then
+            printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT" > "$RUNNER_TEMP/package-index-trust-root.pem"
+            args+=(--package-index-trust-root "$RUNNER_TEMP/package-index-trust-root.pem")
+          fi
+          while IFS= read -r smoke_report; do
+            if [ -n "$smoke_report" ]; then
+              args+=(--smoke-report "$smoke_report")
+            fi
+          done <<'EOF'
+          ${{ inputs.smoke_reports }}
+          EOF
+          scripts/internal/admin.py "${args[@]}" > .artifacts/admin-curation/gap-report.json
+
+      - name: Upload admin curation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-curation-${{ github.run_id }}
+          path: .artifacts/admin-curation/*.json

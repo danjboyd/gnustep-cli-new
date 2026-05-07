@@ -88,7 +88,7 @@ host_prerequisite_packages() {
       printf '%s\n' "ca-certificates curl tar gzip xz zstd git make cmake ninja pkgconf clang lld libxml2 libxslt icu avahi gnutls libffi libjpeg-turbo libtiff libpng cairo libxft libxt libx11 libxext"
       ;;
     openbsd)
-      printf '%s\n' "curl git gmake cmake ninja libxml libxslt icu4c avahi gnutls libffi jpeg tiff png cairo gnustep-make gnustep-base gnustep-gui gnustep-back gnustep-libobjc2"
+      printf '%s\n' "curl git bash gmake cmake ninja libxml libxslt icu4c avahi gnutls libffi jpeg tiff png cairo gnustep-make gnustep-base gnustep-gui gnustep-back gnustep-libobjc2"
       ;;
     *)
       printf '%s\n' ""
@@ -627,6 +627,8 @@ Commands:
   run        Unavailable in bootstrap. Install the full interface first.
   shell      Unavailable in bootstrap. Install the full interface first.
   new        Unavailable in bootstrap. Install the full interface first.
+  list       Unavailable in bootstrap. Install the full interface first.
+  search     Unavailable in bootstrap. Install the full interface first.
   install    Unavailable in bootstrap. Install the full interface first.
   remove     Unavailable in bootstrap. Install the full interface first.
   update     Unavailable in bootstrap. Install the full interface first.
@@ -905,7 +907,7 @@ case "$COMMAND" in
     perform_setup
     exit $?
     ;;
-  build|clean|run|shell|new|install|remove|update)
+  build|clean|run|shell|new|list|search|install|remove|update)
     unsupported_command "$COMMAND"
     exit $?
     ;;

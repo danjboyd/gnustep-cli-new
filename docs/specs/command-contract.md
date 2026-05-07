@@ -16,6 +16,8 @@ gnustep <command> [options] [args]
 - `clean`
 - `run`
 - `new`
+- `list`
+- `search`
 - `install`
 - `remove`
 - `update`
@@ -66,6 +68,19 @@ gnustep <command> [options] [args]
 - `setup` must not grow a `--update` option.
 - `gnustep setup --rollback` should restore the preserved previous managed release when an upgrade has completed but must be backed out; it may remain the explicit rollback command until a separate rollback UX is designed.
 - `gnustep setup --repair` should recover interrupted installs/upgrades and normalize managed state before another update is attempted.
+
+## Package Discovery Contract
+
+- `gnustep list` lists every package record in the configured default package index without installing anything.
+- `gnustep search <query>` searches package `id`, `name`, `aliases`, `summary`, `description`, and `tags` in the configured default package index.
+- `--index <path-or-url>` remains an explicit override for local testing, private package repositories, and recovery flows.
+- Default package-index resolution should prefer the explicit override, then managed package state, then package-index metadata advertised by the active release manifest.
+- `list` and `search` should return the same stable JSON result shape: package count, index path, install profile, compatibility-filter flag, query when applicable, and a `packages` array.
+- `--compatible` filters results to packages whose declared requirements, selected artifact, and runtime-component needs match the detected environment and requested install profile.
+- `--profile <server|developer|desktop|ci>` controls runtime-component compatibility evaluation for `--compatible`; it should not change unfiltered discovery.
+- Discovery commands must never install the first search result implicitly.
+- `install` accepts an exact package ID, a package manifest path, or a package alias/simple name from the package index.
+- Package aliases/simple names are case-insensitive, but they must resolve to exactly one package. Ambiguous aliases must fail and tell the user which full package IDs are available.
 
 ## Build, Clean, And Run Contract
 

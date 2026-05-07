@@ -63,6 +63,11 @@ Current priority order:
    against the final `v0.1.0` manifest in run `25396304950`.
 6. Keep package, setup, update, and release trust gates green while converting
    remaining operator-run validation into repeatable automation.
+7. Use the internal admin curation CLI as the project control plane for binary
+   freshness and build operations. `scripts/internal/admin.py` now provides
+   inventory, upstream freshness checks, gap reports, build plans, dry-run or
+   applied GitHub workflow dispatches, and scheduler templates. See
+   `docs/specs/admin-curation-cli.md`.
 
 Non-blocking for the immediate release unless this roadmap is revised:
 
@@ -119,6 +124,27 @@ May 5, 2026 RC execution update:
   immediate RC blocker for v1 because the Tier 1 managed-install target set
   does not include it and `../OracleTestVMs` still has no OpenBSD arm64 profile
   or equivalent scripted host access.
+- Admin curation is now implemented as an internal operator surface rather than
+  another set of ad hoc script invocations. The first supported loop is:
+  inventory served artifacts and package metadata, compare pinned sources
+  against explicit upstream data, report release gaps, plan rebuilds across
+  GitHub Actions and OTVM lanes, and optionally dispatch unblocked workflow
+  builds.
+- Admin gap closure is now evidence-driven. `gap-report` accepts the same
+  production trust roots, release/evidence directories, smoke reports,
+  update-all evidence, scheduler evidence, and doctor parity evidence used by
+  the release qualification path. Missing proof is reported as an actionable
+  blocker, while documented future targets remain informational deferrals.
+  `.github/workflows/admin-curation.yml` is the first scheduled GitHub Actions
+  curation lane and emits scheduler evidence for that gap.
+- Release key-rotation and admin gap closure no longer depend on the host's
+  default `/tmp` capacity. The release key-rotation drill uses release-adjacent
+  scratch space by default, and hosted Release/Admin Curation workflows export
+  `TMPDIR` under the repository workspace before running release gates.
+- Upstream freshness is now audited separately from stale-source detection.
+  `upstream-check` returns warning status when comparison data is missing, and
+  `upstream-sources` lists the package/toolchain source pins that need cache or
+  fetched upstream comparison data.
 
 April 27, 2026 execution update:
 

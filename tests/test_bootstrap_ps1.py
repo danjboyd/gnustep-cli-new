@@ -36,6 +36,8 @@ class BootstrapPowerShellTests(unittest.TestCase):
         self.assertIn("doctor", proc.stdout)
         self.assertIn("build", proc.stdout)
         self.assertIn("shell", proc.stdout)
+        self.assertIn("list", proc.stdout)
+        self.assertIn("search", proc.stdout)
         self.assertIn("update", proc.stdout)
 
     def test_remote_artifact_downloads_use_progress_downloader(self):

@@ -176,6 +176,14 @@ The main remaining release-engineering issue is productionizing evidence and tru
   or a signing service. The repository now enforces the trust-root path in the
   Release workflow, but this document should not claim stable production
   publication until that final run exists.
+- Release-gate scratch space is no longer a hidden local blocker. The
+  release key-rotation drill now allocates release-adjacent temporary space by
+  default, and hosted Release/Admin Curation workflows export `TMPDIR` under
+  the repository workspace before running release gates.
+- Admin curation now separates source freshness from stale-source proof:
+  missing upstream comparison data yields warning status and
+  `upstream-sources` emits the exact package/toolchain source pins that need
+  cache or fetched upstream comparison data.
 - Follow-up dogfood release `v0.1.0-dev-hosted.32` is now the current hosted
   RC baseline. It was staged from fresh Linux and Windows current-source
   producer runs, verified locally before publication, signed for publication

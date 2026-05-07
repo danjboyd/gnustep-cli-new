@@ -33,6 +33,11 @@ class PackageRepositoryTests(unittest.TestCase):
         self.assertIn("org.gnustep.gorm", package_ids)
         self.assertIn("io.github.danjboyd.arlen", package_ids)
 
+    def test_arlen_and_gorm_publish_simple_aliases(self):
+        payload = generate_package_index(ROOT / "packages")
+        packages = {record["id"]: record for record in payload["packages"]}
+        self.assertIn("arlen", packages["io.github.danjboyd.arlen"]["aliases"])
+        self.assertIn("gorm", packages["org.gnustep.gorm"]["aliases"])
 
     def test_package_index_has_trust_metadata(self):
         payload = generate_package_index(ROOT / "packages")

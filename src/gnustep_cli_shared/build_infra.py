@@ -3424,7 +3424,9 @@ def write_release_qualification_summary(
 
 def release_key_rotation_drill(release_dir: str | Path, *, work_dir: str | Path | None = None) -> dict[str, Any]:
     root = Path(release_dir).resolve()
-    temp_context = tempfile.TemporaryDirectory() if work_dir is None else None
+    temp_parent = root.parent / ".tmp"
+    temp_parent.mkdir(parents=True, exist_ok=True)
+    temp_context = tempfile.TemporaryDirectory(dir=temp_parent) if work_dir is None else None
     drill_root = Path(work_dir).resolve() if work_dir else Path(temp_context.name)
     drill_root.mkdir(parents=True, exist_ok=True)
     release_copy = drill_root / "release-copy"
@@ -4945,9 +4947,11 @@ def package_managed_source_artifact(
         if arlen_makefile.exists():
             text = arlen_makefile.read_text(encoding="utf-8")
             patched = text.replace("ARLEN_PLATFORM_LINK_LIBS := -ldl", "ARLEN_PLATFORM_LINK_LIBS :=")
+            patched = patched.replace(" -ldispatch", "")
+            patched = patched.replace("SHELL := /bin/bash", "SHELL := /usr/local/bin/bash")
             if patched != text:
                 arlen_makefile.write_text(patched, encoding="utf-8")
-                commands.append(["patch-source", "openbsd-arlen-drop-libdl"])
+                commands.append(["patch-source", "openbsd-arlen-native-linkage"])
         arlen_route_policy = checkout / "src" / "Arlen" / "MVC" / "Middleware" / "ALNRoutePolicyMiddleware.m"
         if arlen_route_policy.exists():
             text = arlen_route_policy.read_text(encoding="utf-8")
@@ -4958,6 +4962,30 @@ def package_managed_source_artifact(
             if patched != text:
                 arlen_route_policy.write_text(patched, encoding="utf-8")
                 commands.append(["patch-source", "openbsd-arlen-netinet-in"])
+        dispatch_once_shim = out / "openbsd-dispatch-once-shim.h"
+        dispatch_once_shim.write_text(
+            "#ifndef ARLEN_OPENBSD_DISPATCH_ONCE_SHIM_H\n"
+            "#define ARLEN_OPENBSD_DISPATCH_ONCE_SHIM_H\n"
+            "#include <dispatch/dispatch.h>\n"
+            "#include <pthread.h>\n"
+            "static pthread_mutex_t ALNOpenBSDDispatchOnceLock = PTHREAD_MUTEX_INITIALIZER;\n"
+            "static inline void ALNOpenBSDDispatchOnce(dispatch_once_t *predicate, dispatch_block_t block) {\n"
+            "  if (__atomic_load_n(predicate, __ATOMIC_ACQUIRE) != 0) {\n"
+            "    return;\n"
+            "  }\n"
+            "  pthread_mutex_lock(&ALNOpenBSDDispatchOnceLock);\n"
+            "  if (__atomic_load_n(predicate, __ATOMIC_RELAXED) == 0) {\n"
+            "    block();\n"
+            "    __atomic_store_n(predicate, ~0l, __ATOMIC_RELEASE);\n"
+            "  }\n"
+            "  pthread_mutex_unlock(&ALNOpenBSDDispatchOnceLock);\n"
+            "}\n"
+            "#undef dispatch_once\n"
+            "#define dispatch_once ALNOpenBSDDispatchOnce\n"
+            "#endif\n",
+            encoding="utf-8",
+        )
+        commands.append(["patch-source", "openbsd-arlen-dispatch-once-shim"])
     if is_windows and package_id == "org.gnustep.gorm":
         formatter_dir = checkout / "Applications" / "Gorm" / "Palettes" / "6Formatters"
         formatter_import = (
@@ -4994,8 +5022,11 @@ def package_managed_source_artifact(
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Failed to archive package source.", "stdout": archived.stdout, "stderr": archived.stderr, "commands": commands}
     make_cmd = "gmake" if is_openbsd else "make"
     compiler = "clang"
+    extra_make_args = ""
+    if is_openbsd and package_id == "io.github.danjboyd.arlen":
+        extra_make_args = f" EXTRA_OBJC_FLAGS=-include\\ {shlex.quote(str(out / 'openbsd-dispatch-once-shim.h'))}"
     if package_id == "io.github.danjboyd.arlen":
-        build_body = f"{make_cmd} -C \"{{source}}\" clean >/dev/null || true\n{make_cmd} -C \"{{source}}\" all CC={compiler} OBJC={compiler} ARLEN_USE_VENDORED_XCTEST=0 ARLEN_ENABLE_LLHTTP=0\n"
+        build_body = f"{make_cmd} -C \"{{source}}\" clean >/dev/null || true\n{make_cmd} -C \"{{source}}\" all CC={compiler} OBJC={compiler} ARLEN_USE_VENDORED_XCTEST=0 ARLEN_ENABLE_LLHTTP=0{extra_make_args}\n"
     else:
         build_body = f"{make_cmd} -C \"{{source}}\" clean >/dev/null || true\n{make_cmd} -C \"{{source}}\" CC={compiler} OBJC={compiler}\n"
     if is_windows:
@@ -5664,7 +5695,7 @@ def otvm_release_host_validation_plan(
             ],
             "guest_release_manifest_path": release_manifest_guest_unix,
             "expected_probes": [
-                "pkg_add gmake gnustep-make gnustep-base gnustep-libobjc2",
+                "pkg_add bash gmake gnustep-make gnustep-base gnustep-libobjc2",
                 "source /usr/local/share/GNUstep/Makefiles/GNUstep.sh",
                 "Foundation compile-link-run probe in the packaged GNUstep environment",
             ],

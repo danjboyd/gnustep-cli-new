@@ -81,6 +81,14 @@ This document records the current Phase 10-12 baseline.
   supports Linux amd64, Ubuntu 24.04 amd64, and Linux arm64 target ids, enforces
   runner architecture before building, and uploads the managed toolchain, full
   CLI, SHA256SUMS, and build reports for downstream package builds.
+- `scripts/internal/admin.py` is the internal operator control plane for this
+  build infrastructure. It can inventory the current package/toolchain/release
+  metadata, compare pinned upstream sources against explicit freshness data,
+  report remaining release gaps, generate GitHub Actions/OTVM build plans, and
+  dry-run or apply unblocked `gh workflow run` dispatches. Package artifact
+  dispatches stay blocked until the operator supplies either a managed
+  toolchain URL plus SHA256 or a workflow artifact run id, matching the
+  controlled workflow contracts.
 
 ## Upstream And Patch Policy
 
