@@ -135,6 +135,12 @@
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface;
 - (NSDictionary *)nativeToolchainAssessmentForEnvironment:(NSDictionary *)environment compatibility:(NSDictionary *)compatibility;
+- (NSDictionary *)runtimeLibrariesForOS:(NSString *)osName;
+- (NSString *)capturedOutputForExecutable:(NSString *)name arguments:(NSArray *)arguments;
+- (NSNumber *)detectHostICUMajor;
+- (NSString *)detectHostGlibcVersion;
+- (NSInteger)maxICUMajorInString:(NSString *)text;
+- (BOOL)artifact:(NSDictionary *)artifact matchesRuntimeRequirementsForEnvironment:(NSDictionary *)environment;
 - (NSDictionary *)currentEnvironmentForInterface:(NSString *)interface;
 - (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath quick:(BOOL)quick;
 - (NSString *)setupTransactionStatePathForInstallRoot:(NSString *)installRoot;
@@ -2512,6 +2518,190 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return [releases objectAtIndex: 0];
 }
 
+- (NSString *)capturedOutputForExecutable:(NSString *)name arguments:(NSArray *)arguments
+{
+  NSString *launchPath = [self firstAvailableExecutable: [NSArray arrayWithObject: name]];
+  NSString *output = nil;
+  NSTask *task = nil;
+
+  if (launchPath == nil)
+    {
+      return nil;
+    }
+  task = [[NSTask alloc] init];
+  @try
+    {
+      NSPipe *pipe = [NSPipe pipe];
+      NSData *data = nil;
+      [task setLaunchPath: launchPath];
+      [task setArguments: arguments];
+      [task setStandardOutput: pipe];
+      [task setStandardError: [NSPipe pipe]];
+      [task launch];
+      data = [[pipe fileHandleForReading] readDataToEndOfFile];
+      [task waitUntilExit];
+      output = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+    }
+  @catch (NSException *exception)
+    {
+      output = nil;
+    }
+  [task release];
+  return output;
+}
+
+- (NSInteger)maxICUMajorInString:(NSString *)text
+{
+  NSInteger best = -1;
+  NSArray *parts = nil;
+  NSCharacterSet *digits = [NSCharacterSet decimalDigitCharacterSet];
+  NSUInteger i = 0;
+
+  if (text == nil)
+    {
+      return -1;
+    }
+  parts = [text componentsSeparatedByString: @"libicuuc.so."];
+  for (i = 1; i < [parts count]; i++)
+    {
+      NSString *tail = [parts objectAtIndex: i];
+      NSUInteger j = 0;
+      while (j < [tail length] && [digits characterIsMember: [tail characterAtIndex: j]])
+        {
+          j++;
+        }
+      if (j > 0)
+        {
+          NSInteger value = [[tail substringToIndex: j] integerValue];
+          if (value > best)
+            {
+              best = value;
+            }
+        }
+    }
+  return best;
+}
+
+- (NSNumber *)detectHostICUMajor
+{
+  NSInteger best = [self maxICUMajorInString:
+                     [self capturedOutputForExecutable: @"ldconfig" arguments: [NSArray arrayWithObject: @"-p"]]];
+
+  if (best < 0)
+    {
+      NSArray *dirs = [NSArray arrayWithObjects:
+                                 @"/lib", @"/usr/lib", @"/usr/lib64",
+                                 @"/lib/x86_64-linux-gnu", @"/usr/lib/x86_64-linux-gnu",
+                                 @"/lib/aarch64-linux-gnu", @"/usr/lib/aarch64-linux-gnu", nil];
+      NSFileManager *manager = [NSFileManager defaultManager];
+      NSUInteger i = 0;
+      for (i = 0; i < [dirs count]; i++)
+        {
+          NSArray *entries = [manager contentsOfDirectoryAtPath: [dirs objectAtIndex: i] error: NULL];
+          if (entries != nil)
+            {
+              NSInteger candidate = [self maxICUMajorInString: [entries componentsJoinedByString: @"\n"]];
+              if (candidate > best)
+                {
+                  best = candidate;
+                }
+            }
+        }
+    }
+  if (best < 0)
+    {
+      return nil;
+    }
+  return [NSNumber numberWithInteger: best];
+}
+
+- (NSString *)detectHostGlibcVersion
+{
+  NSCharacterSet *whitespace = [NSCharacterSet whitespaceAndNewlineCharacterSet];
+  NSString *output = [self capturedOutputForExecutable: @"getconf"
+                                             arguments: [NSArray arrayWithObject: @"GNU_LIBC_VERSION"]];
+
+  if (output != nil)
+    {
+      NSString *trimmed = [output stringByTrimmingCharactersInSet: whitespace];
+      if ([trimmed hasPrefix: @"glibc "])
+        {
+          return [[trimmed substringFromIndex: 6] stringByTrimmingCharactersInSet: whitespace];
+        }
+    }
+  output = [self capturedOutputForExecutable: @"ldd" arguments: [NSArray arrayWithObject: @"--version"]];
+  if (output != nil && [output length] > 0)
+    {
+      NSString *firstLine = [[output componentsSeparatedByString: @"\n"] objectAtIndex: 0];
+      NSArray *tokens = [firstLine componentsSeparatedByCharactersInSet: [NSCharacterSet whitespaceCharacterSet]];
+      NSString *last = [tokens lastObject];
+      if (last != nil && [last length] > 0 && [last rangeOfString: @"."].location != NSNotFound)
+        {
+          return last;
+        }
+    }
+  return nil;
+}
+
+- (NSDictionary *)runtimeLibrariesForOS:(NSString *)osName
+{
+  NSNumber *icuMajor = nil;
+  NSString *glibc = nil;
+
+  if ([osName isEqual: @"linux"] == NO)
+    {
+      return [NSDictionary dictionary];
+    }
+  icuMajor = [self detectHostICUMajor];
+  glibc = [self detectHostGlibcVersion];
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+                        icuMajor ? (id)icuMajor : (id)[NSNull null], @"icu_major",
+                        glibc ? (id)glibc : (id)[NSNull null], @"glibc_version",
+                        nil];
+}
+
+- (BOOL)artifact:(NSDictionary *)artifact matchesRuntimeRequirementsForEnvironment:(NSDictionary *)environment
+{
+  NSDictionary *requirements = [artifact objectForKey: @"runtime_requirements"];
+  NSDictionary *host = nil;
+  id requiredICU = nil;
+  id requiredGlibc = nil;
+
+  if (requirements == nil || (id)requirements == (id)[NSNull null] ||
+      [requirements isKindOfClass: [NSDictionary class]] == NO ||
+      [[environment objectForKey: @"os"] isEqual: @"linux"] == NO)
+    {
+      return YES;
+    }
+  host = [environment objectForKey: @"runtime_libraries"];
+  if ([host isKindOfClass: [NSDictionary class]] == NO)
+    {
+      host = nil;
+    }
+
+  requiredICU = [requirements objectForKey: @"icu_major"];
+  if (requiredICU != nil && (id)requiredICU != (id)[NSNull null])
+    {
+      id hostICU = host ? [host objectForKey: @"icu_major"] : nil;
+      if (hostICU != nil && (id)hostICU != (id)[NSNull null] &&
+          [hostICU integerValue] != [requiredICU integerValue])
+        {
+          return NO;
+        }
+    }
+  requiredGlibc = [requirements objectForKey: @"glibc_min"];
+  if (requiredGlibc != nil && (id)requiredGlibc != (id)[NSNull null])
+    {
+      id hostGlibc = host ? [host objectForKey: @"glibc_version"] : nil;
+      if (hostGlibc != nil && (id)hostGlibc != (id)[NSNull null] &&
+          [self compareVersionString: hostGlibc toVersionString: requiredGlibc] == NSOrderedAscending)
+        {
+          return NO;
+        }
+    }
+  return YES;
+}
+
 - (BOOL)artifact:(NSDictionary *)artifact matchesHostOS:(NSString *)osName arch:(NSString *)arch
 {
   return [[artifact objectForKey: @"os"] isEqualToString: osName] &&
@@ -2552,7 +2742,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
           return NO;
         }
     }
-  return YES;
+  // A definite runtime-library ABI mismatch (e.g. ICU major) excludes the
+  // artifact from selection so setup never installs something that cannot load.
+  return [self artifact: artifact matchesRuntimeRequirementsForEnvironment: environment];
 }
 
 - (BOOL)artifact:(NSDictionary *)artifact matchesToolchain:(NSDictionary *)toolchain
@@ -3483,6 +3675,57 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                            @"Detected Linux OS version is not in the artifact's supported OS versions.", @"message",
                                            nil]];
     }
+  if ([[environment objectForKey: @"os"] isEqualToString: @"linux"])
+    {
+      NSDictionary *runtimeRequirements = [artifact objectForKey: @"runtime_requirements"];
+      if (runtimeRequirements != nil && (id)runtimeRequirements != (id)[NSNull null] &&
+          [runtimeRequirements isKindOfClass: [NSDictionary class]])
+        {
+          NSDictionary *hostLibraries = [environment objectForKey: @"runtime_libraries"];
+          id requiredICU = [runtimeRequirements objectForKey: @"icu_major"];
+          id requiredGlibc = [runtimeRequirements objectForKey: @"glibc_min"];
+          if ([hostLibraries isKindOfClass: [NSDictionary class]] == NO)
+            {
+              hostLibraries = nil;
+            }
+          if (requiredICU != nil && (id)requiredICU != (id)[NSNull null])
+            {
+              id hostICU = hostLibraries ? [hostLibraries objectForKey: @"icu_major"] : nil;
+              if (hostICU == nil || (id)hostICU == (id)[NSNull null])
+                {
+                  [warnings addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                       @"icu_major_undetected", @"code",
+                                                       [NSString stringWithFormat: @"The managed artifact links ICU major %@, but the host ICU version could not be detected.", requiredICU], @"message",
+                                                       nil]];
+                }
+              else if ([hostICU integerValue] != [requiredICU integerValue])
+                {
+                  [reasons addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                       @"icu_major_mismatch", @"code",
+                                                       [NSString stringWithFormat: @"The host provides ICU major %@, but the selected managed artifact links ICU major %@. ICU has no cross-major ABI compatibility, so the managed GNUstep runtime would fail to load.", hostICU, requiredICU], @"message",
+                                                       nil]];
+                }
+            }
+          if (requiredGlibc != nil && (id)requiredGlibc != (id)[NSNull null])
+            {
+              id hostGlibc = hostLibraries ? [hostLibraries objectForKey: @"glibc_version"] : nil;
+              if (hostGlibc == nil || (id)hostGlibc == (id)[NSNull null])
+                {
+                  [warnings addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                       @"glibc_version_undetected", @"code",
+                                                       [NSString stringWithFormat: @"The managed artifact requires glibc >= %@, but the host glibc version could not be detected.", requiredGlibc], @"message",
+                                                       nil]];
+                }
+              else if ([self compareVersionString: hostGlibc toVersionString: requiredGlibc] == NSOrderedAscending)
+                {
+                  [reasons addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                       @"glibc_too_old", @"code",
+                                                       [NSString stringWithFormat: @"The host provides glibc %@, but the selected managed artifact requires glibc >= %@.", hostGlibc, requiredGlibc], @"message",
+                                                       nil]];
+                }
+            }
+        }
+    }
   if ([[toolchain objectForKey: @"present"] boolValue])
     {
       if (detectedCompiler != nil &&
@@ -3628,6 +3871,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       [environment setObject: distributionID forKey: @"distribution_id"];
     }
+  [environment setObject: [self runtimeLibrariesForOS: osName] forKey: @"runtime_libraries"];
   [environment setObject: arch forKey: @"arch"];
   [environment setObject: @"posix" forKey: @"shell_family"];
   [environment setObject: @"user" forKey: @"install_scope"];
@@ -4007,6 +4251,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       [environment setObject: distributionID forKey: @"distribution_id"];
     }
+  [environment setObject: [self runtimeLibrariesForOS: osName] forKey: @"runtime_libraries"];
   [environment setObject: emptyLayouts forKey: @"detected_layouts"];
   [environment setObject: emptyPrefixes forKey: @"install_prefixes"];
   [emptyLayouts release];
@@ -8597,6 +8842,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: activationError data: nil];
       }
     [packages setObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                         packageID, @"package_id",
+                                         [packageRecord objectForKey: @"name"] ? [packageRecord objectForKey: @"name"] : [NSNull null], @"name",
+                                         [packageRecord objectForKey: @"aliases"] ? [packageRecord objectForKey: @"aliases"] : [NSArray array], @"aliases",
                                          manifestPath ? [manifestPath stringByResolvingSymlinksInPath] : [NSNull null], @"manifest_path",
                                          [self normalizedPackageIndexReference: indexPath] ? [self normalizedPackageIndexReference: indexPath] : [NSNull null], @"index_path",
                                          finalRoot, @"install_root",
@@ -8714,6 +8962,35 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   state = [[self loadInstalledPackagesState: root] mutableCopy];
   packages = [[[state objectForKey: @"packages"] mutableCopy] autorelease];
   record = [packages objectForKey: packageID];
+  if (record == nil)
+    {
+      NSString *normalizedSpecifier = [packageID lowercaseString];
+      NSEnumerator *aliasEnumerator = [packages keyEnumerator];
+      NSString *candidateID = nil;
+      while ((candidateID = [aliasEnumerator nextObject]) != nil)
+        {
+          NSDictionary *candidateRecord = [packages objectForKey: candidateID];
+          NSMutableDictionary *lookupRecord = [NSMutableDictionary dictionaryWithDictionary: candidateRecord];
+          NSArray *keys = nil;
+          NSUInteger keyIndex = 0;
+          [lookupRecord setObject: candidateID forKey: @"id"];
+          keys = [self packageLookupKeysForRecord: lookupRecord];
+          for (keyIndex = 0; keyIndex < [keys count]; keyIndex++)
+            {
+              NSString *key = [keys objectAtIndex: keyIndex];
+              if ([[key lowercaseString] isEqualToString: normalizedSpecifier])
+                {
+                  packageID = candidateID;
+                  record = candidateRecord;
+                  break;
+                }
+            }
+          if (record != nil)
+            {
+              break;
+            }
+        }
+    }
   [self appendInstallTrace: @"remove loaded package record"];
   if (record == nil)
     {

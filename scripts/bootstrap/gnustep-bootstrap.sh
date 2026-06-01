@@ -250,7 +250,7 @@ detect_os() {
 detect_arch() {
   case "$(uname -m 2>/dev/null)" in
     x86_64|amd64) printf '%s\n' "amd64" ;;
-    aarch64|arm64) printf '%s\n' "aarch64" ;;
+    aarch64|arm64) printf '%s\n' "arm64" ;;
     *) printf '%s\n' "unknown" ;;
   esac
 }
@@ -301,6 +301,82 @@ json_release_version() {
       exit
     }
   ' "$path"
+}
+
+detect_host_icu_major() {
+  # GNUstep base links the versioned ICU SONAME (libicuuc.so.NN); ICU has no
+  # cross-major ABI compatibility, so the host major must match the artifact's.
+  if command -v ldconfig >/dev/null 2>&1; then
+    major=$(ldconfig -p 2>/dev/null | grep -oE 'libicuuc\.so\.[0-9]+' | sed -E 's/.*\.so\.//' | sort -n | tail -n 1)
+    if [ -n "$major" ]; then printf '%s\n' "$major"; return 0; fi
+  fi
+  for dir in /lib /usr/lib /usr/lib64 /lib/x86_64-linux-gnu /usr/lib/x86_64-linux-gnu /lib/aarch64-linux-gnu /usr/lib/aarch64-linux-gnu; do
+    [ -d "$dir" ] || continue
+    major=$(ls "$dir" 2>/dev/null | grep -oE '^libicuuc\.so\.[0-9]+' | sed -E 's/.*\.so\.//' | sort -n | tail -n 1)
+    if [ -n "$major" ]; then printf '%s\n' "$major"; return 0; fi
+  done
+  return 1
+}
+
+detect_host_glibc_version() {
+  if command -v getconf >/dev/null 2>&1; then
+    version=$(getconf GNU_LIBC_VERSION 2>/dev/null)
+    case "$version" in
+      "glibc "*) printf '%s\n' "${version#glibc }"; return 0 ;;
+    esac
+  fi
+  if command -v ldd >/dev/null 2>&1; then
+    version=$(ldd --version 2>/dev/null | head -n 1 | grep -oE '[0-9]+\.[0-9]+' | head -n 1)
+    if [ -n "$version" ]; then printf '%s\n' "$version"; return 0; fi
+  fi
+  return 1
+}
+
+version_ge() {
+  # 0 (true) if dotted-numeric $1 >= $2, comparing major then minor.
+  left_major=${1%%.*}; left_rest=${1#*.}; left_minor=${left_rest%%.*}
+  right_major=${2%%.*}; right_rest=${2#*.}; right_minor=${right_rest%%.*}
+  case "$left_minor" in *[!0-9]*|"") left_minor=0 ;; esac
+  case "$right_minor" in *[!0-9]*|"") right_minor=0 ;; esac
+  case "$left_major$right_major" in *[!0-9]*) return 0 ;; esac
+  if [ "$left_major" -gt "$right_major" ]; then return 0; fi
+  if [ "$left_major" -lt "$right_major" ]; then return 1; fi
+  [ "$left_minor" -ge "$right_minor" ]
+}
+
+RUNTIME_INCOMPAT_REASON=""
+RUNTIME_INCOMPAT_CODE=""
+check_runtime_compatibility() {
+  # Refuse to install a managed artifact whose runtime-library ABI the host
+  # cannot satisfy (the ICU 72-vs-76 crash class). A definite mismatch fails;
+  # an undetectable host value warns rather than silently passing; an artifact
+  # without runtime_requirements imposes no constraint (legacy manifests).
+  os="$1"; manifest="$2"; artifact_id="$3"
+  RUNTIME_INCOMPAT_REASON=""; RUNTIME_INCOMPAT_CODE=""
+  [ "$os" = "linux" ] || return 0
+  req_icu=$(json_file_bool "$manifest" "$artifact_id" "icu_major")
+  req_glibc=$(json_file_value "$manifest" "$artifact_id" "glibc_min")
+  if [ -n "$req_icu" ]; then
+    host_icu=$(detect_host_icu_major || true)
+    if [ -z "$host_icu" ]; then
+      printf '%s\n' "setup: warning: the managed artifact links ICU major $req_icu but the host ICU version could not be detected" >&2
+    elif [ "$host_icu" != "$req_icu" ]; then
+      RUNTIME_INCOMPAT_CODE="icu_major_mismatch"
+      RUNTIME_INCOMPAT_REASON="The host provides ICU major $host_icu, but the selected managed artifact links ICU major $req_icu. ICU has no cross-major ABI compatibility, so the managed GNUstep runtime would fail to load."
+      return 1
+    fi
+  fi
+  if [ -n "$req_glibc" ]; then
+    host_glibc=$(detect_host_glibc_version || true)
+    if [ -z "$host_glibc" ]; then
+      printf '%s\n' "setup: warning: the managed artifact requires glibc >= $req_glibc but the host glibc version could not be detected" >&2
+    elif ! version_ge "$host_glibc" "$req_glibc"; then
+      RUNTIME_INCOMPAT_CODE="glibc_too_old"
+      RUNTIME_INCOMPAT_REASON="The host provides glibc $host_glibc, but the selected managed artifact requires glibc >= $req_glibc."
+      return 1
+    fi
+  fi
+  return 0
 }
 
 sha256_file() {
@@ -535,6 +611,19 @@ EOF
 EOF
     else
       printf '%s\n' "setup: no matching release artifacts were found for this host"
+    fi
+    return 4
+  fi
+
+  if ! check_runtime_compatibility "$host_os" "$manifest_path" "$toolchain_id"; then
+    if [ "${JSON_MODE:-0}" = "1" ]; then
+      reason_json=$(json_escape "$RUNTIME_INCOMPAT_REASON")
+      cat <<EOF
+{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":false,"status":"error","summary":"The host runtime libraries are incompatible with the selected managed artifact.","doctor":{"status":"error","environment_classification":"toolchain_incompatible","summary":"The selected managed artifact cannot run on this host.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","selected_release":"${release_version:-unknown}","selected_artifacts":[],"system_privileges_ok":true},"compatibility":{"compatible":false,"reasons":[{"code":"$RUNTIME_INCOMPAT_CODE","message":$reason_json}]},"actions":[{"kind":"use_compatible_host","priority":1,"message":$reason_json}]}
+EOF
+    else
+      printf '%s\n' "setup: the selected managed artifact is incompatible with this host" >&2
+      printf '%s\n' "setup: $RUNTIME_INCOMPAT_REASON" >&2
     fi
     return 4
   fi
