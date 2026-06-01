@@ -7,6 +7,7 @@ import re
 import shlex
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import time
@@ -43,8 +44,9 @@ TIER1_TARGETS = [
         "publish": True,
         "core_components": UNIX_CORE_COMPONENTS,
         "supported_distributions": ["debian"],
+        "runtime_requirements": {"icu_major": 76, "glibc_min": "2.41"},
         "portability_policy": "distribution-scoped",
-        "portability_notes": "Current source-built Linux artifact is validated on Debian only; Ubuntu requires its own distro-scoped artifact because ICU and other runtime SONAMEs differ by distro release.",
+        "portability_notes": "Source-built on Debian 13 trixie (glibc 2.41, ICU 76); validated on Debian only. Ubuntu requires its own distro-scoped artifact because ICU and other runtime SONAMEs differ by distro release.",
     },
     {
         "id": "linux-ubuntu2404-amd64-clang",
@@ -57,9 +59,10 @@ TIER1_TARGETS = [
         "core_components": UNIX_CORE_COMPONENTS,
         "supported_distributions": ["ubuntu"],
         "supported_os_versions": ["ubuntu-24.04"],
+        "runtime_requirements": {"icu_major": 74, "glibc_min": "2.39"},
         "build_host": "ubuntu:24.04 docker amd64",
         "portability_policy": "distribution-scoped",
-        "portability_notes": "Ubuntu amd64 managed target built in a base Ubuntu 24.04 Docker image; publish is enabled after runtime dependency closure and Docker setup smoke validation.",
+        "portability_notes": "Ubuntu amd64 managed target built in a base Ubuntu 24.04 Docker image (glibc 2.39, ICU 74); publish is enabled after runtime dependency closure and Docker setup smoke validation.",
     },
     {
         "id": "linux-arm64-clang",
@@ -68,11 +71,13 @@ TIER1_TARGETS = [
         "compiler_family": "clang",
         "toolchain_flavor": "clang",
         "strategy": "source-build",
-        "publish": False,
+        "publish": True,
         "core_components": UNIX_CORE_COMPONENTS,
         "supported_distributions": ["debian"],
+        "runtime_requirements": {"icu_major": 76, "glibc_min": "2.41"},
+        "build_host": "debian:13 docker aarch64",
         "portability_policy": "distribution-scoped",
-        "portability_notes": "Planned Debian aarch64 managed target; publish remains false until OracleTestVMs build/validation evidence exists.",
+        "portability_notes": "Source-built on Debian 13 trixie aarch64 (glibc 2.41, ICU 76) via toolchains/linux-arm64-clang/Dockerfile; runtime-host validation on real arm64 hardware is still pending.",
     },
     {
         "id": "openbsd-amd64-clang",
@@ -245,6 +250,7 @@ def release_manifest_from_matrix(version: str, base_url: str) -> dict[str, Any]:
                 "format": "tar.gz" if target["os"] != "windows" else "zip",
                 "supported_distributions": target.get("supported_distributions", []),
                 "supported_os_versions": target.get("supported_os_versions", []),
+                "runtime_requirements": target.get("runtime_requirements", {}),
                 "portability_policy": target.get("portability_policy", "platform-wide"),
                 "url": f"{base_url.rstrip('/')}/{version}/{cli_id}",
                 "sha256": "TBD",
@@ -273,6 +279,7 @@ def release_manifest_from_matrix(version: str, base_url: str) -> dict[str, Any]:
                 "format": "tar.gz" if target["os"] != "windows" else "zip",
                 "supported_distributions": target.get("supported_distributions", []),
                 "supported_os_versions": target.get("supported_os_versions", []),
+                "runtime_requirements": target.get("runtime_requirements", {}),
                 "portability_policy": target.get("portability_policy", "platform-wide"),
                 "url": f"{base_url.rstrip('/')}/{version}/toolchain-{target['id']}",
                 "sha256": "TBD",
@@ -659,6 +666,7 @@ def toolchain_manifest(target_id: str, toolchain_version: str) -> dict[str, Any]
         "platform_policy": {
             "supported_distributions": target.get("supported_distributions", []),
             "supported_os_versions": target.get("supported_os_versions", []),
+            "runtime_requirements": target.get("runtime_requirements", {}),
             "portability_policy": target.get("portability_policy", "platform-wide"),
             "notes": target.get("portability_notes"),
         },
@@ -723,6 +731,7 @@ def component_inventory(target_id: str, toolchain_version: str) -> dict[str, Any
         "platform_policy": {
             "supported_distributions": target.get("supported_distributions", []),
             "supported_os_versions": target.get("supported_os_versions", []),
+            "runtime_requirements": target.get("runtime_requirements", {}),
             "portability_policy": target.get("portability_policy", "platform-wide"),
             "notes": target.get("portability_notes"),
         },
@@ -3938,6 +3947,7 @@ def stage_release_assets(
                 "filename": filename,
                 "supported_distributions": target.get("supported_distributions", []),
                 "supported_os_versions": target.get("supported_os_versions", []),
+                "runtime_requirements": target.get("runtime_requirements", {}),
                 "portability_policy": target.get("portability_policy", "platform-wide"),
                 "published": True,
             }
@@ -3969,6 +3979,7 @@ def stage_release_assets(
                 )
             reused.setdefault("supported_distributions", target.get("supported_distributions", []))
             reused.setdefault("supported_os_versions", target.get("supported_os_versions", []))
+            reused.setdefault("runtime_requirements", target.get("runtime_requirements", {}))
             reused.setdefault("portability_policy", target.get("portability_policy", "platform-wide"))
             target_artifacts.append(reused)
 
@@ -4578,11 +4589,32 @@ def package_tools_xctest_artifact(
     if rebuild:
         makefiles = os.environ.get("GNUSTEP_MAKEFILES_DIR", "/usr/share/GNUstep/Makefiles")
         gcc_headers = os.environ.get("GCC_OBJC_HEADERS", "/usr/lib/gcc/x86_64-linux-gnu/14/include")
-        build_script = "set -e\n. \"{}/GNUstep.sh\"\nmake -C \"{}\" clean >/dev/null || true\nmake -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\"\nmake -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\" GNUSTEP_INSTALLATION_DOMAIN=USER install\n".format(makefiles, source, source, gcc_headers, source, gcc_headers)
+        make_command = os.environ.get("MAKE", "make")
+        openbsd_split_build = os.environ.get("TOOLS_XCTEST_OPENBSD_SPLIT_BUILD") == "1" or sys.platform.startswith("openbsd")
+        if openbsd_split_build:
+            build_script = (
+                "set -e\n"
+                ". \"{}/GNUstep.sh\"\n"
+                "\"{}\" -C \"{}\" clean >/dev/null || true\n"
+                "\"{}\" -C \"{}/XCTest\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\"\n"
+                "if [ -f \"{}/XCTest/obj/libXCTest.so.0\" ] && [ ! -e \"{}/XCTest/obj/libXCTest.so\" ]; then\n"
+                "  ln -s libXCTest.so.0 \"{}/XCTest/obj/libXCTest.so\"\n"
+                "fi\n"
+                "\"{}\" -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\" xctest.all.tool.variables\n"
+                "\"{}\" -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\" GNUSTEP_INSTALLATION_DOMAIN=USER install\n"
+            ).format(makefiles, make_command, source, make_command, source, gcc_headers, source, source, source, make_command, source, gcc_headers, make_command, source, gcc_headers)
+        else:
+            build_script = "set -e\n. \"{}/GNUstep.sh\"\n\"{}\" -C \"{}\" clean >/dev/null || true\n\"{}\" -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\"\n\"{}\" -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\" GNUSTEP_INSTALLATION_DOMAIN=USER install\n".format(makefiles, make_command, source, make_command, source, gcc_headers, make_command, source, gcc_headers)
         commands.append(["sh", "-c", build_script])
         built = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
         if built.returncode != 0:
             return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Failed to build and install tools-xctest.", "stdout": built.stdout, "stderr": built.stderr, "commands": commands}
+
+    installed_lib_dir = install_root / "Library" / "Libraries"
+    versioned_xctest_lib = installed_lib_dir / "libXCTest.so.0"
+    unversioned_xctest_lib = installed_lib_dir / "libXCTest.so"
+    if versioned_xctest_lib.exists() and not unversioned_xctest_lib.exists():
+        unversioned_xctest_lib.symlink_to(versioned_xctest_lib.name)
 
     required = [install_root / "Tools" / "xctest", install_root / "Library" / "Headers" / "XCTest", install_root / "Library" / "Libraries" / "libXCTest.so"]
     missing = [str(item) for item in required if not item.exists()]
@@ -4608,9 +4640,20 @@ def package_tools_xctest_artifact(
     launcher.write_text(
         "#!/bin/sh\n"
         "set -e\n"
-        "bin_dir=$(CDPATH= cd -- \"$(dirname -- \"$0\")\" && pwd)\n"
-        "package_root=$(CDPATH= cd -- \"$bin_dir/..\" && pwd)\n"
-        "managed_root=$(CDPATH= cd -- \"$package_root/../..\" && pwd)\n"
+        "script_path=$0\n"
+        "if [ -L \"$script_path\" ]; then\n"
+        "  link_target=$(readlink \"$script_path\")\n"
+        "  case \"$link_target\" in\n"
+        "    /*) script_path=$link_target ;;\n"
+        "    *) script_path=$(dirname \"$script_path\")/$link_target ;;\n"
+        "  esac\n"
+        "fi\n"
+        "bin_dir=$(CDPATH= cd \"$(dirname \"$script_path\")\" && pwd)\n"
+        "package_root=$(CDPATH= cd \"$bin_dir/..\" && pwd)\n"
+        "managed_root=$(CDPATH= cd \"$package_root/../..\" && pwd)\n"
+        "if [ -f \"$managed_root/etc/GNUstep/GNUstep.conf\" ]; then\n"
+        "  export GNUSTEP_CONFIG_FILE=\"$managed_root/etc/GNUstep/GNUstep.conf\"\n"
+        "fi\n"
         "runtime_libs=$package_root/Library/Libraries:$managed_root/Local/Library/Libraries:$managed_root/System/Library/Libraries:$managed_root/lib:$managed_root/lib64\n"
         "export LD_LIBRARY_PATH=\"$runtime_libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\"\n"
         "exec \"$package_root/libexec/xctest\" \"$@\"\n"
@@ -5080,6 +5123,47 @@ def package_managed_source_artifact(
             (checkout / "GormObjCHeaderParser" / "obj" / "GormObjCHeaderParser-0.dll", package_root / "Library" / "Libraries" / "GormObjCHeaderParser-0.dll"),
             (checkout / "Tools" / "gormtool" / "obj" / "gormtool", package_root / "bin" / "gormtool"),
         ])
+        for library_dir, pattern in [
+            (checkout / "InterfaceBuilder" / "obj", "libInterfaceBuilder.so*"),
+            (checkout / "GormObjCHeaderParser" / "obj", "libGormObjCHeaderParser.so*"),
+        ]:
+            for library in sorted(library_dir.glob(pattern)):
+                destination = package_root / "Library" / "Libraries" / library.name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                if library.is_symlink():
+                    target = os.readlink(library)
+                    if destination.exists() or destination.is_symlink():
+                        destination.unlink()
+                    destination.symlink_to(target)
+                else:
+                    shutil.copy2(library, destination)
+                copied.append(str(destination))
+        launcher = package_root / "bin" / "gorm"
+        launcher.parent.mkdir(parents=True, exist_ok=True)
+        launcher.write_text(
+            "#!/bin/sh\n"
+            "set -e\n"
+            "script_path=$0\n"
+            "if [ -L \"$script_path\" ]; then\n"
+            "  link_target=$(readlink \"$script_path\")\n"
+            "  case \"$link_target\" in\n"
+            "    /*) script_path=$link_target ;;\n"
+            "    *) script_path=$(dirname \"$script_path\")/$link_target ;;\n"
+            "  esac\n"
+            "fi\n"
+            "bin_dir=$(CDPATH= cd \"$(dirname \"$script_path\")\" && pwd)\n"
+            "package_root=$(CDPATH= cd \"$bin_dir/..\" && pwd)\n"
+            "managed_root=$(CDPATH= cd \"$package_root/../..\" && pwd)\n"
+            "if [ -f \"$managed_root/etc/GNUstep/GNUstep.conf\" ]; then\n"
+            "  export GNUSTEP_CONFIG_FILE=\"$managed_root/etc/GNUstep/GNUstep.conf\"\n"
+            "fi\n"
+            "runtime_libs=$package_root/Library/Libraries:$package_root/Library/Frameworks/GormCore.framework/Versions/Current:$package_root/Library/Frameworks/GormCore.framework:$managed_root/Local/Library/Libraries:$managed_root/System/Library/Libraries:$managed_root/lib:$managed_root/lib64\n"
+            "export LD_LIBRARY_PATH=\"$runtime_libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\"\n"
+            "exec \"$package_root/Applications/Gorm.app/Gorm\" \"$@\"\n",
+            encoding="utf-8",
+        )
+        launcher.chmod(0o755)
+        copied.append(str(launcher))
     else:
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "No staging rule exists for package.", "package_id": package_id}
     if not copied:
@@ -5856,7 +5940,7 @@ def session_build_box_plan(
         target = known_targets[target_id]
         profile = {
             "linux": "debian-13-gnome-wayland" if target_id == "linux-amd64-clang" else "ubuntu-24.04-aarch64" if target["arch"] == "arm64" else "ubuntu-24.04-amd64",
-            "openbsd": "openbsd-7.8-fvwm",
+            "openbsd": "openbsd-7.8-arm64" if target["arch"] == "arm64" else "openbsd-7.8-fvwm",
             "windows": "windows-2022",
         }.get(target["os"], target_id)
         builders.append(
