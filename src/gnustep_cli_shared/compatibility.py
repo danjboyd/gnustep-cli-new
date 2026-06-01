@@ -40,6 +40,88 @@ def classify_environment(environment: dict[str, Any]) -> str:
     return "toolchain_compatible"
 
 
+def _parse_version_tuple(value: Any) -> tuple[int, ...]:
+    parts: list[int] = []
+    for component in str(value).split("."):
+        if component.isdigit():
+            parts.append(int(component))
+        else:
+            break
+    return tuple(parts)
+
+
+def runtime_library_findings(
+    environment: dict[str, Any], artifact: dict[str, Any]
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """Evaluate host runtime libraries against an artifact's hard ABI requirements.
+
+    Managed Linux artifacts link the build distribution's versioned ICU SONAME
+    and a minimum glibc. ICU has no cross-major ABI compatibility, so a host
+    whose ICU major differs cannot load the managed runtime — installing anyway
+    is the crash class this gate prevents. Returns (reasons, warnings): a definite
+    mismatch is a hard reason (incompatible); an undetectable host value is a
+    warning rather than a silent pass.
+    """
+    reasons: list[dict[str, str]] = []
+    warnings: list[dict[str, str]] = []
+    requirements = artifact.get("runtime_requirements") or {}
+    if not requirements or environment.get("os") != "linux":
+        return reasons, warnings
+    host = environment.get("runtime_libraries") or {}
+
+    required_icu = requirements.get("icu_major")
+    if required_icu is not None:
+        host_icu = host.get("icu_major")
+        if host_icu is None:
+            warnings.append(
+                {
+                    "code": "icu_major_undetected",
+                    "message": (
+                        f"The managed artifact links ICU major {required_icu}, but the host ICU "
+                        "version could not be detected; the managed runtime may fail to load if it "
+                        "does not match."
+                    ),
+                }
+            )
+        elif int(host_icu) != int(required_icu):
+            reasons.append(
+                {
+                    "code": "icu_major_mismatch",
+                    "message": (
+                        f"The host provides ICU major {host_icu}, but the selected managed artifact "
+                        f"links ICU major {required_icu}. ICU has no cross-major ABI compatibility, "
+                        "so the managed GNUstep runtime would fail to load."
+                    ),
+                }
+            )
+
+    required_glibc = requirements.get("glibc_min")
+    if required_glibc is not None:
+        host_glibc = host.get("glibc_version")
+        if host_glibc is None:
+            warnings.append(
+                {
+                    "code": "glibc_version_undetected",
+                    "message": (
+                        f"The managed artifact requires glibc >= {required_glibc}, but the host "
+                        "glibc version could not be detected."
+                    ),
+                }
+            )
+        elif _parse_version_tuple(host_glibc) < _parse_version_tuple(required_glibc):
+            reasons.append(
+                {
+                    "code": "glibc_too_old",
+                    "message": (
+                        f"The host provides glibc {host_glibc}, but the selected managed artifact "
+                        f"requires glibc >= {required_glibc}."
+                    ),
+                }
+            )
+
+    return reasons, warnings
+
+
 def artifact_matches_host(environment: dict[str, Any], artifact: dict[str, Any]) -> bool:
     if environment.get("os") != artifact.get("os") or environment.get("arch") != artifact.get("arch"):
         return False
@@ -49,7 +131,13 @@ def artifact_matches_host(environment: dict[str, Any], artifact: dict[str, Any])
             return False
     supported_os_versions = artifact.get("supported_os_versions") or []
     if environment.get("os") == "linux" and supported_os_versions:
-        return environment.get("os_version") in supported_os_versions
+        if environment.get("os_version") not in supported_os_versions:
+            return False
+    # A definite runtime-library ABI mismatch (e.g. ICU major) excludes the
+    # artifact from selection so setup never installs something that cannot load.
+    runtime_reasons, _ = runtime_library_findings(environment, artifact)
+    if runtime_reasons:
+        return False
     return True
 
 
@@ -148,6 +236,10 @@ def evaluate_environment_against_artifact(
                 ),
             }
         )
+
+    runtime_reasons, runtime_warnings = runtime_library_findings(environment, artifact)
+    reasons.extend(runtime_reasons)
+    warnings.extend(runtime_warnings)
 
     toolchain = environment.get("toolchain", {})
     if toolchain.get("present"):
