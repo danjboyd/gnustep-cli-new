@@ -289,12 +289,27 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("linux-arm64-clang", content)
         self.assertIn("ubuntu-24.04-arm", content)
         self.assertIn("uname -m", content)
-        self.assertIn("toolchains/${{ inputs.target }}/build-toolchain.sh", content)
+        # The build must run inside the target's pinned base image (Dockerfile),
+        # not directly on the runner OS, so the artifact links the pinned
+        # glibc/ICU rather than the runner's ICU.
+        self.assertIn("docker build", content)
+        self.assertIn('"toolchains/${{ inputs.target }}"', content)
+        self.assertIn("build-toolchain.sh", content)
         self.assertIn("package-source-built-linux-toolchain", content)
         self.assertIn("build-linux-cli-against-managed-toolchain", content)
-        self.assertIn("gnustep-toolchain-${{ inputs.target }}-${{ inputs.version }}.tar.gz", content)
-        self.assertIn("gnustep-cli-${{ inputs.target }}-${{ inputs.version }}.tar.gz", content)
+        self.assertIn("gnustep-toolchain-", content)
+        self.assertIn("gnustep-cli-", content)
         self.assertIn("actions/upload-artifact@v4", content)
+
+    def test_managed_linux_toolchains_pin_debian13_base_image(self):
+        for target in ("linux-amd64-clang", "linux-arm64-clang"):
+            dockerfile = TOOLCHAINS / target / "Dockerfile"
+            with self.subTest(target=target):
+                self.assertTrue(dockerfile.exists())
+                content = dockerfile.read_text()
+                self.assertIn("FROM debian:13", content)
+                # python3 is required to run build_infra.py inside the container.
+                self.assertIn("python3", content)
 
     def test_release_evidence_workflow_publishes_verified_evidence_artifact(self):
         workflow = ROOT / ".github" / "workflows" / "release-evidence.yml"

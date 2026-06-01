@@ -22,8 +22,16 @@ RUN apt-get update \
         cmake \
         ninja-build \
         pkg-config \
+        autoconf \
+        automake \
+        libtool \
+        python3 \
         clang \
         lld \
+        libblocksruntime-dev \
+        libssl-dev \
+        zlib1g-dev \
+        libfreetype-dev \
         libxml2-dev \
         libxslt1-dev \
         libicu-dev \

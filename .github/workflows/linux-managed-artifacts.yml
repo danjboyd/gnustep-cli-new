@@ -36,42 +36,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Install build prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            autoconf \
-            automake \
-            ca-certificates \
-            clang \
-            cmake \
-            curl \
-            git \
-            libavahi-client-dev \
-            libblocksruntime-dev \
-            libcurl4-openssl-dev \
-            libffi-dev \
-            libfreetype-dev \
-            libgnutls28-dev \
-            libicu-dev \
-            libjpeg-dev \
-            libpng-dev \
-            libssl-dev \
-            libtiff-dev \
-            libx11-dev \
-            libxext-dev \
-            libxft-dev \
-            libxt-dev \
-            libxml2-dev \
-            libxslt1-dev \
-            lld \
-            make \
-            ninja-build \
-            pkg-config \
-            python3 \
-            tar \
-            zlib1g-dev
-
       - name: Enforce target architecture
         run: |
           case "${{ inputs.target }}" in
@@ -87,45 +51,61 @@ jobs:
               ;;
           esac
 
-      - name: Build source-managed toolchain
+      # The toolchain and CLI must be compiled inside the target's pinned base
+      # image so the artifact links the base image's glibc/ICU SONAMEs rather than
+      # the GitHub runner OS's (ubuntu-24.04 = ICU 74, which loads on neither
+      # Debian 12 nor Debian 13). Each toolchains/<target>/Dockerfile pins the
+      # correct base: debian:13 for the Debian targets, ubuntu:24.04 for ubuntu2404.
+      - name: Stage build environment
         run: |
-          "toolchains/${{ inputs.target }}/build-toolchain.sh"
-
-      - name: Package managed toolchain
-        run: |
-          mkdir -p "$RUNNER_TEMP/gnustep-linux-managed-artifacts"
+          set -eu
+          out="$RUNNER_TEMP/gnustep-linux-managed-artifacts"
+          mkdir -p "$out"
           case "${{ inputs.target }}" in
-            linux-arm64-clang)
-              staging_prefix=/tmp/gnustep-cli-linux-arm64-toolchain/install
-              ;;
-            linux-amd64-clang)
-              staging_prefix=/tmp/gnustep-cli-linux-toolchain/install
-              ;;
-            linux-ubuntu2404-amd64-clang)
-              staging_prefix=/tmp/gnustep-cli-ubuntu2404-toolchain/install
-              ;;
+            linux-arm64-clang) staging_prefix=/tmp/gnustep-cli-linux-arm64-toolchain/install ;;
+            linux-amd64-clang) staging_prefix=/tmp/gnustep-cli-linux-toolchain/install ;;
+            linux-ubuntu2404-amd64-clang) staging_prefix=/tmp/gnustep-cli-ubuntu2404-toolchain/install ;;
           esac
-          packaged_root="$RUNNER_TEMP/gnustep-linux-managed-artifacts/toolchain-root"
+          echo "STAGING_PREFIX=$staging_prefix" >> "$GITHUB_ENV"
+          cat > "$out/container-build.sh" <<'CONTAINER_BUILD'
+          set -eu
+          git config --global --add safe.directory /src
+          cd /src
+          bash "toolchains/$TARGET/build-toolchain.sh"
           python3 scripts/internal/build_infra.py --json package-source-built-linux-toolchain \
-            --staging-prefix "$staging_prefix" \
-            --output-dir "$packaged_root" \
-            --toolchain-version "${{ inputs.version }}" \
-            --target "${{ inputs.target }}" | tee "$RUNNER_TEMP/gnustep-linux-managed-artifacts/toolchain-package-report.json"
-          python3 -c 'import json,sys; payload=json.load(open(sys.argv[1])); raise SystemExit(0 if payload.get("ok") else 1)' "$RUNNER_TEMP/gnustep-linux-managed-artifacts/toolchain-package-report.json"
-          toolchain_archive="$RUNNER_TEMP/gnustep-linux-managed-artifacts/gnustep-toolchain-${{ inputs.target }}-${{ inputs.version }}.tar.gz"
-          tar -C "$packaged_root" -czf "$toolchain_archive" .
-          echo "TOOLCHAIN_ARCHIVE=$toolchain_archive" >> "$GITHUB_ENV"
-
-      - name: Build full CLI against managed toolchain
-        run: |
-          cli_archive="$RUNNER_TEMP/gnustep-linux-managed-artifacts/gnustep-cli-${{ inputs.target }}-${{ inputs.version }}.tar.gz"
+            --staging-prefix "$STAGING_PREFIX" \
+            --output-dir /out/toolchain-root \
+            --toolchain-version "$VERSION" \
+            --target "$TARGET" | tee /out/toolchain-package-report.json
+          python3 -c 'import json,sys; raise SystemExit(0 if json.load(open(sys.argv[1]))["ok"] else 1)' /out/toolchain-package-report.json
+          toolchain_archive="/out/gnustep-toolchain-$TARGET-$VERSION.tar.gz"
+          tar -C /out/toolchain-root -czf "$toolchain_archive" .
           python3 scripts/internal/build_infra.py --json build-linux-cli-against-managed-toolchain \
-            --toolchain-archive "$TOOLCHAIN_ARCHIVE" \
-            --output-archive "$cli_archive" \
-            --version "${{ inputs.version }}" \
-            --target "${{ inputs.target }}" \
-            --repo-root "$GITHUB_WORKSPACE" | tee "$RUNNER_TEMP/gnustep-linux-managed-artifacts/cli-build-report.json"
-          python3 -c 'import json,sys; payload=json.load(open(sys.argv[1])); raise SystemExit(0 if payload.get("ok") else 1)' "$RUNNER_TEMP/gnustep-linux-managed-artifacts/cli-build-report.json"
+            --toolchain-archive "$toolchain_archive" \
+            --output-archive "/out/gnustep-cli-$TARGET-$VERSION.tar.gz" \
+            --version "$VERSION" \
+            --target "$TARGET" \
+            --repo-root /src | tee /out/cli-build-report.json
+          python3 -c 'import json,sys; raise SystemExit(0 if json.load(open(sys.argv[1]))["ok"] else 1)' /out/cli-build-report.json
+          CONTAINER_BUILD
+
+      - name: Build managed toolchain and CLI in pinned base image
+        run: |
+          set -eu
+          out="$RUNNER_TEMP/gnustep-linux-managed-artifacts"
+          image="gnustep-managed-build-${{ inputs.target }}"
+          docker build -t "$image" "toolchains/${{ inputs.target }}"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -v "$out:/out" \
+            -e TARGET="${{ inputs.target }}" \
+            -e VERSION="${{ inputs.version }}" \
+            -e STAGING_PREFIX="$STAGING_PREFIX" \
+            "$image" \
+            bash /out/container-build.sh
+          # Artifacts are written by the container's root user; hand them back to
+          # the runner user so later steps and upload-artifact can read them.
+          sudo chown -R "$(id -u):$(id -g)" "$out"
 
       - name: Write checksums
         run: |
