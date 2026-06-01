@@ -406,6 +406,74 @@ download_to() {
   wget --header="Cache-Control: no-cache" -qO "$destination" "$url"
 }
 
+# Pinned release-signing trust root. The release manifest's authenticity is
+# verified against THIS key, which travels inside the bootstrap, not against the
+# release-signing-public.pem bundled next to the downloaded manifest (which an
+# attacker who controls the manifest could also replace). This is the current
+# dev/dogfood signing key; for production set RELEASE_TRUST_ROOT to the pinned
+# production public key.
+emit_pinned_trust_root() {
+  cat <<'TRUST_ROOT_PEM'
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApqGh2TATl3jFarwQQ/9O
+au+YSXOTgKsP/vrWmYdQ7fIplJqP/Zci+L1OLYu6K6MPsFfwFSxYNTfvXSNnEVVS
+x1nI6+sbdQGeWkzhWeYC7iCgxvLmLwkTYC2aiquZ0bG3iWWbIox3VTKMASU8+0Mq
+UDncWa8IkoFOg9uu/mhDABbnzjwuTxHR6BAVQKN7/yT0gIDL313+fD6WX0ZPE177
+wrT8s8k8u8TQif1A9sonvuPj4nriLzlO+FR6S4Kpdz8VILnUk0FyK4toiCAISO/8
+e6doSwUJjNockivsbU5JhVUwvoUJUb+ubbuEWKUc8UNDjLqmF0vfmtait/Yy7LRm
+cwIDAQAB
+-----END PUBLIC KEY-----
+TRUST_ROOT_PEM
+}
+
+SIG_FAIL_REASON=""
+verify_manifest_signature() {
+  # Verify the release manifest against the pinned trust root before trusting any
+  # of its contents. Fails closed: missing signature, missing openssl, or a bad
+  # signature all refuse. --allow-unsigned (or GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED=1)
+  # bypasses for local/dev bring-up.
+  manifest="$1"; manifest_src="$2"; manifest_dir="$3"; work="$4"
+  SIG_FAIL_REASON=""
+  if [ "$ALLOW_UNSIGNED" = "1" ]; then
+    printf '%s\n' "setup: warning: release signature verification skipped (--allow-unsigned)" >&2
+    return 0
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    SIG_FAIL_REASON="openssl is required to verify the release signature but was not found; install openssl or rerun with --allow-unsigned"
+    return 1
+  fi
+
+  sig_path=""
+  case "$manifest_src" in
+    http://*|https://*)
+      sig_path="$work/release-manifest.json.sig"
+      if ! download_to "$manifest_src.sig" "$sig_path"; then sig_path=""; fi
+      ;;
+    *)
+      if [ -f "$manifest_src.sig" ]; then
+        sig_path="$manifest_src.sig"
+      elif [ -f "$manifest_dir/release-manifest.json.sig" ]; then
+        sig_path="$manifest_dir/release-manifest.json.sig"
+      fi
+      ;;
+  esac
+  if [ -z "$sig_path" ] || [ ! -f "$sig_path" ]; then
+    SIG_FAIL_REASON="the release manifest is not signed (no release-manifest.json.sig); refusing to trust unsigned release metadata"
+    return 1
+  fi
+
+  trust_root="${RELEASE_TRUST_ROOT:-}"
+  if [ -z "$trust_root" ] || [ ! -f "$trust_root" ]; then
+    trust_root="$work/release-trust-root.pem"
+    emit_pinned_trust_root >"$trust_root"
+  fi
+  if ! openssl dgst -sha256 -verify "$trust_root" -signature "$sig_path" "$manifest" >/dev/null 2>&1; then
+    SIG_FAIL_REASON="the release manifest signature did not verify against the pinned trusted key"
+    return 1
+  fi
+  return 0
+}
+
 extract_tarball() {
   archive="$1"
   destination="$2"
@@ -588,6 +656,19 @@ EOF
       ;;
   esac
 
+  if ! verify_manifest_signature "$manifest_path" "$manifest_source" "$manifest_dir" "$temp_dir"; then
+    if [ "${JSON_MODE:-0}" = "1" ]; then
+      reason_json=$(json_escape "$SIG_FAIL_REASON")
+      cat <<EOF
+{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":false,"status":"error","summary":"The release manifest signature could not be verified.","doctor":{"status":"error","environment_classification":"no_toolchain","summary":"Release metadata authenticity could not be established.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","selected_release":null,"selected_artifacts":[],"system_privileges_ok":true},"trust":{"verified":false,"reason":$reason_json},"actions":[{"kind":"verify_release_signature","priority":1,"message":$reason_json}]}
+EOF
+    else
+      printf '%s\n' "setup: refusing to install: $SIG_FAIL_REASON" >&2
+      printf '%s\n' "next: Use a signed release, set RELEASE_TRUST_ROOT to the correct pinned key, or rerun with --allow-unsigned." >&2
+    fi
+    return 1
+  fi
+
   release_version=$(json_release_version "$manifest_path")
   target_suffix=$(managed_target_suffix "$host_os" "$host_arch" "$host_platform" "$host_os_version")
   target_id="cli-$target_suffix"
@@ -729,6 +810,7 @@ Global options:
   --verbose
   --quiet
   --yes
+  --allow-unsigned
   --dogfood
 EOF
 }
@@ -861,6 +943,7 @@ EOF
 }
 
 JSON_MODE=0
+ALLOW_UNSIGNED="${GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED:-0}"
 SETUP_SCOPE=""
 SETUP_ROOT=""
 
@@ -883,6 +966,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --yes)
       YES_MODE=1
+      shift
+      ;;
+    --allow-unsigned)
+      ALLOW_UNSIGNED=1
       shift
       ;;
     --dogfood)
@@ -968,6 +1055,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --yes)
       YES_MODE=1
+      shift
+      ;;
+    --allow-unsigned)
+      ALLOW_UNSIGNED=1
       shift
       ;;
     --dogfood)

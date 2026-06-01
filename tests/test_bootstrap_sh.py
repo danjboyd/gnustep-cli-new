@@ -82,6 +82,99 @@ class BootstrapShTests(unittest.TestCase):
         self.assertEqual(payload["command"], "setup")
         self.assertIn("summary", payload)
 
+    # --- release-manifest signature verification ---------------------------
+
+    def _openssl(self):
+        return __import__("shutil").which("openssl")
+
+    def _signed_release_dir(self, *, sign=True, tamper=False):
+        """Create a release dir with a minimal manifest, return (dir, pubkey_path)."""
+        import shutil
+        import subprocess as sp
+        import tempfile
+
+        directory = Path(tempfile.mkdtemp(prefix="gnustep-sig-test-"))
+        self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+        manifest = {
+            "version": "0.1.0-dev",
+            "releases": [{"version": "0.1.0-dev", "artifacts": [
+                {"id": "cli-linux-amd64-clang", "kind": "cli", "published": True,
+                 "url": "https://example.invalid/cli.tar.gz", "sha256": "00"},
+                {"id": "toolchain-linux-amd64-clang", "kind": "toolchain", "published": True,
+                 "url": "https://example.invalid/tc.tar.gz", "sha256": "00"},
+            ]}],
+        }
+        manifest_path = directory / "release-manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        pubkey_path = directory / "trust.pub.pem"
+        if sign:
+            key_path = directory / "key.pem"
+            sp.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048",
+                    "-out", str(key_path)], check=True, capture_output=True)
+            sp.run(["openssl", "dgst", "-sha256", "-sign", str(key_path),
+                    "-out", str(directory / "release-manifest.json.sig"), str(manifest_path)],
+                   check=True, capture_output=True)
+            sp.run(["openssl", "pkey", "-in", str(key_path), "-pubout", "-out", str(pubkey_path)],
+                   check=True, capture_output=True)
+        if tamper:
+            tampered = json.loads(manifest_path.read_text())
+            tampered["releases"][0]["version"] = "9.9.9-evil"
+            manifest_path.write_text(json.dumps(tampered, indent=2) + "\n", encoding="utf-8")
+        return directory, pubkey_path
+
+    def _setup(self, manifest, *extra, trust_root=None):
+        import os
+        env = dict(os.environ)
+        if trust_root is not None:
+            env["RELEASE_TRUST_ROOT"] = str(trust_root)
+        root = manifest.parent / "install-root"
+        proc = subprocess.run(
+            ["sh", str(BOOTSTRAP), "--json", "setup", "--root", str(root),
+             "--manifest", str(manifest), *extra],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False, env=env,
+        )
+        return proc
+
+    def _trust_failed(self, proc):
+        try:
+            payload = json.loads(proc.stdout)
+        except ValueError:
+            return False
+        return bool(payload.get("trust", {}).get("verified") is False)
+
+    def test_setup_refuses_unsigned_manifest(self):
+        if not self._openssl():
+            self.skipTest("openssl not available")
+        directory, _ = self._signed_release_dir(sign=False)
+        proc = self._setup(directory / "release-manifest.json")
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertTrue(self._trust_failed(proc))
+        self.assertIn("not signed", json.loads(proc.stdout)["trust"]["reason"])
+
+    def test_setup_refuses_tampered_manifest(self):
+        if not self._openssl():
+            self.skipTest("openssl not available")
+        directory, pubkey = self._signed_release_dir(sign=True, tamper=True)
+        proc = self._setup(directory / "release-manifest.json", trust_root=pubkey)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertTrue(self._trust_failed(proc))
+        self.assertIn("did not verify", json.loads(proc.stdout)["trust"]["reason"])
+
+    def test_setup_accepts_signed_manifest_with_pinned_trust_root(self):
+        if not self._openssl():
+            self.skipTest("openssl not available")
+        directory, pubkey = self._signed_release_dir(sign=True)
+        proc = self._setup(directory / "release-manifest.json", trust_root=pubkey)
+        # Verification passes against the matching pinned key, so setup proceeds
+        # past trust (and only then fails on the unreachable artifact URLs).
+        self.assertFalse(self._trust_failed(proc))
+
+    def test_setup_allow_unsigned_bypasses_verification(self):
+        directory, _ = self._signed_release_dir(sign=False)
+        proc = self._setup(directory / "release-manifest.json", "--allow-unsigned")
+        self.assertFalse(self._trust_failed(proc))
+        self.assertIn("verification skipped", proc.stderr)
+
 
     def test_bootstrap_knows_ubuntu_distro_scoped_target(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")
@@ -89,6 +182,11 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("linux-ubuntu2404-amd64-clang", content)
         self.assertIn("json_file_bool", content)
         self.assertIn("published", content)
+
+    def test_bootstrap_uses_canonical_arm64_architecture(self):
+        content = BOOTSTRAP.read_text(encoding="utf-8")
+        self.assertIn('aarch64|arm64) printf \'%s\\n\' "arm64"', content)
+        self.assertNotIn('aarch64|arm64) printf \'%s\\n\' "aarch64"', content)
 
     def test_bootstrap_has_temporary_dogfood_manifest_option(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")
