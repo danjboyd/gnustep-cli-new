@@ -31,7 +31,24 @@
             "debian"
         ],
         "portability_policy": "distribution-scoped",
-        "notes": "Planned Debian aarch64 managed target; publish remains false until OracleTestVMs build/validation evidence exists."
+        "supported_distribution_releases": [
+            "debian-13"
+        ],
+        "deprecated_distribution_releases": [
+            "debian-12"
+        ],
+        "notes": "Planned Debian aarch64 managed target built on Debian 13 trixie (glibc 2.41, ICU 76); Debian 12 bookworm is deprecated and its ICU 72 artifacts do not load on Debian 13. Publish remains false until OracleTestVMs build/validation evidence exists."
+    },
+    "build_environment": {
+        "base_image": "debian:13",
+        "distribution": "debian",
+        "distribution_release": "trixie",
+        "dockerfile": "Dockerfile",
+        "glibc_floor": "2.41",
+        "icu_major": "76",
+        "deprecated_bases": [
+            "debian:12"
+        ]
     },
     "source_policy": {
         "strategy": "source-build",

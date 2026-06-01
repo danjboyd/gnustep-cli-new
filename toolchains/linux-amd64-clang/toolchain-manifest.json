@@ -31,7 +31,24 @@
       "debian"
     ],
     "portability_policy": "distribution-scoped",
-    "notes": "Current source-built Linux artifact is validated on Debian only; Fedora and Arch require dependency closure or per-distro artifacts before managed artifact support is claimed."
+    "supported_distribution_releases": [
+      "debian-13"
+    ],
+    "deprecated_distribution_releases": [
+      "debian-12"
+    ],
+    "notes": "Current source-built Linux artifact is built on Debian 13 trixie (glibc 2.41, ICU 76) and validated on Debian only; Debian 12 bookworm is deprecated and its ICU 72 artifacts do not load on Debian 13. Fedora and Arch require dependency closure or per-distro artifacts before managed artifact support is claimed."
+  },
+  "build_environment": {
+    "base_image": "debian:13",
+    "distribution": "debian",
+    "distribution_release": "trixie",
+    "dockerfile": "Dockerfile",
+    "glibc_floor": "2.41",
+    "icu_major": "76",
+    "deprecated_bases": [
+      "debian:12"
+    ]
   },
   "source_policy": {
     "strategy": "source-build",

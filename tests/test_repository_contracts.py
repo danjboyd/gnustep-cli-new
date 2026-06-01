@@ -324,7 +324,7 @@ class RepositoryContractsTests(unittest.TestCase):
         workflow = ROOT / ".github" / "workflows" / "linux-current-source-artifacts.yml"
         self.assertTrue(workflow.exists())
         content = workflow.read_text()
-        self.assertIn("container: debian:12", content)
+        self.assertIn("container: debian:13", content)
         self.assertIn("gnustep-devel", content)
         self.assertIn("bundle-cli", content)
         self.assertIn("assemble-linux-toolchain", content)

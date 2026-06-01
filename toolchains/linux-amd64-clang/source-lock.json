@@ -12,6 +12,18 @@
     "objc_runtime": "libobjc2",
     "objc_abi": "modern"
   },
+  "build_environment": {
+    "base_image": "debian:13",
+    "distribution": "debian",
+    "distribution_release": "trixie",
+    "dockerfile": "Dockerfile",
+    "glibc_floor": "2.41",
+    "icu_major": "76",
+    "deprecated_bases": [
+      "debian:12"
+    ],
+    "notes": "GNUstep libs-base/libs-corebase link against the build base ICU SONAMEs (libicu*.so.76 on trixie). Debian 12 bookworm (ICU 72) is deprecated; artifacts built on it do not load on Debian 13."
+  },
   "components": [
     {
       "name": "libobjc2",

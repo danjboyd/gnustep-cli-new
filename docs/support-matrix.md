@@ -64,7 +64,14 @@ candidate, not a published stable release yet.
   manifest after rebuilding the Linux CLI against the managed source-built
   toolchain, adding runtime SONAME aliases, and adding full-CLI HTTPS manifest
   downloader fallback. Signing/provenance remains pending before any production
-  security claim.
+  security claim. The managed Linux build base is now pinned to Debian 13 trixie
+  (glibc 2.41, ICU 76) via `toolchains/linux-amd64-clang/Dockerfile`; Debian 12
+  bookworm is deprecated. The previously published `v0.1.0` / `.32` artifacts
+  were built on Debian 12 bookworm (ICU 72) and do not load on Debian 13 because
+  GNUstep base links the versioned ICU SONAMEs and ICU has no cross-major ABI
+  compatibility. The artifact must be rebuilt on the trixie base, the Linux CLI
+  rebuilt against that managed prefix, then restaged, re-signed, and re-validated
+  on a Debian 13 host before the trixie support claim is evidence-backed.
 - `debian-arm64-managed-clang`
   status: `planned_build_target`
   notes: planned Debian/aarch64 managed target for the full CLI and official
@@ -72,7 +79,9 @@ candidate, not a published stable release yet.
   validation should use `../OracleTestVMs` local libvirt/mac capacity first and
   fall back to OCI only when local capacity is unavailable. No release artifact
   or installability claim exists until the managed toolchain, full CLI, and
-  `tools-xctest` package artifacts are built and host-validated.
+  `tools-xctest` package artifacts are built and host-validated. The build base
+  is pinned to Debian 13 trixie (glibc 2.41, ICU 76) via
+  `toolchains/linux-arm64-clang/Dockerfile`; Debian 12 bookworm is deprecated.
 - `ubuntu2404-amd64-managed-clang`
   status: `dogfood_ready_partial`
   notes: Ubuntu 24.04/amd64 now has distro-scoped managed CLI and toolchain
@@ -95,11 +104,16 @@ candidate, not a published stable release yet.
   Arch Tier 1 modern-runtime workflows require the managed Clang/libobjc2
   toolchain unless Arch later ships a validated modern GNUstep stack.
 - `openbsd-arm64-clang`
-  status: `planned_build_target`
+  status: `package_lifecycle_validated_managed_toolchain_deferred`
   notes: planned OpenBSD/arm64 target for the full CLI and official package
-  artifacts. Initial evidence should come from an OTVM OpenBSD arm64 profile
-  or scripted access to the available OpenBSD arm64 server before publication
-  is enabled; this remains blocked as of April 21, 2026.
+  artifacts. The latest OracleTestVMs exposes accepted profile
+  `openbsd-7.8-arm64`, and May 7, 2026 acceptance passed with the accepted image
+  when using `/home/danboyd/.ssh/otvm/id_rsa.pub`. OTVM lease
+  `lease-20260507215030-3q6vbf` built the native full CLI, built patched
+  `tools-xctest`, installed it by simple alias, ran `xctest --help`, ran a
+  minimal XCTest bundle, and removed it by simple alias. Managed toolchain
+  publication remains disabled until a source-built OpenBSD arm64 toolchain is
+  produced and smoked.
 - `windows-amd64-msys2-clang64`
   status: `managed_target_staged_artifacts_validated`
   notes: planned Tier 1 managed target with live host and staged release-artifact
@@ -161,6 +175,16 @@ candidate, not a published stable release yet.
   remain blocked for managed Clang/libobjc2 support because the Debian-built
   artifact is not portable: Fedora lacks `libcurl-gnutls.so.4`; Arch lacks
   `libxml2.so.2`.
+- The managed Linux build base is pinned to Debian 13 trixie (glibc 2.41, ICU
+  76) through `toolchains/linux-amd64-clang/Dockerfile` and
+  `toolchains/linux-arm64-clang/Dockerfile`, and the `debian:12` CI containers in
+  `published-url-qualification.yml` and `linux-current-source-artifacts.yml` are
+  retargeted to `debian:13`. Debian 12 bookworm is deprecated. This is a
+  release-floor change: trixie-built artifacts (glibc 2.41 / ICU 76) will not run
+  on bookworm, which is the intended trade. The durable follow-up is to bundle
+  the transitive runtime closure (ICU, libxml2, libcurl-gnutls, libgnutls, libffi)
+  into the managed prefix so the artifact stops being pinned to a single distro
+  release; until then, each ICU major bump requires a rebuild.
 - Policy decision for the current release candidate: do not advertise the
   Debian-built `linux/amd64/clang` artifact as portable across all Linux distro
   families. Either publish it as Debian-qualified only, add per-distro managed

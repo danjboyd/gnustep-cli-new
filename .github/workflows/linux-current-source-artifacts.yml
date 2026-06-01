@@ -17,7 +17,9 @@ permissions:
 jobs:
   linux-current-source:
     runs-on: ubuntu-latest
-    container: debian:12
+    # Debian 13 trixie (glibc 2.41, ICU 76) is the supported Linux base; Debian 12
+    # bookworm is deprecated and cannot load ICU 76-built managed artifacts.
+    container: debian:13
     steps:
       - name: Install build prerequisites
         run: |
@@ -106,7 +108,7 @@ jobs:
               "summary": "Linux CLI artifact was built from the current workflow source revision.",
               "artifact_id": "cli-linux-amd64-clang",
               "source_revision": source_revision,
-              "builder_identity": f"github-actions/debian-12/{run_id}",
+              "builder_identity": f"github-actions/debian-13/{run_id}",
               "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
               "cli_artifact": {
                   "filename": Path(cli_archive).name,

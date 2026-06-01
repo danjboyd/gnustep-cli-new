@@ -40,7 +40,9 @@ permissions:
 jobs:
   linux-published-url:
     runs-on: ubuntu-latest
-    container: debian:12
+    # Debian 13 trixie (glibc 2.41, ICU 76) is the supported Linux base; Debian 12
+    # bookworm is deprecated and cannot load ICU 76-built managed artifacts.
+    container: debian:13
     steps:
       - name: Install host prerequisites
         run: |
@@ -66,7 +68,7 @@ jobs:
             "schema_version": 1,
             "suite_id": "tier1-core",
             "target_id": "linux-amd64-clang",
-            "runner_id": "github-actions-debian-12-container",
+            "runner_id": "github-actions-debian-13-container",
             "overall_ok": False,
             "summary": "Linux published-URL smoke failed before structured completion.",
             "failure_exit_status": status,
@@ -104,7 +106,7 @@ jobs:
               "schema_version": 1,
               "suite_id": "tier1-core",
               "target_id": "linux-amd64-clang",
-              "runner_id": "github-actions-debian-12-container",
+              "runner_id": "github-actions-debian-13-container",
               "release_under_test": {"source": "${{ inputs.release_manifest_url }}"},
               "overall_ok": True,
               "summary": "Linux published-URL bootstrap, doctor, new/build/run smoke passed.",
