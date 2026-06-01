@@ -1,4 +1,6 @@
 #import <XCTest/XCTest.h>
+#import <stdlib.h>
+#import <string.h>
 #import <sys/stat.h>
 #import <unistd.h>
 
@@ -1725,6 +1727,26 @@
   XCTAssertNotNil([[state objectForKey: @"packages"] objectForKey: @"io.github.danjboyd.arlen"]);
   XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: managedArlenLink]);
   XCTAssertEqualObjects([[[payload objectForKey: @"executable_links"] objectAtIndex: 0] objectForKey: @"name"], @"arlen");
+
+  payload = [runner executeRemoveForContext:
+                        [GSCommandContext contextWithArguments:
+                                            [NSArray arrayWithObjects:
+                                                       @"remove",
+                                                       @"--root",
+                                                       managedRoot,
+                                                       @"arlen",
+                                                       nil]]
+                                 exitCode: &exitCode];
+  state = [NSJSONSerialization JSONObjectWithData:
+                               [NSData dataWithContentsOfFile: [managedRoot stringByAppendingPathComponent: @"state/installed-packages.json"]]
+                                         options: 0
+                                           error: NULL];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([payload objectForKey: @"package_id"], @"io.github.danjboyd.arlen");
+  XCTAssertNil([[state objectForKey: @"packages"] objectForKey: @"io.github.danjboyd.arlen"]);
+  XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: managedArlenLink]);
 }
 
 - (void)testListCompatibleFiltersByDetectedEnvironment
@@ -2907,6 +2929,149 @@
 
   XCTAssertTrue([human rangeOfString: @"remove: package=org.gnustep.tools-xctest"].location != NSNotFound);
   XCTAssertTrue([human rangeOfString: @"remove: blocked_by=org.example.consumer, org.example.gui"].location != NSNotFound);
+}
+
+// --- release-manifest signature verification --------------------------------
+// The test harness exports GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED=1 so the unsigned
+// fixture manifests used throughout this suite skip verification. These tests
+// unset it to exercise real verification; tearDown restores it so later tests
+// in the same process keep the opt-out.
+
+- (void)tearDown
+{
+  setenv("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED", "1", 1);
+  unsetenv("RELEASE_TRUST_ROOT");
+  [super tearDown];
+}
+
+- (BOOL)runOpenSSL:(NSArray *)arguments
+{
+  NSTask *task = [[NSTask alloc] init];
+  int status = 1;
+
+  @try
+    {
+      [task setLaunchPath: @"/usr/bin/env"];
+      [task setArguments: [[NSArray arrayWithObject: @"openssl"] arrayByAddingObjectsFromArray: arguments]];
+      [task setStandardOutput: [NSPipe pipe]];
+      [task setStandardError: [NSPipe pipe]];
+      [task launch];
+      [task waitUntilExit];
+      status = [task terminationStatus];
+    }
+  @catch (NSException *exception)
+    {
+      status = 1;
+    }
+  [task release];
+  return status == 0;
+}
+
+- (NSString *)preparedManifestSigned:(BOOL)sign tamper:(BOOL)tamper trustRoot:(NSString **)trustRootOut
+{
+  NSString *dir = [self temporaryPathComponent: @"sig-manifest"];
+  NSString *manifestPath = nil;
+  NSString *keyPath = nil;
+  NSString *pubPath = nil;
+
+  [[NSFileManager defaultManager] createDirectoryAtPath: dir withIntermediateDirectories: YES attributes: nil error: NULL];
+  manifestPath = [self releaseManifestPathInDirectory: dir
+                                            cliSHA256: @"00"
+                                      toolchainSHA256: @"00"
+                                               cliURL: @"https://example.invalid/cli.tar.gz"
+                                         toolchainURL: @"https://example.invalid/tc.tar.gz"];
+  if (sign)
+    {
+      keyPath = [dir stringByAppendingPathComponent: @"key.pem"];
+      pubPath = [dir stringByAppendingPathComponent: @"trust.pub.pem"];
+      if ([self runOpenSSL: [NSArray arrayWithObjects: @"genpkey", @"-algorithm", @"RSA",
+                              @"-pkeyopt", @"rsa_keygen_bits:2048", @"-out", keyPath, nil]] == NO)
+        {
+          return nil;  // openssl unavailable; caller skips
+        }
+      [self runOpenSSL: [NSArray arrayWithObjects: @"dgst", @"-sha256", @"-sign", keyPath,
+                          @"-out", [manifestPath stringByAppendingString: @".sig"], manifestPath, nil]];
+      [self runOpenSSL: [NSArray arrayWithObjects: @"pkey", @"-in", keyPath, @"-pubout",
+                          @"-out", pubPath, nil]];
+      if (trustRootOut != NULL) { *trustRootOut = pubPath; }
+    }
+  if (tamper)
+    {
+      NSMutableData *bytes = [[[NSData dataWithContentsOfFile: manifestPath] mutableCopy] autorelease];
+      [bytes appendData: [@"\n" dataUsingEncoding: NSUTF8StringEncoding]];
+      [bytes writeToFile: manifestPath atomically: YES];
+    }
+  return manifestPath;
+}
+
+- (BOOL)trustFailedInPayload:(NSDictionary *)payload
+{
+  NSDictionary *trust = [payload objectForKey: @"trust"];
+  return ([trust isKindOfClass: [NSDictionary class]] &&
+          [[trust objectForKey: @"verified"] boolValue] == NO);
+}
+
+- (NSDictionary *)runSetupForManifest:(NSString *)manifestPath
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *installRoot = [self temporaryPathComponent: @"sig-install-root"];
+  int exitCode = 0;
+  GSCommandContext *context = [GSCommandContext contextWithArguments:
+                                [NSArray arrayWithObjects: @"setup", @"--root", installRoot,
+                                  @"--manifest", manifestPath, nil]];
+  return [runner executeSetupForContext: context exitCode: &exitCode];
+}
+
+- (void)testSetupRefusesUnsignedManifest
+{
+  unsetenv("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED");
+  NSString *manifestPath = [self preparedManifestSigned: NO tamper: NO trustRoot: NULL];
+  NSDictionary *payload = [self runSetupForManifest: manifestPath];
+  XCTAssertTrue([self trustFailedInPayload: payload]);
+  XCTAssertTrue([[[payload objectForKey: @"trust"] objectForKey: @"reason"]
+                  rangeOfString: @"not signed"].location != NSNotFound);
+}
+
+- (void)testSetupRefusesTamperedManifest
+{
+  NSString *trustRoot = nil;
+  NSString *manifestPath = nil;
+  NSDictionary *payload = nil;
+
+  unsetenv("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED");
+  manifestPath = [self preparedManifestSigned: YES tamper: YES trustRoot: &trustRoot];
+  if (manifestPath == nil) { return; }  // openssl unavailable
+  setenv("RELEASE_TRUST_ROOT", [trustRoot fileSystemRepresentation], 1);
+  payload = [self runSetupForManifest: manifestPath];
+  XCTAssertTrue([self trustFailedInPayload: payload]);
+  XCTAssertTrue([[[payload objectForKey: @"trust"] objectForKey: @"reason"]
+                  rangeOfString: @"did not verify"].location != NSNotFound);
+}
+
+- (void)testSetupAcceptsSignedManifestWithPinnedTrustRoot
+{
+  NSString *trustRoot = nil;
+  NSString *manifestPath = nil;
+  NSDictionary *payload = nil;
+
+  unsetenv("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED");
+  manifestPath = [self preparedManifestSigned: YES tamper: NO trustRoot: &trustRoot];
+  if (manifestPath == nil) { return; }  // openssl unavailable
+  setenv("RELEASE_TRUST_ROOT", [trustRoot fileSystemRepresentation], 1);
+  payload = [self runSetupForManifest: manifestPath];
+  // Verification passes against the matching pinned key, so setup proceeds past
+  // trust (and only then may fail on the unreachable artifact URLs).
+  XCTAssertFalse([self trustFailedInPayload: payload]);
+}
+
+- (void)testSetupAllowUnsignedBypassesVerification
+{
+  NSString *manifestPath = [self preparedManifestSigned: NO tamper: NO trustRoot: NULL];
+  NSDictionary *payload = nil;
+
+  setenv("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED", "1", 1);
+  payload = [self runSetupForManifest: manifestPath];
+  XCTAssertFalse([self trustFailedInPayload: payload]);
 }
 
 @end

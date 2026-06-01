@@ -141,6 +141,9 @@
 - (NSString *)detectHostGlibcVersion;
 - (NSInteger)maxICUMajorInString:(NSString *)text;
 - (BOOL)artifact:(NSDictionary *)artifact matchesRuntimeRequirementsForEnvironment:(NSDictionary *)environment;
+- (BOOL)verifyReleaseManifestSignatureForReference:(NSString *)reference error:(NSString **)errorMessage;
+- (NSString *)pinnedReleaseTrustRootPEM;
+- (NSDictionary *)signatureFailurePayloadForInstallRoot:(NSString *)installRoot reason:(NSString *)reason exitCode:(int *)exitCode;
 - (NSDictionary *)currentEnvironmentForInterface:(NSString *)interface;
 - (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath quick:(BOOL)quick;
 - (NSString *)setupTransactionStatePathForInstallRoot:(NSString *)installRoot;
@@ -2702,6 +2705,140 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return YES;
 }
 
+- (NSString *)pinnedReleaseTrustRootPEM
+{
+  // Pinned release-signing public key; the release manifest is verified against
+  // THIS key, not the release-signing-public.pem bundled next to the downloaded
+  // manifest. Current dev/dogfood key; override with RELEASE_TRUST_ROOT for
+  // production. Kept in sync with scripts/bootstrap/release-signing-trust-root.pem.
+  return @"-----BEGIN PUBLIC KEY-----\n"
+         @"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApqGh2TATl3jFarwQQ/9O\n"
+         @"au+YSXOTgKsP/vrWmYdQ7fIplJqP/Zci+L1OLYu6K6MPsFfwFSxYNTfvXSNnEVVS\n"
+         @"x1nI6+sbdQGeWkzhWeYC7iCgxvLmLwkTYC2aiquZ0bG3iWWbIox3VTKMASU8+0Mq\n"
+         @"UDncWa8IkoFOg9uu/mhDABbnzjwuTxHR6BAVQKN7/yT0gIDL313+fD6WX0ZPE177\n"
+         @"wrT8s8k8u8TQif1A9sonvuPj4nriLzlO+FR6S4Kpdz8VILnUk0FyK4toiCAISO/8\n"
+         @"e6doSwUJjNockivsbU5JhVUwvoUJUb+ubbuEWKUc8UNDjLqmF0vfmtait/Yy7LRm\n"
+         @"cwIDAQAB\n"
+         @"-----END PUBLIC KEY-----\n";
+}
+
+- (BOOL)verifyReleaseManifestSignatureForReference:(NSString *)reference error:(NSString **)errorMessage
+{
+  // Verify the release manifest against the pinned trust root before trusting it
+  // for install/update. Fails closed on missing signature, missing openssl, or a
+  // bad signature. getenv (not NSProcessInfo) so tests can toggle per-call.
+  const char *allowUnsigned = getenv("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED");
+  const char *trustOverride = getenv("RELEASE_TRUST_ROOT");
+  BOOL isURL = ([reference hasPrefix: @"http://"] || [reference hasPrefix: @"https://"]);
+  NSData *manifestData = nil;
+  NSData *signatureData = nil;
+  NSString *tempDir = nil;
+  NSString *manifestTemp = nil;
+  NSString *signatureTemp = nil;
+  NSString *trustRoot = nil;
+  NSDictionary *result = nil;
+
+  if (allowUnsigned != NULL && strcmp(allowUnsigned, "1") == 0)
+    {
+      return YES;
+    }
+  if ([self firstAvailableExecutable: [NSArray arrayWithObject: @"openssl"]] == nil)
+    {
+      if (errorMessage != NULL)
+        {
+          *errorMessage = @"openssl is required to verify the release signature but was not found; install openssl or set GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED=1";
+        }
+      return NO;
+    }
+
+  if (isURL)
+    {
+      manifestData = [self downloadURLData: reference error: NULL];
+      signatureData = [self downloadURLData: [reference stringByAppendingString: @".sig"] error: NULL];
+    }
+  else
+    {
+      manifestData = [NSData dataWithContentsOfFile: reference];
+      signatureData = [NSData dataWithContentsOfFile: [reference stringByAppendingString: @".sig"]];
+      if (signatureData == nil)
+        {
+          signatureData = [NSData dataWithContentsOfFile:
+                            [[reference stringByDeletingLastPathComponent]
+                              stringByAppendingPathComponent: @"release-manifest.json.sig"]];
+        }
+    }
+  if (manifestData == nil)
+    {
+      if (errorMessage != NULL)
+        {
+          *errorMessage = @"the release manifest could not be read for signature verification";
+        }
+      return NO;
+    }
+  if (signatureData == nil)
+    {
+      if (errorMessage != NULL)
+        {
+          *errorMessage = @"the release manifest is not signed (no release-manifest.json.sig); refusing to trust unsigned release metadata";
+        }
+      return NO;
+    }
+
+  tempDir = [NSTemporaryDirectory() stringByAppendingPathComponent:
+              [NSString stringWithFormat: @"gnustep-sigverify-%@",
+                [[NSProcessInfo processInfo] globallyUniqueString]]];
+  [[NSFileManager defaultManager] createDirectoryAtPath: tempDir withIntermediateDirectories: YES attributes: nil error: NULL];
+  manifestTemp = [tempDir stringByAppendingPathComponent: @"manifest.json"];
+  signatureTemp = [tempDir stringByAppendingPathComponent: @"manifest.json.sig"];
+  [manifestData writeToFile: manifestTemp atomically: YES];
+  [signatureData writeToFile: signatureTemp atomically: YES];
+
+  if (trustOverride != NULL &&
+      [[NSFileManager defaultManager] fileExistsAtPath: [NSString stringWithUTF8String: trustOverride]])
+    {
+      trustRoot = [NSString stringWithUTF8String: trustOverride];
+    }
+  else
+    {
+      trustRoot = [tempDir stringByAppendingPathComponent: @"trust-root.pem"];
+      [[self pinnedReleaseTrustRootPEM] writeToFile: trustRoot atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+    }
+
+  result = [self runCommand: [NSArray arrayWithObjects:
+                                @"openssl", @"dgst", @"-sha256", @"-verify", trustRoot,
+                                @"-signature", signatureTemp, manifestTemp, nil]
+           currentDirectory: nil];
+  [[NSFileManager defaultManager] removeItemAtPath: tempDir error: NULL];
+
+  if ([[result objectForKey: @"launched"] boolValue] &&
+      [[result objectForKey: @"exit_status"] intValue] == 0)
+    {
+      return YES;
+    }
+  if (errorMessage != NULL)
+    {
+      *errorMessage = @"the release manifest signature did not verify against the pinned trusted key";
+    }
+  return NO;
+}
+
+- (NSDictionary *)signatureFailurePayloadForInstallRoot:(NSString *)installRoot reason:(NSString *)reason exitCode:(int *)exitCode
+{
+  *exitCode = 1;
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+                        [NSNumber numberWithInt: 1], @"schema_version",
+                        @"setup", @"command",
+                        [NSNumber numberWithBool: NO], @"ok",
+                        @"error", @"status",
+                        @"The release manifest signature could not be verified.", @"summary",
+                        installRoot ? installRoot : [NSNull null], @"install_root",
+                        [NSDictionary dictionaryWithObjectsAndKeys:
+                                      [NSNumber numberWithBool: NO], @"verified",
+                                      reason ? reason : @"signature verification failed", @"reason",
+                                      nil], @"trust",
+                        nil];
+}
+
 - (BOOL)artifact:(NSDictionary *)artifact matchesHostOS:(NSString *)osName arch:(NSString *)arch
 {
   return [[artifact objectForKey: @"os"] isEqualToString: osName] &&
@@ -5121,6 +5258,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: @"No release manifest could be resolved." data: nil];
     }
 
+  {
+    NSString *signatureError = nil;
+    if ([self verifyReleaseManifestSignatureForReference: resolvedManifest error: &signatureError] == NO)
+      {
+        return [self signatureFailurePayloadForInstallRoot: selectedRoot reason: signatureError exitCode: exitCode];
+      }
+  }
+
   doctor = [self buildDoctorPayloadWithInterface: @"full" manifestPath: resolvedManifest];
   nativeToolchain = [[doctor objectForKey: @"environment"] objectForKey: @"native_toolchain"];
   manifest = [self validateAndLoadManifest: resolvedManifest error: &errorMessage];
@@ -6043,6 +6188,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       *exitCode = 5;
       return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: @"No release manifest could be resolved." data: nil];
     }
+
+  {
+    NSString *signatureError = nil;
+    if ([self verifyReleaseManifestSignatureForReference: resolvedManifest error: &signatureError] == NO)
+      {
+        return [self signatureFailurePayloadForInstallRoot: expandedRoot reason: signatureError exitCode: exitCode];
+      }
+  }
 
   manifest = [self validateAndLoadManifest: resolvedManifest error: &manifestError];
   if (manifest != nil)

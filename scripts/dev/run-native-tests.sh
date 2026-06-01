@@ -7,6 +7,10 @@ LOCK_DIR=${TMPDIR:-/tmp}/gnustep-cli-native-tests.lock
 
 . "$SCRIPT_DIR/activate-tools-xctest.sh"
 
+# Legacy workflow tests use unsigned fixture manifests; opt them out of release
+# signature verification. The dedicated signature tests unset this per-test.
+export GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED=1
+
 cd "$REPO_ROOT"
 
 while ! mkdir "$LOCK_DIR" 2>/dev/null; do
