@@ -984,6 +984,30 @@ class BuildInfraTests(unittest.TestCase):
             (release_dir / "release-provenance.json").write_text("{}\n")
             self.assertFalse(release_trust_gate(release_dir)["ok"])
 
+    def test_sign_release_metadata_bundles_provided_public_key(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_bundle = temp / "gnustep-cli-linux-amd64-clang-0.1.0.tar.gz"
+            cli_bundle.write_bytes(b"cli")
+            payload = stage_release_assets(
+                "0.1.0",
+                temp / "dist",
+                "https://example.invalid/releases",
+                cli_inputs={"linux-amd64-clang": cli_bundle},
+            )
+            release_dir = Path(payload["release_dir"])
+            import subprocess
+            key = temp / "release-signing-key.pem"
+            pub = temp / "release-signing-public.pem"
+            subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(key)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run(["openssl", "pkey", "-in", str(key), "-pubout", "-out", str(pub)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            signed = sign_release_metadata(release_dir, key, public_key_path=pub)
+            self.assertTrue(signed["ok"])
+            bundled = release_dir / "release-signing-public.pem"
+            self.assertTrue(bundled.exists())
+            self.assertEqual(bundled.read_bytes(), pub.read_bytes())
+            self.assertTrue(release_trust_gate(release_dir, trusted_public_key_path=bundled)["ok"])
+
 
     def test_release_trust_gate_rejects_expired_metadata_and_revoked_artifacts(self):
         with tempfile.TemporaryDirectory() as tempdir:

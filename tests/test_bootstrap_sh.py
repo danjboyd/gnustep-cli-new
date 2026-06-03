@@ -194,6 +194,36 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("DOGFOOD_MANIFEST_URL", content)
         self.assertIn("/releases/download/dogfood/release-manifest.json", content)
 
+    def _emit_pinned_trust_root(self, cli_version="0.1.0", dogfood_mode=0):
+        # Extract the trust-root emitter functions and exercise the real shell
+        # channel selection in isolation.
+        content = BOOTSTRAP.read_text(encoding="utf-8")
+        import re
+        block = re.search(
+            r"emit_production_trust_root\(\) \{.*?\nemit_pinned_trust_root\(\) \{.*?\n\}",
+            content,
+            re.S,
+        )
+        self.assertIsNotNone(block, "trust-root emitter functions not found")
+        proc = subprocess.run(
+            ["sh", "-c", f"{block.group(0)}\nCLI_VERSION={cli_version} DOGFOOD_MODE={dogfood_mode} emit_pinned_trust_root"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True,
+        )
+        return proc.stdout
+
+    def test_release_version_pins_production_trust_root(self):
+        pem = (ROOT / "scripts" / "bootstrap" / "release-signing-trust-root.pem").read_text(encoding="utf-8")
+        production = self._emit_pinned_trust_root(cli_version="0.1.0", dogfood_mode=0)
+        dev_version = self._emit_pinned_trust_root(cli_version="0.1.0-dev", dogfood_mode=0)
+        dogfood = self._emit_pinned_trust_root(cli_version="0.1.0", dogfood_mode=1)
+        # A release version selects the production key, which is the canonical
+        # release-signing-trust-root.pem.
+        self.assertEqual(production, pem)
+        # A -dev version and --dogfood both select a different (dev) key.
+        self.assertNotEqual(production, dev_version)
+        self.assertEqual(dev_version, dogfood)
+        self.assertIn("BEGIN PUBLIC KEY", dev_version)
+
     def test_openbsd_prerequisites_include_native_gnustep_runtime(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")
         self.assertIn("gnustep-make gnustep-base gnustep-gui gnustep-back gnustep-libobjc2", content)

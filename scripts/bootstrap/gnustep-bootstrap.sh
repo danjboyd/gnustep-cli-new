@@ -406,13 +406,26 @@ download_to() {
   wget --header="Cache-Control: no-cache" -qO "$destination" "$url"
 }
 
-# Pinned release-signing trust root. The release manifest's authenticity is
-# verified against THIS key, which travels inside the bootstrap, not against the
+# Pinned release-signing trust roots. The release manifest's authenticity is
+# verified against THESE keys, which travel inside the bootstrap, not against the
 # release-signing-public.pem bundled next to the downloaded manifest (which an
-# attacker who controls the manifest could also replace). This is the current
-# dev/dogfood signing key; for production set RELEASE_TRUST_ROOT to the pinned
-# production public key.
-emit_pinned_trust_root() {
+# attacker who controls the manifest could also replace). The production key
+# signs stable releases; the dev/dogfood key signs the --dogfood channel. Setting
+# RELEASE_TRUST_ROOT overrides the selection with an explicit pinned key file.
+emit_production_trust_root() {
+  cat <<'TRUST_ROOT_PEM'
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp8xT2pS/hozuvG+IvUOt
+5btJ+iuedUNysW37vWTLwPpRBAuX3Hra61ZChAWo0DiTGU+ka6IuxMgpNLAOLglr
+E5COu1YHwJsm5u+yJ9ujLVQVWP4zhAhJmC7+MAK2wbg3HK1cT8UMBaWZkkELLe3t
+1uFGGVqtr5R/HZmoI6KowBTYC8l6unD6N8GRq6Y59Xq6oHlVe2UekWeBtwKDtFRk
+jTuGq+ctl8pxe8tXxIB/fEBT/UcOY+ZPQxdNCF6IbfSJGBFltSbUleuYl8LEH+ys
+z1rf/W/l/owwryvGgH0FzsYOzQnK2BxX03tSshKT5EPpvxsOQ//xCCFcRhejmnkY
+UwIDAQAB
+-----END PUBLIC KEY-----
+TRUST_ROOT_PEM
+}
+emit_dogfood_trust_root() {
   cat <<'TRUST_ROOT_PEM'
 -----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApqGh2TATl3jFarwQQ/9O
@@ -424,6 +437,21 @@ e6doSwUJjNockivsbU5JhVUwvoUJUb+ubbuEWKUc8UNDjLqmF0vfmtait/Yy7LRm
 cwIDAQAB
 -----END PUBLIC KEY-----
 TRUST_ROOT_PEM
+}
+# Select the pinned trust root for the manifest about to be verified. Dogfood
+# mode and pre-release (-dev/-dogfood) versions fetch dev-key-signed manifests;
+# release versions fetch the production-key-signed stable manifest. The version
+# also drives the manifest URL/path (see manifest_source resolution), so the two
+# stay in lock-step.
+emit_pinned_trust_root() {
+  if [ "${DOGFOOD_MODE:-0}" = "1" ]; then
+    emit_dogfood_trust_root
+    return
+  fi
+  case "${CLI_VERSION:-}" in
+    *-dev*|*-dogfood*) emit_dogfood_trust_root ;;
+    *) emit_production_trust_root ;;
+  esac
 }
 
 SIG_FAIL_REASON=""
