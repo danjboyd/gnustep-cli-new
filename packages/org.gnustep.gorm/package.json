@@ -121,6 +121,35 @@
       "build_blockers": []
     },
     {
+      "id": "gorm-linux-arm64-clang",
+      "os": "linux",
+      "arch": "arm64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "supported_distributions": [
+        "debian",
+        "ubuntu"
+      ],
+      "portability_policy": "debian-family-interim-host-validated",
+      "format": "tar.gz",
+      "publish": true,
+      "status": "hosted_validated_linux_arm64_gui_runtime_install_remove",
+      "filename": "gorm-gorm-linux-arm64-clang-1.5.0-snapshot.20260505.tar.gz",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/gorm-gorm-linux-arm64-clang-1.5.0-snapshot.20260505.tar.gz",
+      "artifact_path": ".artifacts/arm64-otvm-lease-20260507202841-cvp23y/gorm-gorm-linux-arm64-clang-1.5.0-snapshot.20260505.tar.gz",
+      "sha256": "16ee6672d7086cff60041b47a950999f2225ae90adf8b8c6ff0133455c6fc204",
+      "size": 5896268,
+      "build_evidence": "docs/validation/linux-arm64-otvm-build-20260507.json",
+      "validation_evidence": "docs/validation/linux-arm64-hosted-package-install-remove-20260507.json",
+      "notes": "OTVM lease lease-20260507202841-cvp23y installed and removed the hosted artifact from the signed v0.1.0-dev package index and launched Gorm under Xvfb through the package launcher. The launcher resolves package-local libraries and exports the managed GNUstep config so GNUstep Back can locate the backend bundle.",
+      "build_blockers": []
+    },
+    {
       "id": "gorm-openbsd-amd64-clang",
       "os": "openbsd",
       "arch": "amd64",

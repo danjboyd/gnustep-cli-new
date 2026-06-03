@@ -74,6 +74,34 @@ def _payload(command: str, ok: bool, status: str, summary: str, **extra: Any) ->
     return payload
 
 
+def _target_key(target: dict[str, Any]) -> tuple[Any, Any, Any, Any]:
+    return (
+        target.get("os"),
+        target.get("arch"),
+        target.get("compiler_family"),
+        target.get("toolchain_flavor"),
+    )
+
+
+def _artifact_matches_target(artifact: dict[str, Any], target: dict[str, Any]) -> bool:
+    return _target_key(artifact) == _target_key(target)
+
+
+def _selected_targets(matrix_targets: list[dict[str, Any]], targets: list[str] | None) -> list[dict[str, Any]]:
+    selected_ids = set(targets or [])
+    if not selected_ids:
+        return list(matrix_targets)
+    return [target for target in matrix_targets if target.get("id") in selected_ids]
+
+
+def _toolchain_workflow_artifact_name(target_id: str | None, version: str) -> str | None:
+    if not target_id:
+        return None
+    if target_id.startswith("linux-"):
+        return f"gnustep-linux-managed-{target_id}-{version}"
+    return None
+
+
 def _package_manifests(packages_dir: Path) -> list[dict[str, Any]]:
     manifests = []
     for manifest_path in sorted(packages_dir.glob("*/package.json")):
@@ -531,12 +559,12 @@ def admin_build_plan(
     package_plan = package_artifact_build_plan(str(packages_root))
     matrix_targets = build_matrix().get("targets", [])
     selected = set(targets or [])
+    selected_target_records = _selected_targets(matrix_targets, targets)
     actions = []
 
-    for target in matrix_targets:
-        if selected and target.get("id") not in selected:
-            continue
-        if not target.get("publish", True):
+    for target in selected_target_records:
+        explicitly_requested = bool(selected and target.get("id") in selected)
+        if not target.get("publish", True) and not explicitly_requested:
             actions.append({"kind": "skip_deferred_target", "target": target.get("id"), "reason": "Target publish=false."})
             continue
         workflow = "linux-managed-artifacts.yml" if target.get("os") == "linux" else "windows-current-source-artifacts.yml" if target.get("os") == "windows" else None
@@ -551,13 +579,28 @@ def admin_build_plan(
                     inputs["toolchain_zip_url"] = windows_toolchain_zip_url
                 if windows_toolchain_zip_sha256:
                     inputs["toolchain_zip_sha256"] = windows_toolchain_zip_sha256
-            actions.append({"kind": "github_workflow_dispatch", "target": target.get("id"), "workflow": workflow, "inputs": inputs})
+            action = {"kind": "github_workflow_dispatch", "target": target.get("id"), "workflow": workflow, "inputs": inputs}
+            expected_artifact_name = _toolchain_workflow_artifact_name(target.get("id"), version)
+            if expected_artifact_name:
+                action["expected_artifact_name"] = expected_artifact_name
+            if not target.get("publish", True):
+                action["deferred"] = True
+                action["reason"] = "Target publish=false but was explicitly requested."
+            actions.append(action)
         else:
-            actions.append({"kind": "otvm_build_required", "target": target.get("id"), "message": "Use OTVM-backed build/validation for this target."})
+            action = {"kind": "otvm_build_required", "target": target.get("id"), "message": "Use OTVM-backed build/validation for this target."}
+            if not target.get("publish", True):
+                action["deferred"] = True
+                action["reason"] = "Target publish=false but was explicitly requested."
+            actions.append(action)
 
     for package in package_plan.get("packages", []):
         for artifact in package.get("artifacts", []):
-            if artifact.get("publish") is False:
+            matching_targets = [target for target in selected_target_records if _artifact_matches_target(artifact, target)]
+            if selected and not matching_targets:
+                continue
+            explicitly_requested_deferred = bool(matching_targets and any(not target.get("publish", True) for target in matching_targets))
+            if artifact.get("publish") is False and not explicitly_requested_deferred:
                 continue
             package_version = artifact.get("version") or package.get("version") or version
             if artifact.get("os") == "windows":
@@ -574,8 +617,11 @@ def admin_build_plan(
                 inputs = {"package_id": package.get("id"), "target": artifact.get("id"), "version": package_version}
                 if toolchain_artifact_run_id:
                     inputs["toolchain_artifact_run_id"] = toolchain_artifact_run_id
-                    if toolchain_artifact_name:
-                        inputs["toolchain_artifact_name"] = toolchain_artifact_name
+                    inferred_toolchain_artifact_name = toolchain_artifact_name
+                    if not inferred_toolchain_artifact_name and len(matching_targets) == 1:
+                        inferred_toolchain_artifact_name = _toolchain_workflow_artifact_name(matching_targets[0].get("id"), version)
+                    if inferred_toolchain_artifact_name:
+                        inputs["toolchain_artifact_name"] = inferred_toolchain_artifact_name
                 elif toolchain_url or toolchain_sha256:
                     if toolchain_url:
                         inputs["toolchain_url"] = toolchain_url
@@ -596,8 +642,12 @@ def admin_build_plan(
                     "inputs": inputs,
                     "blocked": bool(missing_inputs),
                     "missing_inputs": missing_inputs,
+                    "matched_targets": [target.get("id") for target in matching_targets],
                 }
             )
+            if artifact.get("publish") is False:
+                actions[-1]["deferred"] = True
+                actions[-1]["reason"] = "Package artifact publish=false but matches an explicitly requested deferred target."
 
     otvm_targets = [a["target"] for a in actions if a["kind"] == "otvm_build_required"]
     if otvm_targets:

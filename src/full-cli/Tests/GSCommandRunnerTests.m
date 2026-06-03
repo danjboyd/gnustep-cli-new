@@ -391,6 +391,97 @@
   XCTAssertFalse([ubuntuCodes containsObject: @"unsupported_distribution"]);
 }
 
+- (void)testArtifactSelectionRejectsMismatchedICUMajor
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *artifact = [NSDictionary dictionaryWithObjectsAndKeys:
+                                           @"linux", @"os",
+                                           @"amd64", @"arch",
+                                           [NSArray arrayWithObject: @"debian"], @"supported_distributions",
+                                           [NSDictionary dictionaryWithObjectsAndKeys:
+                                                         [NSNumber numberWithInt: 76], @"icu_major",
+                                                         @"2.41", @"glibc_min", nil], @"runtime_requirements",
+                                           nil];
+  NSDictionary *trixie = [NSDictionary dictionaryWithObjectsAndKeys:
+                                        @"linux", @"os", @"amd64", @"arch",
+                                        @"debian", @"distribution_id", @"debian-13", @"os_version",
+                                        [NSDictionary dictionaryWithObjectsAndKeys:
+                                                      [NSNumber numberWithInt: 76], @"icu_major",
+                                                      @"2.41", @"glibc_version", nil], @"runtime_libraries",
+                                        nil];
+  NSDictionary *bookworm = [NSDictionary dictionaryWithObjectsAndKeys:
+                                          @"linux", @"os", @"amd64", @"arch",
+                                          @"debian", @"distribution_id", @"debian-12", @"os_version",
+                                          [NSDictionary dictionaryWithObjectsAndKeys:
+                                                        [NSNumber numberWithInt: 72], @"icu_major",
+                                                        @"2.36", @"glibc_version", nil], @"runtime_libraries",
+                                          nil];
+  NSDictionary *undetected = [NSDictionary dictionaryWithObjectsAndKeys:
+                                            @"linux", @"os", @"amd64", @"arch",
+                                            @"debian", @"distribution_id", @"debian-13", @"os_version",
+                                            [NSDictionary dictionaryWithObjectsAndKeys:
+                                                          [NSNull null], @"icu_major",
+                                                          [NSNull null], @"glibc_version", nil], @"runtime_libraries",
+                                            nil];
+
+  XCTAssertTrue([runner artifact: artifact matchesDistributionForEnvironment: trixie]);
+  XCTAssertFalse([runner artifact: artifact matchesDistributionForEnvironment: bookworm]);
+  // Undetectable host ICU must not falsely exclude (the gate warns instead).
+  XCTAssertTrue([runner artifact: artifact matchesDistributionForEnvironment: undetected]);
+}
+
+- (void)testCompatibilityReasonsFlagICUMismatch
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *artifact = [NSDictionary dictionaryWithObjectsAndKeys:
+                                           @"toolchain-linux-amd64-clang", @"id",
+                                           @"toolchain", @"kind",
+                                           @"linux", @"os", @"amd64", @"arch",
+                                           [NSArray arrayWithObject: @"debian"], @"supported_distributions",
+                                           [NSDictionary dictionaryWithObjectsAndKeys:
+                                                         [NSNumber numberWithInt: 76], @"icu_major",
+                                                         @"2.41", @"glibc_min", nil], @"runtime_requirements",
+                                           nil];
+  NSDictionary *bookworm = [NSDictionary dictionaryWithObjectsAndKeys:
+                                          @"linux", @"os", @"amd64", @"arch",
+                                          @"debian", @"distribution_id", @"debian-12", @"os_version",
+                                          [NSDictionary dictionaryWithObjectsAndKeys:
+                                                        [NSNumber numberWithInt: 72], @"icu_major",
+                                                        @"2.36", @"glibc_version", nil], @"runtime_libraries",
+                                          [NSDictionary dictionaryWithObjectsAndKeys:
+                                                        [NSNumber numberWithBool: NO], @"present", nil], @"toolchain",
+                                          nil];
+  NSDictionary *undetected = [NSDictionary dictionaryWithObjectsAndKeys:
+                                            @"linux", @"os", @"amd64", @"arch",
+                                            @"debian", @"distribution_id", @"debian-13", @"os_version",
+                                            [NSDictionary dictionaryWithObjectsAndKeys:
+                                                          [NSNull null], @"icu_major",
+                                                          [NSNull null], @"glibc_version", nil], @"runtime_libraries",
+                                            [NSDictionary dictionaryWithObjectsAndKeys:
+                                                          [NSNumber numberWithBool: NO], @"present", nil], @"toolchain",
+                                            nil];
+  NSDictionary *bookwormResult = [runner evaluateCompatibilityForEnvironment: bookworm artifact: artifact];
+  NSDictionary *undetectedResult = [runner evaluateCompatibilityForEnvironment: undetected artifact: artifact];
+  NSMutableArray *bookwormCodes = [NSMutableArray array];
+  NSMutableArray *undetectedWarnings = [NSMutableArray array];
+  NSArray *reasons = [bookwormResult objectForKey: @"reasons"];
+  NSArray *warnings = [undetectedResult objectForKey: @"warnings"];
+  NSUInteger index = 0;
+
+  for (index = 0; index < [reasons count]; index++)
+    {
+      [bookwormCodes addObject: [[reasons objectAtIndex: index] objectForKey: @"code"]];
+    }
+  for (index = 0; index < [warnings count]; index++)
+    {
+      [undetectedWarnings addObject: [[warnings objectAtIndex: index] objectForKey: @"code"]];
+    }
+
+  XCTAssertTrue([bookwormCodes containsObject: @"icu_major_mismatch"]);
+  XCTAssertFalse([[bookwormResult objectForKey: @"compatible"] boolValue]);
+  XCTAssertTrue([undetectedWarnings containsObject: @"icu_major_undetected"]);
+}
+
 - (void)testArtifactMatchesToolchainWhenRuntimeAndFeaturesAlign
 {
   GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];

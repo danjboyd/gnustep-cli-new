@@ -4,6 +4,7 @@ import ctypes.util
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -67,6 +68,74 @@ def _distribution_id(os_version: str | None) -> str | None:
     if not os_version:
         return None
     return os_version.split("-", 1)[0]
+
+
+def _detect_glibc_version() -> str | None:
+    """Return the host glibc version (e.g. "2.41"), or None if not glibc/undetectable."""
+    try:
+        value = os.confstr("CS_GNU_LIBC_VERSION")  # e.g. "glibc 2.41"
+    except (ValueError, OSError, AttributeError):
+        value = None
+    if value:
+        parts = value.split()
+        if len(parts) == 2 and parts[0] == "glibc":
+            return parts[1]
+    try:
+        name, version = platform.libc_ver()
+    except Exception:
+        return None
+    if name == "glibc" and version:
+        return version
+    return None
+
+
+_ICU_LIBRARY_DIRS = (
+    "/lib",
+    "/usr/lib",
+    "/usr/lib64",
+    "/lib/x86_64-linux-gnu",
+    "/usr/lib/x86_64-linux-gnu",
+    "/lib/aarch64-linux-gnu",
+    "/usr/lib/aarch64-linux-gnu",
+)
+
+
+def _detect_icu_major() -> int | None:
+    """Return the host's ICU major version from the runtime SONAME, or None.
+
+    GNUstep base links the versioned ICU SONAMEs (libicuuc.so.NN etc.) and ICU
+    has no cross-major ABI compatibility, so the major present on the host must
+    match the major a managed artifact was built against.
+    """
+    candidates: set[int] = set()
+    ldconfig = shutil.which("ldconfig")
+    if ldconfig:
+        proc = subprocess.run([ldconfig, "-p"], capture_output=True, text=True, check=False)
+        if proc.returncode == 0:
+            for match in re.finditer(r"libicuuc\.so\.(\d+)", proc.stdout):
+                candidates.add(int(match.group(1)))
+    if not candidates:
+        for directory in _ICU_LIBRARY_DIRS:
+            path = Path(directory)
+            if not path.is_dir():
+                continue
+            for entry in path.glob("libicuuc.so.*"):
+                match = re.fullmatch(r"libicuuc\.so\.(\d+)", entry.name)
+                if match:
+                    candidates.add(int(match.group(1)))
+    if not candidates:
+        return None
+    return max(candidates)
+
+
+def _detect_runtime_libraries(os_name: str) -> dict[str, Any]:
+    """Detect host runtime-library versions relevant to managed-artifact ABI match."""
+    if os_name != "linux":
+        return {}
+    return {
+        "icu_major": _detect_icu_major(),
+        "glibc_version": _detect_glibc_version(),
+    }
 
 
 def _find_first(names: list[str]) -> str | None:
@@ -513,6 +582,7 @@ def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = 
         },
     }
     environment["distribution_id"] = _distribution_id(environment["os_version"])
+    environment["runtime_libraries"] = _detect_runtime_libraries(environment["os"])
     environment["toolchain"] = _detect_toolchain(environment, interface=interface)
     environment["detected_layouts"] = environment["toolchain"].get("detected_layouts", [])
     environment["install_prefixes"] = []

@@ -1,20 +1,27 @@
 {
   "schema_version": 1,
-  "ok": false,
-  "non_release_blocker": true,
+  "ok": true,
   "package_id": "org.gnustep.tools-xctest",
   "artifact_id": "tools-xctest-openbsd-arm64-clang",
   "target": "openbsd-arm64-clang",
-  "host_profile": null,
+  "host_profile": "openbsd-7.8-arm64",
   "checks": [
-    "host-access-blocker"
+    "otvm-profile-present",
+    "otvm-preflight-passed",
+    "otvm-acceptance-passed",
+    "native-full-cli-build",
+    "package-build",
+    "install",
+    "xctest-smoke",
+    "minimal-bundle",
+    "remove"
   ],
-  "blocker": {
-    "code": "openbsd_arm64_host_access_unavailable",
-    "message": "No OTVM OpenBSD arm64 profile is currently available, and no scripted SSH access to the user-owned OpenBSD arm64 server has been configured for this repository. This is tracked as a documented non-release blocker rather than a package-pipeline failure."
-  },
   "details": {
-    "otvm_catalog": "catalog-list exposes openbsd-7.8-fvwm but no OpenBSD arm64 profile as of April 21, 2026",
-    "required_next_step": "Add an OTVM OpenBSD arm64 profile or provide scripted host access, then build, install, smoke, and remove tools-xctest on that host."
+    "otvm_catalog": "catalog-list exposes openbsd-7.8-arm64 as of the latest OracleTestVMs pull on May 7, 2026",
+    "candidate_image": "oracletestvms-openbsd78-arm64-headless-20260421170510",
+    "profile_evidence": "docs/validation/openbsd-arm64-otvm-profile-20260507.json",
+    "required_config": "Use operator_public_key_file = /home/danboyd/.ssh/otvm/id_rsa.pub for this accepted image, or rebuild the image with the newer oracletestvms_ed25519 key.",
+    "package_evidence": "docs/validation/tools-xctest-openbsd-arm64-20260507/tools-xctest-openbsd-arm64-clang.json",
+    "artifact_sha256": "85efadaeea3c65c215ed533d93cbf2afcfe61627886d2f93f1d7df13f988b35e"
   }
 }

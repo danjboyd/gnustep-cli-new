@@ -152,7 +152,7 @@ class BuildInfraTests(unittest.TestCase):
         )
 
 
-    def test_arm64_managed_targets_have_source_locks_and_stay_unpublished_until_validated(self):
+    def test_arm64_managed_targets_have_source_locks_and_publish_only_validated_targets(self):
         for target_id in ("linux-arm64-clang", "openbsd-arm64-clang"):
             with self.subTest(target_id=target_id):
                 lock = source_lock_template(target_id)
@@ -162,7 +162,7 @@ class BuildInfraTests(unittest.TestCase):
                 self.assertEqual(lock["target"]["arch"], "arm64")
                 self.assertEqual(lock["target"]["compiler_family"], "clang")
                 self.assertEqual(lock["runtime"]["objc_runtime"], "libobjc2")
-                self.assertFalse(manifest["published"])
+                self.assertEqual(manifest["published"], target_id == "linux-arm64-clang")
                 self.assertEqual(manifest["target"]["arch"], "arm64")
 
 
@@ -807,6 +807,13 @@ class BuildInfraTests(unittest.TestCase):
         step_ids = [step["id"] for step in payload["steps"]]
         self.assertIn("sync-source", step_ids)
         self.assertIn("publish-dogfood-manifest", step_ids)
+
+    def test_session_build_box_plan_uses_openbsd_arm64_profile(self):
+        payload = session_build_box_plan(targets=["openbsd-arm64-clang"], ttl_hours=6)
+
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["builders"][0]["target_id"], "openbsd-arm64-clang")
+        self.assertEqual(payload["builders"][0]["otvm_profile"], "openbsd-7.8-arm64")
 
     def test_dogfood_snapshot_version_orders_multiple_same_day_builds(self):
         first = dogfood_snapshot_version(
@@ -2142,8 +2149,42 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("./Library/Libraries/libXCTest.so", names)
             self.assertIn("LD_LIBRARY_PATH", launcher)
             self.assertIn("managed_root", launcher)
-        self.assertIn("System/Library/Libraries", launcher)
-        self.assertIn("libexec/xctest", launcher)
+            self.assertIn("System/Library/Libraries", launcher)
+            self.assertIn("libexec/xctest", launcher)
+
+    def test_package_tools_xctest_artifact_accepts_openbsd_versioned_library(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            source = temp / "src"
+            source.mkdir()
+            subprocess.run(["git", "-C", str(source), "init"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.email", "test@example.invalid"], check=True)
+            subprocess.run(["git", "-C", str(source), "config", "user.name", "Test"], check=True)
+            (source / "README.md").write_text("tools-xctest fixture\n")
+            subprocess.run(["git", "-C", str(source), "add", "README.md"], check=True)
+            subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            installed = temp / "GNUstep"
+            (installed / "Tools").mkdir(parents=True)
+            (installed / "Library" / "Headers" / "XCTest").mkdir(parents=True)
+            (installed / "Library" / "Libraries").mkdir(parents=True)
+            (installed / "Tools" / "xctest").write_text("#!/bin/sh\n")
+            (installed / "Library" / "Headers" / "XCTest" / "XCTest.h").write_text("// header\n")
+            (installed / "Library" / "Libraries" / "libXCTest.so.0").write_text("library\n")
+
+            payload = package_tools_xctest_artifact(
+                temp / "out",
+                source_dir=source,
+                installed_root=installed,
+                target_id="openbsd-arm64-clang",
+                version="9.9.9",
+            )
+
+            self.assertTrue(payload["ok"])
+            self.assertTrue((installed / "Library" / "Libraries" / "libXCTest.so").is_symlink())
+            with tarfile.open(Path(payload["artifact"]["path"]), "r:gz") as archive:
+                names = archive.getnames()
+            self.assertIn("./Library/Libraries/libXCTest.so", names)
+            self.assertIn("./Library/Libraries/libXCTest.so.0", names)
 
     def test_package_managed_source_artifact_requires_toolchain_environment(self):
         with tempfile.TemporaryDirectory() as tempdir:
@@ -2733,7 +2774,7 @@ class BuildInfraTests(unittest.TestCase):
         self.assertEqual(openbsd_artifact["patches"][0]["upstream_pr"], "https://github.com/gnustep/tools-xctest/pull/5")
         self.assertTrue(linux_arm64_artifact["publish"])
         self.assertEqual(linux_arm64_artifact["arch"], "arm64")
-        self.assertFalse(openbsd_arm64_artifact["publish"])
+        self.assertTrue(openbsd_arm64_artifact["publish"])
         self.assertEqual(openbsd_arm64_artifact["arch"], "arm64")
         self.assertTrue(windows_artifact["publish"])
         self.assertEqual(windows_artifact["toolchain_flavor"], "msys2-clang64")
@@ -2802,8 +2843,9 @@ class BuildInfraTests(unittest.TestCase):
         self.assertTrue(targets["tools-xctest-linux-arm64-clang"]["release_ready"])
         self.assertEqual(targets["tools-xctest-windows-amd64-msys2-clang64"]["format"], "zip")
         self.assertTrue(targets["tools-xctest-windows-amd64-msys2-clang64"]["release_ready"])
-        self.assertEqual(targets["tools-xctest-openbsd-arm64-clang"]["dogfood_evidence"], "deferred")
-        self.assertTrue(targets["tools-xctest-openbsd-arm64-clang"]["deferred_non_release_blocker"])
+        self.assertEqual(targets["tools-xctest-openbsd-arm64-clang"]["dogfood_evidence"], "accepted")
+        self.assertTrue(targets["tools-xctest-openbsd-arm64-clang"]["release_ready"])
+        self.assertFalse(targets["tools-xctest-openbsd-arm64-clang"]["deferred_non_release_blocker"])
         self.assertIn("minimal XCTest bundle execution", payload["dogfood_checks"])
 
     def test_tools_xctest_release_gate_passes_with_publishable_artifact_and_evidence(self):

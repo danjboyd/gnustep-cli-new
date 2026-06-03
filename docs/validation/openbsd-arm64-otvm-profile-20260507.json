@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "validation_id": "openbsd-arm64-otvm-profile-20260507",
+  "validated_at": "2026-05-07",
+  "target": "openbsd-arm64-clang",
+  "otvm_profile": "openbsd-7.8-arm64",
+  "candidate_image": {
+    "display_name": "oracletestvms-openbsd78-arm64-headless-20260421170510",
+    "image_ocid": "ocid1.image.oc1.phx.aaaaaaaaz2at5wuzhycbhxmp2i5323kqimdublkjlyfuwltwged7cubtt5ja",
+    "shape": "VM.Standard.A1.Flex"
+  },
+  "checks": {
+    "otvm_catalog_profile_present": true,
+    "separate_arm64_image_config_slot_present": true,
+    "admin_build_plan_selects_openbsd_arm64_otvm_profile": true,
+    "oci_preflight_passed": true,
+    "shape_compatibility_passed": true,
+    "lease_instance_launched": true,
+    "tcp_22_opened": true,
+    "configured_oracletestvms_ed25519_key_accepted": false,
+    "accepted_image_otvm_key_accepted": true,
+    "ssh_readiness_probe_passed": true,
+    "acceptance_run_passed": true,
+    "acceptance_cleanup_destroyed_lease": true
+  },
+  "lease_probe": {
+    "wrong_key_lease_id": "lease-20260507213123-meir24",
+    "accepted_key_lease_id": "lease-20260507214023-lx990i",
+    "public_ip": "129.146.75.211",
+    "status": "destroyed",
+    "events": [
+      "lease.requested",
+      "lease.nsg.rules",
+      "lease.provisioning",
+      "lease.instance.launched",
+      "lease.network.ready",
+      "lease.readiness.tcp",
+      "lease.readiness.ssh",
+      "lease.ready",
+      "lease.destroyed"
+    ],
+    "wrong_key_result": "The current default /home/danboyd/.ssh/oracletestvms_ed25519 key is not accepted by the accepted image.",
+    "accepted_key": "/home/danboyd/.ssh/otvm/id_rsa",
+    "accepted_key_result": "SSH contract passed for oracleadmin and uname -m returned arm64."
+  },
+  "ok": true,
+  "status": "ok",
+  "summary": "Latest OracleTestVMs OpenBSD arm64 OTVM support is operational when the config uses /home/danboyd/.ssh/otvm/id_rsa.pub, the key embedded in the accepted image. No further OTVM image/profile work is required before GNUstep target-native build validation."
+}

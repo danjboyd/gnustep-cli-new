@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "validation_id": "linux-arm64-otvm-build-20260507",
+  "validated_at": "2026-05-07",
+  "host": {
+    "provider": "otvm-oci",
+    "lease_id": "lease-20260507195517-xfh2au",
+    "profile": "ubuntu-24.04-aarch64",
+    "architecture": "aarch64",
+    "target": "linux-arm64-clang"
+  },
+  "results": {
+    "managed_toolchain_build": "passed",
+    "managed_toolchain_package": "passed",
+    "full_cli_build": "passed",
+    "full_cli_smoke": "passed",
+    "arlen_package_build": "passed",
+    "gorm_package_build": "passed",
+    "tools_xctest_package_build": "passed",
+    "install_remove_qualification": "passed_on_lease-20260507202841-cvp23y",
+    "gorm_gui_runtime_qualification": "passed_on_lease-20260507202841-cvp23y",
+    "publication": "hosted_prerelease"
+  },
+  "artifacts": [
+    {
+      "id": "gnustep-toolchain-linux-arm64-clang",
+      "filename": "gnustep-toolchain-linux-arm64-clang-0.1.0-dev-arm64-otvm.tar.gz",
+      "sha256": "53270094cfd438caf52c62a805ca3f77b71239977020ae664ef472f2ab0ab811"
+    },
+    {
+      "id": "gnustep-cli-linux-arm64-clang",
+      "filename": "gnustep-cli-linux-arm64-clang-0.1.0-dev-arm64-otvm.tar.gz",
+      "sha256": "ae63de24d5e5e79d5818b4f54027419d29f2e953fd35480eda4486e8f45fdeb5"
+    },
+    {
+      "id": "arlen-linux-arm64-clang-headless",
+      "filename": "arlen-arlen-linux-arm64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
+      "sha256": "610c65ddd36e9962f9332cacfbfad28a00966a30267967f298b3456024555e74"
+    },
+    {
+      "id": "gorm-linux-arm64-clang",
+      "filename": "gorm-gorm-linux-arm64-clang-1.5.0-snapshot.20260505.tar.gz",
+      "sha256": "16ee6672d7086cff60041b47a950999f2225ae90adf8b8c6ff0133455c6fc204"
+    },
+    {
+      "id": "tools-xctest-linux-arm64-clang",
+      "filename": "tools-xctest-linux-arm64-clang-0.1.0.tar.gz",
+      "sha256": "c38242213945c183b69508ce134f125a9ede6016cc518a837d433f6d4d7aed53"
+    }
+  ],
+  "evidence_paths": [
+    ".artifacts/arm64-otvm-lease-20260507195517-xfh2au/SHA256SUMS",
+    ".artifacts/arm64-otvm-lease-20260507195517-xfh2au/cli-build-report.json",
+    ".artifacts/arm64-otvm-lease-20260507195517-xfh2au/doctor-arm64.json",
+    ".artifacts/arm64-otvm-lease-20260507195517-xfh2au/packages/SHA256SUMS.packages",
+    ".artifacts/arm64-otvm-lease-20260507195517-xfh2au/packages/arlen-linux-arm64-clang-headless-build-report.json",
+    ".artifacts/arm64-otvm-lease-20260507195517-xfh2au/packages/gorm-linux-arm64-clang-build-report.json",
+    ".artifacts/arm64-otvm-lease-20260507195517-xfh2au/packages/tools-xctest-linux-arm64-clang-build-report.json"
+  ],
+  "follow_up_evidence": "docs/validation/linux-arm64-hosted-package-install-remove-20260507.json",
+  "remaining_blockers": []
+}

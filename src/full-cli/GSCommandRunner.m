@@ -135,6 +135,15 @@
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface;
 - (NSDictionary *)nativeToolchainAssessmentForEnvironment:(NSDictionary *)environment compatibility:(NSDictionary *)compatibility;
+- (NSDictionary *)runtimeLibrariesForOS:(NSString *)osName;
+- (NSString *)capturedOutputForExecutable:(NSString *)name arguments:(NSArray *)arguments;
+- (NSNumber *)detectHostICUMajor;
+- (NSString *)detectHostGlibcVersion;
+- (NSInteger)maxICUMajorInString:(NSString *)text;
+- (BOOL)artifact:(NSDictionary *)artifact matchesRuntimeRequirementsForEnvironment:(NSDictionary *)environment;
+- (BOOL)verifyReleaseManifestSignatureForReference:(NSString *)reference error:(NSString **)errorMessage;
+- (NSString *)pinnedReleaseTrustRootPEM;
+- (NSDictionary *)signatureFailurePayloadForInstallRoot:(NSString *)installRoot reason:(NSString *)reason exitCode:(int *)exitCode;
 - (NSDictionary *)currentEnvironmentForInterface:(NSString *)interface;
 - (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath quick:(BOOL)quick;
 - (NSString *)setupTransactionStatePathForInstallRoot:(NSString *)installRoot;
@@ -2512,6 +2521,324 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return [releases objectAtIndex: 0];
 }
 
+- (NSString *)capturedOutputForExecutable:(NSString *)name arguments:(NSArray *)arguments
+{
+  NSString *launchPath = [self firstAvailableExecutable: [NSArray arrayWithObject: name]];
+  NSString *output = nil;
+  NSTask *task = nil;
+
+  if (launchPath == nil)
+    {
+      return nil;
+    }
+  task = [[NSTask alloc] init];
+  @try
+    {
+      NSPipe *pipe = [NSPipe pipe];
+      NSData *data = nil;
+      [task setLaunchPath: launchPath];
+      [task setArguments: arguments];
+      [task setStandardOutput: pipe];
+      [task setStandardError: [NSPipe pipe]];
+      [task launch];
+      data = [[pipe fileHandleForReading] readDataToEndOfFile];
+      [task waitUntilExit];
+      output = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+    }
+  @catch (NSException *exception)
+    {
+      output = nil;
+    }
+  [task release];
+  return output;
+}
+
+- (NSInteger)maxICUMajorInString:(NSString *)text
+{
+  NSInteger best = -1;
+  NSArray *parts = nil;
+  NSCharacterSet *digits = [NSCharacterSet decimalDigitCharacterSet];
+  NSUInteger i = 0;
+
+  if (text == nil)
+    {
+      return -1;
+    }
+  parts = [text componentsSeparatedByString: @"libicuuc.so."];
+  for (i = 1; i < [parts count]; i++)
+    {
+      NSString *tail = [parts objectAtIndex: i];
+      NSUInteger j = 0;
+      while (j < [tail length] && [digits characterIsMember: [tail characterAtIndex: j]])
+        {
+          j++;
+        }
+      if (j > 0)
+        {
+          NSInteger value = [[tail substringToIndex: j] integerValue];
+          if (value > best)
+            {
+              best = value;
+            }
+        }
+    }
+  return best;
+}
+
+- (NSNumber *)detectHostICUMajor
+{
+  NSInteger best = [self maxICUMajorInString:
+                     [self capturedOutputForExecutable: @"ldconfig" arguments: [NSArray arrayWithObject: @"-p"]]];
+
+  if (best < 0)
+    {
+      NSArray *dirs = [NSArray arrayWithObjects:
+                                 @"/lib", @"/usr/lib", @"/usr/lib64",
+                                 @"/lib/x86_64-linux-gnu", @"/usr/lib/x86_64-linux-gnu",
+                                 @"/lib/aarch64-linux-gnu", @"/usr/lib/aarch64-linux-gnu", nil];
+      NSFileManager *manager = [NSFileManager defaultManager];
+      NSUInteger i = 0;
+      for (i = 0; i < [dirs count]; i++)
+        {
+          NSArray *entries = [manager contentsOfDirectoryAtPath: [dirs objectAtIndex: i] error: NULL];
+          if (entries != nil)
+            {
+              NSInteger candidate = [self maxICUMajorInString: [entries componentsJoinedByString: @"\n"]];
+              if (candidate > best)
+                {
+                  best = candidate;
+                }
+            }
+        }
+    }
+  if (best < 0)
+    {
+      return nil;
+    }
+  return [NSNumber numberWithInteger: best];
+}
+
+- (NSString *)detectHostGlibcVersion
+{
+  NSCharacterSet *whitespace = [NSCharacterSet whitespaceAndNewlineCharacterSet];
+  NSString *output = [self capturedOutputForExecutable: @"getconf"
+                                             arguments: [NSArray arrayWithObject: @"GNU_LIBC_VERSION"]];
+
+  if (output != nil)
+    {
+      NSString *trimmed = [output stringByTrimmingCharactersInSet: whitespace];
+      if ([trimmed hasPrefix: @"glibc "])
+        {
+          return [[trimmed substringFromIndex: 6] stringByTrimmingCharactersInSet: whitespace];
+        }
+    }
+  output = [self capturedOutputForExecutable: @"ldd" arguments: [NSArray arrayWithObject: @"--version"]];
+  if (output != nil && [output length] > 0)
+    {
+      NSString *firstLine = [[output componentsSeparatedByString: @"\n"] objectAtIndex: 0];
+      NSArray *tokens = [firstLine componentsSeparatedByCharactersInSet: [NSCharacterSet whitespaceCharacterSet]];
+      NSString *last = [tokens lastObject];
+      if (last != nil && [last length] > 0 && [last rangeOfString: @"."].location != NSNotFound)
+        {
+          return last;
+        }
+    }
+  return nil;
+}
+
+- (NSDictionary *)runtimeLibrariesForOS:(NSString *)osName
+{
+  NSNumber *icuMajor = nil;
+  NSString *glibc = nil;
+
+  if ([osName isEqual: @"linux"] == NO)
+    {
+      return [NSDictionary dictionary];
+    }
+  icuMajor = [self detectHostICUMajor];
+  glibc = [self detectHostGlibcVersion];
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+                        icuMajor ? (id)icuMajor : (id)[NSNull null], @"icu_major",
+                        glibc ? (id)glibc : (id)[NSNull null], @"glibc_version",
+                        nil];
+}
+
+- (BOOL)artifact:(NSDictionary *)artifact matchesRuntimeRequirementsForEnvironment:(NSDictionary *)environment
+{
+  NSDictionary *requirements = [artifact objectForKey: @"runtime_requirements"];
+  NSDictionary *host = nil;
+  id requiredICU = nil;
+  id requiredGlibc = nil;
+
+  if (requirements == nil || (id)requirements == (id)[NSNull null] ||
+      [requirements isKindOfClass: [NSDictionary class]] == NO ||
+      [[environment objectForKey: @"os"] isEqual: @"linux"] == NO)
+    {
+      return YES;
+    }
+  host = [environment objectForKey: @"runtime_libraries"];
+  if ([host isKindOfClass: [NSDictionary class]] == NO)
+    {
+      host = nil;
+    }
+
+  requiredICU = [requirements objectForKey: @"icu_major"];
+  if (requiredICU != nil && (id)requiredICU != (id)[NSNull null])
+    {
+      id hostICU = host ? [host objectForKey: @"icu_major"] : nil;
+      if (hostICU != nil && (id)hostICU != (id)[NSNull null] &&
+          [hostICU integerValue] != [requiredICU integerValue])
+        {
+          return NO;
+        }
+    }
+  requiredGlibc = [requirements objectForKey: @"glibc_min"];
+  if (requiredGlibc != nil && (id)requiredGlibc != (id)[NSNull null])
+    {
+      id hostGlibc = host ? [host objectForKey: @"glibc_version"] : nil;
+      if (hostGlibc != nil && (id)hostGlibc != (id)[NSNull null] &&
+          [self compareVersionString: hostGlibc toVersionString: requiredGlibc] == NSOrderedAscending)
+        {
+          return NO;
+        }
+    }
+  return YES;
+}
+
+- (NSString *)pinnedReleaseTrustRootPEM
+{
+  // Pinned release-signing public key; the release manifest is verified against
+  // THIS key, not the release-signing-public.pem bundled next to the downloaded
+  // manifest. Current dev/dogfood key; override with RELEASE_TRUST_ROOT for
+  // production. Kept in sync with scripts/bootstrap/release-signing-trust-root.pem.
+  return @"-----BEGIN PUBLIC KEY-----\n"
+         @"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApqGh2TATl3jFarwQQ/9O\n"
+         @"au+YSXOTgKsP/vrWmYdQ7fIplJqP/Zci+L1OLYu6K6MPsFfwFSxYNTfvXSNnEVVS\n"
+         @"x1nI6+sbdQGeWkzhWeYC7iCgxvLmLwkTYC2aiquZ0bG3iWWbIox3VTKMASU8+0Mq\n"
+         @"UDncWa8IkoFOg9uu/mhDABbnzjwuTxHR6BAVQKN7/yT0gIDL313+fD6WX0ZPE177\n"
+         @"wrT8s8k8u8TQif1A9sonvuPj4nriLzlO+FR6S4Kpdz8VILnUk0FyK4toiCAISO/8\n"
+         @"e6doSwUJjNockivsbU5JhVUwvoUJUb+ubbuEWKUc8UNDjLqmF0vfmtait/Yy7LRm\n"
+         @"cwIDAQAB\n"
+         @"-----END PUBLIC KEY-----\n";
+}
+
+- (BOOL)verifyReleaseManifestSignatureForReference:(NSString *)reference error:(NSString **)errorMessage
+{
+  // Verify the release manifest against the pinned trust root before trusting it
+  // for install/update. Fails closed on missing signature, missing openssl, or a
+  // bad signature. getenv (not NSProcessInfo) so tests can toggle per-call.
+  const char *allowUnsigned = getenv("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED");
+  const char *trustOverride = getenv("RELEASE_TRUST_ROOT");
+  BOOL isURL = ([reference hasPrefix: @"http://"] || [reference hasPrefix: @"https://"]);
+  NSData *manifestData = nil;
+  NSData *signatureData = nil;
+  NSString *tempDir = nil;
+  NSString *manifestTemp = nil;
+  NSString *signatureTemp = nil;
+  NSString *trustRoot = nil;
+  NSDictionary *result = nil;
+
+  if (allowUnsigned != NULL && strcmp(allowUnsigned, "1") == 0)
+    {
+      return YES;
+    }
+  if ([self firstAvailableExecutable: [NSArray arrayWithObject: @"openssl"]] == nil)
+    {
+      if (errorMessage != NULL)
+        {
+          *errorMessage = @"openssl is required to verify the release signature but was not found; install openssl or set GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED=1";
+        }
+      return NO;
+    }
+
+  if (isURL)
+    {
+      manifestData = [self downloadURLData: reference error: NULL];
+      signatureData = [self downloadURLData: [reference stringByAppendingString: @".sig"] error: NULL];
+    }
+  else
+    {
+      manifestData = [NSData dataWithContentsOfFile: reference];
+      signatureData = [NSData dataWithContentsOfFile: [reference stringByAppendingString: @".sig"]];
+      if (signatureData == nil)
+        {
+          signatureData = [NSData dataWithContentsOfFile:
+                            [[reference stringByDeletingLastPathComponent]
+                              stringByAppendingPathComponent: @"release-manifest.json.sig"]];
+        }
+    }
+  if (manifestData == nil)
+    {
+      if (errorMessage != NULL)
+        {
+          *errorMessage = @"the release manifest could not be read for signature verification";
+        }
+      return NO;
+    }
+  if (signatureData == nil)
+    {
+      if (errorMessage != NULL)
+        {
+          *errorMessage = @"the release manifest is not signed (no release-manifest.json.sig); refusing to trust unsigned release metadata";
+        }
+      return NO;
+    }
+
+  tempDir = [NSTemporaryDirectory() stringByAppendingPathComponent:
+              [NSString stringWithFormat: @"gnustep-sigverify-%@",
+                [[NSProcessInfo processInfo] globallyUniqueString]]];
+  [[NSFileManager defaultManager] createDirectoryAtPath: tempDir withIntermediateDirectories: YES attributes: nil error: NULL];
+  manifestTemp = [tempDir stringByAppendingPathComponent: @"manifest.json"];
+  signatureTemp = [tempDir stringByAppendingPathComponent: @"manifest.json.sig"];
+  [manifestData writeToFile: manifestTemp atomically: YES];
+  [signatureData writeToFile: signatureTemp atomically: YES];
+
+  if (trustOverride != NULL &&
+      [[NSFileManager defaultManager] fileExistsAtPath: [NSString stringWithUTF8String: trustOverride]])
+    {
+      trustRoot = [NSString stringWithUTF8String: trustOverride];
+    }
+  else
+    {
+      trustRoot = [tempDir stringByAppendingPathComponent: @"trust-root.pem"];
+      [[self pinnedReleaseTrustRootPEM] writeToFile: trustRoot atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+    }
+
+  result = [self runCommand: [NSArray arrayWithObjects:
+                                @"openssl", @"dgst", @"-sha256", @"-verify", trustRoot,
+                                @"-signature", signatureTemp, manifestTemp, nil]
+           currentDirectory: nil];
+  [[NSFileManager defaultManager] removeItemAtPath: tempDir error: NULL];
+
+  if ([[result objectForKey: @"launched"] boolValue] &&
+      [[result objectForKey: @"exit_status"] intValue] == 0)
+    {
+      return YES;
+    }
+  if (errorMessage != NULL)
+    {
+      *errorMessage = @"the release manifest signature did not verify against the pinned trusted key";
+    }
+  return NO;
+}
+
+- (NSDictionary *)signatureFailurePayloadForInstallRoot:(NSString *)installRoot reason:(NSString *)reason exitCode:(int *)exitCode
+{
+  *exitCode = 1;
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+                        [NSNumber numberWithInt: 1], @"schema_version",
+                        @"setup", @"command",
+                        [NSNumber numberWithBool: NO], @"ok",
+                        @"error", @"status",
+                        @"The release manifest signature could not be verified.", @"summary",
+                        installRoot ? installRoot : [NSNull null], @"install_root",
+                        [NSDictionary dictionaryWithObjectsAndKeys:
+                                      [NSNumber numberWithBool: NO], @"verified",
+                                      reason ? reason : @"signature verification failed", @"reason",
+                                      nil], @"trust",
+                        nil];
+}
+
 - (BOOL)artifact:(NSDictionary *)artifact matchesHostOS:(NSString *)osName arch:(NSString *)arch
 {
   return [[artifact objectForKey: @"os"] isEqualToString: osName] &&
@@ -2552,7 +2879,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
           return NO;
         }
     }
-  return YES;
+  // A definite runtime-library ABI mismatch (e.g. ICU major) excludes the
+  // artifact from selection so setup never installs something that cannot load.
+  return [self artifact: artifact matchesRuntimeRequirementsForEnvironment: environment];
 }
 
 - (BOOL)artifact:(NSDictionary *)artifact matchesToolchain:(NSDictionary *)toolchain
@@ -3483,6 +3812,57 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                            @"Detected Linux OS version is not in the artifact's supported OS versions.", @"message",
                                            nil]];
     }
+  if ([[environment objectForKey: @"os"] isEqualToString: @"linux"])
+    {
+      NSDictionary *runtimeRequirements = [artifact objectForKey: @"runtime_requirements"];
+      if (runtimeRequirements != nil && (id)runtimeRequirements != (id)[NSNull null] &&
+          [runtimeRequirements isKindOfClass: [NSDictionary class]])
+        {
+          NSDictionary *hostLibraries = [environment objectForKey: @"runtime_libraries"];
+          id requiredICU = [runtimeRequirements objectForKey: @"icu_major"];
+          id requiredGlibc = [runtimeRequirements objectForKey: @"glibc_min"];
+          if ([hostLibraries isKindOfClass: [NSDictionary class]] == NO)
+            {
+              hostLibraries = nil;
+            }
+          if (requiredICU != nil && (id)requiredICU != (id)[NSNull null])
+            {
+              id hostICU = hostLibraries ? [hostLibraries objectForKey: @"icu_major"] : nil;
+              if (hostICU == nil || (id)hostICU == (id)[NSNull null])
+                {
+                  [warnings addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                       @"icu_major_undetected", @"code",
+                                                       [NSString stringWithFormat: @"The managed artifact links ICU major %@, but the host ICU version could not be detected.", requiredICU], @"message",
+                                                       nil]];
+                }
+              else if ([hostICU integerValue] != [requiredICU integerValue])
+                {
+                  [reasons addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                       @"icu_major_mismatch", @"code",
+                                                       [NSString stringWithFormat: @"The host provides ICU major %@, but the selected managed artifact links ICU major %@. ICU has no cross-major ABI compatibility, so the managed GNUstep runtime would fail to load.", hostICU, requiredICU], @"message",
+                                                       nil]];
+                }
+            }
+          if (requiredGlibc != nil && (id)requiredGlibc != (id)[NSNull null])
+            {
+              id hostGlibc = hostLibraries ? [hostLibraries objectForKey: @"glibc_version"] : nil;
+              if (hostGlibc == nil || (id)hostGlibc == (id)[NSNull null])
+                {
+                  [warnings addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                       @"glibc_version_undetected", @"code",
+                                                       [NSString stringWithFormat: @"The managed artifact requires glibc >= %@, but the host glibc version could not be detected.", requiredGlibc], @"message",
+                                                       nil]];
+                }
+              else if ([self compareVersionString: hostGlibc toVersionString: requiredGlibc] == NSOrderedAscending)
+                {
+                  [reasons addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                       @"glibc_too_old", @"code",
+                                                       [NSString stringWithFormat: @"The host provides glibc %@, but the selected managed artifact requires glibc >= %@.", hostGlibc, requiredGlibc], @"message",
+                                                       nil]];
+                }
+            }
+        }
+    }
   if ([[toolchain objectForKey: @"present"] boolValue])
     {
       if (detectedCompiler != nil &&
@@ -3628,6 +4008,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       [environment setObject: distributionID forKey: @"distribution_id"];
     }
+  [environment setObject: [self runtimeLibrariesForOS: osName] forKey: @"runtime_libraries"];
   [environment setObject: arch forKey: @"arch"];
   [environment setObject: @"posix" forKey: @"shell_family"];
   [environment setObject: @"user" forKey: @"install_scope"];
@@ -4007,6 +4388,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     {
       [environment setObject: distributionID forKey: @"distribution_id"];
     }
+  [environment setObject: [self runtimeLibrariesForOS: osName] forKey: @"runtime_libraries"];
   [environment setObject: emptyLayouts forKey: @"detected_layouts"];
   [environment setObject: emptyPrefixes forKey: @"install_prefixes"];
   [emptyLayouts release];
@@ -4875,6 +5257,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       *exitCode = 5;
       return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: @"No release manifest could be resolved." data: nil];
     }
+
+  {
+    NSString *signatureError = nil;
+    if ([self verifyReleaseManifestSignatureForReference: resolvedManifest error: &signatureError] == NO)
+      {
+        return [self signatureFailurePayloadForInstallRoot: selectedRoot reason: signatureError exitCode: exitCode];
+      }
+  }
 
   doctor = [self buildDoctorPayloadWithInterface: @"full" manifestPath: resolvedManifest];
   nativeToolchain = [[doctor objectForKey: @"environment"] objectForKey: @"native_toolchain"];
@@ -5798,6 +6188,14 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       *exitCode = 5;
       return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: @"No release manifest could be resolved." data: nil];
     }
+
+  {
+    NSString *signatureError = nil;
+    if ([self verifyReleaseManifestSignatureForReference: resolvedManifest error: &signatureError] == NO)
+      {
+        return [self signatureFailurePayloadForInstallRoot: expandedRoot reason: signatureError exitCode: exitCode];
+      }
+  }
 
   manifest = [self validateAndLoadManifest: resolvedManifest error: &manifestError];
   if (manifest != nil)
@@ -8597,6 +8995,9 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         return [self payloadWithCommand: @"install" ok: NO status: @"error" summary: activationError data: nil];
       }
     [packages setObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                         packageID, @"package_id",
+                                         [packageRecord objectForKey: @"name"] ? [packageRecord objectForKey: @"name"] : [NSNull null], @"name",
+                                         [packageRecord objectForKey: @"aliases"] ? [packageRecord objectForKey: @"aliases"] : [NSArray array], @"aliases",
                                          manifestPath ? [manifestPath stringByResolvingSymlinksInPath] : [NSNull null], @"manifest_path",
                                          [self normalizedPackageIndexReference: indexPath] ? [self normalizedPackageIndexReference: indexPath] : [NSNull null], @"index_path",
                                          finalRoot, @"install_root",
@@ -8714,6 +9115,35 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   state = [[self loadInstalledPackagesState: root] mutableCopy];
   packages = [[[state objectForKey: @"packages"] mutableCopy] autorelease];
   record = [packages objectForKey: packageID];
+  if (record == nil)
+    {
+      NSString *normalizedSpecifier = [packageID lowercaseString];
+      NSEnumerator *aliasEnumerator = [packages keyEnumerator];
+      NSString *candidateID = nil;
+      while ((candidateID = [aliasEnumerator nextObject]) != nil)
+        {
+          NSDictionary *candidateRecord = [packages objectForKey: candidateID];
+          NSMutableDictionary *lookupRecord = [NSMutableDictionary dictionaryWithDictionary: candidateRecord];
+          NSArray *keys = nil;
+          NSUInteger keyIndex = 0;
+          [lookupRecord setObject: candidateID forKey: @"id"];
+          keys = [self packageLookupKeysForRecord: lookupRecord];
+          for (keyIndex = 0; keyIndex < [keys count]; keyIndex++)
+            {
+              NSString *key = [keys objectAtIndex: keyIndex];
+              if ([[key lowercaseString] isEqualToString: normalizedSpecifier])
+                {
+                  packageID = candidateID;
+                  record = candidateRecord;
+                  break;
+                }
+            }
+          if (record != nil)
+            {
+              break;
+            }
+        }
+    }
   [self appendInstallTrace: @"remove loaded package record"];
   if (record == nil)
     {

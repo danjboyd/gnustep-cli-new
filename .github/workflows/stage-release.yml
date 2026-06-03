@@ -15,8 +15,11 @@ on:
         required: true
         default: https://github.com/danjboyd/gnustep-cli-new/releases/download
       source_artifact_run_id:
-        description: Workflow run id containing CLI/toolchain input artifacts
-        required: true
+        description: Workflow run id containing CLI/toolchain input artifacts (omit when reuse_release_tag is set)
+        required: false
+      reuse_release_tag:
+        description: "Reuse mode: stage cli/toolchain by downloading existing assets from this release tag (e.g. v0.1.0) instead of workflow-run artifacts"
+        required: false
       linux_source_artifact_run_id:
         description: Optional workflow run id containing Linux input artifacts
         required: false
@@ -94,6 +97,7 @@ jobs:
           run-id: ${{ inputs.windows_source_artifact_run_id || inputs.source_artifact_run_id }}
 
       - name: Stage release directory
+        if: ${{ inputs.reuse_release_tag == '' }}
         run: |
           resolve_input() {
             kind="$1"
@@ -134,6 +138,49 @@ jobs:
           marker=$(find "$INPUT_ROOT" -type f -name windows-current-source-artifact.json | sort | head -n 1)
           if [ -n "$marker" ]; then
             cp "$marker" "$RELEASE_DIR/windows-current-source-artifact.json"
+          fi
+          python3 scripts/internal/build_infra.py --json verify-release --release-dir "$RELEASE_DIR"
+
+      # Reuse mode: rebuild a complete staged release by downloading the already
+      # published, validated cli/toolchain assets from an existing release tag.
+      # Used to add a new target (for example linux-arm64-clang) to a release
+      # without rebuilding the other targets: every cli/toolchain asset present on
+      # the tag is re-staged byte-for-byte, so the regenerated release-manifest
+      # lists all targets and no previously published target is dropped.
+      - name: Stage release directory from reused release assets
+        if: ${{ inputs.reuse_release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          version="${{ inputs.version }}"
+          tag="${{ inputs.reuse_release_tag }}"
+          reuse_dir="$INPUT_ROOT/reuse"
+          mkdir -p "$reuse_dir"
+          gh release download "$tag" \
+            --repo "${{ github.repository }}" \
+            --dir "$reuse_dir" \
+            --pattern 'gnustep-cli-*' \
+            --pattern 'gnustep-toolchain-*' \
+            --pattern 'windows-current-source-artifact.json'
+          args=(--json stage-release
+            --version "$version"
+            --channel "${{ inputs.channel }}"
+            --base-url "${{ inputs.base_url }}"
+            --output-dir "$OUTPUT_ROOT")
+          for kind in cli toolchain; do
+            for f in "$reuse_dir/gnustep-$kind-"*"-$version".tar.gz "$reuse_dir/gnustep-$kind-"*"-$version".zip; do
+              [ -e "$f" ] || continue
+              base="$(basename "$f")"
+              target="${base#gnustep-$kind-}"
+              target="${target%-$version.tar.gz}"
+              target="${target%-$version.zip}"
+              args+=("--$kind-input" "$target=$f")
+            done
+          done
+          python3 scripts/internal/build_infra.py "${args[@]}"
+          if [ -f "$reuse_dir/windows-current-source-artifact.json" ]; then
+            cp "$reuse_dir/windows-current-source-artifact.json" "$RELEASE_DIR/windows-current-source-artifact.json"
           fi
           python3 scripts/internal/build_infra.py --json verify-release --release-dir "$RELEASE_DIR"
 
