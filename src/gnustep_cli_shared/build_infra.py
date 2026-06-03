@@ -2982,8 +2982,16 @@ def sign_release_metadata(release_dir: str | Path, private_key_path: str | Path,
     if not private_key.exists():
         return {"schema_version": 1, "command": "sign-release-metadata", "ok": False, "status": "error", "summary": "Signing private key is missing.", "release_dir": str(root)}
     provenance_path = write_release_provenance(root, builder_identity=os.environ.get("GNUSTEP_CLI_BUILDER_ID", "local"))
-    public_key = Path(public_key_path).resolve() if public_key_path else root / "release-signing-public.pem"
-    if public_key_path is None:
+    # Always bundle the signing public key next to the release so the release is
+    # self-describing. When an explicit public key is supplied (CI passes the
+    # GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY secret), copy it in; otherwise derive
+    # it from the private key.
+    public_key = root / "release-signing-public.pem"
+    if public_key_path is not None:
+        provided = Path(public_key_path).resolve()
+        if provided != public_key:
+            shutil.copyfile(provided, public_key)
+    else:
         proc = subprocess.run(["openssl", "pkey", "-in", str(private_key), "-pubout", "-out", str(public_key)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
         if proc.returncode != 0:
             return {"schema_version": 1, "command": "sign-release-metadata", "ok": False, "status": "error", "summary": "Failed to derive release signing public key.", "release_dir": str(root), "stderr": proc.stderr}
