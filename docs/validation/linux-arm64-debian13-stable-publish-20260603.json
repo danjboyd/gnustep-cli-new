@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "validation_id": "linux-arm64-debian13-stable-publish-20260603",
+  "validated_at": "2026-06-03",
+  "summary": "Debian-13 arm64 artifacts published to the stable v0.1.0 release and validated on a native Debian 13 aarch64 host.",
+  "host": {
+    "name": "iep-wellproduction",
+    "architecture": "aarch64",
+    "distribution": "Debian GNU/Linux 13 (trixie)",
+    "kernel": "6.12.57+deb13-arm64",
+    "glibc": "2.41",
+    "icu_major": 76
+  },
+  "release": {
+    "tag": "v0.1.0",
+    "channel": "stable",
+    "release_run_id": "26914384351",
+    "stage_release_run_id": "26913625005",
+    "package_index_run_id": "26912875819",
+    "package_index_signing_key_fp": "3fe55f12ef17660bc59abba52dccc05869176e6c96e6654ccd454bea5d31a274"
+  },
+  "results": {
+    "manifest_arm64_cli_added": "passed",
+    "manifest_arm64_toolchain_added": "passed",
+    "manifest_amd64_windows_unchanged": "passed",
+    "package_index_self_consistent_bundled_key": "passed",
+    "package_index_pinned_root_trust_gate": "passed",
+    "arm64_package_urls_resolve_200": "passed",
+    "toolchain_libs_resolve_on_debian13_arm64": "passed",
+    "toolchain_links_icu76_glibc241": "passed",
+    "foundation_compile_with_published_toolchain": "passed",
+    "foundation_run_on_debian13_arm64": "passed"
+  },
+  "evidence": {
+    "manifest_arm64_entries": [
+      {"kind": "cli", "os": "linux", "arch": "arm64", "sha256": "1495a89dc364bcfadabcd6268dc2dea34177a97394cad48110db0362b5eb9c4f"},
+      {"kind": "toolchain", "os": "linux", "arch": "arm64", "sha256": "09b69ecf1969b3c0405ea567e86ee03d88e24e782686edba5b62ce800d369050"}
+    ],
+    "arm64_packages_published": [
+      "arlen-linux-arm64-clang-headless",
+      "gorm-linux-arm64-clang",
+      "tools-xctest-linux-arm64-clang",
+      "tools-xctest-openbsd-arm64-clang"
+    ],
+    "needed_icu_sonames": ["libicui18n.so.76", "libicuuc.so.76", "libicudata.so.76"],
+    "foundation_smoke_output": [
+      "GNUstep arm64 OK on 6.12.57+deb13-arm64",
+      "array sum = 42 (expect 42)"
+    ]
+  },
+  "notes": "The published arm64 toolchain links the Debian 13 trixie ICU 76 / glibc 2.41 SONAMEs, which resolve to the host system libraries. A GNUstep Foundation program compiled against the toolchain ran successfully on the native aarch64 host. The committed shell bootstrap pins the dev-channel release trust root, so stable-channel end-to-end bootstrap install was not exercised here (pre-existing dev/prod bootstrap separation, identical for amd64); validation used direct artifact download + toolchain placeholder normalization equivalent to the gnustep setup install step.",
+  "remaining_blockers": []
+}
