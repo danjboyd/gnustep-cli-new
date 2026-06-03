@@ -47,7 +47,11 @@ machine-readable control surface.
   maps OpenBSD targets to OTVM-backed build requirements. Package artifacts are
   included, but Unix package builds are marked blocked until the operator
   supplies either a managed toolchain URL/checksum or a workflow artifact run
-  id. This prevents invalid workflow dispatches.
+  id. Explicitly requested deferred targets such as `linux-arm64-clang` are
+  planned even while `publish:false`, package actions are filtered to the
+  requested target, and Linux package actions infer the expected managed
+  toolchain workflow artifact name when a run id is supplied. This prevents
+  invalid workflow dispatches while still allowing target bring-up.
 - `dispatch-builds`
   Produces the exact `gh workflow run` commands in dry-run mode by default.
   `--apply` executes only unblocked dispatches.

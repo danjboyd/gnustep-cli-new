@@ -140,14 +140,14 @@
         "ubuntu"
       ],
       "portability_policy": "debian-family-interim-host-validated",
-      "url": "dist/dogfood/packages/tools-xctest-linux-arm64-clang-0.1.0.tar.gz",
-      "sha256": "0de76047878737cb78642cba60034651a194fc1c70d05a1a220e2c758bc68285",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/tools-xctest-linux-arm64-clang-0.1.0.tar.gz",
+      "sha256": "c38242213945c183b69508ce134f125a9ede6016cc518a837d433f6d4d7aed53",
       "format": "tar.gz",
       "publish": true,
       "status": "validated_ubuntu2404_aarch64_managed_clang_with_declared_patch_and_launcher",
-      "notes": "Built on OTVM ubuntu-24.04-aarch64 against the Phase 16.B2 managed Clang/libobjc2 toolchain from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes a bin/xctest launcher that sets package-local and managed-root library paths before execing libexec/xctest.",
+      "notes": "Built on OTVM ubuntu-24.04-aarch64 against the Phase 16.B2 managed Clang/libobjc2 toolchain from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes a symlink-safe bin/xctest launcher that sets package-local and managed-root library paths before execing libexec/xctest.",
       "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-linux-arm64-clang-build.json",
-      "validation_evidence": "docs/validation/tools-xctest-linux-arm64-ubuntu-2404-20260421/tools-xctest-linux-arm64-clang.json",
+      "validation_evidence": "docs/validation/linux-arm64-hosted-package-install-remove-20260507.json",
       "supported_os_versions": [
         "ubuntu-24.04"
       ]
@@ -183,12 +183,14 @@
       "required_features": [
         "blocks"
       ],
-      "url": "dist/dogfood/packages/tools-xctest-openbsd-arm64-clang-0.1.0.tar.gz",
-      "sha256": "planned-artifact-checksum-tbd",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/tools-xctest-openbsd-arm64-clang-0.1.0.tar.gz",
+      "sha256": "85efadaeea3c65c215ed533d93cbf2afcfe61627886d2f93f1d7df13f988b35e",
       "format": "tar.gz",
-      "publish": false,
-      "status": "blocked_no_openbsd_arm64_otvm_profile_or_host_access",
-      "notes": "OpenBSD arm64 remains blocked until OTVM provides an OpenBSD arm64 profile or equivalent scripted access to the available OpenBSD arm64 server."
+      "publish": true,
+      "status": "validated_openbsd_arm64_native_clang_with_declared_patch_and_launcher",
+      "notes": "Built and validated on OTVM openbsd-7.8-arm64 lease lease-20260507215030-3q6vbf against OpenBSD packaged GNUstep/Clang. Artifact includes the declared PR #5 tools-xctest patch, an OpenBSD split-build fix for libXCTest.so.0, package-local launcher library paths, install by simple alias, xctest --help smoke, minimal XCTest bundle execution, and remove by simple alias.",
+      "validation_evidence": "docs/validation/tools-xctest-openbsd-arm64-20260507/tools-xctest-openbsd-arm64-clang.json",
+      "build_evidence": "docs/validation/tools-xctest-openbsd-arm64-20260507/package-report.json"
     }
   ],
   "install": {

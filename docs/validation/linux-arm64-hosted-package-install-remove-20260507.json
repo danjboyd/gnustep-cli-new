@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "validation_id": "linux-arm64-hosted-package-install-remove-20260507",
+  "validated_at": "2026-05-07",
+  "target": "linux-arm64-clang",
+  "host": {
+    "provider": "otvm-oci",
+    "lease_id": "lease-20260507202841-cvp23y",
+    "profile": "ubuntu-24.04-aarch64",
+    "architecture": "aarch64"
+  },
+  "index": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0-dev/package-index.json",
+  "setup_manifest": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0-dev/release-manifest.json",
+  "ok": true,
+  "status": "ok",
+  "selected_artifacts": {
+    "tools-xctest": "tools-xctest-linux-arm64-clang",
+    "arlen": "arlen-linux-arm64-clang-headless",
+    "gorm": "gorm-linux-arm64-clang"
+  },
+  "checks": {
+    "bootstrap_setup_selected_linux_arm64_cli": true,
+    "bootstrap_setup_selected_linux_arm64_toolchain": true,
+    "tools_xctest_install_remove": true,
+    "tools_xctest_launcher_smoke": true,
+    "arlen_install_remove": true,
+    "arlen_launcher_smoke": true,
+    "gorm_install_remove": true,
+    "gorm_launcher_smoke": true,
+    "gorm_xvfb_launch_exit_code": 124,
+    "gorm_xvfb_launch_accepted": true,
+    "final_installed_package_state_empty": true
+  },
+  "evidence_paths": [
+    ".artifacts/arm64-otvm-lease-20260507202841-cvp23y/arm64-validation/setup-arm64-fixed.json",
+    ".artifacts/arm64-otvm-lease-20260507202841-cvp23y/arm64-validation/install-tools-xctest-final-cycle.json",
+    ".artifacts/arm64-otvm-lease-20260507202841-cvp23y/arm64-validation/install-arlen-final-cycle.json",
+    ".artifacts/arm64-otvm-lease-20260507202841-cvp23y/arm64-validation/install-gorm-final-cycle.json",
+    ".artifacts/arm64-otvm-lease-20260507202841-cvp23y/arm64-validation/gorm-xvfb-final-cycle.stdout",
+    ".artifacts/arm64-otvm-lease-20260507202841-cvp23y/arm64-validation/gorm-xvfb-final-cycle.rc",
+    ".artifacts/arm64-otvm-lease-20260507202841-cvp23y/arm64-validation/remove-org.gnustep.gorm-final-cycle.json",
+    ".artifacts/arm64-otvm-lease-20260507202841-cvp23y/arm64-validation/remove-io.github.danjboyd.arlen-final-cycle.json",
+    ".artifacts/arm64-otvm-lease-20260507202841-cvp23y/arm64-validation/remove-org.gnustep.tools-xctest-final-cycle.json"
+  ],
+  "summary": "Hosted Linux arm64 setup selected the arm64 CLI/toolchain, installed tools-xctest, Arlen, and Gorm from the signed package index, launched Gorm under Xvfb through its package launcher, and removed all packages cleanly."
+}

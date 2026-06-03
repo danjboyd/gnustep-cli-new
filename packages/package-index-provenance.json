@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-05-07T18:33:24.229280Z",
+  "generated_at": "2026-05-07T22:14:17.014625Z",
   "builder_identity": "local",
   "package_index": {
     "filename": "package-index.json",
-    "sha256": "2d508d4b85379d49110082a006701c0f56664a5cb7ac8c0269da827797b7de7b",
+    "sha256": "f835f2e3d52a11338655e181cdb5b73644c22986eaa372a671c5930a37680215",
     "channel": "stable",
     "metadata_version": 1,
     "expires_at": "TBD"
@@ -76,7 +76,7 @@
         },
         {
           "id": "arlen-linux-arm64-clang-headless",
-          "sha256": "6d61dd37257dcb87ce493518893e1d779d7fb0ad0f59c79680dbf642bc5bdd39",
+          "sha256": "610c65ddd36e9962f9332cacfbfad28a00966a30267967f298b3456024555e74",
           "source_sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
           "patches": []
         },
@@ -116,7 +116,7 @@
           "sha256": "ba09bfed0782f45b40cc4661eebed26711b78fd05be3a5fc319c36bdbf6d571a"
         }
       ],
-      "artifact_count": 4,
+      "artifact_count": 5,
       "build": {
         "backend": "gnustep-cli",
         "build_system": "gnustep-make",
@@ -143,6 +143,12 @@
         {
           "id": "gorm-linux-ubuntu2404-amd64-clang",
           "sha256": "9438fe5d8b67eb59c9e98719c6f015f35464429ca88236193f4f90253e38f7d2",
+          "source_sha256": "76832519ce69080420f6f67ad318688dfe1fe8b5ec1ae8373692bd25ecfa8b6a",
+          "patches": []
+        },
+        {
+          "id": "gorm-linux-arm64-clang",
+          "sha256": "16ee6672d7086cff60041b47a950999f2225ae90adf8b8c6ff0133455c6fc204",
           "source_sha256": "76832519ce69080420f6f67ad318688dfe1fe8b5ec1ae8373692bd25ecfa8b6a",
           "patches": []
         },
@@ -241,7 +247,7 @@
         },
         {
           "id": "tools-xctest-linux-arm64-clang",
-          "sha256": "0de76047878737cb78642cba60034651a194fc1c70d05a1a220e2c758bc68285",
+          "sha256": "c38242213945c183b69508ce134f125a9ede6016cc518a837d433f6d4d7aed53",
           "source_sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
           "patches": [
             {
@@ -263,7 +269,7 @@
         },
         {
           "id": "tools-xctest-openbsd-arm64-clang",
-          "sha256": "planned-artifact-checksum-tbd",
+          "sha256": "85efadaeea3c65c215ed533d93cbf2afcfe61627886d2f93f1d7df13f988b35e",
           "source_sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
           "patches": [
             {

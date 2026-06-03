@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "package_id": "org.gnustep.tools-xctest",
+  "artifact_id": "tools-xctest-openbsd-arm64-clang",
+  "target": "openbsd-arm64-clang",
+  "host_profile": "openbsd-7.8-arm64",
+  "lease_id": "lease-20260507215030-3q6vbf",
+  "checks": [
+    "otvm-profile-present",
+    "otvm-preflight-passed",
+    "otvm-acceptance-passed",
+    "native-full-cli-build",
+    "package-build",
+    "install",
+    "xctest-smoke",
+    "minimal-bundle",
+    "remove"
+  ],
+  "details": {
+    "package_report": "package-report.json",
+    "install": "install.json",
+    "xctest_help": "xctest-help.txt",
+    "minimal_bundle_build": "minimal-xctest-build.txt",
+    "minimal_bundle_run": "minimal-xctest-run.txt",
+    "remove": "remove.json",
+    "installed_after_remove": "installed-after-remove.txt",
+    "artifact_sha256": "85efadaeea3c65c215ed533d93cbf2afcfe61627886d2f93f1d7df13f988b35e",
+    "source_revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3"
+  }
+}

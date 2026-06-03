@@ -67,6 +67,14 @@ class AdminCliTests(unittest.TestCase):
                     "toolchain_flavor": "clang",
                     "publish": False,
                 },
+                {
+                    "id": "example-linux-arm64-clang",
+                    "os": "linux",
+                    "arch": "arm64",
+                    "compiler_family": "clang",
+                    "toolchain_flavor": "clang",
+                    "publish": False,
+                },
             ],
         }
         (package_root / "package.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -219,6 +227,30 @@ class AdminCliTests(unittest.TestCase):
         package_action = next(action for action in payload["actions"] if action["kind"] == "package_artifact_build")
         self.assertFalse(package_action["blocked"])
         self.assertEqual(package_action["inputs"]["toolchain_artifact_run_id"], "12345")
+
+    def test_build_plan_includes_explicit_openbsd_arm64_deferred_target_and_filters_packages(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo, packages = self.make_repo(Path(tmpdir))
+            payload = admin_build_plan(
+                repo,
+                packages_dir=packages,
+                targets=["openbsd-arm64-clang"],
+                version="arm64-version",
+                toolchain_artifact_run_id="67890",
+            )
+
+        otvm_actions = [action for action in payload["actions"] if action["kind"] == "otvm_build_required"]
+        self.assertEqual(len(otvm_actions), 1)
+        self.assertEqual(otvm_actions[0]["target"], "openbsd-arm64-clang")
+        self.assertTrue(otvm_actions[0]["deferred"])
+
+        package_actions = [action for action in payload["actions"] if action["kind"] == "package_artifact_build"]
+        self.assertEqual([action["artifact"] for action in package_actions], ["example-openbsd-arm64-clang"])
+        self.assertTrue(package_actions[0]["deferred"])
+        self.assertFalse(package_actions[0]["blocked"])
+        self.assertEqual(package_actions[0]["matched_targets"], ["openbsd-arm64-clang"])
+        self.assertEqual(package_actions[0]["inputs"]["toolchain_artifact_run_id"], "67890")
+        self.assertNotIn("toolchain_artifact_name", package_actions[0]["inputs"])
 
     def test_dispatch_builds_is_dry_run_and_skips_blocked_package_actions(self):
         with tempfile.TemporaryDirectory() as tmpdir:

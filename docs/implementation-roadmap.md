@@ -122,8 +122,10 @@ May 5, 2026 RC execution update:
   `publish: false` until source builds, full-CLI smoke, package rebuilds, and
   install/remove validation are available. OpenBSD `arm64` is explicitly not an
   immediate RC blocker for v1 because the Tier 1 managed-install target set
-  does not include it and `../OracleTestVMs` still has no OpenBSD arm64 profile
-  or equivalent scripted host access.
+  does not include it. The latest `../OracleTestVMs` code has an accepted
+  headless `openbsd-7.8-arm64` profile; acceptance passes with
+  `operator_public_key_file = /home/danboyd/.ssh/otvm/id_rsa.pub`, the key baked
+  into the accepted image.
 - Admin curation is now implemented as an internal operator surface rather than
   another set of ad hoc script invocations. The first supported loop is:
   inventory served artifacts and package metadata, compare pinned sources
@@ -1103,14 +1105,20 @@ Remaining subphases to project completion:
 - Phase 16D regression coverage includes source-lock validation, MSYS2 input-manifest validation, source-built Linux artifact packaging, release metadata propagation, archive metadata auditing, setup-time managed-prefix relocation, and host-origin GNUstep path leakage detection.
 - The older host-derived Linux assembler remains available only as a transitional non-production path and marks its artifacts `production_eligible = false`.
 - Phase 16 follow-up resolves the immediate Linux portability blocker by making the current `linux-amd64-clang` managed artifact explicitly Debian-scoped in generated release metadata, toolchain manifests, component inventories, and artifact selection. Ubuntu `amd64/clang` is now a separate distro-scoped target (`linux-ubuntu2404-amd64-clang`) with Docker-built managed CLI/toolchain artifacts published to the `v0.1.0-dev` prerelease and April 20, 2026 setup/doctor/package dogfood evidence. Fedora and Arch remain validated GCC/libobjc interoperability targets, and future managed Clang support there requires dependency closure or per-distro artifacts rather than reusing the Debian-scoped artifact.
-- Phase 16.B2 is implemented at metadata/planning level: the build matrix,
-  source lock, toolchain manifest, component inventory, generated build script,
-  package target metadata, and regression coverage now exist for
+- Phase 16.B2 is implemented and has native OTVM build evidence: the build
+  matrix, source lock, toolchain manifest, component inventory, generated build
+  script, package target metadata, and regression coverage exist for
   `linux-arm64-clang`. OTVM OCI validation for `ubuntu-24.04-aarch64` passed on
-  May 5, 2026 with lease `lease-20260505191156-s29xph`, clearing the VM-access
-  blocker for Linux arm64 host validation. Publication remains disabled until a
-  source-built Linux arm64 managed toolchain, full CLI smoke, package rebuilds,
-  and install/remove validation pass.
+  May 5, 2026 with lease `lease-20260505191156-s29xph`, and OTVM lease
+  `lease-20260507195517-xfh2au` built the source-managed Linux arm64 toolchain,
+  packaged it, built the full CLI against it, smoke-launched the CLI, and built
+  Arlen, Gorm, and tools-xctest package artifacts. OTVM lease
+  `lease-20260507202841-cvp23y` then validated hosted setup from the signed
+  `v0.1.0-dev` release manifest, installed Arlen, Gorm, and tools-xctest from
+  the signed hosted package index, launched Gorm under Xvfb through its package
+  launcher, and removed all three packages cleanly. Linux arm64 is no longer
+  an arm64 bring-up blocker; remaining work is normal release hardening and
+  broader distro coverage.
 - The package-index release trust boundary is now closed for `v0.1.0`: the
   package-index CI signing public key is published as
   `package-index-signing-public.pem` in the hosted release asset set, and
@@ -1124,8 +1132,15 @@ Remaining subphases to project completion:
   the managed toolchain with `package-source-built-linux-toolchain`, builds the
   full CLI with `build-linux-cli-against-managed-toolchain`, and uploads the
   toolchain archive, CLI archive, checksums, and JSON build reports. Linux arm64
-  publication is still pending a successful arm64 workflow run and hosted
-  qualification evidence.
+  has hosted prerelease artifacts and OTVM qualification evidence; CI workflow
+  runs remain useful for repeatability but no longer block the target.
+- The admin curation CLI now has an arm64 bring-up path for
+  `linux-arm64-clang`: an explicitly requested deferred target is planned
+  instead of skipped, package build actions are filtered to Linux arm64 only,
+  and package dispatches can infer the expected managed toolchain workflow
+  artifact name once the arm64 toolchain run id is known. Gorm now has
+  `gorm-linux-arm64-clang` hosted controlled-binary metadata with OTVM build,
+  GUI/runtime, install/remove, and release-promotion evidence.
 
 ## Phase 17. Remaining Tier 1 Toolchain Builds
 
@@ -1143,18 +1158,27 @@ Remaining subphases to project completion:
 ### A2. OpenBSD `arm64/clang` Managed Toolchain Build
 - Add OpenBSD/arm64 as a first-class planned target for the full CLI, managed toolchain metadata, and official packages.
 - Use canonical target id `openbsd-arm64-clang` and canonical architecture value `arm64`.
-- Validate initially on the available OpenBSD arm64 server before enabling artifact publication.
-- Keep publication disabled until source-built toolchain, full CLI, package artifacts, and host-backed install/remove validation pass on the target.
+- Validate initially on the OTVM `openbsd-7.8-arm64` host before enabling package artifact publication.
+- Keep managed toolchain publication disabled until source-built toolchain and full CLI smoke validation pass on the target; package artifacts may publish once their own target-native build/install/smoke/remove evidence exists.
 
 ### Phase 17 Execution Status
 - Phase 17.A2 is implemented at metadata/planning level: the build matrix,
   source lock, toolchain manifest, component inventory, generated build script,
   package target metadata, and regression coverage now exist for
   `openbsd-arm64-clang`. It is a deferred expansion target rather than a v1 RC
-  blocker. Publication remains disabled until a live OpenBSD/arm64 build,
-  full-CLI smoke, package artifact rebuild, and install/remove validation pass;
-  `../OracleTestVMs` currently has no OpenBSD/arm64 profile or equivalent
-  scripted host access.
+  blocker. Managed toolchain publication remains disabled until a source-built
+  OpenBSD/arm64 toolchain and full-CLI smoke validation pass;
+  the latest `../OracleTestVMs` has an accepted `openbsd-7.8-arm64` profile, a
+  separate `openbsd78_arm64_image_ocid` config slot, and admin build plans
+  select that profile for `openbsd-arm64-clang`. May 7, 2026 validation against
+  `oracletestvms-openbsd78-arm64-headless-20260421170510` passed preflight and
+  acceptance when using `/home/danboyd/.ssh/otvm/id_rsa.pub`, which is the key
+  baked into the accepted image. OTVM lease `lease-20260507215030-3q6vbf` then
+  built the native full CLI, built patched `tools-xctest`, installed it by the
+  simple package name, ran `xctest --help`, ran a minimal XCTest bundle, and
+  removed it by the simple package name. The remaining OpenBSD arm64 blocker is
+  source-built managed toolchain publication, not OTVM host access or package
+  lifecycle validation.
 
 ### B. Windows `amd64/msys2-clang64` Managed Toolchain Assembly
 - Define the pinned MSYS2 package input set for the Windows `clang64` target.
@@ -1715,8 +1739,8 @@ Remaining subphases to project completion:
 
 ### Phase 24 Execution Status
 - Phase 24.A-D are implemented at repository-tooling level: the `tools-xctest` package manifest records upstream source policy, update cadence, channel policy, submitted PR #5 as a verified downstream patch, and a `gnustep build`-oriented build workflow. Package tooling can now validate and apply declared patches to a source checkout, package build planning exposes build backend/invocation metadata, and generated package indexes/provenance carry package and per-artifact source/patch identity.
-- Phase 24.E-G now have a repository release gate through `scripts/internal/build_infra.py --json tools-xctest-release-gate --packages-dir packages --evidence-dir <evidence-dir>`. The gate now passes with OpenBSD arm64 explicitly deferred as a documented non-release blocker; validated targets have rebuilt `tools-xctest` artifacts from the declared upstream revision plus PR #5 patch with native install/smoke/minimal-bundle/remove evidence.
-- Current blockers: OpenBSD arm64 remains a documented non-release blocker pending an OTVM profile or equivalent scripted access to the OpenBSD arm64 host. Debian Linux amd64, Ubuntu Linux amd64, Linux arm64 on the OTVM Ubuntu/aarch64 managed Clang/libobjc2 path, OpenBSD amd64, and Windows/MSYS2 are rebuilt from the declared upstream revision plus PR #5 patch, published in package metadata, and validated with install/help/minimal-bundle/remove evidence.
+- Phase 24.E-G now have a repository release gate through `scripts/internal/build_infra.py --json tools-xctest-release-gate --packages-dir packages --evidence-dir <evidence-dir>`. The gate now passes with rebuilt `tools-xctest` artifacts from the declared upstream revision plus PR #5 patch with native install/smoke/minimal-bundle/remove evidence.
+- Current blockers: none for the `tools-xctest` package lifecycle gate. Debian Linux amd64, Ubuntu Linux amd64, Linux arm64 on the OTVM Ubuntu/aarch64 managed Clang/libobjc2 path, OpenBSD amd64, OpenBSD arm64 on OTVM `openbsd-7.8-arm64`, and Windows/MSYS2 are rebuilt from the declared upstream revision plus PR #5 patch, published in package metadata, and validated with install/help/minimal-bundle/remove evidence.
 - Gorm and Arlen now have initial package manifests, package-index entries, and
   hosted Linux `amd64/clang` artifacts. Target-native expansion remains active
   work: Linux `arm64/clang`, Ubuntu `amd64/clang`, OpenBSD `amd64/clang`, and
@@ -1740,7 +1764,7 @@ Remaining subphases to project completion:
 - Verify `xctest` is on the expected installed path, can execute `--help` or equivalent smoke behavior, and can run at least one minimal XCTest bundle.
 - Remove the package through the CLI and verify owned-file cleanup, state updates, and dependency behavior.
 - Run this flow on Debian Linux amd64, Ubuntu Linux amd64, Linux arm64/Debian, OpenBSD, and Windows/MSYS2 as target artifacts become available.
-- Status: gate defined and enforced at repository level; Debian Linux amd64, Ubuntu Linux amd64, Linux arm64 on OTVM Ubuntu/aarch64 with a managed Clang/libobjc2 toolchain, OpenBSD amd64, and Windows/MSYS2 now pass the gate with accepted dogfood evidence. OpenBSD arm64 remains host-access blocked and is recorded as a documented non-release blocker. The `tools-xctest-release-gate` now passes with that explicit deferral.
+- Status: gate defined and enforced at repository level; Debian Linux amd64, Ubuntu Linux amd64, Linux arm64 on OTVM Ubuntu/aarch64 with a managed Clang/libobjc2 toolchain, OpenBSD amd64, OpenBSD arm64 through OTVM `openbsd-7.8-arm64`, and Windows/MSYS2 now pass the gate with accepted dogfood evidence. The OpenBSD arm64 validation used `/home/danboyd/.ssh/otvm/id_rsa.pub`, built the native full CLI, installed `tools-xctest` by simple alias, ran `xctest --help`, ran a minimal XCTest bundle, and removed the package by simple alias.
 
 ### F. Release Gate Integration
 - Add `tools-xctest` package install/remove smoke to release qualification so Objective-C unit-test infrastructure is validated as a real package, not only as a developer prerequisite.
@@ -2169,13 +2193,14 @@ Post-RC hardening before a stable production claim:
 Deferred expansion tracks:
 
 - Phase 16.B2: Linux `arm64/clang` build and publication. OTVM
-  Ubuntu/aarch64 host validation is available; publication remains blocked on
-  source-built artifact, package rebuild, and install/remove evidence.
+  Ubuntu/aarch64 source build, hosted setup, package install/remove, and Gorm
+  Xvfb launch validation are complete for the dogfood channel.
 - Phase 17.A: optional managed OpenBSD `amd64/clang` artifact publication if the
   project later needs a managed OpenBSD path; current release claims should use
   the preferred native packaged path.
 - Phase 17.A2: OpenBSD `arm64/clang` build and publication, deferred until
-  OpenBSD/arm64 host access or OTVM support exists.
+  `openbsd-7.8-arm64` is used to produce target-native GNUstep build, package,
+  install, smoke, and remove evidence.
 - Phase 17.C: Windows `amd64/msvc`, explicitly deferred.
 - Phase 24.C/E/G: complete any deferred package artifacts and dogfood evidence
   for non-release-blocking targets such as OpenBSD arm64.
