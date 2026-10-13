@@ -65,11 +65,11 @@ managed_target_suffix() {
   platform=$3
   os_version=${4:-}
   if [ "$os" = "linux" ] && [ "$platform" = "ubuntu" ] && [ "$arch" = "amd64" ]; then
-    if [ "$os_version" = "ubuntu-24.04" ]; then
-      printf '%s\n' "linux-ubuntu2404-amd64-clang"
-    else
-      printf '%s\n' "linux-ubuntu-unsupported-$arch-clang"
-    fi
+    case "$os_version" in
+      ubuntu-24.04) printf '%s\n' "linux-ubuntu2404-amd64-clang" ;;
+      ubuntu-26.04) printf '%s\n' "linux-ubuntu2604-amd64-clang" ;;
+      *) printf '%s\n' "linux-ubuntu-unsupported-$arch-clang" ;;
+    esac
     return 0
   fi
   printf '%s\n' "$os-$arch-clang"

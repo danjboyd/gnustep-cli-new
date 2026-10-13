@@ -183,6 +183,21 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("json_file_bool", content)
         self.assertIn("published", content)
 
+    def _managed_target_suffix(self, *args):
+        content = BOOTSTRAP.read_text(encoding="utf-8")
+        start = content.index("managed_target_suffix() {")
+        end = content.index("\n}\n", start) + 3
+        script = content[start:end] + 'managed_target_suffix "$@"\n'
+        proc = subprocess.run(["sh", "-c", script, "sh", *args], capture_output=True, text=True, check=True)
+        return proc.stdout.strip()
+
+    def test_managed_target_suffix_maps_ubuntu_lts_releases(self):
+        self.assertEqual(self._managed_target_suffix("linux", "amd64", "ubuntu", "ubuntu-24.04"), "linux-ubuntu2404-amd64-clang")
+        self.assertEqual(self._managed_target_suffix("linux", "amd64", "ubuntu", "ubuntu-26.04"), "linux-ubuntu2604-amd64-clang")
+        self.assertEqual(self._managed_target_suffix("linux", "amd64", "ubuntu", "ubuntu-25.10"), "linux-ubuntu-unsupported-amd64-clang")
+        self.assertEqual(self._managed_target_suffix("linux", "amd64", "debian", "debian-13"), "linux-amd64-clang")
+        self.assertEqual(self._managed_target_suffix("linux", "arm64", "debian", "debian-13"), "linux-arm64-clang")
+
     def test_bootstrap_uses_canonical_arm64_architecture(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")
         self.assertIn('aarch64|arm64) printf \'%s\\n\' "arm64"', content)

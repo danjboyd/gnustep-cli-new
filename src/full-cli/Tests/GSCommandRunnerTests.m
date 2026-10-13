@@ -336,8 +336,17 @@
                                              @"ubuntu-26.04", @"os_version",
                                              nil];
 
+  NSDictionary *artifact2604 = [NSDictionary dictionaryWithObjectsAndKeys:
+                                               @"linux", @"os",
+                                               @"amd64", @"arch",
+                                               [NSArray arrayWithObject: @"ubuntu"], @"supported_distributions",
+                                               [NSArray arrayWithObject: @"ubuntu-26.04"], @"supported_os_versions",
+                                               nil];
+
   XCTAssertTrue([runner artifact: artifact matchesDistributionForEnvironment: ubuntu2404]);
   XCTAssertFalse([runner artifact: artifact matchesDistributionForEnvironment: ubuntu2604]);
+  XCTAssertTrue([runner artifact: artifact2604 matchesDistributionForEnvironment: ubuntu2604]);
+  XCTAssertFalse([runner artifact: artifact2604 matchesDistributionForEnvironment: ubuntu2404]);
 }
 
 - (void)testCompatibilityReasonsSeparateDistributionAndOSVersion
