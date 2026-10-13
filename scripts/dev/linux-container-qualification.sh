@@ -107,6 +107,64 @@ clang -fobjc-arc -fblocks $(gnustep-config --objc-flags) probe.m -o probe $(gnus
 LD_LIBRARY_PATH="$R/lib:${LD_LIBRARY_PATH:-}" ./probe
 LD_LIBRARY_PATH="$R/lib:${LD_LIBRARY_PATH:-}" ldd ./probe
 PROBE
+cat > "$work/package-smoke.sh" <<'PACKAGE'
+# Install and remove a minimal cli-tool package from a local index and confirm
+# the managed environment is left without the package's files.
+set -eu
+pkg="$WORK/package"
+rm -rf "$pkg"
+mkdir -p "$pkg/payload/bin"
+printf '#!/bin/sh\necho container-package-ok\n' > "$pkg/payload/bin/gnustep-qualify-demo"
+chmod +x "$pkg/payload/bin/gnustep-qualify-demo"
+tar -czf "$pkg/demo.tar.gz" -C "$pkg/payload" .
+sha=$(sha256sum "$pkg/demo.tar.gz" | awk '{print $1}')
+cat > "$pkg/package-index.json" <<INDEX
+{
+  "schema_version": 1,
+  "channel": "qualification",
+  "packages": [
+    {
+      "id": "org.gnustep.qualify-demo",
+      "name": "qualify-demo",
+      "version": "0.1.0",
+      "kind": "cli-tool",
+      "summary": "Container qualification package fixture.",
+      "requirements": {
+        "supported_os": ["linux"],
+        "supported_arch": ["amd64"],
+        "supported_compiler_families": ["clang"],
+        "supported_objc_runtimes": ["libobjc2"],
+        "supported_objc_abi": ["modern"],
+        "required_features": ["blocks"],
+        "forbidden_features": []
+      },
+      "dependencies": [],
+      "artifacts": [
+        {
+          "id": "qualify-demo-linux-amd64-clang",
+          "os": "linux",
+          "arch": "amd64",
+          "compiler_family": "clang",
+          "toolchain_flavor": "clang",
+          "objc_runtime": "libobjc2",
+          "objc_abi": "modern",
+          "required_features": ["blocks"],
+          "url": "file://$pkg/demo.tar.gz",
+          "sha256": "$sha"
+        }
+      ]
+    }
+  ]
+}
+INDEX
+gnustep install --json --root "$R" --index "$pkg/package-index.json" org.gnustep.qualify-demo > "$OUT/package-install.json"
+installed=$(find "$R" -name gnustep-qualify-demo -type f | head -n 1)
+test -n "$installed"
+"$installed" | grep -qx container-package-ok
+gnustep remove --json --root "$R" org.gnustep.qualify-demo > "$OUT/package-remove.json"
+test -z "$(find "$R" -name gnustep-qualify-demo)"
+echo "installed_path=${installed#$R/}"
+PACKAGE
 cat > "$work/steps.sh" <<'STEPS'
 set -u
 cd "$WORK"
@@ -134,6 +192,7 @@ step build gnustep build --json
 step run gnustep run --json
 cd "$WORK"
 step probe sh "$WORK/probe.sh"
+step package_smoke sh "$WORK/package-smoke.sh"
 STEPS
 chown -R "$USER_NAME" "$work"
 chmod a+rwx "$OUT"
@@ -166,6 +225,7 @@ results = {
     "doctor": "passed" if steps.get("doctor") == "0" and doctor.get("status") in ("ok", "warning") else "failed",
     "new_build_run": "passed" if all(steps.get(s) == "0" for s in ("new", "build", "run")) and "Hello from CLI tool" in run.get("stdout", "") else "failed",
     "foundation_probe": "passed" if steps.get("probe") == "0" and "SUM=42" in probe else "failed",
+    "package_install_remove": "passed" if steps.get("package_smoke") == "0" and last_json(read("package-install.json")).get("ok") and last_json(read("package-remove.json")).get("ok") else "failed",
 }
 probe_icu = [line.strip() for line in probe.splitlines() if "libicu" in line or "libc.so.6" in line]
 report = {
@@ -176,6 +236,8 @@ report = {
     "target_id": target,
     "version": version,
     "ok": all(value == "passed" for value in results.values()),
+    "evidence_tier": "github-actions-container",
+    "evidence_tier_note": "Clean container of the target distro release on a GitHub-hosted runner: real distro userland and package archive, but the runner's kernel, not a VM or physical host.",
     "host": {
         "distribution": os_release.get("PRETTY_NAME", "").strip('"'),
         "os_version": f'{os_release.get("ID", "")}-{os_release.get("VERSION_ID", "").strip(chr(34))}',
@@ -199,6 +261,7 @@ report = {
         "doctor_default_manifest_classification": last_json(read("doctor_default.out")).get("environment_classification"),
         "run_stdout": run.get("stdout", "").strip(),
         "probe_runtime_resolution": probe_icu,
+        "package_smoke": read("package_smoke.out").strip().splitlines(),
     },
 }
 json.dump(report, open(os.path.join(out, "container-qualification.json"), "w"), indent=2)
