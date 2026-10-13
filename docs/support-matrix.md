@@ -1,14 +1,26 @@
 # Support Matrix
 
-This document records the current release-candidate support position for the
-targets the project is actively discussing.
+This document records the current support position for the targets the
+project is actively discussing.
 
 ## Current Snapshot
 
-Stable `v0.1.0` support claims are frozen around the target set below pending
-fresh structured OpenBSD and Windows stable evidence. The current dogfood RC
-baseline remains `v0.1.0-dev-hosted.32`; `v0.1.0` is the intended stable tag
-candidate, not a published stable release yet.
+`v0.1.0` is published as the stable GitHub release (first published May 5,
+2026; release evidence in `docs/validation/release-0.1.0-evidence/`). On June 3,
+2026 Debian 13 trixie `arm64` CLI and toolchain artifacts were added to it. The
+signed stable manifest scopes the Linux artifacts to Debian with an ICU 76 /
+glibc 2.41 runtime gate. Ubuntu is not covered by the stable manifest.
+Per-target notes below that describe `v0.1.0` as a candidate are historical.
+
+On October 13, 2026 the stable `amd64` CLI and toolchain were replaced with
+Debian 13 builds and the release metadata was re-signed. The previous `amd64`
+toolchain (sha256 `cad89e63…`) was a mislabeled Debian 12 bookworm build: it
+bundled glibc 2.36 and ICU 72 and crashed on Debian 13. The stable install
+command is the release-asset bootstrap
+`https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/gnustep-bootstrap.sh`,
+which selects the `v0.1.0` manifest and verifies it with the production trust
+root. Evidence:
+`docs/validation/linux-amd64-debian13-stable-republish-20261013.json`.
 
 - `openbsd-amd64-clang`
   status: `validated_native_preferred`
@@ -72,9 +84,21 @@ candidate, not a published stable release yet.
   compatibility. The artifact must be rebuilt on the trixie base, the Linux CLI
   rebuilt against that managed prefix, then restaged, re-signed, and re-validated
   on a Debian 13 host before the trixie support claim is evidence-backed.
+  October 13, 2026: done. The trixie amd64 CLI and toolchain are on stable
+  `v0.1.0`, and a native Debian 13 amd64 host completed bootstrap `setup
+  --user`, `doctor`, `new`/`build`/`run`, and a Foundation compile-link-run
+  probe through the published stable bootstrap. Evidence:
+  `docs/validation/linux-amd64-debian13-stable-republish-20261013.json`.
 - `debian-arm64-managed-clang`
-  status: `planned_build_target`
-  notes: planned Debian/aarch64 managed target for the full CLI and official
+  status: `published_stable_debian13`
+  notes: June 3, 2026: Debian 13 arm64 CLI and toolchain artifacts were
+  published on the stable `v0.1.0` release and validated on a native Debian 13
+  aarch64 host (toolchain libraries resolve against ICU 76 / glibc 2.41, and a
+  Foundation program compiled with the published toolchain ran); evidence in
+  `docs/validation/linux-arm64-debian13-stable-publish-20260603.json`. That
+  validation used direct artifact download; stable arm64 has not yet been
+  exercised through the stable bootstrap. Earlier
+  history: planned Debian/aarch64 managed target for the full CLI and official
   package artifacts. Target metadata uses canonical `arch = arm64`; build and
   validation should use `../OracleTestVMs` local libvirt/mac capacity first and
   fall back to OCI only when local capacity is unavailable. No release artifact
