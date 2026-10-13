@@ -17,6 +17,8 @@ if str(SRC) not in sys.path:
 
 from gnustep_cli_shared.compatibility import artifact_matches_host, evaluate_environment_against_artifact
 from gnustep_cli_shared.build_infra import (
+    cli_version_compile_defines,
+    stamped_cli_version,
     assemble_linux_toolchain_artifact,
     build_matrix,
     compare_windows_msys2_inventories,
@@ -115,6 +117,16 @@ def managed_debian_doctor_payload():
 
 
 class BuildInfraTests(unittest.TestCase):
+    def test_release_versions_are_stamped_into_the_cli(self):
+        self.assertEqual(stamped_cli_version("0.1.0"), "0.1.0")
+        self.assertEqual(cli_version_compile_defines("0.1.0"), ['-DGNUSTEP_CLI_VERSION="0.1.0"'])
+        self.assertEqual(stamped_cli_version("0.2.13"), "0.2.13")
+
+    def test_development_labels_keep_the_dev_cli_version(self):
+        for label in ("0.1.0-dev", "0.1.0-dev-current", "0.1.0-dogfood", "0.1.0-snapshot.20260505"):
+            self.assertEqual(stamped_cli_version(label), "0.1.0-dev")
+            self.assertEqual(cli_version_compile_defines(label), [])
+
     def test_matrix_contains_tier1_targets(self):
         payload = build_matrix()
         self.assertEqual(payload["schema_version"], 1)

@@ -12,6 +12,19 @@
 #import <unistd.h>
 #endif
 
+// Release builds stamp the CLI version (for example -DGNUSTEP_CLI_VERSION="0.1.0")
+// so a stable CLI reports its release version and resolves the matching
+// v<version> release manifest and production trust root. Unstamped development
+// builds stay on the 0.1.0-dev prerelease line.
+#ifndef GNUSTEP_CLI_VERSION
+#define GNUSTEP_CLI_VERSION "0.1.0-dev"
+#endif
+
+static NSString *GSCLIVersionString(void)
+{
+  return @GNUSTEP_CLI_VERSION;
+}
+
 @interface GSCommandRunner ()
 
 - (BOOL)isKnownCommand:(NSString *)command;
@@ -570,7 +583,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                ok: YES
                            status: @"ok"
                           summary: @"GNUstep CLI version"
-                             data: [NSDictionary dictionaryWithObject: @"0.1.0-dev"
+                             data: [NSDictionary dictionaryWithObject: GSCLIVersionString()
                                                               forKey: @"version"]];
 }
 
@@ -633,13 +646,13 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   if (root != nil)
     {
-      staged = [[root stringByAppendingPathComponent: @"dist/stable/0.1.0-dev"] stringByAppendingPathComponent: @"release-manifest.json"];
+      staged = [[root stringByAppendingPathComponent: [@"dist/stable" stringByAppendingPathComponent: GSCLIVersionString()]] stringByAppendingPathComponent: @"release-manifest.json"];
       if ([manager fileExistsAtPath: staged])
         {
           return staged;
         }
     }
-  return @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0-dev/release-manifest.json";
+  return [NSString stringWithFormat: @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v%@/release-manifest.json", GSCLIVersionString()];
 }
 
 - (NSString *)dogfoodManifestURL
@@ -4377,7 +4390,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return [NSDictionary dictionaryWithObjectsAndKeys:
                         [NSNumber numberWithInt: 1], @"schema_version",
                         @"doctor", @"command",
-                        @"0.1.0-dev", @"cli_version",
+                        GSCLIVersionString(), @"cli_version",
                         interface, @"interface",
                         quick ? @"quick" : ([interface isEqualToString: @"bootstrap"] ? @"installer" : @"full"), @"diagnostic_depth",
                         [NSNumber numberWithBool: ![status isEqualToString: @"error"]], @"ok",
@@ -5435,7 +5448,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     return [NSDictionary dictionaryWithObjectsAndKeys:
                           [NSNumber numberWithInt: 1], @"schema_version",
                           @"setup", @"command",
-                          @"0.1.0-dev", @"cli_version",
+                          GSCLIVersionString(), @"cli_version",
                           [NSNumber numberWithBool: ok], @"ok",
                           status, @"status",
                           summary, @"summary",
@@ -6865,7 +6878,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     return [NSDictionary dictionaryWithObjectsAndKeys:
                           [NSNumber numberWithInt: 1], @"schema_version",
                           @"setup", @"command",
-                          @"0.1.0-dev", @"cli_version",
+                          GSCLIVersionString(), @"cli_version",
                           [NSNumber numberWithBool: YES], @"ok",
                           @"ok", @"status",
                           (upgradeMode ? @"Managed upgrade completed." : @"Managed installation completed."), @"summary",
@@ -9836,7 +9849,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         }
       else
         {
-          printf("0.1.0-dev\n");
+          printf("%s\n", GNUSTEP_CLI_VERSION);
         }
       return 0;
     }

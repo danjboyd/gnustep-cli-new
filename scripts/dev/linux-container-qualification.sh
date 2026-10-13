@@ -83,7 +83,10 @@ OBJC
 
 cat > "$work/probe.sh" <<'PROBE'
 set -eu
+# GNUstep.sh references unset shell variables (for example ZSH_VERSION).
+set +u
 . "$R/System/Library/Makefiles/GNUstep.sh"
+set -u
 clang -fobjc-arc -fblocks $(gnustep-config --objc-flags) probe.m -o probe $(gnustep-config --base-libs) -L"$R/lib" -ldispatch
 LD_LIBRARY_PATH="$R/lib:${LD_LIBRARY_PATH:-}" ./probe
 LD_LIBRARY_PATH="$R/lib:${LD_LIBRARY_PATH:-}" ldd ./probe
@@ -99,7 +102,8 @@ step setup env GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED=1 sh "$REPO/scripts/bootstrap/gn
 export PATH="$R/bin:$PATH"
 step version gnustep --version
 step help gnustep --help
-step doctor gnustep doctor --json
+step doctor gnustep doctor --json --manifest "$OUT/release-manifest.json"
+step doctor_default gnustep doctor --json
 step new gnustep new --json cli-tool "$WORK/proj" --name HelloTool
 cd "$WORK/proj"
 step build gnustep build --json
@@ -165,6 +169,8 @@ report = {
         "setup_selected_artifacts": setup.get("plan", {}).get("selected_artifacts"),
         "doctor_status": doctor.get("status"),
         "doctor_environment_classification": doctor.get("environment_classification"),
+        "doctor_default_manifest_status": last_json(read("doctor_default.out")).get("status"),
+        "doctor_default_manifest_classification": last_json(read("doctor_default.out")).get("environment_classification"),
         "run_stdout": run.get("stdout", "").strip(),
         "probe_runtime_resolution": probe_icu,
     },

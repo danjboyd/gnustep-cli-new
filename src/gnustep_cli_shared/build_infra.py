@@ -2754,6 +2754,28 @@ def _linux_gcc_runtime_include_path() -> str | None:
     return str(candidates[-1])
 
 
+RELEASE_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
+DEVELOPMENT_CLI_VERSION = "0.1.0-dev"
+
+
+def stamped_cli_version(version: str) -> str:
+    """Return the version a CLI built for this artifact version reports.
+
+    Only plain release versions (for example 0.1.0) are stamped into the binary,
+    so a stable CLI resolves its own v<version> release manifest and the
+    production trust root. Development labels such as 0.1.0-dev-current keep the
+    built-in 0.1.0-dev prerelease line.
+    """
+    return version if RELEASE_VERSION_PATTERN.match(version) else DEVELOPMENT_CLI_VERSION
+
+
+def cli_version_compile_defines(version: str) -> list[str]:
+    stamped = stamped_cli_version(version)
+    if stamped == DEVELOPMENT_CLI_VERSION:
+        return []
+    return [f'-DGNUSTEP_CLI_VERSION="{stamped}"']
+
+
 def build_linux_cli_against_managed_toolchain(
     toolchain_archive: str | Path,
     output_archive: str | Path,
@@ -2800,6 +2822,7 @@ def build_linux_cli_against_managed_toolchain(
         command = [
             "clang",
             *objc_flags,
+            *cli_version_compile_defines(version),
             f"-I{managed_root / 'Local' / 'Library' / 'Headers'}",
             f"-I{managed_root / 'System' / 'Library' / 'Headers'}",
             *([f"-I{gcc_include}"] if gcc_include else []),
@@ -2826,6 +2849,10 @@ def build_linux_cli_against_managed_toolchain(
         smoke = subprocess.run([str(binary), "--help"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=runtime_env, check=False)
         if smoke.returncode != 0:
             return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": False, "status": "error", "summary": "Managed-prefix Linux CLI smoke failed.", "stdout": smoke.stdout, "stderr": smoke.stderr}
+        expected_version = stamped_cli_version(version)
+        version_smoke = subprocess.run([str(binary), "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=runtime_env, check=False)
+        if version_smoke.returncode != 0 or version_smoke.stdout.strip() != expected_version:
+            return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": False, "status": "error", "summary": f"Managed-prefix Linux CLI reports version {version_smoke.stdout.strip()!r}, expected {expected_version!r}.", "stdout": version_smoke.stdout, "stderr": version_smoke.stderr}
         abi = linux_cli_abi_audit(binary)
         if not abi["ok"]:
             return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": False, "status": "error", "summary": "Managed-prefix Linux CLI ABI audit failed.", "abi_audit": abi}
