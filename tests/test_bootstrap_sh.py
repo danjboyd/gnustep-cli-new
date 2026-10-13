@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 import subprocess
 import unittest
 from pathlib import Path
@@ -10,13 +12,21 @@ BOOTSTRAP = ROOT / "scripts" / "bootstrap" / "gnustep-bootstrap.sh"
 
 class BootstrapShTests(unittest.TestCase):
     def run_script(self, *args):
-        proc = subprocess.run(
-            ["sh", str(BOOTSTRAP), *args],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
+        # Always run with a throwaway HOME: `setup` without --root installs into
+        # $HOME/.local/share/gnustep-cli and must never touch the real user's
+        # managed environment.
+        with tempfile.TemporaryDirectory() as home:
+            env = dict(os.environ, HOME=home, XDG_CONFIG_HOME=f"{home}/.config",
+                       XDG_CACHE_HOME=f"{home}/.cache", XDG_STATE_HOME=f"{home}/.local/state",
+                       XDG_DATA_HOME=f"{home}/.local/share")
+            proc = subprocess.run(
+                ["sh", str(BOOTSTRAP), *args],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+                env=env,
+            )
         return proc
 
     def test_help_shows_full_command_surface(self):
