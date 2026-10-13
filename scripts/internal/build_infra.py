@@ -13,6 +13,7 @@ if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
 from gnustep_cli_shared.build_infra import build_matrix, release_manifest_from_matrix, write_release_manifest
+from gnustep_cli_shared.custom_toolchain import build_custom_toolchain, validate_custom_toolchain_lock
 from gnustep_cli_shared.build_infra import (
     package_artifact_build_plan,
     package_artifact_publication_gate,
@@ -123,6 +124,16 @@ def main() -> int:
     package_linux_toolchain.add_argument("--output-dir", required=True)
     package_linux_toolchain.add_argument("--toolchain-version", default="2026.04.0")
     package_linux_toolchain.add_argument("--target", default="linux-amd64-clang")
+
+    validate_custom_lock = subparsers.add_parser("validate-custom-toolchain-lock", add_help=False)
+    validate_custom_lock.add_argument("--lock", required=True)
+
+    build_custom = subparsers.add_parser("build-custom-toolchain", add_help=False)
+    build_custom.add_argument("--lock", required=True)
+    build_custom.add_argument("--prefix", required=True)
+    build_custom.add_argument("--work-dir")
+    build_custom.add_argument("--jobs", type=int)
+    build_custom.add_argument("--sources-only", action="store_true")
 
     host_origin_audit = subparsers.add_parser("toolchain-host-origin-audit", add_help=False)
     host_origin_audit.add_argument("--toolchain-root", required=True)
@@ -434,6 +445,17 @@ def main() -> int:
             toolchain_version=args.toolchain_version,
             target_id=args.target,
         )
+    elif args.subcommand == "validate-custom-toolchain-lock":
+        lock_path = Path(args.lock)
+        payload = validate_custom_toolchain_lock(json.loads(lock_path.read_text()), lock_path)
+    elif args.subcommand == "build-custom-toolchain":
+        payload = build_custom_toolchain(
+            args.lock,
+            args.prefix,
+            work_dir=args.work_dir,
+            jobs=args.jobs,
+            sources_only=args.sources_only,
+        )
     elif args.subcommand == "toolchain-host-origin-audit":
         payload = toolchain_tree_host_origin_audit(args.toolchain_root)
     elif args.subcommand == "github-release-plan":
@@ -655,7 +677,7 @@ def main() -> int:
             "'stage-release', 'github-release-plan', 'github-release-publish', "
             "'prepare-github-release', 'session-build-box-plan', 'dogfood-snapshot-version', 'delta-artifact-record', 'package-artifact-publication-gate', 'tools-xctest-release-gate', 'package-tools-xctest-artifact', 'build-linux-cli-against-managed-toolchain', 'linux-cli-abi-audit', 'refresh-local-release-metadata', 'published-url-qualification-plan', "
             "'verify-release', 'qualify-release', 'qualify-full-cli-handoff', 'windows-current-source-marker', 'release-evidence-bundle', 'release-qualification-summary', 'validate-update-all-evidence', 'release-key-rotation-drill', 'immediate-rc-blocker-status', "
-            "'validate-source-lock', 'msys2-input-manifest', 'validate-input-manifest', 'component-inventory', 'windows-msys2-component-inventory', 'compare-windows-msys2-inventories', 'toolchain-manifest', "
+            "'validate-source-lock', 'validate-custom-toolchain-lock', 'build-custom-toolchain', 'msys2-input-manifest', 'validate-input-manifest', 'component-inventory', 'windows-msys2-component-inventory', 'compare-windows-msys2-inventories', 'toolchain-manifest', "
             "'toolchain-plan', 'linux-build-script', 'openbsd-build-script', "
             "'msys2-assembly-script', 'toolchain-archive-audit', 'debian-gcc-interop-plan', 'windows-extracted-toolchain-rebuild-plan', or 'msvc-status'",
             file=sys.stderr,
