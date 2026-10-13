@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "validation_id": "linux-amd64-debian13-stable-republish-20261013",
+  "validated_at": "2026-10-13",
+  "summary": "Stable v0.1.0 linux-amd64-clang CLI and toolchain republished as Debian 13 trixie builds, re-signed, and validated end to end on a native Debian 13 amd64 host through the published stable bootstrap.",
+  "host": {
+    "name": "iep-daniel-t14",
+    "architecture": "x86_64",
+    "distribution": "Debian GNU/Linux 13 (trixie)",
+    "kernel": "6.12.111+deb13-amd64",
+    "glibc": "2.41",
+    "icu_major": 76
+  },
+  "defect_fixed": {
+    "found_at": "2026-10-13",
+    "description": "The previously published v0.1.0 linux-amd64-clang toolchain was a Debian 12 bookworm build that bundled glibc 2.36, libm, libstdc++, libgcc_s, and ICU 72 under System/Library/Libraries despite manifest labels icu_major 76 / glibc_min 2.41. The installed CLI aborted with 'stack smashing detected' on Debian 13 amd64.",
+    "replaced_assets": [
+      {
+        "filename": "gnustep-toolchain-linux-amd64-clang-0.1.0.tar.gz",
+        "old_sha256": "cad89e63db141191eccdacebb24f0c87fd0ff12b140bd832fa34888413b5e0ce",
+        "new_sha256": "cad08bb0ae05f216abc821431c4a5119dd295df891ab7024161a0cbd13171833"
+      },
+      {
+        "filename": "gnustep-cli-linux-amd64-clang-0.1.0.tar.gz",
+        "old_sha256": "b7798fcd22d32c8ba5b902ef57cfc01d134c057e62a8a84dfe5bc73cee7c38f9",
+        "new_sha256": "08036124933163b9ab524e15cd27928553b504d4c70d4af5932d6d0037ff5037"
+      }
+    ],
+    "unchanged_assets": [
+      "gnustep-cli-linux-arm64-clang-0.1.0.tar.gz",
+      "gnustep-toolchain-linux-arm64-clang-0.1.0.tar.gz",
+      "gnustep-cli-windows-amd64-msys2-clang64-0.1.0.zip",
+      "gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0.zip"
+    ]
+  },
+  "release": {
+    "tag": "v0.1.0",
+    "channel": "stable",
+    "managed_artifacts_run_id": "38447568998",
+    "release_evidence_run_id": "38448495579",
+    "stage_release_run_id": "38448498872",
+    "release_run_id": "38450122008",
+    "release_run_ref": "stable-amd64-trixie-v0.1.0",
+    "release_manifest_signature": "verified against the production release trust root pinned in scripts/bootstrap (production-bootstrap-trust-root, PR #2)",
+    "bootstrap_asset": {
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/gnustep-bootstrap.sh",
+      "sha256": "881f1371572448dafbeeaa12393225a3b262f227b93b1d34335ddb480f26d55e",
+      "source": "scripts/bootstrap/gnustep-bootstrap.sh at origin/production-bootstrap-trust-root (a023008) with CLI_VERSION stamped to 0.1.0"
+    }
+  },
+  "results": {
+    "toolchain_built_from_source_in_debian13_container": "passed",
+    "toolchain_no_bundled_libc_libm_libstdcxx_libgcc": "passed",
+    "toolchain_icu_needed_only_76": "passed",
+    "cli_no_bundled_runtime_libs": "passed",
+    "release_manifest_production_signature": "passed",
+    "bootstrap_selects_stable_v0_1_0_manifest": "passed",
+    "bootstrap_setup_user_default_root": "passed",
+    "cli_version": "passed",
+    "cli_help": "passed",
+    "doctor_toolchain_compatible": "passed",
+    "new_cli_tool_build_run": "passed",
+    "foundation_blocks_arc_dispatch_compile_link_run": "passed"
+  },
+  "evidence": {
+    "user_command": "curl -fsSL https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/gnustep-bootstrap.sh | sh -s -- setup --user",
+    "soname_scan": {
+      "toolchain_icu_needed": ["libicudata.so.76", "libicui18n.so.76", "libicuuc.so.76"],
+      "toolchain_max_glibc_symbol": "GLIBC_2.38",
+      "cli_max_glibc_symbol": "GLIBC_2.34"
+    },
+    "doctor": {
+      "status": "ok",
+      "environment_classification": "toolchain_compatible",
+      "distribution_id": "debian",
+      "os_version": "debian-13"
+    },
+    "run_stdout": "Hello from CLI tool",
+    "foundation_probe_stdout": "SUM=42 6.12.111+deb13-amd64",
+    "foundation_probe_runtime_resolution": {
+      "libc.so.6": "/lib/x86_64-linux-gnu/libc.so.6",
+      "libicuuc.so.76": "/lib/x86_64-linux-gnu/libicuuc.so.76",
+      "libobjc.so.4.6": "<root>/lib/libobjc.so.4.6",
+      "libdispatch.so": "<root>/lib/libdispatch.so"
+    }
+  },
+  "known_limitations": [
+    "The full CLI reports version 0.1.0-dev and defaults its update manifest to the v0.1.0-dev prerelease; this is hardcoded in src/full-cli/GSCommandRunner.m and equally true of the stable arm64 CLI.",
+    "Binaries built by hand after sourcing GNUstep.sh need <root>/lib on LD_LIBRARY_PATH (libdispatch, libobjc2); the gnustep launcher and gnustep new templates handle this.",
+    "The Release run consumed the committed May 2026 linux-smoke-report.json (Debian 12 container against v0.1.0-dev-hosted.32) as its Linux smoke gate input; this file is the fresh Debian 13 amd64 evidence.",
+    "Stable arm64 was not exercised through the bootstrap in this validation.",
+    "Official amd64 package artifacts on v0.1.0 (arlen, gorm, tools-xctest snapshots from 2026-05-05) were built against the previous bookworm toolchain and were not rebuilt or revalidated."
+  ],
+  "remaining_blockers": []
+}
