@@ -102,6 +102,11 @@ The repository currently contains:
   (built in `ubuntu:26.04`, clang 21) were added to `v0.1.0`. Their evidence tier
   is a clean `ubuntu:26.04` container on a GitHub-hosted runner, not a VM:
   `docs/validation/linux-ubuntu2604-amd64-stable-publish-20261013/`.
+- On October 13, 2026 the Debian 13 `amd64` and `arm64` CLIs were rebuilt with
+  version stamping against the unchanged published toolchains and re-signed;
+  both now report `0.1.0`. Stable `arm64` was validated through the published
+  bootstrap for the first time (container tier). Evidence:
+  `docs/validation/linux-debian13-cli-version-stamp-20261013/`.
 - The stable manifest also carries the Windows `amd64` MSYS2 `clang64` CLI and
   toolchain. OpenBSD `amd64` is a native packaged-GNUstep path, not a managed
   artifact.
@@ -111,11 +116,10 @@ The repository currently contains:
 - the production release trust-root pin (PR #2,
   `production-bootstrap-trust-root`) is not merged to `master` yet; until it
   is, the bootstrap and native CLI on `master` pin only the dev/dogfood key
-- release builds now stamp the CLI version (`GNUSTEP_CLI_VERSION`), so a
-  stable CLI reports `0.1.0` and resolves the `v0.1.0` manifest. Only the
-  Ubuntu 26.04 CLI was built that way; the Debian 13 `amd64`/`arm64` stable CLIs
-  predate stamping and still report `0.1.0-dev` and check the prerelease for
-  updates until they are rebuilt
+- release builds stamp the CLI version (`GNUSTEP_CLI_VERSION`), so the stable
+  Linux CLIs (Debian 13 `amd64`/`arm64`, Ubuntu 26.04 `amd64`) report `0.1.0`
+  and check the `v0.1.0` manifest for updates; the Windows MSYS2 CLI has not
+  been rebuilt and still reports `0.1.0-dev`
 - no official package has an Ubuntu 26.04 artifact yet
 - the `amd64` official package artifacts on `v0.1.0` (Arlen, Gorm,
   `tools-xctest` snapshots from May 5, 2026) were built against the previous

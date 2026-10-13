@@ -97,8 +97,11 @@ root. Evidence:
   aarch64 host (toolchain libraries resolve against ICU 76 / glibc 2.41, and a
   Foundation program compiled with the published toolchain ran); evidence in
   `docs/validation/linux-arm64-debian13-stable-publish-20260603.json`. That
-  validation used direct artifact download; stable arm64 has not yet been
-  exercised through the stable bootstrap. Earlier
+  validation used direct artifact download. October 13, 2026: the arm64 CLI
+  was rebuilt with version stamping (reports `0.1.0`) and validated through
+  the published stable bootstrap in a clean `debian:13` arm64 container
+  (container tier; evidence in
+  `docs/validation/linux-debian13-cli-version-stamp-20261013/`). Earlier
   history: planned Debian/aarch64 managed target for the full CLI and official
   package artifacts. Target metadata uses canonical `arch = arm64`; build and
   validation should use `../OracleTestVMs` local libvirt/mac capacity first and
