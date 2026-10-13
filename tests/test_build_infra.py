@@ -153,7 +153,7 @@ class BuildInfraTests(unittest.TestCase):
         self.assertEqual(distribution_by_id["toolchain-linux-ubuntu2604-amd64-clang"], ["ubuntu"])
         self.assertEqual(version_by_id["cli-linux-ubuntu2604-amd64-clang"], ["ubuntu-26.04"])
         self.assertEqual(version_by_id["toolchain-linux-ubuntu2604-amd64-clang"], ["ubuntu-26.04"])
-        self.assertFalse(published_by_id["toolchain-linux-ubuntu2604-amd64-clang"])
+        self.assertTrue(published_by_id["toolchain-linux-ubuntu2604-amd64-clang"])
         runtime_by_id = {artifact["id"]: artifact["runtime_requirements"] for artifact in linux_artifacts}
         self.assertEqual(runtime_by_id["toolchain-linux-ubuntu2604-amd64-clang"], {"icu_major": 78, "glibc_min": "2.43"})
         self.assertTrue(all(artifact["portability_policy"] == "distribution-scoped" for artifact in linux_artifacts))

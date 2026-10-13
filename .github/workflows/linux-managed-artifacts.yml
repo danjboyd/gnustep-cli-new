@@ -33,6 +33,11 @@ on:
         required: false
         default: ""
         type: string
+      qualify_bootstrap_url:
+        description: "Optional: qualify the PUBLISHED release instead of this run's artifacts by installing through this bootstrap URL"
+        required: false
+        default: ""
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -150,6 +155,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/src:ro" \
             -v "$RUNNER_TEMP/gnustep-linux-managed-artifacts:/artifacts" \
             -v "$RUNNER_TEMP/qualification:/out" \
+            -e QUALIFY_BOOTSTRAP_URL="${{ inputs.qualify_bootstrap_url }}" \
             "${{ inputs.qualify_image }}" \
             sh /src/scripts/dev/linux-container-qualification.sh \
               "${{ inputs.target }}" /artifacts "${{ inputs.version }}" "${{ inputs.qualify_icu_major }}" /out
@@ -158,5 +164,5 @@ jobs:
         if: ${{ always() && inputs.qualify_image != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: gnustep-container-qualification-${{ inputs.target }}-${{ inputs.version }}
+          name: gnustep-container-qualification-${{ inputs.target }}-${{ inputs.version }}${{ inputs.qualify_bootstrap_url != '' && '-published' || '' }}
           path: ${{ runner.temp }}/qualification

@@ -25,7 +25,7 @@
     "libs-gui",
     "libs-back"
   ],
-  "published": false,
+  "published": true,
   "platform_policy": {
     "supported_distributions": [
       "ubuntu"
@@ -34,7 +34,7 @@
       "ubuntu-26.04"
     ],
     "portability_policy": "distribution-scoped",
-    "notes": "Planned Ubuntu amd64 managed target built in a base Ubuntu Docker image; publish remains false until ICU/runtime dependency closure and Docker smoke validation exist."
+    "notes": "Ubuntu 26.04 LTS amd64 managed target built in a base ubuntu:26.04 Docker image (glibc 2.43, ICU 78, clang 21); qualified in a clean ubuntu:26.04 container before publication."
   },
   "source_policy": {
     "strategy": "source-build",

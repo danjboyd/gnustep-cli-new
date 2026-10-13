@@ -10,6 +10,11 @@
 # prerequisites), --version, --help, doctor --json, new/build/run, and a
 # Foundation/blocks/ARC/libdispatch compile-link-run probe. Results go to
 # <output-dir>/container-qualification.json.
+#
+# Published mode: with QUALIFY_BOOTSTRAP_URL set, the published release assets
+# for the target are downloaded and SONAME-checked instead of <artifacts-dir>,
+# no local manifest is written, and setup runs the published bootstrap with no
+# manifest override or unsigned bypass, exactly as a user would.
 set -eu
 
 TARGET=$1
@@ -26,6 +31,15 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update >/dev/null
 apt-get install -y --no-install-recommends sudo ca-certificates curl python3 binutils >/dev/null
 
+BOOTSTRAP_URL=${QUALIFY_BOOTSTRAP_URL:-}
+RELEASE_BASE=${QUALIFY_RELEASE_BASE:-https://github.com/danjboyd/gnustep-cli-new/releases/download}
+if [ -n "$BOOTSTRAP_URL" ]; then
+  ARTIFACTS="$OUT/published-assets"
+  mkdir -p "$ARTIFACTS"
+  for kind in toolchain cli; do
+    curl -fsSL -o "$ARTIFACTS/gnustep-$kind-$TARGET-$VERSION.tar.gz" "$RELEASE_BASE/v$VERSION/gnustep-$kind-$TARGET-$VERSION.tar.gz"
+  done
+fi
 toolchain="$ARTIFACTS/gnustep-toolchain-$TARGET-$VERSION.tar.gz"
 cli="$ARTIFACTS/gnustep-cli-$TARGET-$VERSION.tar.gz"
 test -f "$toolchain"
@@ -37,6 +51,7 @@ soname_rc=$?
 set -e
 cat "$OUT/soname-check.txt"
 
+if [ -z "$BOOTSTRAP_URL" ]; then
 PYTHONPATH="$REPO/src" python3 - "$TARGET" "$VERSION" "$toolchain" "$cli" "$OUT/release-manifest.json" <<'PY'
 import hashlib, json, sys
 from gnustep_cli_shared.build_infra import release_manifest_from_matrix
@@ -57,6 +72,7 @@ for artifact in release["artifacts"]:
     artifact["published"] = True
 json.dump(manifest, open(output, "w"), indent=2)
 PY
+fi
 
 id "$USER_NAME" >/dev/null 2>&1 || useradd -m -s /bin/sh "$USER_NAME"
 printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$USER_NAME" > /etc/sudoers.d/gsqualify
@@ -98,11 +114,19 @@ R="$HOME/.local/share/gnustep-cli"
 export R
 step() { name=$1; shift; "$@" > "$OUT/$name.out" 2> "$OUT/$name.err"; printf '%s %s\n' "$name" "$?" >> "$OUT/steps.txt"; }
 : > "$OUT/steps.txt"
-step setup env GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED=1 sh "$REPO/scripts/bootstrap/gnustep-bootstrap.sh" --yes --json setup --user --manifest "$OUT/release-manifest.json"
+if [ -n "$BOOTSTRAP_URL" ]; then
+  step setup sh -c 'curl -fsSL "$1" | sh -s -- --yes --json setup --user' sh "$BOOTSTRAP_URL"
+else
+  step setup env GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED=1 sh "$REPO/scripts/bootstrap/gnustep-bootstrap.sh" --yes --json setup --user --manifest "$OUT/release-manifest.json"
+fi
 export PATH="$R/bin:$PATH"
 step version gnustep --version
 step help gnustep --help
-step doctor gnustep doctor --json --manifest "$OUT/release-manifest.json"
+if [ -n "$BOOTSTRAP_URL" ]; then
+  step doctor gnustep doctor --json
+else
+  step doctor gnustep doctor --json --manifest "$OUT/release-manifest.json"
+fi
 step doctor_default gnustep doctor --json
 step new gnustep new --json cli-tool "$WORK/proj" --name HelloTool
 cd "$WORK/proj"
@@ -113,7 +137,7 @@ step probe sh "$WORK/probe.sh"
 STEPS
 chown -R "$USER_NAME" "$work"
 chmod a+rwx "$OUT"
-su - "$USER_NAME" -c "OUT='$OUT' REPO='$REPO' WORK='$work' sh '$work/steps.sh'"
+su - "$USER_NAME" -c "OUT='$OUT' REPO='$REPO' WORK='$work' BOOTSTRAP_URL='$BOOTSTRAP_URL' sh '$work/steps.sh'"
 
 PYTHONPATH="$REPO/src" python3 - "$OUT" "$TARGET" "$VERSION" "$ICU_MAJOR" "$soname_rc" "$toolchain" "$cli" <<'PY'
 import hashlib, json, os, platform, subprocess, sys
@@ -147,6 +171,8 @@ probe_icu = [line.strip() for line in probe.splitlines() if "libicu" in line or 
 report = {
     "schema_version": 1,
     "kind": "linux-container-qualification",
+    "mode": "published" if os.environ.get("QUALIFY_BOOTSTRAP_URL") else "pre-publication",
+    "bootstrap_url": os.environ.get("QUALIFY_BOOTSTRAP_URL") or None,
     "target_id": target,
     "version": version,
     "ok": all(value == "passed" for value in results.values()),
