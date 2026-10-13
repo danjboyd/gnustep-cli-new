@@ -23,6 +23,11 @@ on:
         required: true
         default: ubuntu-24.04-arm
         type: string
+      reuse_toolchain_tag:
+        description: "Optional: build only the CLI, against this release tag's published toolchain asset for the target (for example v0.1.0); the toolchain bytes are kept unchanged"
+        required: false
+        default: ""
+        type: string
       qualify_image:
         description: "Optional: container image of the target distro release (for example ubuntu:26.04) to qualify the built artifacts in"
         required: false
@@ -74,6 +79,8 @@ jobs:
       # correct base: debian:13 for the Debian targets, ubuntu:24.04 for ubuntu2404,
       # ubuntu:26.04 for ubuntu2604.
       - name: Stage build environment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
           out="$RUNNER_TEMP/gnustep-linux-managed-artifacts"
@@ -85,19 +92,29 @@ jobs:
             linux-ubuntu2604-amd64-clang) staging_prefix=/tmp/gnustep-cli-ubuntu2604-toolchain/install ;;
           esac
           echo "STAGING_PREFIX=$staging_prefix" >> "$GITHUB_ENV"
+          if [ -n "${{ inputs.reuse_toolchain_tag }}" ]; then
+            gh release download "${{ inputs.reuse_toolchain_tag }}" \
+              --repo "${{ github.repository }}" \
+              --dir "$out" \
+              --pattern "gnustep-toolchain-${{ inputs.target }}-${{ inputs.version }}.tar.gz"
+          fi
           cat > "$out/container-build.sh" <<'CONTAINER_BUILD'
           set -eu
           git config --global --add safe.directory /src
           cd /src
-          bash "toolchains/$TARGET/build-toolchain.sh"
-          python3 scripts/internal/build_infra.py --json package-source-built-linux-toolchain \
-            --staging-prefix "$STAGING_PREFIX" \
-            --output-dir /out/toolchain-root \
-            --toolchain-version "$VERSION" \
-            --target "$TARGET" | tee /out/toolchain-package-report.json
-          python3 -c 'import json,sys; raise SystemExit(0 if json.load(open(sys.argv[1]))["ok"] else 1)' /out/toolchain-package-report.json
           toolchain_archive="/out/gnustep-toolchain-$TARGET-$VERSION.tar.gz"
-          tar -C /out/toolchain-root -czf "$toolchain_archive" .
+          if [ -f "$toolchain_archive" ]; then
+            echo "Reusing published toolchain $toolchain_archive; building the CLI only."
+          else
+            bash "toolchains/$TARGET/build-toolchain.sh"
+            python3 scripts/internal/build_infra.py --json package-source-built-linux-toolchain \
+              --staging-prefix "$STAGING_PREFIX" \
+              --output-dir /out/toolchain-root \
+              --toolchain-version "$VERSION" \
+              --target "$TARGET" | tee /out/toolchain-package-report.json
+            python3 -c 'import json,sys; raise SystemExit(0 if json.load(open(sys.argv[1]))["ok"] else 1)' /out/toolchain-package-report.json
+            tar -C /out/toolchain-root -czf "$toolchain_archive" .
+          fi
           python3 scripts/internal/build_infra.py --json build-linux-cli-against-managed-toolchain \
             --toolchain-archive "$toolchain_archive" \
             --output-archive "/out/gnustep-cli-$TARGET-$VERSION.tar.gz" \

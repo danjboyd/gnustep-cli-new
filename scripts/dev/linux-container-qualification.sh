@@ -118,6 +118,7 @@ printf '#!/bin/sh\necho container-package-ok\n' > "$pkg/payload/bin/gnustep-qual
 chmod +x "$pkg/payload/bin/gnustep-qualify-demo"
 tar -czf "$pkg/demo.tar.gz" -C "$pkg/payload" .
 sha=$(sha256sum "$pkg/demo.tar.gz" | awk '{print $1}')
+case "$(uname -m)" in aarch64|arm64) arch=arm64 ;; *) arch=amd64 ;; esac
 cat > "$pkg/package-index.json" <<INDEX
 {
   "schema_version": 1,
@@ -131,7 +132,7 @@ cat > "$pkg/package-index.json" <<INDEX
       "summary": "Container qualification package fixture.",
       "requirements": {
         "supported_os": ["linux"],
-        "supported_arch": ["amd64"],
+        "supported_arch": ["$arch"],
         "supported_compiler_families": ["clang"],
         "supported_objc_runtimes": ["libobjc2"],
         "supported_objc_abi": ["modern"],
@@ -141,9 +142,9 @@ cat > "$pkg/package-index.json" <<INDEX
       "dependencies": [],
       "artifacts": [
         {
-          "id": "qualify-demo-linux-amd64-clang",
+          "id": "qualify-demo-linux-$arch-clang",
           "os": "linux",
-          "arch": "amd64",
+          "arch": "$arch",
           "compiler_family": "clang",
           "toolchain_flavor": "clang",
           "objc_runtime": "libobjc2",
