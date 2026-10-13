@@ -12,6 +12,7 @@ on:
           - linux-amd64-clang
           - linux-arm64-clang
           - linux-ubuntu2404-amd64-clang
+          - linux-ubuntu2604-amd64-clang
       version:
         description: Artifact version label
         required: true
@@ -42,7 +43,7 @@ jobs:
             linux-arm64-clang)
               test "$(uname -m)" = "aarch64"
               ;;
-            linux-amd64-clang|linux-ubuntu2404-amd64-clang)
+            linux-amd64-clang|linux-ubuntu2404-amd64-clang|linux-ubuntu2604-amd64-clang)
               test "$(uname -m)" = "x86_64"
               ;;
             *)
@@ -55,7 +56,8 @@ jobs:
       # image so the artifact links the base image's glibc/ICU SONAMEs rather than
       # the GitHub runner OS's (ubuntu-24.04 = ICU 74, which loads on neither
       # Debian 12 nor Debian 13). Each toolchains/<target>/Dockerfile pins the
-      # correct base: debian:13 for the Debian targets, ubuntu:24.04 for ubuntu2404.
+      # correct base: debian:13 for the Debian targets, ubuntu:24.04 for ubuntu2404,
+      # ubuntu:26.04 for ubuntu2604.
       - name: Stage build environment
         run: |
           set -eu
@@ -65,6 +67,7 @@ jobs:
             linux-arm64-clang) staging_prefix=/tmp/gnustep-cli-linux-arm64-toolchain/install ;;
             linux-amd64-clang) staging_prefix=/tmp/gnustep-cli-linux-toolchain/install ;;
             linux-ubuntu2404-amd64-clang) staging_prefix=/tmp/gnustep-cli-ubuntu2404-toolchain/install ;;
+            linux-ubuntu2604-amd64-clang) staging_prefix=/tmp/gnustep-cli-ubuntu2604-toolchain/install ;;
           esac
           echo "STAGING_PREFIX=$staging_prefix" >> "$GITHUB_ENV"
           cat > "$out/container-build.sh" <<'CONTAINER_BUILD'
