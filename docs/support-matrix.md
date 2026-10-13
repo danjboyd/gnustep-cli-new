@@ -9,7 +9,8 @@ project is actively discussing.
 2026; release evidence in `docs/validation/release-0.1.0-evidence/`). On June 3,
 2026 Debian 13 trixie `arm64` CLI and toolchain artifacts were added to it. The
 signed stable manifest scopes the Linux artifacts to Debian with an ICU 76 /
-glibc 2.41 runtime gate. Ubuntu is not covered by the stable manifest.
+glibc 2.41 runtime gate. Ubuntu 26.04 amd64 was added on October 13, 2026 (see its entry below); Ubuntu
+24.04 is not covered by the stable manifest.
 Per-target notes below that describe `v0.1.0` as a candidate are historical.
 
 On October 13, 2026 the stable `amd64` CLI and toolchain were replaced with
@@ -106,6 +107,20 @@ root. Evidence:
   `tools-xctest` package artifacts are built and host-validated. The build base
   is pinned to Debian 13 trixie (glibc 2.41, ICU 76) via
   `toolchains/linux-arm64-clang/Dockerfile`; Debian 12 bookworm is deprecated.
+- `ubuntu2604-amd64-managed-clang`
+  status: `published_stable_container_qualified`
+  notes: October 13, 2026: Ubuntu 26.04 LTS amd64 CLI and toolchain built from
+  source in `ubuntu:26.04` (glibc 2.43, ICU 78, clang 21.1; libs-base,
+  libs-corebase, libs-gui, and libs-back build without patches) and added to
+  stable `v0.1.0` with an `ubuntu-26.04` / ICU 78 / glibc 2.43 manifest gate.
+  Qualified through the published bootstrap in a clean `ubuntu:26.04.1`
+  container on a GitHub-hosted runner: bundled SONAME check, setup as an
+  unprivileged user, `doctor` (`toolchain_compatible`), `new`/`build`/`run`, a
+  Foundation/blocks/ARC/libdispatch probe, and package install/remove with a
+  fixture package. The evidence tier is a container, not a VM; Dan accepted it
+  for this target. Evidence:
+  `docs/validation/linux-ubuntu2604-amd64-stable-publish-20261013/`. No
+  official package has a 26.04 artifact yet. arm64 is not planned for now.
 - `ubuntu2404-amd64-managed-clang`
   status: `dogfood_ready_partial`
   notes: Ubuntu 24.04/amd64 now has distro-scoped managed CLI and toolchain
