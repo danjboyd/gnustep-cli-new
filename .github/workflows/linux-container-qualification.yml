@@ -1,0 +1,80 @@
+name: Linux Container Qualification
+
+# Qualifies distro-scoped managed Linux artifacts produced by Linux Managed
+# Artifacts inside a clean container of the target distro release: bundled
+# SONAME check, bootstrap setup as an unprivileged user, version/help/doctor,
+# new/build/run, and a Foundation compile-link-run probe. This is real distro
+# userland on the runner's kernel, not a VM-backed host claim.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Managed Linux target id
+        required: true
+        default: linux-ubuntu2604-amd64-clang
+        type: choice
+        options:
+          - linux-ubuntu2604-amd64-clang
+          - linux-ubuntu2404-amd64-clang
+          - linux-amd64-clang
+      image:
+        description: Container image matching the target distro release
+        required: true
+        default: ubuntu:26.04
+        type: string
+      icu_major:
+        description: Expected ICU major version for the target
+        required: true
+        default: "78"
+        type: string
+      version:
+        description: Artifact version label used by Linux Managed Artifacts
+        required: true
+        default: 0.1.0
+        type: string
+      source_artifact_run_id:
+        description: Linux Managed Artifacts run id that produced the artifacts
+        required: true
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download managed artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: gnustep-linux-managed-${{ inputs.target }}-${{ inputs.version }}
+          path: ${{ runner.temp }}/artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.source_artifact_run_id }}
+
+      - name: Qualify in ${{ inputs.image }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/qualification"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src:ro" \
+            -v "$RUNNER_TEMP/artifacts:/artifacts" \
+            -v "$RUNNER_TEMP/qualification:/out" \
+            "${{ inputs.image }}" \
+            sh /src/scripts/dev/linux-container-qualification.sh \
+              "${{ inputs.target }}" /artifacts "${{ inputs.version }}" "${{ inputs.icu_major }}" /out
+
+      - name: Upload qualification evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-container-qualification-${{ inputs.target }}-${{ inputs.version }}
+          path: ${{ runner.temp }}/qualification
