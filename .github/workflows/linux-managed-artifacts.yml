@@ -23,6 +23,16 @@ on:
         required: true
         default: ubuntu-24.04-arm
         type: string
+      qualify_image:
+        description: "Optional: container image of the target distro release (for example ubuntu:26.04) to qualify the built artifacts in"
+        required: false
+        default: ""
+        type: string
+      qualify_icu_major:
+        description: Expected ICU major version for qualification (required with qualify_image)
+        required: false
+        default: ""
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -124,3 +134,29 @@ jobs:
             ${{ runner.temp }}/gnustep-linux-managed-artifacts/gnustep-cli-*.tar.gz
             ${{ runner.temp }}/gnustep-linux-managed-artifacts/SHA256SUMS
             ${{ runner.temp }}/gnustep-linux-managed-artifacts/*-report.json
+
+      # Optional container qualification: bundled SONAME check, bootstrap setup
+      # as an unprivileged user, version/help/doctor, new/build/run, and a
+      # Foundation compile-link-run probe inside a clean container of the target
+      # distro release. Real distro userland on the runner kernel, not a
+      # VM-backed host claim.
+      - name: Qualify artifacts in target distro container
+        if: ${{ inputs.qualify_image != '' }}
+        run: |
+          set -eu
+          test -n "${{ inputs.qualify_icu_major }}"
+          mkdir -p "$RUNNER_TEMP/qualification"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src:ro" \
+            -v "$RUNNER_TEMP/gnustep-linux-managed-artifacts:/artifacts" \
+            -v "$RUNNER_TEMP/qualification:/out" \
+            "${{ inputs.qualify_image }}" \
+            sh /src/scripts/dev/linux-container-qualification.sh \
+              "${{ inputs.target }}" /artifacts "${{ inputs.version }}" "${{ inputs.qualify_icu_major }}" /out
+
+      - name: Upload qualification evidence
+        if: ${{ always() && inputs.qualify_image != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-container-qualification-${{ inputs.target }}-${{ inputs.version }}
+          path: ${{ runner.temp }}/qualification
