@@ -205,5 +205,25 @@ class CustomToolchainBuildTests(unittest.TestCase):
         self.assertIsNone(parse_build_id("no notes"))
 
 
+class CustomToolchainCiLockTests(unittest.TestCase):
+    def test_ci_lock_uses_official_pins_with_gui_flags_and_a_verified_patch(self):
+        script = ROOT / "scripts" / "ci" / "write-custom-toolchain-ci-lock.py"
+        source_lock = json.loads((ROOT / "toolchains" / "linux-amd64-clang" / "source-lock.json").read_text())
+        official = {component["name"]: component["revision"] for component in source_lock["components"]}
+        with tempfile.TemporaryDirectory() as tmp:
+            out = subprocess.run([sys.executable, str(script), tmp], check=True, capture_output=True, text=True)
+            lock_path = Path(out.stdout.strip())
+            lock = json.loads(lock_path.read_text())
+            self.assertTrue(validate_custom_toolchain_lock(lock, lock_path)["ok"])
+            components = {component["name"]: component for component in lock["components"]}
+            self.assertEqual(list(components), COMPONENT_ORDER)
+            for name, component in components.items():
+                self.assertEqual(component["revision"], official[name])
+            self.assertIn("--disable-cups", components["libs-gui"]["configure_args"])
+            [objc_patch] = components["libobjc2"]["patches"]
+            patch_bytes = (lock_path.parent / objc_patch["path"]).read_bytes()
+            self.assertEqual(hashlib.sha256(patch_bytes).hexdigest(), objc_patch["sha256"])
+
+
 if __name__ == "__main__":
     unittest.main()

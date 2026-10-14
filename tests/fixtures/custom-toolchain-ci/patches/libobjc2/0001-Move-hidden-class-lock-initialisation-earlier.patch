@@ -1,0 +1,62 @@
+From: David Chisnall <github@theravensnest.org>
+Subject: [PATCH] Move hidden-class lock initialisation earlier
+
+Backport of upstream libobjc2 commit fab3df291a37fefdcc7b774c507ffb2ad5db6fb8
+(PR #430, fixes gnustep/libobjc2#424) to v2.3, where the file is still
+associate.m (C) rather than associate.mm (C++). The C++ casts are rewritten
+as C casts; the logic is identical.
+
+The hidden class's reference_list lock was initialised after the class was
+linked into its superclass's subclass list, so a racing first @synchronized
+on an instance could acquire an uninitialised lock (hang, lost mutual
+exclusion, or abort). Initialise it in allocateHiddenClass before the class
+becomes reachable, and drop the three later INIT_LOCK calls.
+
+Origin: backport, https://github.com/gnustep/libobjc2/commit/fab3df291a37fefdcc7b774c507ffb2ad5db6fb8
+Bug: https://github.com/gnustep/libobjc2/issues/424
+Applied-Upstream: fab3df291a37fefdcc7b774c507ffb2ad5db6fb8
+Last-Update: 2026-10-14
+---
+diff --git a/associate.m b/associate.m
+index 2b987f9..18ab41b 100644
+--- a/associate.m
++++ b/associate.m
+@@ -219,6 +219,11 @@ static Class allocateHiddenClass(Class superclass)
+ 	newClass->dtable = uninstalled_dtable;
+ 	newClass->instance_size = superclass->instance_size;
+ 
++	// Initialise the lock *before* this is globally reachable via any path.
++	// This would ideally belong in `initHiddenClassForObject`, but it's also
++	// possible to find the class after this point by traversing the class
++	// hierarchy and paths after that may attempt to acquire the lock.
++	INIT_LOCK(((struct reference_list*)object_getIndexedIvars((id)newClass))->lock);
+ 	LOCK_RUNTIME_FOR_SCOPE();
+ 	newClass->sibling_class = superclass->subclass_list;
+ 	superclass->subclass_list = newClass;
+@@ -315,8 +320,6 @@ static struct reference_list* referenceListForObject(id object, BOOL create)
+ 		if (NULL == hiddenClass)
+ 		{
+ 			hiddenClass = initHiddenClassForObject(object);
+-			struct reference_list *list = object_getIndexedIvars(hiddenClass);
+-			INIT_LOCK(list->lock);
+ 		}
+ 		unlock_spinlock(lock);
+ 	}
+@@ -439,8 +442,6 @@ static Class hiddenClassForObject(id object)
+ 		if (NULL == hiddenClass)
+ 		{
+ 			hiddenClass = initHiddenClassForObject(object);
+-			struct reference_list *list = object_getIndexedIvars(hiddenClass);
+-			INIT_LOCK(list->lock);
+ 		}
+ 		unlock_spinlock(lock);
+ 	}
+@@ -466,8 +467,6 @@ id object_clone_np(id object)
+ 	referenceListForObject(object, YES);
+ 	id new = class_createInstance(object->isa, 0);
+ 	Class hiddenClass = initHiddenClassForObject(new);
+-	struct reference_list *list = object_getIndexedIvars(hiddenClass);
+-	INIT_LOCK(list->lock);
+ 	objc_setAssociatedObject(new, &prototypeKey, object,
+ 			OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+ 	return new;

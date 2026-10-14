@@ -1,0 +1,111 @@
+name: Custom Toolchain
+
+# Builds a custom GNUstep toolchain end to end with
+# scripts/dev/build-custom-toolchain-in-container.sh, the way a consuming
+# project's CI would, then smoke-tests the result in the same image.
+
+on:
+  pull_request:
+    paths:
+      - src/gnustep_cli_shared/custom_toolchain.py
+      - scripts/dev/build-custom-toolchain-in-container.sh
+      - scripts/ci/write-custom-toolchain-ci-lock.py
+      - tests/fixtures/custom-toolchain-ci/**
+      - toolchains/linux-amd64-clang/**
+      - .github/workflows/custom-toolchain.yml
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  container-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Choose paths
+        run: |
+          echo "LOCK_DIR=$RUNNER_TEMP/custom-toolchain-lock" >> "$GITHUB_ENV"
+          echo "PREFIX=$RUNNER_TEMP/custom-gnustep" >> "$GITHUB_ENV"
+
+      - name: Write CI lock
+        run: |
+          python3 scripts/ci/write-custom-toolchain-ci-lock.py "$LOCK_DIR"
+          cat "$LOCK_DIR/gnustep-toolchain.lock.json"
+
+      - name: Build toolchain in container
+        run: |
+          start=$(date +%s)
+          scripts/dev/build-custom-toolchain-in-container.sh "$LOCK_DIR/gnustep-toolchain.lock.json" "$PREFIX"
+          echo "build_seconds=$(( $(date +%s) - start ))" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Check provenance
+        run: |
+          python3 - "$PREFIX/gnustep-toolchain-provenance.json" <<'PY'
+          import json, sys
+          p = json.load(open(sys.argv[1]))
+          components = {c["name"]: c for c in p["components"]}
+          assert p["official"] is False, "provenance must be non-official"
+          assert len(components) == 7, sorted(components)
+          for c in components.values():
+              assert c["resolved_commit"] == c["revision"], c["name"]
+          assert len(components["libobjc2"]["applied_patches"]) == 1
+          assert "--disable-cups" in components["libs-gui"]["configure_args"]
+          assert p["build_host"]["container"] is True
+          assert len(p["elf_build_ids"]) >= 30, len(p["elf_build_ids"])
+          print(f"ok: {len(p['elf_build_ids'])} ELF build IDs, host {p['build_host'].get('distribution')}")
+          PY
+
+      - name: Smoke test in build image
+        run: |
+          prefix="$PREFIX"
+          docker run --rm \
+            -v "$prefix:$prefix:ro" \
+            -v "$PWD/tests/fixtures/custom-toolchain-ci:/fixtures:ro" \
+            -e PREFIX="$prefix" \
+            gnustep-custom-toolchain-linux-amd64-clang \
+            sh -c '
+              set -eu
+              set +u; . "$PREFIX/System/Library/Makefiles/GNUstep.sh"; set -u
+              export LD_LIBRARY_PATH="$PREFIX/lib:${LD_LIBRARY_PATH:-}"
+              cd /tmp
+              cat > foundation.m <<EOF
+          #import <Foundation/Foundation.h>
+          int main(void) {
+            @autoreleasepool {
+              NSArray *items = [@"custom toolchain" componentsSeparatedByString: @" "];
+              void (^check)(void) = ^{ printf("foundation ok: %lu\n", (unsigned long)[items count]); };
+              check();
+            }
+            return 0;
+          }
+          EOF
+              cat > appkit.m <<EOF
+          #import <AppKit/AppKit.h>
+          int main(void) { return [NSApplication class] == nil; }
+          EOF
+              clang $(gnustep-config --objc-flags) -fobjc-arc -fblocks foundation.m -o foundation $(gnustep-config --base-libs)
+              ./foundation
+              ldd ./foundation | grep -E "libobjc|libgnustep-base"
+              ldd ./foundation | grep -E "libobjc|libgnustep-base" | grep -q "$PREFIX"
+              clang $(gnustep-config --objc-flags) -fobjc-arc appkit.m -o appkit $(gnustep-config --gui-libs)
+              echo "appkit link ok"
+              clang $(gnustep-config --objc-flags) -fobjc-arc -fblocks -pthread /fixtures/sync_probe.m -o sync_probe $(gnustep-config --base-libs)
+              for run in 1 2 3 4 5 6 7 8 9 10; do
+                timeout 60 ./sync_probe
+              done
+              echo "sync probe: 10 of 10 runs passed"
+            '
+
+      - name: Upload provenance and build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-toolchain-ci
+          path: |
+            ${{ runner.temp }}/custom-gnustep/gnustep-toolchain-provenance.json
+            ${{ runner.temp }}/.custom-gnustep-build/logs/
+          if-no-files-found: warn
