@@ -19,6 +19,7 @@ marks this in the provenance it writes (`"official": false`).
   "schema_version": 1,
   "kind": "custom-toolchain-lock",
   "name": "lindirstat",
+  "install_domain": "LOCAL",
   "container": {
     "recipe": "linux-amd64-clang",
     "apt_packages": []
@@ -59,7 +60,14 @@ marks this in the provenance it writes (`"official": false`).
   CMake arguments for `libobjc2` and `libdispatch`, and `./configure` arguments
   for `tools-make` and the GNUstep libraries.
 - `patches` are applied in order with `git apply`. Paths are relative to the lock
-  file, and each patch's sha256 is checked before it is applied.
+  file and must stay inside the lock's directory (the container wrapper mounts
+  only that directory), and each patch's sha256 is checked before it is applied.
+- `install_domain` is optional: `LOCAL` (the default, as in the official
+  recipe) or `SYSTEM`. It sets `GNUSTEP_INSTALLATION_DOMAIN` for the GNUstep
+  libraries, so libs-base, libs-corebase, libs-gui, and libs-back install under
+  `<prefix>/Local/Library/...` or `<prefix>/System/Library/...`. Packagers that
+  relocate a single GNUstep domain usually want `SYSTEM`. The value is recorded
+  in the provenance.
 - `container.apt_packages` lists extra Debian packages to install in the build
   image. libs-gui and libs-back enable optional features based on the libraries
   they find at configure time, so record those inputs here instead of relying on
@@ -84,6 +92,13 @@ Build in the pinned Debian 13 image (recommended for release builds):
 ```sh
 scripts/dev/build-custom-toolchain-in-container.sh path/to/gnustep-toolchain.lock.json /abs/path/to/prefix
 ```
+
+The wrapper runs `docker` directly, so the invoking user needs Docker access.
+On a GitHub-hosted `ubuntu-latest` runner a full seven-component build takes
+about two minutes, including building the image; the Custom Toolchain
+workflow (`.github/workflows/custom-toolchain.yml`) runs exactly this and is a
+working example of a CI job, including smoke tests and caching-friendly
+outputs. Cache the prefix keyed on the sha256 of the lock and its patches.
 
 Build natively on the current host:
 

@@ -97,6 +97,30 @@ class CustomToolchainLockTests(unittest.TestCase):
             bare = validate_custom_toolchain_lock(_lock(base + [_component("libs-base", patches=["patches/fix.patch"])]), lock_path)
             self.assertFalse(bare["ok"])
 
+    def test_patches_must_stay_inside_the_lock_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_dir = Path(tmp) / "lock"
+            lock_dir.mkdir()
+            outside = Path(tmp) / "outside.patch"
+            outside.write_text("diff\n")
+            digest = hashlib.sha256(outside.read_bytes()).hexdigest()
+            base = [_component(n) for n in ["libobjc2", "libdispatch", "tools-make"]]
+            result = validate_custom_toolchain_lock(
+                _lock(base + [_component("libs-base", patches=[{"path": "../outside.patch", "sha256": digest}])]),
+                lock_dir / "lock.json",
+            )
+            self.assertFalse(result["ok"])
+            self.assertIn("inside the lock's directory", result["errors"][0]["message"])
+
+    def test_install_domain_is_local_or_system(self):
+        components = [_component(n) for n in ["libobjc2", "libdispatch", "tools-make", "libs-base"]]
+        with tempfile.TemporaryDirectory() as tmp:
+            for domain, valid in [("LOCAL", True), ("SYSTEM", True), ("USER", False), ("system", False)]:
+                lock = _lock(components)
+                lock["install_domain"] = domain
+                result = validate_custom_toolchain_lock(lock, Path(tmp) / "lock.json")
+                self.assertEqual(result["ok"], valid, domain)
+
     def test_container_section_is_validated(self):
         components = [_component(n) for n in ["libobjc2", "libdispatch", "tools-make", "libs-base"]]
         lock = _lock(components)
@@ -220,6 +244,7 @@ class CustomToolchainCiLockTests(unittest.TestCase):
             for name, component in components.items():
                 self.assertEqual(component["revision"], official[name])
             self.assertIn("--disable-cups", components["libs-gui"]["configure_args"])
+            self.assertEqual(lock["install_domain"], "SYSTEM")
             [objc_patch] = components["libobjc2"]["patches"]
             patch_bytes = (lock_path.parent / objc_patch["path"]).read_bytes()
             self.assertEqual(hashlib.sha256(patch_bytes).hexdigest(), objc_patch["sha256"])

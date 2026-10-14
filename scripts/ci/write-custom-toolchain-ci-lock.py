@@ -3,7 +3,8 @@
 
 The lock starts from the official linux-amd64-clang pins and adds the kinds of
 changes consuming applications make: libs-gui configure flags that drop optional
-features, and a verified patch (the libobjc2 @synchronized first-lock fix).
+features, a verified patch (the libobjc2 @synchronized first-lock fix), and
+installing the GNUstep libraries into the SYSTEM domain.
 
 Usage: write-custom-toolchain-ci-lock.py <output-dir>
 Writes <output-dir>/gnustep-toolchain.lock.json plus its patches.
@@ -38,6 +39,8 @@ def write_ci_lock(output_dir: Path) -> Path:
     source_lock = json.loads((ROOT / "toolchains" / "linux-amd64-clang" / "source-lock.json").read_text())
     lock = custom_toolchain_lock_from_source_lock(source_lock, "gnustep-cli-ci")
     lock["container"] = {"recipe": "linux-amd64-clang", "apt_packages": []}
+    # LOCAL (the default) is what the official recipe uses; CI covers SYSTEM.
+    lock["install_domain"] = "SYSTEM"
     patch_target = output_dir / LIBOBJC2_PATCH
     patch_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(FIXTURES / LIBOBJC2_PATCH, patch_target)

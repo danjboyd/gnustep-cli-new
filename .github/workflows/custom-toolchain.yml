@@ -55,6 +55,11 @@ jobs:
           assert len(components["libobjc2"]["applied_patches"]) == 1
           assert "--disable-cups" in components["libs-gui"]["configure_args"]
           assert p["build_host"]["container"] is True
+          assert p["install_domain"] == "SYSTEM"
+          system_libs = [k for k in p["elf_build_ids"] if k.startswith("System/Library/Libraries/libgnustep-")]
+          assert any("libgnustep-base" in k for k in system_libs), system_libs
+          assert any("libgnustep-gui" in k for k in system_libs), system_libs
+          assert not any(k.startswith("Local/Library/Libraries/libgnustep-") for k in p["elf_build_ids"])
           assert len(p["elf_build_ids"]) >= 30, len(p["elf_build_ids"])
           print(f"ok: {len(p['elf_build_ids'])} ELF build IDs, host {p['build_host'].get('distribution')}")
           PY

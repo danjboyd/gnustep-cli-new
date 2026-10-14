@@ -44,6 +44,9 @@ COMPONENT_ORDER = [
 ]
 REQUIRED_COMPONENTS = ["libobjc2", "libdispatch", "tools-make", "libs-base"]
 GNUSTEP_LIBRARIES = {"libs-base", "libs-corebase", "libs-gui", "libs-back"}
+# GNUstep domains the libraries may install into. LOCAL is GNUstep Make's
+# default and what the official recipe uses.
+INSTALL_DOMAINS = ("LOCAL", "SYSTEM")
 
 LIBOBJC2_BASE_ARGS = [
     "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
@@ -130,6 +133,8 @@ def validate_custom_toolchain_lock(lock: dict[str, Any], lock_path: str | Path) 
         add_error("components", f"components must appear once each in build order: {', '.join(COMPONENT_ORDER)}")
     if "libs-back" in names and "libs-gui" not in names:
         add_error("components", "libs-back requires libs-gui")
+    if lock.get("install_domain", "LOCAL") not in INSTALL_DOMAINS:
+        add_error("install_domain", f"install_domain must be one of: {', '.join(INSTALL_DOMAINS)}")
 
     container = lock.get("container")
     if container is not None:
@@ -173,7 +178,10 @@ def validate_custom_toolchain_lock(lock: dict[str, Any], lock_path: str | Path) 
                 add_error(f"{patch_where}.sha256", "sha256 must be 64 lowercase hex characters")
                 continue
             patch_file = (lock_file.parent / patch["path"]).resolve()
-            if not patch_file.is_file():
+            if lock_file.parent not in patch_file.parents:
+                # The container wrapper mounts only the lock's directory.
+                add_error(f"{patch_where}.path", f"patch must be inside the lock's directory {lock_file.parent}: {patch['path']}")
+            elif not patch_file.is_file():
                 add_error(f"{patch_where}.path", f"patch file not found: {patch_file}")
             elif _sha256_file(patch_file) != patch["sha256"]:
                 add_error(f"{patch_where}.sha256", f"patch digest mismatch for {patch_file}")
@@ -420,13 +428,17 @@ def build_custom_toolchain(
         shutil.rmtree(prefix_dir)
     prefix_dir.mkdir(parents=True)
     env = build_environment(prefix_dir)
+    install_domain = lock.get("install_domain", "LOCAL")
     for component, source in zip(lock["components"], fetched):
         name = component["name"]
         log = logs_dir / f"{name}.log"
+        step_env = env
+        if name in GNUSTEP_LIBRARIES:
+            step_env = dict(env, GNUSTEP_INSTALLATION_DOMAIN=install_domain)
         for step in _component_steps(name, Path(source["source_dir"]), prefix_dir, jobs, component.get("configure_args", [])):
             if name in GNUSTEP_LIBRARIES:
                 step = _wrap_for_gnustep(step, prefix_dir)
-            if _run(step, Path(source["source_dir"]), env, log) != 0:
+            if _run(step, Path(source["source_dir"]), step_env, log) != 0:
                 return _result(command, False, f"{name} build step failed: {shlex.join(step)}", component=name, log=str(log))
         if name == "tools-make":
             # Expose the libobjc2 runtime headers through the GNUstep header domain,
@@ -466,6 +478,7 @@ def build_custom_toolchain(
         },
         "build_host": build_host_identity(),
         "container": lock.get("container"),
+        "install_domain": install_domain,
         "components": [
             {
                 "name": component["name"],
