@@ -113,9 +113,6 @@ The repository currently contains:
 
 ### Still Blocked Or Pending
 
-- the production release trust-root pin (PR #2,
-  `production-bootstrap-trust-root`) is not merged to `master` yet; until it
-  is, the bootstrap and native CLI on `master` pin only the dev/dogfood key
 - release builds stamp the CLI version (`GNUSTEP_CLI_VERSION`), so the stable
   Linux CLIs (Debian 13 `amd64`/`arm64`, Ubuntu 26.04 `amd64`) report `0.1.0`
   and check the `v0.1.0` manifest for updates; the Windows MSYS2 CLI has not
@@ -126,9 +123,11 @@ The repository currently contains:
   bookworm toolchain and have not been rebuilt or revalidated on Debian 13
 - managed GNUstep shared libraries have no RUNPATH, and GNUstep Make's
   `GNUstep.sh` does not add `<root>/lib` (libobjc2, libdispatch,
-  BlocksRuntime) to the loader path; binaries built by hand after sourcing
-  `GNUstep.sh` need `<root>/lib` on `LD_LIBRARY_PATH`. The `gnustep` launcher
-  and `gnustep new` project templates already handle this
+  BlocksRuntime) to the loader path. Toolchains packaged from `master` now
+  patch the managed `GNUstep.sh` to prepend `<root>/lib`, but the toolchains
+  published on `v0.1.0` predate that: with them, binaries built by hand after
+  sourcing `GNUstep.sh` need `<root>/lib` on `LD_LIBRARY_PATH`. The `gnustep`
+  launcher and `gnustep new` project templates already handle this
 - finish native Objective-C `doctor` deep-detection parity with the shared model
   before claiming the full CLI as the authoritative diagnostic implementation
 - repaired Linux managed artifact portability beyond the explicitly scoped

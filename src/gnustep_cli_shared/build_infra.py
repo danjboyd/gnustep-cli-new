@@ -20,6 +20,7 @@ from zipfile import ZIP_DEFLATED, ZipFile, is_zipfile
 from .setup_planner import execute_setup
 from .package_repository import package_index_trust_gate
 from .package_tooling import apply_package_patches
+from .runtime_library_path import add_runtime_library_path
 from .smoke_harness import evaluate_release_gate, phase26_exit_status
 
 
@@ -2532,6 +2533,7 @@ def package_source_built_linux_toolchain_artifact(
     shutil.copytree(source_root, output_root)
     (output_root / "toolchain-assembly.json").unlink(missing_ok=True)
     runtime_aliases = ensure_linux_runtime_soname_aliases(output_root)
+    runtime_library_path = add_runtime_library_path(output_root / "System" / "Library" / "Makefiles")
     normalization = normalize_source_built_toolchain_paths(output_root, source_root)
     metadata_result = write_toolchain_metadata(
         output_root,
@@ -2562,6 +2564,7 @@ def package_source_built_linux_toolchain_artifact(
             key: Path(value).name for key, value in metadata_result["written"].items()
         },
         "runtime_aliases": runtime_aliases,
+        "gnustep_sh_runtime_library_path": runtime_library_path,
         "normalization": {
             "ok": normalization["ok"],
             "status": normalization["status"],
