@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 import subprocess
 import unittest
 from pathlib import Path
@@ -10,13 +12,21 @@ BOOTSTRAP = ROOT / "scripts" / "bootstrap" / "gnustep-bootstrap.sh"
 
 class BootstrapShTests(unittest.TestCase):
     def run_script(self, *args):
-        proc = subprocess.run(
-            ["sh", str(BOOTSTRAP), *args],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
+        # Always run with a throwaway HOME: `setup` without --root installs into
+        # $HOME/.local/share/gnustep-cli and must never touch the real user's
+        # managed environment.
+        with tempfile.TemporaryDirectory() as home:
+            env = dict(os.environ, HOME=home, XDG_CONFIG_HOME=f"{home}/.config",
+                       XDG_CACHE_HOME=f"{home}/.cache", XDG_STATE_HOME=f"{home}/.local/state",
+                       XDG_DATA_HOME=f"{home}/.local/share")
+            proc = subprocess.run(
+                ["sh", str(BOOTSTRAP), *args],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+                env=env,
+            )
         return proc
 
     def test_help_shows_full_command_surface(self):
@@ -183,6 +193,21 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("json_file_bool", content)
         self.assertIn("published", content)
 
+    def _managed_target_suffix(self, *args):
+        content = BOOTSTRAP.read_text(encoding="utf-8")
+        start = content.index("managed_target_suffix() {")
+        end = content.index("\n}\n", start) + 3
+        script = content[start:end] + 'managed_target_suffix "$@"\n'
+        proc = subprocess.run(["sh", "-c", script, "sh", *args], capture_output=True, text=True, check=True)
+        return proc.stdout.strip()
+
+    def test_managed_target_suffix_maps_ubuntu_lts_releases(self):
+        self.assertEqual(self._managed_target_suffix("linux", "amd64", "ubuntu", "ubuntu-24.04"), "linux-ubuntu2404-amd64-clang")
+        self.assertEqual(self._managed_target_suffix("linux", "amd64", "ubuntu", "ubuntu-26.04"), "linux-ubuntu2604-amd64-clang")
+        self.assertEqual(self._managed_target_suffix("linux", "amd64", "ubuntu", "ubuntu-25.10"), "linux-ubuntu-unsupported-amd64-clang")
+        self.assertEqual(self._managed_target_suffix("linux", "amd64", "debian", "debian-13"), "linux-amd64-clang")
+        self.assertEqual(self._managed_target_suffix("linux", "arm64", "debian", "debian-13"), "linux-arm64-clang")
+
     def test_bootstrap_uses_canonical_arm64_architecture(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")
         self.assertIn('aarch64|arm64) printf \'%s\\n\' "arm64"', content)
@@ -193,6 +218,36 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("--dogfood", content)
         self.assertIn("DOGFOOD_MANIFEST_URL", content)
         self.assertIn("/releases/download/dogfood/release-manifest.json", content)
+
+    def _emit_pinned_trust_root(self, cli_version="0.1.0", dogfood_mode=0):
+        # Extract the trust-root emitter functions and exercise the real shell
+        # channel selection in isolation.
+        content = BOOTSTRAP.read_text(encoding="utf-8")
+        import re
+        block = re.search(
+            r"emit_production_trust_root\(\) \{.*?\nemit_pinned_trust_root\(\) \{.*?\n\}",
+            content,
+            re.S,
+        )
+        self.assertIsNotNone(block, "trust-root emitter functions not found")
+        proc = subprocess.run(
+            ["sh", "-c", f"{block.group(0)}\nCLI_VERSION={cli_version} DOGFOOD_MODE={dogfood_mode} emit_pinned_trust_root"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True,
+        )
+        return proc.stdout
+
+    def test_release_version_pins_production_trust_root(self):
+        pem = (ROOT / "scripts" / "bootstrap" / "release-signing-trust-root.pem").read_text(encoding="utf-8")
+        production = self._emit_pinned_trust_root(cli_version="0.1.0", dogfood_mode=0)
+        dev_version = self._emit_pinned_trust_root(cli_version="0.1.0-dev", dogfood_mode=0)
+        dogfood = self._emit_pinned_trust_root(cli_version="0.1.0", dogfood_mode=1)
+        # A release version selects the production key, which is the canonical
+        # release-signing-trust-root.pem.
+        self.assertEqual(production, pem)
+        # A -dev version and --dogfood both select a different (dev) key.
+        self.assertNotEqual(production, dev_version)
+        self.assertEqual(dev_version, dogfood)
+        self.assertIn("BEGIN PUBLIC KEY", dev_version)
 
     def test_openbsd_prerequisites_include_native_gnustep_runtime(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")

@@ -69,20 +69,66 @@ The repository currently contains:
   `--version` / `--help`, package install/remove smoke on a fresh lease, and
   package-flow qualification against refreshed staged Windows release artifacts
 
+### Published Stable Release
+
+- `v0.1.0` is published as the stable GitHub release (first published
+  May 5, 2026). Its release evidence bundle, including the OpenBSD and Windows
+  Tier 1 reports, is in `docs/validation/release-0.1.0-evidence/`.
+- Install on Debian 13 (trixie) `amd64` or `arm64`, or Ubuntu 26.04 LTS `amd64`:
+
+  ```sh
+  curl -fsSL https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/gnustep-bootstrap.sh | sh -s -- setup --user
+  ```
+
+  The release-asset bootstrap is stamped `CLI_VERSION="0.1.0"`, selects the
+  stable `v0.1.0` manifest, and verifies it against the pinned production
+  release trust root. The raw `scripts/bootstrap/gnustep-bootstrap.sh`, on
+  `master` or at the `v0.1.0` tag, reports `0.1.0-dev` and installs from the
+  `v0.1.0-dev` prerelease instead.
+- The signed stable manifest scopes the Debian Linux artifacts to Debian with an
+  ICU 76 / glibc 2.41 runtime gate, and the Ubuntu artifacts to Ubuntu 26.04 with
+  an ICU 78 / glibc 2.43 gate. Debian 12 and Ubuntu 24.04 are not covered by the
+  stable manifest.
+- On June 3, 2026 Debian 13 `arm64` CLI and toolchain artifacts were added to
+  `v0.1.0` (evidence:
+  `docs/validation/linux-arm64-debian13-stable-publish-20260603.json`).
+- On October 13, 2026 the `amd64` CLI and toolchain on `v0.1.0` were replaced
+  with Debian 13 builds and the release metadata was re-signed. The previous
+  `amd64` toolchain was a mislabeled Debian 12 bookworm build that bundled
+  glibc 2.36 and ICU 72 and crashed on Debian 13. Evidence, including the old
+  and new checksums:
+  `docs/validation/linux-amd64-debian13-stable-republish-20261013.json`.
+- On October 13, 2026 Ubuntu 26.04 LTS `amd64` CLI and toolchain artifacts
+  (built in `ubuntu:26.04`, clang 21) were added to `v0.1.0`. Their evidence tier
+  is a clean `ubuntu:26.04` container on a GitHub-hosted runner, not a VM:
+  `docs/validation/linux-ubuntu2604-amd64-stable-publish-20261013/`.
+- On October 13, 2026 the Debian 13 `amd64` and `arm64` CLIs were rebuilt with
+  version stamping against the unchanged published toolchains and re-signed;
+  both now report `0.1.0`. Stable `arm64` was validated through the published
+  bootstrap for the first time (container tier). Evidence:
+  `docs/validation/linux-debian13-cli-version-stamp-20261013/`.
+- The stable manifest also carries the Windows `amd64` MSYS2 `clang64` CLI and
+  toolchain. OpenBSD `amd64` is a native packaged-GNUstep path, not a managed
+  artifact.
+
 ### Still Blocked Or Pending
 
-- dogfood candidate `v0.1.0-dev-hosted.32` is the current qualified RC baseline;
-  the immutable `v0.1.0-dev-hosted.1` dogfood manifest remains historical
-  evidence only because it contains malformed GitHub asset URLs
-- the intended stable tag candidate is `v0.1.0`, but public stable publication
-  is intentionally blocked until fresh hosted structured OpenBSD and Windows
-  Tier 1 reports are collected for the stable candidate
-- Linux and Windows current-source producer lanes, signed package-index
-  generation, stable-channel staging rehearsal, and release-signing smoke now
-  pass with hosted evidence and CI-held trust material
-- structured OpenBSD/Windows smoke-report ingestion is available through the
-  `Structured Smoke Evidence` workflow; it has been validated with the accepted
-  existing structured reports, but those reports are not fresh stable evidence
+- the production release trust-root pin (PR #2,
+  `production-bootstrap-trust-root`) is not merged to `master` yet; until it
+  is, the bootstrap and native CLI on `master` pin only the dev/dogfood key
+- release builds stamp the CLI version (`GNUSTEP_CLI_VERSION`), so the stable
+  Linux CLIs (Debian 13 `amd64`/`arm64`, Ubuntu 26.04 `amd64`) report `0.1.0`
+  and check the `v0.1.0` manifest for updates; the Windows MSYS2 CLI has not
+  been rebuilt and still reports `0.1.0-dev`
+- no official package has an Ubuntu 26.04 artifact yet
+- the `amd64` official package artifacts on `v0.1.0` (Arlen, Gorm,
+  `tools-xctest` snapshots from May 5, 2026) were built against the previous
+  bookworm toolchain and have not been rebuilt or revalidated on Debian 13
+- managed GNUstep shared libraries have no RUNPATH, and GNUstep Make's
+  `GNUstep.sh` does not add `<root>/lib` (libobjc2, libdispatch,
+  BlocksRuntime) to the loader path; binaries built by hand after sourcing
+  `GNUstep.sh` need `<root>/lib` on `LD_LIBRARY_PATH`. The `gnustep` launcher
+  and `gnustep new` project templates already handle this
 - finish native Objective-C `doctor` deep-detection parity with the shared model
   before claiming the full CLI as the authoritative diagnostic implementation
 - repaired Linux managed artifact portability beyond the explicitly scoped

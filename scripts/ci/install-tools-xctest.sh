@@ -6,6 +6,10 @@ REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 TOOLS_XCTEST_DIR=${TOOLS_XCTEST_DIR:-"$REPO_ROOT/.ci/tools-xctest"}
 GNUSTEP_MAKEFILES_DIR=${GNUSTEP_MAKEFILES_DIR:-/usr/share/GNUstep/Makefiles}
 TOOLS_XCTEST_REPO=${TOOLS_XCTEST_REPO:-https://github.com/gnustep/tools-xctest.git}
+# Pinned to the revision used by packages/org.gnustep.tools-xctest. Upstream HEAD
+# (October 2026) requires blocks, which the distro GCC-flavored GNUstep on the CI
+# runners does not enable, so tracking HEAD broke CI without any change here.
+TOOLS_XCTEST_REVISION=${TOOLS_XCTEST_REVISION:-2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3}
 
 if [ ! -f "$GNUSTEP_MAKEFILES_DIR/GNUstep.sh" ]; then
   printf '%s\n' "GNUstep.sh was not found at $GNUSTEP_MAKEFILES_DIR/GNUstep.sh" >&2
@@ -15,11 +19,11 @@ fi
 mkdir -p "$(dirname "$TOOLS_XCTEST_DIR")"
 
 if [ ! -d "$TOOLS_XCTEST_DIR/.git" ]; then
-  git clone --depth 1 "$TOOLS_XCTEST_REPO" "$TOOLS_XCTEST_DIR"
-else
-  git -C "$TOOLS_XCTEST_DIR" fetch --depth 1 origin HEAD
-  git -C "$TOOLS_XCTEST_DIR" reset --hard FETCH_HEAD
+  git init -q "$TOOLS_XCTEST_DIR"
+  git -C "$TOOLS_XCTEST_DIR" remote add origin "$TOOLS_XCTEST_REPO"
 fi
+git -C "$TOOLS_XCTEST_DIR" fetch --depth 1 origin "$TOOLS_XCTEST_REVISION"
+git -C "$TOOLS_XCTEST_DIR" reset --hard FETCH_HEAD
 
 set +u
 . "$GNUSTEP_MAKEFILES_DIR/GNUstep.sh"

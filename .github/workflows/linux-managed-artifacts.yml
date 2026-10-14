@@ -12,6 +12,7 @@ on:
           - linux-amd64-clang
           - linux-arm64-clang
           - linux-ubuntu2404-amd64-clang
+          - linux-ubuntu2604-amd64-clang
       version:
         description: Artifact version label
         required: true
@@ -21,6 +22,26 @@ on:
         description: Runner label for the target architecture
         required: true
         default: ubuntu-24.04-arm
+        type: string
+      reuse_toolchain_tag:
+        description: "Optional: build only the CLI, against this release tag's published toolchain asset for the target (for example v0.1.0); the toolchain bytes are kept unchanged"
+        required: false
+        default: ""
+        type: string
+      qualify_image:
+        description: "Optional: container image of the target distro release (for example ubuntu:26.04) to qualify the built artifacts in"
+        required: false
+        default: ""
+        type: string
+      qualify_icu_major:
+        description: Expected ICU major version for qualification (required with qualify_image)
+        required: false
+        default: ""
+        type: string
+      qualify_bootstrap_url:
+        description: "Optional: qualify the PUBLISHED release instead of this run's artifacts by installing through this bootstrap URL"
+        required: false
+        default: ""
         type: string
 
 env:
@@ -42,7 +63,7 @@ jobs:
             linux-arm64-clang)
               test "$(uname -m)" = "aarch64"
               ;;
-            linux-amd64-clang|linux-ubuntu2404-amd64-clang)
+            linux-amd64-clang|linux-ubuntu2404-amd64-clang|linux-ubuntu2604-amd64-clang)
               test "$(uname -m)" = "x86_64"
               ;;
             *)
@@ -55,8 +76,11 @@ jobs:
       # image so the artifact links the base image's glibc/ICU SONAMEs rather than
       # the GitHub runner OS's (ubuntu-24.04 = ICU 74, which loads on neither
       # Debian 12 nor Debian 13). Each toolchains/<target>/Dockerfile pins the
-      # correct base: debian:13 for the Debian targets, ubuntu:24.04 for ubuntu2404.
+      # correct base: debian:13 for the Debian targets, ubuntu:24.04 for ubuntu2404,
+      # ubuntu:26.04 for ubuntu2604.
       - name: Stage build environment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eu
           out="$RUNNER_TEMP/gnustep-linux-managed-artifacts"
@@ -65,21 +89,32 @@ jobs:
             linux-arm64-clang) staging_prefix=/tmp/gnustep-cli-linux-arm64-toolchain/install ;;
             linux-amd64-clang) staging_prefix=/tmp/gnustep-cli-linux-toolchain/install ;;
             linux-ubuntu2404-amd64-clang) staging_prefix=/tmp/gnustep-cli-ubuntu2404-toolchain/install ;;
+            linux-ubuntu2604-amd64-clang) staging_prefix=/tmp/gnustep-cli-ubuntu2604-toolchain/install ;;
           esac
           echo "STAGING_PREFIX=$staging_prefix" >> "$GITHUB_ENV"
+          if [ -n "${{ inputs.reuse_toolchain_tag }}" ]; then
+            gh release download "${{ inputs.reuse_toolchain_tag }}" \
+              --repo "${{ github.repository }}" \
+              --dir "$out" \
+              --pattern "gnustep-toolchain-${{ inputs.target }}-${{ inputs.version }}.tar.gz"
+          fi
           cat > "$out/container-build.sh" <<'CONTAINER_BUILD'
           set -eu
           git config --global --add safe.directory /src
           cd /src
-          bash "toolchains/$TARGET/build-toolchain.sh"
-          python3 scripts/internal/build_infra.py --json package-source-built-linux-toolchain \
-            --staging-prefix "$STAGING_PREFIX" \
-            --output-dir /out/toolchain-root \
-            --toolchain-version "$VERSION" \
-            --target "$TARGET" | tee /out/toolchain-package-report.json
-          python3 -c 'import json,sys; raise SystemExit(0 if json.load(open(sys.argv[1]))["ok"] else 1)' /out/toolchain-package-report.json
           toolchain_archive="/out/gnustep-toolchain-$TARGET-$VERSION.tar.gz"
-          tar -C /out/toolchain-root -czf "$toolchain_archive" .
+          if [ -f "$toolchain_archive" ]; then
+            echo "Reusing published toolchain $toolchain_archive; building the CLI only."
+          else
+            bash "toolchains/$TARGET/build-toolchain.sh"
+            python3 scripts/internal/build_infra.py --json package-source-built-linux-toolchain \
+              --staging-prefix "$STAGING_PREFIX" \
+              --output-dir /out/toolchain-root \
+              --toolchain-version "$VERSION" \
+              --target "$TARGET" | tee /out/toolchain-package-report.json
+            python3 -c 'import json,sys; raise SystemExit(0 if json.load(open(sys.argv[1]))["ok"] else 1)' /out/toolchain-package-report.json
+            tar -C /out/toolchain-root -czf "$toolchain_archive" .
+          fi
           python3 scripts/internal/build_infra.py --json build-linux-cli-against-managed-toolchain \
             --toolchain-archive "$toolchain_archive" \
             --output-archive "/out/gnustep-cli-$TARGET-$VERSION.tar.gz" \
@@ -121,3 +156,30 @@ jobs:
             ${{ runner.temp }}/gnustep-linux-managed-artifacts/gnustep-cli-*.tar.gz
             ${{ runner.temp }}/gnustep-linux-managed-artifacts/SHA256SUMS
             ${{ runner.temp }}/gnustep-linux-managed-artifacts/*-report.json
+
+      # Optional container qualification: bundled SONAME check, bootstrap setup
+      # as an unprivileged user, version/help/doctor, new/build/run, and a
+      # Foundation compile-link-run probe inside a clean container of the target
+      # distro release. Real distro userland on the runner kernel, not a
+      # VM-backed host claim.
+      - name: Qualify artifacts in target distro container
+        if: ${{ inputs.qualify_image != '' }}
+        run: |
+          set -eu
+          test -n "${{ inputs.qualify_icu_major }}"
+          mkdir -p "$RUNNER_TEMP/qualification"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src:ro" \
+            -v "$RUNNER_TEMP/gnustep-linux-managed-artifacts:/artifacts" \
+            -v "$RUNNER_TEMP/qualification:/out" \
+            -e QUALIFY_BOOTSTRAP_URL="${{ inputs.qualify_bootstrap_url }}" \
+            "${{ inputs.qualify_image }}" \
+            sh /src/scripts/dev/linux-container-qualification.sh \
+              "${{ inputs.target }}" /artifacts "${{ inputs.version }}" "${{ inputs.qualify_icu_major }}" /out
+
+      - name: Upload qualification evidence
+        if: ${{ always() && inputs.qualify_image != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-container-qualification-${{ inputs.target }}-${{ inputs.version }}${{ inputs.qualify_bootstrap_url != '' && '-published' || '' }}
+          path: ${{ runner.temp }}/qualification

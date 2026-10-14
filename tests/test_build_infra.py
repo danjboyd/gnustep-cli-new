@@ -17,6 +17,8 @@ if str(SRC) not in sys.path:
 
 from gnustep_cli_shared.compatibility import artifact_matches_host, evaluate_environment_against_artifact
 from gnustep_cli_shared.build_infra import (
+    cli_version_compile_defines,
+    stamped_cli_version,
     assemble_linux_toolchain_artifact,
     build_matrix,
     compare_windows_msys2_inventories,
@@ -115,16 +117,26 @@ def managed_debian_doctor_payload():
 
 
 class BuildInfraTests(unittest.TestCase):
+    def test_release_versions_are_stamped_into_the_cli(self):
+        self.assertEqual(stamped_cli_version("0.1.0"), "0.1.0")
+        self.assertEqual(cli_version_compile_defines("0.1.0"), ['-DGNUSTEP_CLI_VERSION="0.1.0"'])
+        self.assertEqual(stamped_cli_version("0.2.13"), "0.2.13")
+
+    def test_development_labels_keep_the_dev_cli_version(self):
+        for label in ("0.1.0-dev", "0.1.0-dev-current", "0.1.0-dogfood", "0.1.0-snapshot.20260505"):
+            self.assertEqual(stamped_cli_version(label), "0.1.0-dev")
+            self.assertEqual(cli_version_compile_defines(label), [])
+
     def test_matrix_contains_tier1_targets(self):
         payload = build_matrix()
         self.assertEqual(payload["schema_version"], 1)
-        self.assertEqual(len(payload["targets"]), 7)
+        self.assertEqual(len(payload["targets"]), 8)
 
     def test_release_manifest_generation(self):
         payload = release_manifest_from_matrix("0.1.0", "https://example.invalid/releases")
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["releases"][0]["version"], "0.1.0")
-        self.assertEqual(len(payload["releases"][0]["artifacts"]), 14)
+        self.assertEqual(len(payload["releases"][0]["artifacts"]), 16)
         linux_artifacts = [artifact for artifact in payload["releases"][0]["artifacts"] if artifact["os"] == "linux"]
         self.assertTrue(linux_artifacts)
         distribution_by_id = {artifact["id"]: artifact["supported_distributions"] for artifact in linux_artifacts}
@@ -138,6 +150,12 @@ class BuildInfraTests(unittest.TestCase):
         published_by_id = {artifact["id"]: artifact["published"] for artifact in linux_artifacts}
         self.assertTrue(published_by_id["cli-linux-ubuntu2404-amd64-clang"])
         self.assertTrue(published_by_id["toolchain-linux-ubuntu2404-amd64-clang"])
+        self.assertEqual(distribution_by_id["toolchain-linux-ubuntu2604-amd64-clang"], ["ubuntu"])
+        self.assertEqual(version_by_id["cli-linux-ubuntu2604-amd64-clang"], ["ubuntu-26.04"])
+        self.assertEqual(version_by_id["toolchain-linux-ubuntu2604-amd64-clang"], ["ubuntu-26.04"])
+        self.assertTrue(published_by_id["toolchain-linux-ubuntu2604-amd64-clang"])
+        runtime_by_id = {artifact["id"]: artifact["runtime_requirements"] for artifact in linux_artifacts}
+        self.assertEqual(runtime_by_id["toolchain-linux-ubuntu2604-amd64-clang"], {"icu_major": 78, "glibc_min": "2.43"})
         self.assertTrue(all(artifact["portability_policy"] == "distribution-scoped" for artifact in linux_artifacts))
 
     def test_source_lock_template_for_linux(self):
@@ -983,6 +1001,30 @@ class BuildInfraTests(unittest.TestCase):
             self.assertFalse(release_trust_gate(release_dir, trusted_public_key_path=other_pub)["ok"])
             (release_dir / "release-provenance.json").write_text("{}\n")
             self.assertFalse(release_trust_gate(release_dir)["ok"])
+
+    def test_sign_release_metadata_bundles_provided_public_key(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_bundle = temp / "gnustep-cli-linux-amd64-clang-0.1.0.tar.gz"
+            cli_bundle.write_bytes(b"cli")
+            payload = stage_release_assets(
+                "0.1.0",
+                temp / "dist",
+                "https://example.invalid/releases",
+                cli_inputs={"linux-amd64-clang": cli_bundle},
+            )
+            release_dir = Path(payload["release_dir"])
+            import subprocess
+            key = temp / "release-signing-key.pem"
+            pub = temp / "release-signing-public.pem"
+            subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(key)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run(["openssl", "pkey", "-in", str(key), "-pubout", "-out", str(pub)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            signed = sign_release_metadata(release_dir, key, public_key_path=pub)
+            self.assertTrue(signed["ok"])
+            bundled = release_dir / "release-signing-public.pem"
+            self.assertTrue(bundled.exists())
+            self.assertEqual(bundled.read_bytes(), pub.read_bytes())
+            self.assertTrue(release_trust_gate(release_dir, trusted_public_key_path=bundled)["ok"])
 
 
     def test_release_trust_gate_rejects_expired_metadata_and_revoked_artifacts(self):

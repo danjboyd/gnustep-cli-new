@@ -65,6 +65,22 @@ TIER1_TARGETS = [
         "portability_notes": "Ubuntu amd64 managed target built in a base Ubuntu 24.04 Docker image (glibc 2.39, ICU 74); publish is enabled after runtime dependency closure and Docker setup smoke validation.",
     },
     {
+        "id": "linux-ubuntu2604-amd64-clang",
+        "os": "linux",
+        "arch": "amd64",
+        "compiler_family": "clang",
+        "toolchain_flavor": "clang",
+        "strategy": "source-build",
+        "publish": True,
+        "core_components": UNIX_CORE_COMPONENTS,
+        "supported_distributions": ["ubuntu"],
+        "supported_os_versions": ["ubuntu-26.04"],
+        "runtime_requirements": {"icu_major": 78, "glibc_min": "2.43"},
+        "build_host": "ubuntu:26.04 docker amd64",
+        "portability_policy": "distribution-scoped",
+        "portability_notes": "Ubuntu 26.04 LTS amd64 managed target built in a base Ubuntu 26.04 Docker image (glibc 2.43, ICU 78, clang 21); qualified in a clean ubuntu:26.04 container (SONAME check, bootstrap setup, doctor, new/build/run, Foundation probe) before publication.",
+    },
+    {
         "id": "linux-arm64-clang",
         "os": "linux",
         "arch": "arm64",
@@ -2738,6 +2754,28 @@ def _linux_gcc_runtime_include_path() -> str | None:
     return str(candidates[-1])
 
 
+RELEASE_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
+DEVELOPMENT_CLI_VERSION = "0.1.0-dev"
+
+
+def stamped_cli_version(version: str) -> str:
+    """Return the version a CLI built for this artifact version reports.
+
+    Only plain release versions (for example 0.1.0) are stamped into the binary,
+    so a stable CLI resolves its own v<version> release manifest and the
+    production trust root. Development labels such as 0.1.0-dev-current keep the
+    built-in 0.1.0-dev prerelease line.
+    """
+    return version if RELEASE_VERSION_PATTERN.match(version) else DEVELOPMENT_CLI_VERSION
+
+
+def cli_version_compile_defines(version: str) -> list[str]:
+    stamped = stamped_cli_version(version)
+    if stamped == DEVELOPMENT_CLI_VERSION:
+        return []
+    return [f'-DGNUSTEP_CLI_VERSION="{stamped}"']
+
+
 def build_linux_cli_against_managed_toolchain(
     toolchain_archive: str | Path,
     output_archive: str | Path,
@@ -2784,6 +2822,7 @@ def build_linux_cli_against_managed_toolchain(
         command = [
             "clang",
             *objc_flags,
+            *cli_version_compile_defines(version),
             f"-I{managed_root / 'Local' / 'Library' / 'Headers'}",
             f"-I{managed_root / 'System' / 'Library' / 'Headers'}",
             *([f"-I{gcc_include}"] if gcc_include else []),
@@ -2810,6 +2849,10 @@ def build_linux_cli_against_managed_toolchain(
         smoke = subprocess.run([str(binary), "--help"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=runtime_env, check=False)
         if smoke.returncode != 0:
             return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": False, "status": "error", "summary": "Managed-prefix Linux CLI smoke failed.", "stdout": smoke.stdout, "stderr": smoke.stderr}
+        expected_version = stamped_cli_version(version)
+        version_smoke = subprocess.run([str(binary), "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=runtime_env, check=False)
+        if version_smoke.returncode != 0 or version_smoke.stdout.strip() != expected_version:
+            return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": False, "status": "error", "summary": f"Managed-prefix Linux CLI reports version {version_smoke.stdout.strip()!r}, expected {expected_version!r}.", "stdout": version_smoke.stdout, "stderr": version_smoke.stderr}
         abi = linux_cli_abi_audit(binary)
         if not abi["ok"]:
             return {"schema_version": 1, "command": "build-linux-cli-against-managed-toolchain", "ok": False, "status": "error", "summary": "Managed-prefix Linux CLI ABI audit failed.", "abi_audit": abi}
@@ -2982,8 +3025,16 @@ def sign_release_metadata(release_dir: str | Path, private_key_path: str | Path,
     if not private_key.exists():
         return {"schema_version": 1, "command": "sign-release-metadata", "ok": False, "status": "error", "summary": "Signing private key is missing.", "release_dir": str(root)}
     provenance_path = write_release_provenance(root, builder_identity=os.environ.get("GNUSTEP_CLI_BUILDER_ID", "local"))
-    public_key = Path(public_key_path).resolve() if public_key_path else root / "release-signing-public.pem"
-    if public_key_path is None:
+    # Always bundle the signing public key next to the release so the release is
+    # self-describing. When an explicit public key is supplied (CI passes the
+    # GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY secret), copy it in; otherwise derive
+    # it from the private key.
+    public_key = root / "release-signing-public.pem"
+    if public_key_path is not None:
+        provided = Path(public_key_path).resolve()
+        if provided != public_key:
+            shutil.copyfile(provided, public_key)
+    else:
         proc = subprocess.run(["openssl", "pkey", "-in", str(private_key), "-pubout", "-out", str(public_key)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
         if proc.returncode != 0:
             return {"schema_version": 1, "command": "sign-release-metadata", "ok": False, "status": "error", "summary": "Failed to derive release signing public key.", "release_dir": str(root), "stderr": proc.stderr}
@@ -4243,7 +4294,7 @@ def toolchain_archive_audit(archive_path: str | Path, *, target_id: str | None =
             }
         )
         add_check("gnustep_env", "GNUstep environment activation script is present.", [r"/gnustep\.(sh|bat|ps1)$"], required=False)
-    elif inferred_target in {"linux-amd64-clang", "linux-ubuntu2404-amd64-clang", "linux-arm64-clang", "openbsd-amd64-clang", "openbsd-arm64-clang"}:
+    elif inferred_target in {"linux-amd64-clang", "linux-ubuntu2404-amd64-clang", "linux-ubuntu2604-amd64-clang", "linux-arm64-clang", "openbsd-amd64-clang", "openbsd-arm64-clang"}:
         add_check("runtime_tools", "Managed tool directory is present.", [r"/system/tools/", r"/tools/"])
         add_check("source_lock", "Source-built managed toolchain source lock is present.", [r"/source-lock\.json$"])
         add_check("component_inventory", "Managed toolchain component inventory is present.", [r"/component-inventory\.json$"])
@@ -5939,7 +5990,7 @@ def session_build_box_plan(
     for target_id in selected_targets:
         target = known_targets[target_id]
         profile = {
-            "linux": "debian-13-gnome-wayland" if target_id == "linux-amd64-clang" else "ubuntu-24.04-aarch64" if target["arch"] == "arm64" else "ubuntu-24.04-amd64",
+            "linux": "debian-13-gnome-wayland" if target_id == "linux-amd64-clang" else "ubuntu-26.04-amd64" if target_id == "linux-ubuntu2604-amd64-clang" else "ubuntu-24.04-aarch64" if target["arch"] == "arm64" else "ubuntu-24.04-amd64",
             "openbsd": "openbsd-7.8-arm64" if target["arch"] == "arm64" else "openbsd-7.8-fvwm",
             "windows": "windows-2022",
         }.get(target["os"], target_id)

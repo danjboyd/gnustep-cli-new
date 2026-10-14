@@ -36,6 +36,10 @@ endif
 ifneq ($(GNUSTEP_CLI_BLOCKS_RUNTIME_LIB),)
 ADDITIONAL_TOOL_LIBS += -lBlocksRuntime
 endif
+# Release builds stamp the CLI version: make GNUSTEP_CLI_VERSION=0.1.0
+ifneq ($(GNUSTEP_CLI_VERSION),)
+ADDITIONAL_OBJCFLAGS += -DGNUSTEP_CLI_VERSION=\"$(GNUSTEP_CLI_VERSION)\"
+endif
 # MSYS2 libdispatch on Windows expects mode_t to be treated as already available.
 ADDITIONAL_OBJCFLAGS += -DHAVE_MODE_T
 ADDITIONAL_CPPFLAGS += -DHAVE_MODE_T

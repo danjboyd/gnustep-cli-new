@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "validation_id": "linux-debian13-cli-version-stamp-20261013",
+  "validated_at": "2026-10-13",
+  "summary": "Debian 13 amd64 and arm64 stable v0.1.0 CLIs rebuilt with version stamping against the unchanged published toolchains, republished, and re-signed.",
+  "replaced_assets": [
+    {
+      "filename": "gnustep-cli-linux-amd64-clang-0.1.0.tar.gz",
+      "old_sha256": "08036124933163b9ab524e15cd27928553b504d4c70d4af5932d6d0037ff5037",
+      "new_sha256": "39a79b9b679dbc3a8e2426e6fb4b05397bc417bc64bd606ff7219be6857ff5f1",
+      "old_version_output": "0.1.0-dev",
+      "new_version_output": "0.1.0"
+    },
+    {
+      "filename": "gnustep-cli-linux-arm64-clang-0.1.0.tar.gz",
+      "old_sha256": "1495a89dc364bcfadabcd6268dc2dea34177a97394cad48110db0362b5eb9c4f",
+      "new_sha256": "f9951c439dceb9e8c8df9be473a19e2e7bb3184d810333a5cf34b02d4a3ad441",
+      "old_version_output": "0.1.0-dev",
+      "new_version_output": "0.1.0"
+    }
+  ],
+  "unchanged_toolchains": {
+    "gnustep-toolchain-linux-amd64-clang-0.1.0.tar.gz": "cad08bb0ae05f216abc821431c4a5119dd295df891ab7024161a0cbd13171833",
+    "gnustep-toolchain-linux-arm64-clang-0.1.0.tar.gz": "09b69ecf1969b3c0405ea567e86ee03d88e24e782686edba5b62ce800d369050"
+  },
+  "runs": {
+    "amd64_build_and_prepublication_qualification": "38467777228",
+    "arm64_build_and_prepublication_qualification": "38467787742",
+    "stage_release": "38468096127",
+    "release": "38469081039",
+    "amd64_published_qualification": "38469847753",
+    "arm64_published_qualification": "38469859048",
+    "build_mode": "reuse_toolchain_tag=v0.1.0 (CLI-only build)"
+  },
+  "evidence_tier": "github-actions-container",
+  "evidence_tier_note": "Clean debian:13 containers on GitHub-hosted runners (amd64 and arm64 runner kernels), not VMs. Additionally verified on a native Debian 13 amd64 host (iep-daniel-t14): published bootstrap setup, --version 0.1.0, doctor toolchain_compatible, update --check verifying the production-signed v0.1.0 manifest ('Everything is already current.').",
+  "results": {
+    "amd64": {
+      "soname_check": "passed",
+      "bootstrap_setup": "passed",
+      "cli_version": "passed",
+      "cli_help": "passed",
+      "doctor": "passed",
+      "new_build_run": "passed",
+      "foundation_probe": "passed",
+      "package_install_remove": "passed"
+    },
+    "arm64": {
+      "soname_check": "passed",
+      "bootstrap_setup": "passed",
+      "cli_version": "passed",
+      "cli_help": "passed",
+      "doctor": "passed",
+      "new_build_run": "passed",
+      "foundation_probe": "passed",
+      "package_install_remove": "passed"
+    }
+  },
+  "notes": [
+    "This is the first bootstrap-path validation of stable arm64 (container tier).",
+    "Windows MSYS2 CLI was not rebuilt and still reports 0.1.0-dev."
+  ],
+  "remaining_blockers": []
+}

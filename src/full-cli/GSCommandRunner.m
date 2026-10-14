@@ -12,6 +12,19 @@
 #import <unistd.h>
 #endif
 
+// Release builds stamp the CLI version (for example -DGNUSTEP_CLI_VERSION="0.1.0")
+// so a stable CLI reports its release version and resolves the matching
+// v<version> release manifest and production trust root. Unstamped development
+// builds stay on the 0.1.0-dev prerelease line.
+#ifndef GNUSTEP_CLI_VERSION
+#define GNUSTEP_CLI_VERSION "0.1.0-dev"
+#endif
+
+static NSString *GSCLIVersionString(void)
+{
+  return @GNUSTEP_CLI_VERSION;
+}
+
 @interface GSCommandRunner ()
 
 - (BOOL)isKnownCommand:(NSString *)command;
@@ -143,6 +156,8 @@
 - (BOOL)artifact:(NSDictionary *)artifact matchesRuntimeRequirementsForEnvironment:(NSDictionary *)environment;
 - (BOOL)verifyReleaseManifestSignatureForReference:(NSString *)reference error:(NSString **)errorMessage;
 - (NSString *)pinnedReleaseTrustRootPEM;
+- (NSString *)pinnedDogfoodReleaseTrustRootPEM;
+- (NSString *)pinnedReleaseTrustRootPEMForReference:(NSString *)reference;
 - (NSDictionary *)signatureFailurePayloadForInstallRoot:(NSString *)installRoot reason:(NSString *)reason exitCode:(int *)exitCode;
 - (NSDictionary *)currentEnvironmentForInterface:(NSString *)interface;
 - (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath quick:(BOOL)quick;
@@ -568,7 +583,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                ok: YES
                            status: @"ok"
                           summary: @"GNUstep CLI version"
-                             data: [NSDictionary dictionaryWithObject: @"0.1.0-dev"
+                             data: [NSDictionary dictionaryWithObject: GSCLIVersionString()
                                                               forKey: @"version"]];
 }
 
@@ -631,13 +646,13 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   if (root != nil)
     {
-      staged = [[root stringByAppendingPathComponent: @"dist/stable/0.1.0-dev"] stringByAppendingPathComponent: @"release-manifest.json"];
+      staged = [[root stringByAppendingPathComponent: [@"dist/stable" stringByAppendingPathComponent: GSCLIVersionString()]] stringByAppendingPathComponent: @"release-manifest.json"];
       if ([manager fileExistsAtPath: staged])
         {
           return staged;
         }
     }
-  return @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0-dev/release-manifest.json";
+  return [NSString stringWithFormat: @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v%@/release-manifest.json", GSCLIVersionString()];
 }
 
 - (NSString *)dogfoodManifestURL
@@ -2707,10 +2722,25 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
 - (NSString *)pinnedReleaseTrustRootPEM
 {
-  // Pinned release-signing public key; the release manifest is verified against
-  // THIS key, not the release-signing-public.pem bundled next to the downloaded
-  // manifest. Current dev/dogfood key; override with RELEASE_TRUST_ROOT for
-  // production. Kept in sync with scripts/bootstrap/release-signing-trust-root.pem.
+  // Pinned PRODUCTION release-signing public key; the release manifest is verified
+  // against THIS key, not the release-signing-public.pem bundled next to the
+  // downloaded manifest. Signs stable releases. Override with RELEASE_TRUST_ROOT.
+  // Kept in sync with scripts/bootstrap/release-signing-trust-root.pem.
+  return @"-----BEGIN PUBLIC KEY-----\n"
+         @"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp8xT2pS/hozuvG+IvUOt\n"
+         @"5btJ+iuedUNysW37vWTLwPpRBAuX3Hra61ZChAWo0DiTGU+ka6IuxMgpNLAOLglr\n"
+         @"E5COu1YHwJsm5u+yJ9ujLVQVWP4zhAhJmC7+MAK2wbg3HK1cT8UMBaWZkkELLe3t\n"
+         @"1uFGGVqtr5R/HZmoI6KowBTYC8l6unD6N8GRq6Y59Xq6oHlVe2UekWeBtwKDtFRk\n"
+         @"jTuGq+ctl8pxe8tXxIB/fEBT/UcOY+ZPQxdNCF6IbfSJGBFltSbUleuYl8LEH+ys\n"
+         @"z1rf/W/l/owwryvGgH0FzsYOzQnK2BxX03tSshKT5EPpvxsOQ//xCCFcRhejmnkY\n"
+         @"UwIDAQAB\n"
+         @"-----END PUBLIC KEY-----\n";
+}
+
+- (NSString *)pinnedDogfoodReleaseTrustRootPEM
+{
+  // Pinned dev/dogfood release-signing public key; signs the dogfood channel.
+  // Selected only when the manifest reference is a dogfood reference.
   return @"-----BEGIN PUBLIC KEY-----\n"
          @"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApqGh2TATl3jFarwQQ/9O\n"
          @"au+YSXOTgKsP/vrWmYdQ7fIplJqP/Zci+L1OLYu6K6MPsFfwFSxYNTfvXSNnEVVS\n"
@@ -2720,6 +2750,21 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
          @"e6doSwUJjNockivsbU5JhVUwvoUJUb+ubbuEWKUc8UNDjLqmF0vfmtait/Yy7LRm\n"
          @"cwIDAQAB\n"
          @"-----END PUBLIC KEY-----\n";
+}
+
+- (NSString *)pinnedReleaseTrustRootPEMForReference:(NSString *)reference
+{
+  // The dogfood channel and pre-release (-dev) references are signed by the dev
+  // key; release references (the stable channel) by the production key. The
+  // version embedded in the reference drives both the manifest source and the
+  // expected signer, so they stay in lock-step.
+  if (reference != nil &&
+      ([reference rangeOfString: @"/dogfood/"].location != NSNotFound ||
+       [reference rangeOfString: @"-dev"].location != NSNotFound))
+    {
+      return [self pinnedDogfoodReleaseTrustRootPEM];
+    }
+  return [self pinnedReleaseTrustRootPEM];
 }
 
 - (BOOL)verifyReleaseManifestSignatureForReference:(NSString *)reference error:(NSString **)errorMessage
@@ -2801,7 +2846,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   else
     {
       trustRoot = [tempDir stringByAppendingPathComponent: @"trust-root.pem"];
-      [[self pinnedReleaseTrustRootPEM] writeToFile: trustRoot atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+      [[self pinnedReleaseTrustRootPEMForReference: reference] writeToFile: trustRoot atomically: YES encoding: NSUTF8StringEncoding error: NULL];
     }
 
   result = [self runCommand: [NSArray arrayWithObjects:
@@ -4345,7 +4390,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return [NSDictionary dictionaryWithObjectsAndKeys:
                         [NSNumber numberWithInt: 1], @"schema_version",
                         @"doctor", @"command",
-                        @"0.1.0-dev", @"cli_version",
+                        GSCLIVersionString(), @"cli_version",
                         interface, @"interface",
                         quick ? @"quick" : ([interface isEqualToString: @"bootstrap"] ? @"installer" : @"full"), @"diagnostic_depth",
                         [NSNumber numberWithBool: ![status isEqualToString: @"error"]], @"ok",
@@ -5403,7 +5448,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     return [NSDictionary dictionaryWithObjectsAndKeys:
                           [NSNumber numberWithInt: 1], @"schema_version",
                           @"setup", @"command",
-                          @"0.1.0-dev", @"cli_version",
+                          GSCLIVersionString(), @"cli_version",
                           [NSNumber numberWithBool: ok], @"ok",
                           status, @"status",
                           summary, @"summary",
@@ -6833,7 +6878,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
     return [NSDictionary dictionaryWithObjectsAndKeys:
                           [NSNumber numberWithInt: 1], @"schema_version",
                           @"setup", @"command",
-                          @"0.1.0-dev", @"cli_version",
+                          GSCLIVersionString(), @"cli_version",
                           [NSNumber numberWithBool: YES], @"ok",
                           @"ok", @"status",
                           (upgradeMode ? @"Managed upgrade completed." : @"Managed installation completed."), @"summary",
@@ -9804,7 +9849,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         }
       else
         {
-          printf("0.1.0-dev\n");
+          printf("%s\n", GNUSTEP_CLI_VERSION);
         }
       return 0;
     }
