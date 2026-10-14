@@ -233,6 +233,28 @@ root. Evidence:
   artifacts, or close the dependency bundle before claiming Fedora/Arch managed
   Clang/libobjc2 support.
 
+## Known Runtime Issues
+
+- libobjc2 `@synchronized` first-lock race
+  ([gnustep/libobjc2#424](https://github.com/gnustep/libobjc2/issues/424)).
+  The source-built managed toolchains pin libobjc2 at `b67709a`, which predates
+  the upstream fix (`fab3df2`, PR #430, merged October 13, 2026 and not yet in
+  a tagged release). The Windows MSYS2 `clang64` toolchain uses MSYS2's libobjc2
+  package and is affected until MSYS2 ships the fix. When several threads
+  race the first `@synchronized` on a fresh object, the process can hang, lose
+  mutual exclusion, or abort. Associated objects share the same lock, so
+  racing the first `objc_setAssociatedObject` on a fresh object is affected,
+  as is libs-base KVO, which does `@synchronized(object)` when the first
+  observer is added. Single-threaded first use, and `@synchronized` on class
+  objects, are not affected.
+  Policy: the managed toolchains move to the next upstream libobjc2 tag that
+  contains the fix rather than carrying a backport. Until then, applications
+  that need the fix can build a custom toolchain (`docs/custom-toolchains.md`)
+  with a C backport of `fab3df2` in their lock's libobjc2 `patches`; the
+  Custom Toolchain CI workflow builds with one
+  (`tests/fixtures/custom-toolchain-ci/patches/libobjc2/`) and runs a race
+  probe against it.
+
 ## Deferred Discovery Targets
 
 - openSUSE
