@@ -365,9 +365,9 @@ def parse_build_id(readelf_notes: str) -> str | None:
     return match.group(1) if match else None
 
 
-def elf_build_ids(prefix: Path) -> dict[str, str]:
-    """Map prefix-relative ELF paths (libraries, bundles, tools) to GNU build IDs."""
-    ids: dict[str, str] = {}
+def elf_files(prefix: Path) -> dict[str, dict[str, str | None]]:
+    """Map prefix-relative ELF paths (libraries, bundles, tools) to sha256 and GNU build ID."""
+    files: dict[str, dict[str, str | None]] = {}
     for path in sorted(prefix.rglob("*")):
         if path.is_symlink() or not path.is_file():
             continue
@@ -377,11 +377,12 @@ def elf_build_ids(prefix: Path) -> dict[str, str]:
                     continue
         except OSError:
             continue
-        notes = subprocess.run(["readelf", "-n", str(path)], capture_output=True, text=True, check=False).stdout
-        build_id = parse_build_id(notes)
-        if build_id:
-            ids[str(path.relative_to(prefix))] = build_id
-    return ids
+        try:
+            notes = subprocess.run(["readelf", "-n", str(path)], capture_output=True, text=True, check=False).stdout
+        except OSError:
+            notes = ""
+        files[str(path.relative_to(prefix))] = {"sha256": _sha256_file(path), "build_id": parse_build_id(notes)}
+    return files
 
 
 def build_custom_toolchain(
@@ -491,8 +492,11 @@ def build_custom_toolchain(
             }
             for component, source in zip(lock["components"], fetched)
         ],
-        "elf_build_ids": elf_build_ids(prefix_dir),
     }
+    files = elf_files(prefix_dir)
+    # elf_files is the full record; elf_build_ids is kept as a flat path -> ID map.
+    provenance["elf_files"] = files
+    provenance["elf_build_ids"] = {path: entry["build_id"] for path, entry in files.items() if entry["build_id"]}
     (prefix_dir / PROVENANCE_FILENAME).write_text(json.dumps(provenance, indent=2) + "\n")
     return _result(
         command,

@@ -61,6 +61,8 @@ jobs:
           assert any("libgnustep-gui" in k for k in system_libs), system_libs
           assert not any(k.startswith("Local/Library/Libraries/libgnustep-") for k in p["elf_build_ids"])
           assert len(p["elf_build_ids"]) >= 30, len(p["elf_build_ids"])
+          assert set(p["elf_build_ids"]) <= set(p["elf_files"])
+          assert all(len(e["sha256"]) == 64 for e in p["elf_files"].values())
           print(f"ok: {len(p['elf_build_ids'])} ELF build IDs, host {p['build_host'].get('distribution')}")
           PY
 

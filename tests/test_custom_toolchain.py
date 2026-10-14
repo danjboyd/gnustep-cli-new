@@ -20,6 +20,7 @@ from gnustep_cli_shared.custom_toolchain import (  # noqa: E402
     build_environment,
     check_custom_prefix,
     custom_toolchain_lock_from_source_lock,
+    elf_files,
     parse_build_id,
     validate_custom_toolchain_lock,
 )
@@ -227,6 +228,23 @@ class CustomToolchainBuildTests(unittest.TestCase):
         notes = "Displaying notes found in: .note.gnu.build-id\n  Owner  Data size  Description\n  GNU  0x00000014  NT_GNU_BUILD_ID (unique build ID bitstring)\n    Build ID: 3f65a649e63a0011223344556677889900aabbcc\n"
         self.assertEqual(parse_build_id(notes), "3f65a649e63a0011223344556677889900aabbcc")
         self.assertIsNone(parse_build_id("no notes"))
+
+
+class CustomToolchainElfFilesTests(unittest.TestCase):
+    def test_records_sha256_and_build_id_for_elf_files_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            prefix = Path(tmp)
+            (prefix / "lib").mkdir()
+            real = Path("/bin/true").resolve()
+            (prefix / "lib" / "tool").write_bytes(real.read_bytes())
+            (prefix / "lib" / "stub.so").write_bytes(b"\x7fELF-not-really")
+            (prefix / "lib" / "notes.txt").write_text("text\n")
+            (prefix / "lib" / "link.so").symlink_to("stub.so")
+            files = elf_files(prefix)
+            self.assertEqual(sorted(files), ["lib/stub.so", "lib/tool"])
+            self.assertEqual(files["lib/tool"]["sha256"], hashlib.sha256(real.read_bytes()).hexdigest())
+            self.assertRegex(files["lib/tool"]["build_id"] or "", r"^[0-9a-f]{16,}$")
+            self.assertIsNone(files["lib/stub.so"]["build_id"])
 
 
 class CustomToolchainCiLockTests(unittest.TestCase):

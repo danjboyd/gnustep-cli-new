@@ -141,6 +141,10 @@ step needs libdispatch.
   arguments, and applied patches with their sha256
 - the build host: distribution, glibc, kernel, compiler, cmake, make, and
   whether the build ran in a container
-- `elf_build_ids`: the GNU build ID of every ELF file in the prefix (libraries,
-  bundles, tools), keyed by prefix-relative path, so packagers can check that
-  what they bundle is what was built
+- `install_domain`: `LOCAL` or `SYSTEM`
+- `elf_files`: every ELF file in the prefix (libraries, bundles, tools), keyed
+  by prefix-relative path, with its `sha256` and GNU `build_id` (`null` when
+  the file has none), so packagers can check that what they bundle is what
+  was built. The build ID survives copying and relocation; the sha256 changes
+  if a packager strips or patches the file, so compare build IDs first.
+- `elf_build_ids`: the same build IDs as a flat path-to-ID map
