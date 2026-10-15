@@ -171,3 +171,8 @@ diff -u packages/package-index.json /tmp/package-index.json
 
 New features and bug fixes need automated tests in the same change. GitHub
 Actions runs both suites on every push and pull request.
+
+## License
+
+GNUstep CLI is licensed under the GNU Lesser General Public License, version
+2.1 or (at your option) any later version. See [LICENSE](LICENSE).
