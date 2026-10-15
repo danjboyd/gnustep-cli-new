@@ -128,6 +128,10 @@ The repository currently contains:
   published on `v0.1.0` predate that: with them, binaries built by hand after
   sourcing `GNUstep.sh` need `<root>/lib` on `LD_LIBRARY_PATH`. The `gnustep`
   launcher and `gnustep new` project templates already handle this
+- the managed toolchains' libobjc2 has the `@synchronized` first-lock race
+  (gnustep/libobjc2#424); it is fixed upstream but not in a tagged release, and
+  the managed toolchains will pick it up with the next libobjc2 tag. See
+  "Known Runtime Issues" in `docs/support-matrix.md`
 - finish native Objective-C `doctor` deep-detection parity with the shared model
   before claiming the full CLI as the authoritative diagnostic implementation
 - repaired Linux managed artifact portability beyond the explicitly scoped
