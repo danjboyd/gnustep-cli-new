@@ -84,17 +84,17 @@ Hello from CLI tool
 a `GNUmakefile`), not only projects made with `gnustep new`. Add `--help` to
 any command for its options, and `--json` for machine-readable output.
 
-Packages and updates:
+Check for updates:
 
 ```console
-$ gnustep list
-list: package=io.github.danjboyd.arlen ... GNUstep web application framework and command-line tooling.
-list: package=org.gnustep.gorm ... Interface builder application for GNUstep.
-list: package=org.gnustep.tools-xctest ... XCTest runner and harness for native GNUstep Objective-C unit tests.
-
 $ gnustep update --check
 update: Everything is already current.
 ```
+
+The package commands (`list`, `search`, `install`, `remove`) are included, but
+the v0.1.0 release doesn't publish an official package index yet. Until it
+does, they only work with an index you pass explicitly:
+`gnustep list --index <path-or-url>`.
 
 ## Already have GNUstep?
 
