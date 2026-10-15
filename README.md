@@ -1,243 +1,178 @@
-# gnustep-cli-new
+# GNUstep CLI
 
-This repository is a fresh start for a new GNUstep CLI.
+`gnustep` is a command-line tool for installing a modern GNUstep toolchain and
+working with GNUstep projects. It covers both installing a toolchain and the
+day-to-day commands you run on a project:
 
-The design is intentionally split into two interfaces:
+- **`setup`** installs a managed Clang + libobjc2 GNUstep toolchain into your
+  home directory. No root is required, and system packages are left alone.
+- **`doctor`** inspects your machine and tells you whether an existing GNUstep
+  install is usable, what kind it is, and what to do next.
+- **`new`**, **`build`**, **`run`**, and **`clean`** create and drive GNUstep
+  projects. They are thin wrappers over GNUstep Make.
+- **`install`**, **`remove`**, **`list`**, and **`search`** manage packages
+  from a signed package index.
+- **`update`** keeps the CLI, toolchain, and packages current through staged,
+  verified updates that can be rolled back.
 
-- a bootstrap CLI for `setup` and `doctor`
-- a full CLI implemented as an Objective-C/GNUstep application
+Every command supports `--json` for scripting, with a stable, versioned output
+format.
 
-The old repository at `../gnustep-cli` is reference material, not an architectural constraint.
+## Install
 
-## Project Goals
+On Debian 13 (trixie) `amd64`/`arm64` or Ubuntu 26.04 LTS `amd64`:
 
-- Build one CLI with two interfaces:
-  - a minimal bootstrap interface for installation and `doctor`
-  - a full Objective-C/GNUstep interface for normal long-term use
-- Prefer reusing a compatible platform-native GNUstep toolchain when that path is validated and compatible with the CLI's requirements, rather than forcing a managed install everywhere.
-- Keep managed installs artifact-backed and reproducible when a native packaged path is not good enough or not yet supported.
-- Treat updates as a first-class managed lifecycle responsibility of the installed full CLI: `gnustep update` should check, plan, and apply CLI/toolchain and package updates transactionally, while setup remains focused on onboarding, repair, and environment configuration.
-- Treat `build` and `run` as GNUstep project commands with a backend model; GNUstep Make is first implemented, while CMake and libs-xcode/buildtool are core planned backends.
-- Treat current-release native-toolchain discovery and validation as in scope for:
-  - OpenBSD
-  - Fedora
-  - Debian
-  - Arch
-- Treat the following distro families as deferred future investigation targets rather than current-release requirements:
-  - openSUSE
-  - RHEL-family distributions and clones
-  - Alpine
+```sh
+curl -fsSL https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/gnustep-bootstrap.sh | sh -s -- setup --user
+```
 
-## Current Status
+The bootstrap script is a small POSIX `sh` program that needs only `curl` or
+`wget`. It downloads the signed release manifest, checks it against a pinned
+trust root, picks the artifacts that match your machine, checks their
+checksums, and installs them under `~/.local/share/gnustep-cli`. After that it
+prints the `PATH` line to use in your current shell. Once setup finishes you
+can delete the bootstrap script, because the installed `gnustep` handles
+updates from then on.
 
-The repository currently contains:
+```console
+$ curl -fsSL .../gnustep-bootstrap.sh | sh -s -- setup --user
+setup: host prerequisites are derived from https://github.com/gnustep/tools-scripts
+setup: to install GNUstep host prerequisites, run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ca-certificates curl ... clang lld libicu-dev ...
+setup: rerun bootstrap with --yes to let setup install these prerequisites automatically
+setup: managed installation completed
+setup: scope=user root=/home/you/.local/share/gnustep-cli
+next: Run this in the current shell:
+  export PATH="/home/you/.local/share/gnustep-cli/bin:/home/you/.local/share/gnustep-cli/Tools:/home/you/.local/share/gnustep-cli/System/Tools:$PATH"
+next: The bootstrap script is no longer required and may be deleted.
+```
 
-- project requirements and architectural policy in [AGENTS.md](/home/danboyd/gnustep-cli-new/AGENTS.md)
-- an implementation roadmap in [docs/implementation-roadmap.md](/home/danboyd/gnustep-cli-new/docs/implementation-roadmap.md)
-- bootstrap scripts under `scripts/bootstrap/`
-- the Objective-C full CLI under `src/full-cli`
-- a generated package repository under `packages/`
-- schema drafts under `schemas/`
-- automated regression coverage under `tests/` and `src/full-cli/Tests`
-- a project requirement that new features, bug fixes, and roadmap subphases include automated unit/regression coverage before being considered complete
+Want to check your machine before installing anything? Run
+`sh gnustep-bootstrap.sh doctor`. It makes no changes.
 
-### Shipped In Repo
+## Quick start
 
-- native `doctor`, `setup`, `build`, `run`, `new`, `install`, `remove`, and `update` command implementations exist in the full Objective-C CLI
-- package installation now supports package IDs resolved through a package index
-- package safety checks include compatibility-aware artifact selection,
-  dependency rejection, reinstall/idempotent behavior, and removal blocking for
-  dependents
-- the installed full CLI bundle is qualified without bundled Python runtime
-  trees
+```console
+$ gnustep doctor
+doctor: A compatible GNUstep toolchain was detected.
+doctor: status=ok classification=toolchain_compatible
+doctor: host=linux/amd64
+doctor: toolchain=clang runtime=libobjc2 abi=modern
 
-### Validated Now
+$ gnustep new --list-templates
+gui-app
+cli-tool
+library
 
-- the Python/shared regression suite
-- the native Objective-C `tools-xctest` suite
-- bootstrap-to-full handoff qualification for staged release artifacts
-- package index generation determinism in CI
-- fresh OpenBSD packaged-path host evidence on libvirt, including native
-  package install/remove smoke after fixing OpenBSD OS detection
-- fresh Debian host evidence for managed-toolchain compile-link-run,
-  release-artifact package smoke, and public published-URL bootstrap/full-CLI
-  qualification on libvirt
-- Fedora and Arch native packaged-path qualification on disposable libvirt hosts,
-  classified as GCC/libobjc interoperability paths rather than preferred modern
-  Clang/libobjc2 stacks
-- Windows libvirt readiness, MSYS2 assembly, native full-CLI build,
-  `--version` / `--help`, package install/remove smoke on a fresh lease, and
-  package-flow qualification against refreshed staged Windows release artifacts
+$ gnustep new cli-tool HelloTool && cd HelloTool
+Project template created.
 
-### Published Stable Release
+$ gnustep build
+Making all for tool HelloTool...
+ Compiling file main.m ...
+ Linking tool HelloTool ...
+build: GNUstep project build completed.
+build: backend=gnustep-make
+build: project_type=tool target=HelloTool
 
-- `v0.1.0` is published as the stable GitHub release (first published
-  May 5, 2026). Its release evidence bundle, including the OpenBSD and Windows
-  Tier 1 reports, is in `docs/validation/release-0.1.0-evidence/`.
-- Install on Debian 13 (trixie) `amd64` or `arm64`, or Ubuntu 26.04 LTS `amd64`:
+$ gnustep run
+run: project_type=tool target=HelloTool
+run: invocation=./obj/HelloTool
+Hello from CLI tool
+```
 
-  ```sh
-  curl -fsSL https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/gnustep-bootstrap.sh | sh -s -- setup --user
-  ```
+`build` and `run` work on any existing GNUstep Make project (any directory with
+a `GNUmakefile`), not only projects made with `gnustep new`. Add `--help` to
+any command for its options, and `--json` for machine-readable output.
 
-  The release-asset bootstrap is stamped `CLI_VERSION="0.1.0"`, selects the
-  stable `v0.1.0` manifest, and verifies it against the pinned production
-  release trust root. The raw `scripts/bootstrap/gnustep-bootstrap.sh`, on
-  `master` or at the `v0.1.0` tag, reports `0.1.0-dev` and installs from the
-  `v0.1.0-dev` prerelease instead.
-- The signed stable manifest scopes the Debian Linux artifacts to Debian with an
-  ICU 76 / glibc 2.41 runtime gate, and the Ubuntu artifacts to Ubuntu 26.04 with
-  an ICU 78 / glibc 2.43 gate. Debian 12 and Ubuntu 24.04 are not covered by the
-  stable manifest.
-- On June 3, 2026 Debian 13 `arm64` CLI and toolchain artifacts were added to
-  `v0.1.0` (evidence:
-  `docs/validation/linux-arm64-debian13-stable-publish-20260603.json`).
-- On October 13, 2026 the `amd64` CLI and toolchain on `v0.1.0` were replaced
-  with Debian 13 builds and the release metadata was re-signed. The previous
-  `amd64` toolchain was a mislabeled Debian 12 bookworm build that bundled
-  glibc 2.36 and ICU 72 and crashed on Debian 13. Evidence, including the old
-  and new checksums:
-  `docs/validation/linux-amd64-debian13-stable-republish-20261013.json`.
-- On October 13, 2026 Ubuntu 26.04 LTS `amd64` CLI and toolchain artifacts
-  (built in `ubuntu:26.04`, clang 21) were added to `v0.1.0`. Their evidence tier
-  is a clean `ubuntu:26.04` container on a GitHub-hosted runner, not a VM:
-  `docs/validation/linux-ubuntu2604-amd64-stable-publish-20261013/`.
-- On October 13, 2026 the Debian 13 `amd64` and `arm64` CLIs were rebuilt with
-  version stamping against the unchanged published toolchains and re-signed;
-  both now report `0.1.0`. Stable `arm64` was validated through the published
-  bootstrap for the first time (container tier). Evidence:
-  `docs/validation/linux-debian13-cli-version-stamp-20261013/`.
-- On October 15, 2026 the three Linux toolchains (Debian 13 `amd64`/`arm64`,
-  Ubuntu 26.04 `amd64`) were rebuilt from the same pins so their `GNUstep.sh`
-  prepends `<root>/lib` (libobjc2, libdispatch, BlocksRuntime) to
-  `LD_LIBRARY_PATH`, then republished and re-signed; the CLIs are unchanged.
-  Evidence: `docs/validation/linux-toolchain-runtime-lib-republish-20261015/`.
-- The stable manifest also carries the Windows `amd64` MSYS2 `clang64` CLI and
-  toolchain. OpenBSD `amd64` is a native packaged-GNUstep path, not a managed
-  artifact.
+Packages and updates:
 
-### Still Blocked Or Pending
+```console
+$ gnustep list
+list: package=io.github.danjboyd.arlen ... GNUstep web application framework and command-line tooling.
+list: package=org.gnustep.gorm ... Interface builder application for GNUstep.
+list: package=org.gnustep.tools-xctest ... XCTest runner and harness for native GNUstep Objective-C unit tests.
 
-- release builds stamp the CLI version (`GNUSTEP_CLI_VERSION`), so the stable
-  Linux CLIs (Debian 13 `amd64`/`arm64`, Ubuntu 26.04 `amd64`) report `0.1.0`
-  and check the `v0.1.0` manifest for updates; the Windows MSYS2 CLI has not
-  been rebuilt and still reports `0.1.0-dev`
-- no official package has an Ubuntu 26.04 artifact yet
-- the `amd64` official package artifacts on `v0.1.0` (Arlen, Gorm,
-  `tools-xctest` snapshots from May 5, 2026) were built against the previous
-  bookworm toolchain and have not been rebuilt or revalidated on Debian 13
-- managed GNUstep shared libraries have no RUNPATH, and upstream GNUstep
-  Make's `GNUstep.sh` does not add `<root>/lib` (libobjc2, libdispatch,
-  BlocksRuntime) to the loader path. The Linux toolchains on `v0.1.0` patch the
-  managed `GNUstep.sh` to prepend it since October 15, 2026. Installs made
-  before then keep the old `GNUstep.sh`, and `gnustep update` reports them as
-  current because the version did not change; re-running the bootstrap `setup`
-  command refreshes them. Because the patched `GNUstep.sh` prepends
-  `<root>/lib`, libraries there take precedence over system libraries for
-  every process started from that shell
-- the managed toolchains' libobjc2 has the `@synchronized` first-lock race
-  (gnustep/libobjc2#424); it is fixed upstream but not in a tagged release, and
-  the managed toolchains will pick it up with the next libobjc2 tag. See
-  "Known Runtime Issues" in `docs/support-matrix.md`
-- finish native Objective-C `doctor` deep-detection parity with the shared model
-  before claiming the full CLI as the authoritative diagnostic implementation
-- repaired Linux managed artifact portability beyond the explicitly scoped
-  Debian and Ubuntu managed targets remains deferred; Fedora and Arch are
-  currently GCC/libobjc interoperability paths unless per-distro managed
-  Clang/libobjc2 artifacts are built and validated
-- package-index trust metadata, provenance generation, signing, trust-gate
-  validation, and signed-index enforcement in package-index consumer paths are
-  implemented for the official package repository path; hosted Linux
-  `tools-xctest` rebuilds pass, while target-native package rebuilds for
-  OpenBSD, Windows, and arm64 remain to be completed or explicitly deferred
-- OpenBSD `amd64` release claims are native packaged GNUstep claims; managed
-  OpenBSD artifact publication is optional future work, not a current
-  release-candidate blocker
+$ gnustep update --check
+update: Everything is already current.
+```
 
-### otvm Libvirt Note
+## Already have GNUstep?
 
-For current `otvm`-backed validation, use libvirt rather than the default OCI
-config. This now applies to the VM-backed GNUstep CLI validation path
-generally, including Windows work as `OracleTestVMs` rolls out libvirt-backed
-Windows leases. Use a dedicated libvirt config based on
-[otvm-libvirt.example.toml](/home/danboyd/gnustep-cli-new/docs/validation/otvm-libvirt.example.toml)
-and the refresh procedure in
-[openbsd-debian-libvirt-refresh.md](/home/danboyd/gnustep-cli-new/docs/validation/openbsd-debian-libvirt-refresh.md).
-Release preparation also emits `otvm-host-validation-plan.json`, and
-`scripts/internal/build_infra.py otvm-release-host-validation-plan` can
-regenerate that release-scoped Debian/OpenBSD/Windows libvirt validation plan
-for any staged release directory.
+You don't have to use the managed toolchain. `gnustep doctor` detects existing
+installs (distro packages, `/usr/GNUstep`, custom prefixes) and classifies
+them:
 
-## Planned Scope
+- **compatible**: the CLI uses your toolchain as it is.
+- **incompatible**: the toolchain works, but it can't use the published
+  binaries. A typical example is a distro GCC + `gcc_libobjc` toolchain, which
+  lacks blocks, ARC, and the modern runtime. `doctor` explains what is missing
+  and offers the managed Clang toolchain.
+- **broken**: GNUstep is present but doesn't compile, link, or run.
+  `doctor --full` runs real compile/link/run probes to show why.
 
-Initial commands:
+## Supported platforms (v0.1.0)
 
-- `setup`
-- `doctor`
-- `build`
-- `run`
-- `new`
-- `install`
-- `remove`
-- `update`
+| Platform | Status |
+| --- | --- |
+| Debian 13 `amd64`, `arm64` | Managed toolchain via the `sh` bootstrap |
+| Ubuntu 26.04 LTS `amd64` | Managed toolchain via the `sh` bootstrap |
+| OpenBSD `amd64` | Uses OpenBSD's native GNUstep packages |
+| Windows `amd64` (MSYS2 `clang64`) | CLI and toolchain artifacts are published; the PowerShell installer is in preview |
+| Fedora, Arch | `doctor` detection; native GCC toolchains are interoperability-only |
+| Debian 12, Ubuntu 24.04, macOS | Not supported in v0.1.0 |
 
-Bootstrap only supports `setup` and `doctor`, but should expose the full CLI surface in help output. Bootstrap is an onboarding and recovery tool, not the normal updater after the full CLI is installed.
+The managed toolchain is built from pinned upstream sources: tools-make,
+libobjc2, libdispatch, libs-base, libs-corebase, libs-gui, and libs-back. Pins,
+checksums, and build flags are recorded in the release metadata. Known issues,
+including the libobjc2 `@synchronized` first-lock race that is fixed upstream
+and waiting on a tagged release, are in
+[docs/support-matrix.md](docs/support-matrix.md).
 
-Update scope:
+## Documentation
 
-- `gnustep update --check` should compare installed CLI/toolchain and package state against signed release/package metadata without mutating the install.
-- `gnustep update cli` should update the full CLI and managed toolchain through staged, verified, rollback-capable activation.
-- `gnustep update packages` should upgrade installed packages through the signed package index and package transaction model.
-- `gnustep update` / `gnustep update all` should coordinate CLI/toolchain and package updates through one coherent plan.
-- `setup --check-updates` and `setup --upgrade` are compatibility/internal lifecycle hooks only; user-facing documentation should not present setup as the update command, and there should be no `setup --update` syntax.
-- `gnustep setup --repair` should remain the recovery path for interrupted or corrupted lifecycle operations.
-
-Build backend scope:
-
-- `gnustep-make` is the first implemented backend and uses `GNUmakefile` / `make`.
-- `cmake` is a core planned backend using `CMakeLists.txt` / `cmake`.
-- `xcode-buildtool` is a core planned backend using libs-xcode `buildtool` and `*.xcodeproj`.
-- Help and diagnostics should say `GNUstep project` unless the message is specifically backend-specific.
-
-The current release goal is not "managed toolchain only". `doctor` and `setup`
-should be able to distinguish among:
-
-- preferred native packaged toolchain paths
-- supported but not preferred native paths
-- interoperability-only native paths
-- incompatible native paths that should use the managed toolchain instead
+- [Support matrix and known issues](docs/support-matrix.md)
+- [Custom toolchains](docs/custom-toolchains.md)
+- [Windows integration](docs/windows-integration.md)
+- [Release status and validation evidence](docs/release-status.md)
+- [Design and architecture policy](AGENTS.md)
+- [Implementation roadmap](docs/implementation-roadmap.md)
 
 ## Development
 
-Run the baseline test suite with:
+The full CLI is an Objective-C/GNUstep application in `src/full-cli`. The
+bootstrap scripts are in `scripts/bootstrap/`, and the shared schemas and
+policy are in `schemas/` and `src/gnustep_cli_shared`.
+
+Run the Python/shared test suite:
 
 ```bash
 python3 -m unittest discover -s tests
 ```
 
-The committed package index should stay in sync with the package manifests:
-
-```bash
-python3 scripts/internal/package_repo.py --json packages --output /tmp/package-index.json >/dev/null
-diff -u packages/package-index.json /tmp/package-index.json
-```
-
-
-Testing policy: any new feature or bug fix should include the relevant automated tests in the same change set. Native Objective-C behavior belongs in the `tools-xctest` suite; Python tests should cover bootstrap, shared tooling, schemas, package repository generation, and cross-language contracts.
-
-Run the full regression gate, including the native Objective-C `tools-xctest`
-suite for the full CLI, with:
-
-```bash
-python3 -c 'import sys; sys.path.insert(0, "src"); from gnustep_cli_shared.qa import regression_suite; import json; print(json.dumps(regression_suite(), indent=2))'
-```
-
-Or run the native suite directly with:
+Run the native Objective-C `tools-xctest` suite:
 
 ```bash
 . ./scripts/dev/activate-tools-xctest.sh
 ./scripts/dev/run-native-tests.sh
 ```
 
-GitHub Actions now runs both the Python/shared suite and the native
-Objective-C `tools-xctest` suite on every push and pull request.
+Run the full regression gate:
+
+```bash
+python3 -c 'import sys; sys.path.insert(0, "src"); from gnustep_cli_shared.qa import regression_suite; import json; print(json.dumps(regression_suite(), indent=2))'
+```
+
+The committed package index must match the package manifests:
+
+```bash
+python3 scripts/internal/package_repo.py --json packages --output /tmp/package-index.json >/dev/null
+diff -u packages/package-index.json /tmp/package-index.json
+```
+
+New features and bug fixes need automated tests in the same change. GitHub
+Actions runs both suites on every push and pull request.
+
+## License
+
+GNUstep CLI is licensed under the GNU Lesser General Public License, version
+2.1 or (at your option) any later version. See [LICENSE](LICENSE).
