@@ -76,8 +76,9 @@ jobs:
             gnustep-custom-toolchain-linux-amd64-clang \
             sh -c '
               set -eu
+              grep -q "gnustep-cli: runtime library path" "$PREFIX/System/Library/Makefiles/GNUstep.sh"
+              # No manual LD_LIBRARY_PATH: GNUstep.sh must put $PREFIX/lib on it.
               set +u; . "$PREFIX/System/Library/Makefiles/GNUstep.sh"; set -u
-              export LD_LIBRARY_PATH="$PREFIX/lib:${LD_LIBRARY_PATH:-}"
               cd /tmp
               cat > foundation.m <<EOF
           #import <Foundation/Foundation.h>
