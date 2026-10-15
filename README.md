@@ -107,6 +107,11 @@ The repository currently contains:
   both now report `0.1.0`. Stable `arm64` was validated through the published
   bootstrap for the first time (container tier). Evidence:
   `docs/validation/linux-debian13-cli-version-stamp-20261013/`.
+- On October 15, 2026 the three Linux toolchains (Debian 13 `amd64`/`arm64`,
+  Ubuntu 26.04 `amd64`) were rebuilt from the same pins so their `GNUstep.sh`
+  prepends `<root>/lib` (libobjc2, libdispatch, BlocksRuntime) to
+  `LD_LIBRARY_PATH`, then republished and re-signed; the CLIs are unchanged.
+  Evidence: `docs/validation/linux-toolchain-runtime-lib-republish-20261015/`.
 - The stable manifest also carries the Windows `amd64` MSYS2 `clang64` CLI and
   toolchain. OpenBSD `amd64` is a native packaged-GNUstep path, not a managed
   artifact.
@@ -121,15 +126,15 @@ The repository currently contains:
 - the `amd64` official package artifacts on `v0.1.0` (Arlen, Gorm,
   `tools-xctest` snapshots from May 5, 2026) were built against the previous
   bookworm toolchain and have not been rebuilt or revalidated on Debian 13
-- managed GNUstep shared libraries have no RUNPATH, and GNUstep Make's
-  `GNUstep.sh` does not add `<root>/lib` (libobjc2, libdispatch,
-  BlocksRuntime) to the loader path. Toolchains packaged from `master` now
-  patch the managed `GNUstep.sh` to prepend `<root>/lib`, but the toolchains
-  published on `v0.1.0` predate that: with them, binaries built by hand after
-  sourcing `GNUstep.sh` need `<root>/lib` on `LD_LIBRARY_PATH`. The `gnustep`
-  launcher and `gnustep new` project templates already handle this. Because
-  the patched `GNUstep.sh` prepends `<root>/lib`, libraries there take
-  precedence over system libraries for every process started from that shell
+- managed GNUstep shared libraries have no RUNPATH, and upstream GNUstep
+  Make's `GNUstep.sh` does not add `<root>/lib` (libobjc2, libdispatch,
+  BlocksRuntime) to the loader path. The Linux toolchains on `v0.1.0` patch the
+  managed `GNUstep.sh` to prepend it since October 15, 2026. Installs made
+  before then keep the old `GNUstep.sh`, and `gnustep update` reports them as
+  current because the version did not change; re-running the bootstrap `setup`
+  command refreshes them. Because the patched `GNUstep.sh` prepends
+  `<root>/lib`, libraries there take precedence over system libraries for
+  every process started from that shell
 - the managed toolchains' libobjc2 has the `@synchronized` first-lock race
   (gnustep/libobjc2#424); it is fixed upstream but not in a tagged release, and
   the managed toolchains will pick it up with the next libobjc2 tag. See
