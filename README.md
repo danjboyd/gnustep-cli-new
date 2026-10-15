@@ -127,7 +127,9 @@ The repository currently contains:
   patch the managed `GNUstep.sh` to prepend `<root>/lib`, but the toolchains
   published on `v0.1.0` predate that: with them, binaries built by hand after
   sourcing `GNUstep.sh` need `<root>/lib` on `LD_LIBRARY_PATH`. The `gnustep`
-  launcher and `gnustep new` project templates already handle this
+  launcher and `gnustep new` project templates already handle this. Because
+  the patched `GNUstep.sh` prepends `<root>/lib`, libraries there take
+  precedence over system libraries for every process started from that shell
 - the managed toolchains' libobjc2 has the `@synchronized` first-lock race
   (gnustep/libobjc2#424); it is fixed upstream but not in a tagged release, and
   the managed toolchains will pick it up with the next libobjc2 tag. See

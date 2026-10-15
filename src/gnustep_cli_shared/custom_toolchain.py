@@ -26,6 +26,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .runtime_library_path import add_runtime_library_path
+
 
 LOCK_KIND = "custom-toolchain-lock"
 PROVENANCE_FILENAME = "gnustep-toolchain-provenance.json"
@@ -453,6 +455,7 @@ def build_custom_toolchain(
             for header in ("Block.h", "Block_private.h"):
                 if (prefix_dir / "include" / header).exists():
                     shutil.copy2(prefix_dir / "include" / header, headers / header)
+            add_runtime_library_path(prefix_dir / "System" / "Library" / "Makefiles")
 
     lock_copy = prefix_dir / LOCK_COPY_DIRNAME
     lock_copy.mkdir()

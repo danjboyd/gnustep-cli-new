@@ -123,12 +123,15 @@ per-component logs go to `<prefix-parent>/.<prefix-name>-build` unless you pass
 
 ```sh
 . /abs/path/to/prefix/System/Library/Makefiles/GNUstep.sh
-export LD_LIBRARY_PATH=/abs/path/to/prefix/lib:$LD_LIBRARY_PATH
 ```
 
-`<prefix>/lib` holds libobjc2, libdispatch, and BlocksRuntime, and `GNUstep.sh`
-does not add it to the loader path. Link with `-L<prefix>/lib` when a link
-step needs libdispatch.
+`<prefix>/lib` holds libobjc2, libdispatch, and BlocksRuntime. Upstream
+`GNUstep.sh` does not add it to the loader path, so the builder patches the
+prefix's `GNUstep.sh` to prepend `<prefix>/lib` to `LD_LIBRARY_PATH` (once, and
+only when the directory exists). Every process started from that shell then
+loads libraries from `<prefix>/lib` ahead of the system's, so do not install
+unrelated libraries there. Link with `-L<prefix>/lib` when a link step needs
+libdispatch.
 
 ## Provenance
 
