@@ -1,0 +1,67 @@
+{
+ "schema_version": 1,
+ "validation_id": "linux-toolchain-runtime-lib-republish-20261015",
+ "validated_at": "2026-10-15",
+ "summary": "The three stable v0.1.0 Linux toolchains were rebuilt from unchanged pins so the managed GNUstep.sh prepends <root>/lib to LD_LIBRARY_PATH (PR #6), then republished and re-signed. The CLIs are unchanged.",
+ "replaced_assets": [
+  {
+   "filename": "gnustep-toolchain-linux-amd64-clang-0.1.0.tar.gz",
+   "old_sha256": "cad08bb0ae05f216abc821431c4a5119dd295df891ab7024161a0cbd13171833",
+   "new_sha256": "41fd4b8323f877d70b5cb1fa08403f0c6edbea2afe799de2c0d0024781a73acb"
+  },
+  {
+   "filename": "gnustep-toolchain-linux-arm64-clang-0.1.0.tar.gz",
+   "old_sha256": "09b69ecf1969b3c0405ea567e86ee03d88e24e782686edba5b62ce800d369050",
+   "new_sha256": "0f8593f634f24c6f5ce1785ce43f26b2fca0d5af2ffb34d55f0be09c18444976"
+  },
+  {
+   "filename": "gnustep-toolchain-linux-ubuntu2604-amd64-clang-0.1.0.tar.gz",
+   "old_sha256_prefix": "50d6422aebdc",
+   "new_sha256": "1acde52f3d719e867ec4ec3c0a9bf854330e1a8d88dd98f17695d526cfe24708"
+  }
+ ],
+ "unchanged_assets": [
+  "all CLI archives",
+  "gnustep-toolchain-windows-amd64-msys2-clang64-0.1.0.zip",
+  "gnustep-bootstrap.sh"
+ ],
+ "content_delta": "Each new toolchain has the same 2035-entry file list as the one it replaces. Text differences are limited to System/Library/Makefiles/GNUstep.sh (the 'gnustep-cli: runtime library path' snippet) and toolchain-assembly.json (gnustep_sh_runtime_library_path: true); compiled files and gzip man pages differ only from the rebuild.",
+ "runs": {
+  "build_and_prepublication_qualification": {
+   "linux-amd64-clang": "38749313636",
+   "linux-arm64-clang": "38749326855",
+   "linux-ubuntu2604-amd64-clang": "38749339743"
+  },
+  "stage_release": "38750409605",
+  "release": "38751027562",
+  "published_qualification": {
+   "linux-amd64-clang": "38751838688",
+   "linux-arm64-clang": "38751853741",
+   "linux-ubuntu2604-amd64-clang": "38751867335"
+  },
+  "ref": "master at e7915a3"
+ },
+ "evidence_tier": "github-actions-container",
+ "native_host_check": {
+  "host": "iep-daniel-t14, Debian 13 amd64",
+  "results": {
+   "bootstrap_setup_user": "passed",
+   "gnustep_sh_has_snippet": "passed",
+   "foundation_dispatch_synchronized_probe_without_manual_ld_library_path": "passed",
+   "cli_version_0_1_0": "passed",
+   "doctor_toolchain_compatible": "passed",
+   "bootstrap_rerun_restores_snippet_in_existing_install": "passed"
+  }
+ },
+ "results": {
+  "linux-amd64-clang": "passed",
+  "linux-arm64-clang": "passed",
+  "linux-ubuntu2604-amd64-clang": "passed"
+ },
+ "known_limitations": [
+  "The version stays 0.1.0, so gnustep update reports earlier installs as current; re-running the bootstrap setup command refreshes GNUstep.sh.",
+  "GNUstep.csh is not patched.",
+  "libobjc2 is still at b67709a with the @synchronized first-lock race (gnustep/libobjc2#424)."
+ ],
+ "remaining_blockers": []
+}
