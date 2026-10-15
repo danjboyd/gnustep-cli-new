@@ -237,6 +237,8 @@ class BuildInfraTests(unittest.TestCase):
             staging = temp / "staging"
             (staging / "System" / "Tools").mkdir(parents=True)
             (staging / "System" / "Tools" / "gnustep-config").write_text("#!/bin/sh\n")
+            (staging / "System" / "Library" / "Makefiles").mkdir(parents=True)
+            (staging / "System" / "Library" / "Makefiles" / "GNUstep.sh").write_text("# GNUstep.sh\n")
             libdir = staging / "lib"
             libdir.mkdir(parents=True)
             (libdir / "libBlocksRuntime.so").write_text("blocks")
@@ -266,6 +268,8 @@ class BuildInfraTests(unittest.TestCase):
             metadata = __import__("json").loads((packaged / "toolchain-assembly.json").read_text())
             self.assertIn("lib/libBlocksRuntime.so.0", metadata["runtime_aliases"])
             self.assertIn("lib/libobjc.so.4", metadata["runtime_aliases"])
+            self.assertTrue(metadata["gnustep_sh_runtime_library_path"])
+            self.assertIn("gnustep-cli: runtime library path", (packaged / "System" / "Library" / "Makefiles" / "GNUstep.sh").read_text())
 
     def test_msys2_input_manifest_template(self):
         payload = msys2_input_manifest_template()
