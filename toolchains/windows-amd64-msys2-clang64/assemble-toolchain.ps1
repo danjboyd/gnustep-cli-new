@@ -103,12 +103,18 @@ foreach ($entry in $toolDirs) {
   }
 }
 
-$genericWinBase = Join-Path $Prefix 'clang64\include\os\generic_win_base.h'
-if (Test-Path $genericWinBase) {
-  $genericWinBaseText = Get-Content -Path $genericWinBase -Raw
-  if ($genericWinBaseText -match 'typedef int mode_t;') {
-    $genericWinBaseText = $genericWinBaseText -replace 'typedef int mode_t;', "/* mode_t is provided by MinGW sys/types.h in this managed toolchain. */"
-    Set-Content -Path $genericWinBase -Value $genericWinBaseText -Encoding ASCII
+# libdispatch's os/generic_win_base.h typedefs mode_t and pthread_attr_t, which
+# MinGW's sys/types.h and winpthreads' pthread.h already define, so Foundation.h
+# (which includes dispatch) fails to compile, alone or alongside <pthread.h>.
+# Patch every copy, including the root-level compatibility copy made above.
+foreach ($genericWinBase in @((Join-Path $Prefix 'clang64\include\os\generic_win_base.h'), (Join-Path $Prefix 'include\os\generic_win_base.h'))) {
+  if (Test-Path $genericWinBase) {
+    $genericWinBaseText = Get-Content -Path $genericWinBase -Raw
+    $patchedText = $genericWinBaseText -replace 'typedef int mode_t;', "/* mode_t is provided by MinGW sys/types.h in this managed toolchain. */"
+    $patchedText = $patchedText -replace '(?m)^typedef void pthread_attr_t;\r?$', "#if !defined(__MINGW32__) /* winpthreads defines pthread_attr_t */`ntypedef void pthread_attr_t;`n#endif"
+    if ($patchedText -ne $genericWinBaseText) {
+      Set-Content -Path $genericWinBase -Value $patchedText -Encoding ASCII -NoNewline
+    }
   }
 }
 
