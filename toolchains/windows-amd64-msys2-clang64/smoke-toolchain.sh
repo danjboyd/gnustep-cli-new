@@ -10,6 +10,8 @@
 set -euo pipefail
 
 root=${1:?usage: smoke-toolchain.sh <toolchain-root>}
+# Run from the toolchain's own bash, the root is "/"; avoid "//" (a UNC path).
+root=${root%/}
 export PATH="$root/clang64/bin:$root/usr/bin:$PATH"
 export GNUSTEP_MAKEFILES="$root/clang64/share/GNUstep/Makefiles"
 work=$(mktemp -d)
