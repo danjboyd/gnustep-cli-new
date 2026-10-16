@@ -52,7 +52,7 @@ int main(void)
 }
 EOF
 # shellcheck disable=SC2086
-clang $objc_flags pthread_foundation.m -o pthread_foundation.exe $base_libs
+clang $objc_flags pthread_foundation.m -o pthread_foundation.exe $base_libs -lpthread
 ./pthread_foundation.exe
 echo "ok: <pthread.h> together with Foundation"
 
