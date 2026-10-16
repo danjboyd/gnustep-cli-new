@@ -3,7 +3,7 @@ param(
   [string]$Prefix = "C:\gnustep-cli\toolchain",
   [string]$CacheDir = "C:\gnustep-cli\cache",
   [string]$MsysRoot = "",
-  [string]$InputManifest = (Join-Path $PSScriptRoot 'input-manifest.json'),
+  [string]$InputManifest = "",
   # Resolve mode: install the current MSYS2 packages instead of the locked set
   # and write the resolve record (pacman -Q plus sync databases) to this
   # directory. scripts/dev/msys2_lock.py turns that record into the lock.
@@ -13,6 +13,10 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
+# Windows PowerShell 5.1 leaves $PSScriptRoot empty in parameter defaults.
+if (-not $InputManifest) {
+  $InputManifest = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'input-manifest.json'
+}
 $inputs = Get-Content -Raw -Path $InputManifest | ConvertFrom-Json
 $lockedPackages = @($inputs.locked_packages | Where-Object { $_ })
 $resolveMode = [bool]$ResolveOut
