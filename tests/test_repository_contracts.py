@@ -241,6 +241,7 @@ class RepositoryContractsTests(unittest.TestCase):
         # Both header copies must be patched, after the root-level compatibility copy.
         self.assertIn("'clang64\\include\\os\\generic_win_base.h'", toolchain_content)
         self.assertIn("'include\\os\\generic_win_base.h'", toolchain_content)
+        self.assertIn("#if !defined(__MINGW32__) /* winpthreads defines pthread_attr_t */", toolchain_content)
         self.assertLess(
             toolchain_content.index("# Compatibility links for older activation code."),
             toolchain_content.index("foreach ($genericWinBase in"),
