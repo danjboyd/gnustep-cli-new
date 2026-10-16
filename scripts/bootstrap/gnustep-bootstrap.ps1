@@ -369,7 +369,11 @@ function Ensure-GNUstepActivationScripts {
     $etcPath = Join-Path $InstallRoot "etc"
     $fstabPath = Join-Path $etcPath "fstab"
     New-Item -ItemType Directory -Force -Path $tmpPath, $etcPath | Out-Null
-    Set-Content -Encoding ASCII -Path $fstabPath -Value (($tmpPath.Replace('\', '/')) + " /tmp ntfs binary,noacl,posix=0,user 0 0")
+    # Keep stock MSYS2's cygdrive line so drives mount at /c, not /cygdrive/c.
+    Set-Content -Encoding ASCII -Path $fstabPath -Value @(
+        "none / cygdrive binary,posix=0,noacl,user 0 0",
+        (($tmpPath.Replace('\', '/')) + " /tmp ntfs binary,noacl,posix=0,user 0 0")
+    )
     $ps1Content = @"
 `$prefix = Split-Path -Parent `$MyInvocation.MyCommand.Path
 `$env:GNUSTEP_MAKEFILES = Join-Path `$prefix 'clang64\share\GNUstep\Makefiles'
