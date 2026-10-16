@@ -149,7 +149,7 @@ if ($qkkExit -ne 0) {
   $unexpectedQkk = @(
     $qkkOutput | Where-Object {
       ($_ -match '^[^:]+: [0-9]+ total files, [1-9][0-9]* altered files$') -and
-      ($_ -notmatch '^(ca-certificates|mingw-w64-clang-x86_64-libobjc2): ')
+      ($_ -notmatch '^(ca-certificates|mingw-w64-clang-x86_64-ca-certificates|mingw-w64-clang-x86_64-libobjc2): ')
     }
   )
   if ($unexpectedQkk.Count -gt 0) {
