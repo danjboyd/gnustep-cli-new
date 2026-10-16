@@ -238,6 +238,13 @@ class RepositoryContractsTests(unittest.TestCase):
         toolchain_content = toolchain_script.read_text()
         self.assertIn("generic_win_base.h", toolchain_content)
         self.assertIn("mode_t is provided by MinGW sys/types.h", toolchain_content)
+        # Both header copies must be patched, after the root-level compatibility copy.
+        self.assertIn("'clang64\\include\\os\\generic_win_base.h'", toolchain_content)
+        self.assertIn("'include\\os\\generic_win_base.h'", toolchain_content)
+        self.assertLess(
+            toolchain_content.index("# Compatibility links for older activation code."),
+            toolchain_content.index("foreach ($genericWinBase in"),
+        )
 
     def test_openbsd_package_artifact_script_builds_packages_and_gorm_evidence(self):
         script = ROOT / "scripts" / "dev" / "openbsd-package-artifacts.sh"

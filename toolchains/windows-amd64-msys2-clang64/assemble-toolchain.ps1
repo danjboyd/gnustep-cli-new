@@ -103,12 +103,16 @@ foreach ($entry in $toolDirs) {
   }
 }
 
-$genericWinBase = Join-Path $Prefix 'clang64\include\os\generic_win_base.h'
-if (Test-Path $genericWinBase) {
-  $genericWinBaseText = Get-Content -Path $genericWinBase -Raw
-  if ($genericWinBaseText -match 'typedef int mode_t;') {
-    $genericWinBaseText = $genericWinBaseText -replace 'typedef int mode_t;', "/* mode_t is provided by MinGW sys/types.h in this managed toolchain. */"
-    Set-Content -Path $genericWinBase -Value $genericWinBaseText -Encoding ASCII
+# libdispatch's os/generic_win_base.h typedefs mode_t, which MinGW's sys/types.h
+# already defines, so Foundation.h fails to compile. Patch every copy, including
+# the root-level compatibility copy made above.
+foreach ($genericWinBase in @((Join-Path $Prefix 'clang64\include\os\generic_win_base.h'), (Join-Path $Prefix 'include\os\generic_win_base.h'))) {
+  if (Test-Path $genericWinBase) {
+    $genericWinBaseText = Get-Content -Path $genericWinBase -Raw
+    if ($genericWinBaseText -match 'typedef int mode_t;') {
+      $genericWinBaseText = $genericWinBaseText -replace 'typedef int mode_t;', "/* mode_t is provided by MinGW sys/types.h in this managed toolchain. */"
+      Set-Content -Path $genericWinBase -Value $genericWinBaseText -Encoding ASCII
+    }
   }
 }
 
