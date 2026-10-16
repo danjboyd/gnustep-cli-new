@@ -1,5 +1,7 @@
 import io
 import json
+import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -80,6 +82,19 @@ class Msys2LockTests(unittest.TestCase):
             resolve = self.make_resolve_dir(Path(tmp), "make 4.4.1-2\n")
             with self.assertRaisesRegex(ValueError, "requested package mingw-w64-clang-x86_64-curl"):
                 lock_input_manifest(self.manifest(), resolve)
+
+    @unittest.skipUnless(shutil.which("zstd"), "zstd not installed")
+    def test_reads_zstd_compressed_sync_databases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            resolve = self.make_resolve_dir(Path(tmp), "make 4.4.1-2\nmingw-w64-clang-x86_64-curl 8.23.0-1\n")
+            for name in ("msys.db", "clang64.db"):
+                path = resolve / name
+                gz = path.read_bytes()
+                import gzip
+                compressed = subprocess.run(["zstd", "-q", "-c"], input=gzip.decompress(gz), capture_output=True, check=True).stdout
+                path.write_bytes(compressed)
+            locked = lock_input_manifest(self.manifest(), resolve)
+        self.assertEqual(len(locked["locked_packages"]), 2)
 
     def test_checked_in_windows_manifest_requests_curl(self):
         manifest = json.loads((ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "input-manifest.json").read_text())

@@ -11,7 +11,9 @@ with ``pacman -U`` and never sync against the live repository.
 
 from __future__ import annotations
 
+import io
 import json
+import subprocess
 import tarfile
 from pathlib import Path
 from typing import Any
@@ -49,10 +51,26 @@ def _parse_desc(text: str) -> dict[str, list[str]]:
     return fields
 
 
+ZSTD_MAGIC = b"\x28\xb5\x2f\xfd"
+
+
+def _open_database(path: Path) -> tarfile.TarFile:
+    """Open a sync database; current MSYS2 databases are zstd-compressed tars."""
+    data = path.read_bytes()
+    if data[:4] != ZSTD_MAGIC:
+        return tarfile.open(fileobj=io.BytesIO(data))
+    try:
+        from compression import zstd  # Python 3.14+
+        raw = zstd.decompress(data)
+    except ImportError:
+        raw = subprocess.run(["zstd", "-dc"], input=data, capture_output=True, check=True).stdout
+    return tarfile.open(fileobj=io.BytesIO(raw))
+
+
 def read_sync_database(path: Path) -> dict[tuple[str, str], dict[str, Any]]:
     """Read a pacman sync database into (name, version) -> package entry."""
     entries: dict[tuple[str, str], dict[str, Any]] = {}
-    with tarfile.open(path) as archive:
+    with _open_database(path) as archive:
         for member in archive.getmembers():
             if not member.isfile() or not member.name.endswith("/desc"):
                 continue
