@@ -1,3 +1,9 @@
+param(
+  [string]$ReleaseSource = 'final-staged-0.1.0-25342971361',
+  [string]$SuiteId = 'release',
+  [string]$RunnerId = 'otvm-lease'
+)
+
 $ErrorActionPreference = 'Stop'
 
 $runId = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
@@ -215,11 +221,11 @@ $overallOk = -not (@($scenarioReports | Where-Object { -not $_.ok }).Count)
 $evidence | ConvertTo-Json -Depth 12 | Out-File -Encoding utf8 $evidencePath
 [ordered]@{
   schema_version = 1
-  suite_id = 'release'
+  suite_id = $SuiteId
   target_id = 'windows-amd64-msys2-clang64'
-  runner_id = 'otvm-lease'
+  runner_id = $RunnerId
   release_under_test = [ordered]@{
-    source = 'final-staged-0.1.0-25342971361'
+    source = $ReleaseSource
     old_manifest = $oldManifest
     new_manifest = $newManifest
   }

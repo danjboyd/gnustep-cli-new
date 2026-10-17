@@ -299,6 +299,15 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("gorm-window.png", content)
         self.assertIn("process_still_running_after_wait", content)
 
+    def test_windows_full_release_smoke_records_release_source_and_suite(self):
+        script = ROOT / "scripts" / "dev" / "windows-full-release-smoke.ps1"
+        content = script.read_text()
+        self.assertIn("[string]$ReleaseSource =", content)
+        self.assertIn("[string]$SuiteId = 'release'", content)
+        self.assertIn("suite_id = $SuiteId", content)
+        self.assertIn("source = $ReleaseSource", content)
+        self.assertIn("runner_id = $RunnerId", content)
+
     def test_package_release_asset_verifier_checks_release_digest_and_downloads(self):
         script = ROOT / "scripts" / "dev" / "verify-package-release-assets.sh"
         self.assertTrue(script.exists())
