@@ -254,6 +254,8 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("Get-VerifiedDownload -Url $package.url -Sha256 $package.sha256", toolchain_content)
         self.assertIn("Get-VerifiedDownload -Url $inputs.installer.url -Sha256 $inputs.installer.sha256", toolchain_content)
         self.assertNotIn("releases/latest/download", toolchain_content)
+        # The root ships the sync databases the lock was resolved from.
+        self.assertIn("$syncSource = Join-Path (Split-Path -Parent $InputManifest) 'msys2-sync'", toolchain_content)
         resolve_block = toolchain_content[toolchain_content.index("if ($resolveMode) {"):toolchain_content.index("# Install exactly the locked package files")]
         self.assertEqual(toolchain_content.count("pacman -Sy"), resolve_block.count("pacman -Sy"))
         smoke = (ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "smoke-toolchain.sh").read_text()

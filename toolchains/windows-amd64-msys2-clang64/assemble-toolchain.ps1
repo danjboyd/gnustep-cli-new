@@ -97,7 +97,9 @@ if ($resolveMode) {
   New-Item -ItemType Directory -Force -Path $ResolveOut | Out-Null
   & $bash -lc "pacman -Q" | Set-Content -Encoding ASCII -Path (Join-Path $ResolveOut 'pacman-Q.txt')
   foreach ($repo in @('msys', 'clang64')) {
-    Copy-Item -Force (Join-Path $MsysRoot "var\lib\pacman\sync\$repo.db") (Join-Path $ResolveOut "$repo.db")
+    foreach ($suffix in @('.db', '.db.sig')) {
+      Copy-Item -Force (Join-Path $MsysRoot "var\lib\pacman\sync\$repo$suffix") (Join-Path $ResolveOut "$repo$suffix")
+    }
   }
   [ordered]@{
     schema_version = 1
@@ -139,6 +141,21 @@ else {
   $unlocked = @($installed.Keys | Where-Object { -not $lockedNames.ContainsKey($_) })
   if ($unlocked.Count -gt 0) {
     throw ('Installed packages missing from the lock (installer drift?): ' + ($unlocked -join ', '))
+  }
+
+  # Ship the sync databases the lock was resolved from (not the installer's
+  # older ones), so the root's pacman metadata matches its installed packages.
+  $syncSource = Join-Path (Split-Path -Parent $InputManifest) 'msys2-sync'
+  $syncDestination = Join-Path $MsysRoot 'var\lib\pacman\sync'
+  $syncDatabases = @($inputs.sync_databases | Where-Object { $_ })
+  if ($syncDatabases.Count -eq 0) { throw "$InputManifest has no sync_databases; re-lock with scripts/dev/msys2_lock.py." }
+  foreach ($database in $syncDatabases) {
+    foreach ($file in @(@{ name = $database.file; sha256 = $database.sha256 }, @{ name = $database.signature; sha256 = $database.signature_sha256 })) {
+      $source = Join-Path $syncSource $file.name
+      $actual = (Get-FileHash -Algorithm SHA256 -Path $source).Hash.ToLowerInvariant()
+      if ($actual -ne $file.sha256) { throw "Checksum mismatch for ${source}: expected $($file.sha256), got $actual" }
+      Copy-Item -Force $source (Join-Path $syncDestination $file.name)
+    }
   }
 }
 & $bash -lc "pacman -Qkk >/tmp/gnustep-cli-pacman-qkk.out 2>&1"

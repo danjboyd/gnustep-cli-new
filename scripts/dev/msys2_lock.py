@@ -3,6 +3,9 @@
 
 Usage: msys2_lock.py <resolve-dir> [--manifest toolchains/windows-amd64-msys2-clang64/input-manifest.json]
 
+The resolve run's signed sync databases are copied to msys2-sync/ next to the
+manifest and pinned; locked builds ship them in the root.
+
 <resolve-dir> is the gnustep-windows-msys2-resolve artifact of the
 "Windows Current Source Artifacts" workflow run with toolchain_source=resolve-msys2 (resolve.json, pacman-Q.txt, msys.db, clang64.db).
 """
@@ -32,7 +35,7 @@ def main() -> int:
     )
     args = parser.parse_args()
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
-    locked = lock_input_manifest(manifest, args.resolve_dir)
+    locked = lock_input_manifest(manifest, args.resolve_dir, sync_dir=args.manifest.parent / "msys2-sync")
     args.manifest.write_text(json.dumps(locked, indent=2) + "\n", encoding="utf-8")
     print(f"locked {len(locked['locked_packages'])} packages at snapshot {locked['repository_snapshot']} into {args.manifest}")
     return 0

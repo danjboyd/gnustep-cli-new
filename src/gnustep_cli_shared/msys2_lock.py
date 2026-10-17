@@ -11,8 +11,10 @@ with ``pacman -U`` and never sync against the live repository.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
+import shutil
 import subprocess
 import tarfile
 from pathlib import Path
@@ -123,8 +125,12 @@ def locked_packages(installed: dict[str, str], databases: dict[str, dict[tuple[s
     return locked
 
 
-def lock_input_manifest(manifest: dict[str, Any], resolve_dir: Path) -> dict[str, Any]:
-    """Return ``manifest`` with its package pins filled from a resolve run."""
+def lock_input_manifest(manifest: dict[str, Any], resolve_dir: Path, sync_dir: Path | None = None) -> dict[str, Any]:
+    """Return ``manifest`` with its package pins filled from a resolve run.
+
+    With ``sync_dir``, also copy the resolve run's signed sync databases there
+    and pin them as ``sync_databases``; locked builds ship them in the root.
+    """
     metadata = json.loads((resolve_dir / "resolve.json").read_text(encoding="utf-8"))
     installed = parse_pacman_query((resolve_dir / "pacman-Q.txt").read_text(encoding="utf-8"))
     databases = {repo: read_sync_database(resolve_dir / f"{repo}.db") for repo in REPO_BASE_URLS}
@@ -141,4 +147,18 @@ def lock_input_manifest(manifest: dict[str, Any], resolve_dir: Path) -> dict[str
             package["version"] = entry["version"]
             package["sha256"] = entry["sha256"]
     result["locked_packages"] = locked
+    if sync_dir is not None:
+        sync_dir.mkdir(parents=True, exist_ok=True)
+        pinned = []
+        for repo in REPO_BASE_URLS:
+            entry: dict[str, Any] = {"repo": repo}
+            for key, name in (("", f"{repo}.db"), ("signature_", f"{repo}.db.sig")):
+                source = resolve_dir / name
+                if not source.is_file():
+                    raise ValueError(f"resolve record lacks {name}")
+                shutil.copyfile(source, sync_dir / name)
+                entry["signature" if key else "file"] = name
+                entry[f"{key}sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
+            pinned.append(entry)
+        result["sync_databases"] = pinned
     return result

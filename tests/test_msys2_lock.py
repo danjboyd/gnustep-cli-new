@@ -1,3 +1,4 @@
+import hashlib
 import io
 import json
 import shutil
@@ -31,6 +32,7 @@ def write_sync_db(path: Path, packages: list[tuple[str, str, str, str]]) -> None
 
 class Msys2LockTests(unittest.TestCase):
     def make_resolve_dir(self, root: Path, installed: str) -> Path:
+        root.mkdir(parents=True, exist_ok=True)
         (root / "resolve.json").write_text(json.dumps({"resolved_at": "2026-10-16T20:00:00Z"}))
         (root / "pacman-Q.txt").write_text(installed)
         write_sync_db(root / "msys.db", [("make", "4.4.1-2", "make-4.4.1-2-x86_64.pkg.tar.zst", "a" * 64)])
@@ -70,6 +72,19 @@ class Msys2LockTests(unittest.TestCase):
             "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-curl-8.23.0-1-any.pkg.tar.zst",
         )
         self.assertEqual(by_name["make"]["url"], "https://repo.msys2.org/msys/x86_64/make-4.4.1-2-x86_64.pkg.tar.zst")
+
+    def test_lock_pins_and_copies_signed_sync_databases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            resolve = self.make_resolve_dir(Path(tmp) / "resolve", "make 4.4.1-2\nmingw-w64-clang-x86_64-curl 8.23.0-1\n")
+            for repo in ("msys", "clang64"):
+                (resolve / f"{repo}.db.sig").write_bytes(b"sig-" + repo.encode())
+            sync = Path(tmp) / "msys2-sync"
+            locked = lock_input_manifest(self.manifest(), resolve, sync_dir=sync)
+            by_repo = {entry["repo"]: entry for entry in locked["sync_databases"]}
+            self.assertEqual(by_repo["clang64"]["signature"], "clang64.db.sig")
+            self.assertEqual(by_repo["clang64"]["signature_sha256"], hashlib.sha256(b"sig-clang64").hexdigest())
+            self.assertEqual(by_repo["msys"]["sha256"], hashlib.sha256((resolve / "msys.db").read_bytes()).hexdigest())
+            self.assertEqual((sync / "msys.db.sig").read_bytes(), b"sig-msys")
 
     def test_lock_fails_when_installed_version_is_not_in_sync_db(self):
         with tempfile.TemporaryDirectory() as tmp:
