@@ -8,7 +8,7 @@ on:
         required: true
         default: 0.1.0-dev-current
       toolchain_source:
-        description: "Toolchain source: assemble-msys2 or existing-zip"
+        description: "Toolchain source: assemble-msys2 (locked inputs), resolve-msys2 (live MSYS2 repo; uploads a resolve record for scripts/dev/msys2_lock.py), or existing-zip"
         required: true
         default: assemble-msys2
       toolchain_zip_url:
@@ -55,6 +55,8 @@ jobs:
             Expand-Archive -Path $zip -DestinationPath $env:TOOLCHAIN_ROOT -Force
           } elseif ('${{ inputs.toolchain_source }}' -eq 'assemble-msys2') {
             & powershell -NoProfile -ExecutionPolicy Bypass -File toolchains\windows-amd64-msys2-clang64\assemble-toolchain.ps1 -Prefix $env:TOOLCHAIN_ROOT -CacheDir "$env:RUNNER_TEMP\msys2-cache"
+          } elseif ('${{ inputs.toolchain_source }}' -eq 'resolve-msys2') {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File toolchains\windows-amd64-msys2-clang64\assemble-toolchain.ps1 -Prefix $env:TOOLCHAIN_ROOT -CacheDir "$env:RUNNER_TEMP\msys2-cache" -ResolveOut "$env:RUNNER_TEMP\msys2-resolve"
           } else {
             throw 'unsupported toolchain_source: ${{ inputs.toolchain_source }}'
           }
@@ -73,13 +75,25 @@ jobs:
           "TOOLCHAIN_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Append
           "Using TOOLCHAIN_ROOT=$root"
 
+      - name: Smoke assembled toolchain
+        if: ${{ inputs.toolchain_source != 'existing-zip' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bash = Join-Path $env:TOOLCHAIN_ROOT 'usr\bin\bash.exe'
+          $env:CHERE_INVOKING = '1'
+          & $bash -lc "bash `"`$(cygpath -u '$env:GITHUB_WORKSPACE')/toolchains/windows-amd64-msys2-clang64/smoke-toolchain.sh`" `"`$(cygpath -u '$env:TOOLCHAIN_ROOT')`""
+          if ($LASTEXITCODE -ne 0) { throw 'Toolchain smoke checks failed.' }
+
       - name: Build full CLI from current source
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $bash = Join-Path $env:TOOLCHAIN_ROOT 'usr\bin\bash.exe'
           if (-not (Test-Path $bash)) { throw "managed bash not found: $bash" }
-          & $bash -lc "cd '$($env:GITHUB_WORKSPACE -replace '\\','/')/src/full-cli' && export PATH='$($env:TOOLCHAIN_ROOT -replace '\\','/')/clang64/bin:$($env:TOOLCHAIN_ROOT -replace '\\','/')/usr/bin':`$PATH && export GNUSTEP_MAKEFILES='$($env:TOOLCHAIN_ROOT -replace '\\','/')/clang64/share/GNUstep/Makefiles' && make clean && make"
+          # Stamp release versions into the CLI; dev labels keep the source default.
+          $versionArg = if ('${{ inputs.version }}' -match '^[0-9]+\.[0-9]+\.[0-9]+$') { 'GNUSTEP_CLI_VERSION=${{ inputs.version }}' } else { '' }
+          & $bash -lc "cd '$($env:GITHUB_WORKSPACE -replace '\\','/')/src/full-cli' && export PATH='$($env:TOOLCHAIN_ROOT -replace '\\','/')/clang64/bin:$($env:TOOLCHAIN_ROOT -replace '\\','/')/usr/bin':`$PATH && export GNUSTEP_MAKEFILES='$($env:TOOLCHAIN_ROOT -replace '\\','/')/clang64/share/GNUstep/Makefiles' && make clean && make $versionArg"
 
       - name: Smoke built CLI
         shell: pwsh
@@ -88,7 +102,11 @@ jobs:
           $env:PATH = (Join-Path $env:TOOLCHAIN_ROOT 'clang64\bin') + ';' + (Join-Path $env:TOOLCHAIN_ROOT 'usr\bin') + ';' + $env:PATH
           $env:GNUSTEP_MAKEFILES = Join-Path $env:TOOLCHAIN_ROOT 'clang64\share\GNUstep\Makefiles'
           $exe = Join-Path $env:GITHUB_WORKSPACE 'src\full-cli\obj\gnustep.exe'
-          & $exe --version
+          $reported = (& $exe --version | Out-String).Trim()
+          $reported
+          if ('${{ inputs.version }}' -match '^[0-9]+\.[0-9]+\.[0-9]+$' -and $reported -notmatch [regex]::Escape('${{ inputs.version }}')) {
+            throw "CLI reports '$reported', expected version ${{ inputs.version }}"
+          }
           & $exe --help
           & $exe doctor --json --quick | Out-File -Encoding utf8 (Join-Path $env:OUTPUT_ROOT 'doctor.json')
 
@@ -132,3 +150,10 @@ jobs:
         with:
           name: gnustep-windows-current-source-artifacts
           path: ${{ runner.temp }}\gnustep-current-source-artifacts
+
+      - name: Upload MSYS2 resolve record
+        if: ${{ always() && inputs.toolchain_source == 'resolve-msys2' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-windows-msys2-resolve
+          path: ${{ runner.temp }}\msys2-resolve

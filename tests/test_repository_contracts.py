@@ -187,6 +187,10 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("resolve_input toolchain windows-amd64-msys2-clang64", content)
         self.assertIn("actions/upload-artifact@v4", content)
         self.assertIn("gnustep-staged-release", content)
+        # Multi-run mode stages several targets' fresh builds into one release.
+        self.assertIn("source_run_ids", content)
+        self.assertIn('gh run download "$run_id"', content)
+        self.assertIn("duplicate $kind input for $target", content)
 
     def test_release_inputs_workflow_publishes_verified_source_artifacts(self):
         workflow = ROOT / ".github" / "workflows" / "release-inputs.yml"
@@ -246,6 +250,21 @@ class RepositoryContractsTests(unittest.TestCase):
             toolchain_content.index("# Compatibility links for older activation code."),
             toolchain_content.index("foreach ($genericWinBase in"),
         )
+        # gnustep/libs-base#809: clang 23 rejects __block on an ivar.
+        self.assertIn("'BLOCK_SCOPE GSScheduledBlock _block;', 'GSScheduledBlock _block;'", toolchain_content)
+        # Release builds install only the locked package files; the live
+        # repository is used only in resolve mode.
+        self.assertIn("pacman -U $overwrite --noconfirm - < locked-install.txt", toolchain_content)
+        self.assertIn("Get-VerifiedDownload -Url $package.url -Sha256 $package.sha256", toolchain_content)
+        self.assertIn("Get-VerifiedDownload -Url $inputs.installer.url -Sha256 $inputs.installer.sha256", toolchain_content)
+        self.assertNotIn("releases/latest/download", toolchain_content)
+        # The root ships the sync databases the lock was resolved from.
+        self.assertIn("$syncSource = Join-Path (Split-Path -Parent $InputManifest) 'msys2-sync'", toolchain_content)
+        resolve_block = toolchain_content[toolchain_content.index("if ($resolveMode) {"):toolchain_content.index("# Install exactly the locked package files")]
+        self.assertEqual(toolchain_content.count("pacman -Sy"), resolve_block.count("pacman -Sy"))
+        smoke = (ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "smoke-toolchain.sh").read_text()
+        for check in ("gnustep-config --objc-flags", "#include <pthread.h>", "import pyexpat", "AsynchDNS"):
+            self.assertIn(check, smoke)
 
     def test_openbsd_package_artifact_script_builds_packages_and_gorm_evidence(self):
         script = ROOT / "scripts" / "dev" / "openbsd-package-artifacts.sh"
@@ -305,6 +324,9 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("build-toolchain.sh", content)
         self.assertIn("package-source-built-linux-toolchain", content)
         self.assertIn("build-linux-cli-against-managed-toolchain", content)
+        # A new CLI version can be built against an older release's toolchain bytes.
+        self.assertIn("reuse_toolchain_version", content)
+        self.assertIn('mv "$out/gnustep-toolchain-${{ inputs.target }}-$source_version.tar.gz"', content)
         self.assertIn("gnustep-toolchain-", content)
         self.assertIn("gnustep-cli-", content)
         self.assertIn("actions/upload-artifact@v4", content)
@@ -342,6 +364,10 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("assemble-toolchain.ps1", content)
         self.assertIn("windows-current-source-artifact.json", content)
         self.assertIn("gnustep-windows-current-source-artifacts", content)
+        self.assertIn("smoke-toolchain.sh", content)
+        self.assertIn("resolve-msys2", content)
+        self.assertIn("gnustep-windows-msys2-resolve", content)
+        self.assertIn("GNUSTEP_CLI_VERSION=${{ inputs.version }}", content)
 
     def test_linux_current_source_artifacts_workflow_exists(self):
         workflow = ROOT / ".github" / "workflows" / "linux-current-source-artifacts.yml"

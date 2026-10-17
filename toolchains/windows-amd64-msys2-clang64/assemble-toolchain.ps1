@@ -3,11 +3,52 @@ param(
   [string]$Prefix = "C:\gnustep-cli\toolchain",
   [string]$CacheDir = "C:\gnustep-cli\cache",
   [string]$MsysRoot = "",
-  [string]$InstallerUrl = "https://github.com/msys2/msys2-installer/releases/latest/download/msys2-x86_64-latest.exe"
+  [string]$InputManifest = "",
+  # Resolve mode: install the current MSYS2 packages instead of the locked set
+  # and write the resolve record (pacman -Q plus sync databases) to this
+  # directory. scripts/dev/msys2_lock.py turns that record into the lock.
+  [string]$ResolveOut = ""
 )
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+# Windows PowerShell 5.1 leaves $PSScriptRoot empty in parameter defaults.
+if (-not $InputManifest) {
+  $InputManifest = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'input-manifest.json'
+}
+$inputs = Get-Content -Raw -Path $InputManifest | ConvertFrom-Json
+$lockedPackages = @($inputs.locked_packages | Where-Object { $_ })
+$resolveMode = [bool]$ResolveOut
+if (-not $resolveMode -and $lockedPackages.Count -eq 0) {
+  throw "$InputManifest has no locked_packages. Run a resolve (-ResolveOut) and lock it with scripts/dev/msys2_lock.py first."
+}
+
+function Get-VerifiedDownload {
+  param([string]$Url, [string]$Sha256, [string]$Destination)
+  if (Test-Path $Destination) {
+    if ((Get-FileHash -Algorithm SHA256 -Path $Destination).Hash.ToLowerInvariant() -eq $Sha256.ToLowerInvariant()) {
+      return
+    }
+    Remove-Item -Force $Destination
+  }
+  Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Destination
+  $actual = (Get-FileHash -Algorithm SHA256 -Path $Destination).Hash.ToLowerInvariant()
+  if ($actual -ne $Sha256.ToLowerInvariant()) {
+    Remove-Item -Force $Destination
+    throw "Checksum mismatch for ${Url}: expected $Sha256, got $actual"
+  }
+}
+
+function Get-InstalledPackages {
+  $installed = @{}
+  & $bash -lc "pacman -Q" | ForEach-Object {
+    $parts = $_.Trim() -split '\s+'
+    if ($parts.Count -eq 2) { $installed[$parts[0]] = $parts[1] }
+  }
+  if ($LASTEXITCODE -ne 0) { throw 'pacman -Q failed.' }
+  return $installed
+}
 
 New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
 New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null
@@ -19,10 +60,10 @@ $msysRootFull = [System.IO.Path]::GetFullPath($MsysRoot).TrimEnd('\')
 $installingIntoManagedRoot = [string]::Equals($prefixFull, $msysRootFull, [System.StringComparison]::OrdinalIgnoreCase)
 
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
-$installer = Join-Path $CacheDir 'msys2-x86_64-latest.exe'
+$installer = Join-Path $CacheDir (Split-Path -Leaf $inputs.installer.url)
 
 if (-not (Test-Path $bash)) {
-  Invoke-WebRequest -UseBasicParsing -Uri $InstallerUrl -OutFile $installer
+  Get-VerifiedDownload -Url $inputs.installer.url -Sha256 $inputs.installer.sha256 -Destination $installer
   & $installer in --confirm-command --accept-messages --root ($MsysRoot -replace '\\', '/')
 }
 
@@ -38,12 +79,85 @@ if (Test-Path $pacmanLock) {
 
 & $bash -lc "true"
 if ($LASTEXITCODE -ne 0) { throw 'MSYS2 shell bootstrap command failed.' }
-& $bash -lc "pacman -Syuu --noconfirm || true"
-if ($LASTEXITCODE -ne 0) { throw 'MSYS2 package database refresh failed.' }
-& $bash -lc "pacman -S --noconfirm --needed make"
-if ($LASTEXITCODE -ne 0) { throw 'MSYS2 host-package installation failed.' }
-& $bash -lc "pacman -S --overwrite /clang64/include/Block.h --noconfirm --needed mingw-w64-clang-x86_64-clang mingw-w64-clang-x86_64-libobjc2 mingw-w64-clang-x86_64-libdispatch mingw-w64-clang-x86_64-gnustep-make mingw-w64-clang-x86_64-gnustep-base mingw-w64-clang-x86_64-gnustep-gui mingw-w64-clang-x86_64-gnustep-back mingw-w64-clang-x86_64-cairo mingw-w64-clang-x86_64-fontconfig mingw-w64-clang-x86_64-freetype mingw-w64-clang-x86_64-harfbuzz mingw-w64-clang-x86_64-icu mingw-w64-clang-x86_64-libjpeg-turbo mingw-w64-clang-x86_64-libpng mingw-w64-clang-x86_64-libtiff mingw-w64-clang-x86_64-pixman mingw-w64-clang-x86_64-pkgconf"
-if ($LASTEXITCODE -ne 0) { throw 'MSYS2 GNUstep package installation failed.' }
+
+$hostPackages = @($inputs.host_packages | ForEach-Object { $_.name }) -join ' '
+$packages = @($inputs.packages | ForEach-Object { $_.name }) -join ' '
+$overwrite = '--overwrite /clang64/include/Block.h'
+
+if ($resolveMode) {
+  # The first -Syuu may stop after updating the MSYS2 core; the second finishes.
+  & $bash -lc "pacman -Syuu --noconfirm || true"
+  & $bash -lc "pacman -Syuu --noconfirm"
+  if ($LASTEXITCODE -ne 0) { throw 'MSYS2 package database refresh failed.' }
+  & $bash -lc "pacman -S --noconfirm --needed $hostPackages"
+  if ($LASTEXITCODE -ne 0) { throw 'MSYS2 host-package installation failed.' }
+  & $bash -lc "pacman -S $overwrite --noconfirm --needed $packages"
+  if ($LASTEXITCODE -ne 0) { throw 'MSYS2 GNUstep package installation failed.' }
+
+  New-Item -ItemType Directory -Force -Path $ResolveOut | Out-Null
+  & $bash -lc "pacman -Q" | Set-Content -Encoding ASCII -Path (Join-Path $ResolveOut 'pacman-Q.txt')
+  foreach ($repo in @('msys', 'clang64')) {
+    foreach ($suffix in @('.db', '.db.sig')) {
+      Copy-Item -Force (Join-Path $MsysRoot "var\lib\pacman\sync\$repo$suffix") (Join-Path $ResolveOut "$repo$suffix")
+    }
+  }
+  [ordered]@{
+    schema_version = 1
+    resolved_at = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    installer = $inputs.installer.url
+  } | ConvertTo-Json | Set-Content -Encoding ASCII -Path (Join-Path $ResolveOut 'resolve.json')
+}
+else {
+  # Install exactly the locked package files: download, verify each against
+  # the SHA-256 recorded from the signed sync database, then pacman -U. There
+  # is no -Sy, so nothing comes from the live repository.
+  $installed = Get-InstalledPackages
+  $pending = @($lockedPackages | Where-Object { $installed[$_.name] -ne $_.version })
+  foreach ($package in $pending) {
+    Get-VerifiedDownload -Url $package.url -Sha256 $package.sha256 -Destination (Join-Path $CacheDir $package.filename)
+  }
+  $coreNames = @('msys2-runtime', 'pacman', 'pacman-mirrors', 'msys2-keyring', 'bash', 'filesystem')
+  $stages = @(
+    @($pending | Where-Object { $coreNames -contains $_.name }),
+    @($pending | Where-Object { $coreNames -notcontains $_.name })
+  )
+  $cacheUnix = (& $bash -lc "cygpath -u '$CacheDir'").Trim()
+  foreach ($stage in $stages) {
+    if ($stage.Count -eq 0) { continue }
+    $listPath = Join-Path $CacheDir 'locked-install.txt'
+    $stage | ForEach-Object { $_.filename } | Set-Content -Encoding ASCII -Path $listPath
+    & $bash -lc "cd '$cacheUnix' && pacman -U $overwrite --noconfirm - < locked-install.txt"
+    if ($LASTEXITCODE -ne 0) { throw 'Locked MSYS2 package installation failed.' }
+  }
+
+  $installed = Get-InstalledPackages
+  $lockedNames = @{}
+  foreach ($package in $lockedPackages) {
+    $lockedNames[$package.name] = $true
+    if ($installed[$package.name] -ne $package.version) {
+      throw "Locked package $($package.name) is at '$($installed[$package.name])', expected $($package.version)."
+    }
+  }
+  $unlocked = @($installed.Keys | Where-Object { -not $lockedNames.ContainsKey($_) })
+  if ($unlocked.Count -gt 0) {
+    throw ('Installed packages missing from the lock (installer drift?): ' + ($unlocked -join ', '))
+  }
+
+  # Ship the sync databases the lock was resolved from (not the installer's
+  # older ones), so the root's pacman metadata matches its installed packages.
+  $syncSource = Join-Path (Split-Path -Parent $InputManifest) 'msys2-sync'
+  $syncDestination = Join-Path $MsysRoot 'var\lib\pacman\sync'
+  $syncDatabases = @($inputs.sync_databases | Where-Object { $_ })
+  if ($syncDatabases.Count -eq 0) { throw "$InputManifest has no sync_databases; re-lock with scripts/dev/msys2_lock.py." }
+  foreach ($database in $syncDatabases) {
+    foreach ($file in @(@{ name = $database.file; sha256 = $database.sha256 }, @{ name = $database.signature; sha256 = $database.signature_sha256 })) {
+      $source = Join-Path $syncSource $file.name
+      $actual = (Get-FileHash -Algorithm SHA256 -Path $source).Hash.ToLowerInvariant()
+      if ($actual -ne $file.sha256) { throw "Checksum mismatch for ${source}: expected $($file.sha256), got $actual" }
+      Copy-Item -Force $source (Join-Path $syncDestination $file.name)
+    }
+  }
+}
 & $bash -lc "pacman -Qkk >/tmp/gnustep-cli-pacman-qkk.out 2>&1"
 $qkkExit = $LASTEXITCODE
 $qkkOutput = & $bash -lc "cat /tmp/gnustep-cli-pacman-qkk.out"
@@ -52,7 +166,7 @@ if ($qkkExit -ne 0) {
   $unexpectedQkk = @(
     $qkkOutput | Where-Object {
       ($_ -match '^[^:]+: [0-9]+ total files, [1-9][0-9]* altered files$') -and
-      ($_ -notmatch '^(ca-certificates|mingw-w64-clang-x86_64-libobjc2): ')
+      ($_ -notmatch '^(ca-certificates|mingw-w64-clang-x86_64-ca-certificates|mingw-w64-clang-x86_64-libobjc2): ')
     }
   )
   if ($unexpectedQkk.Count -gt 0) {
@@ -114,6 +228,18 @@ foreach ($genericWinBase in @((Join-Path $Prefix 'clang64\include\os\generic_win
     $patchedText = $patchedText -replace '(?m)^typedef void pthread_attr_t;\r?$', "#if !defined(__MINGW32__) /* winpthreads defines pthread_attr_t */`ntypedef void pthread_attr_t;`n#endif"
     if ($patchedText -ne $genericWinBaseText) {
       Set-Content -Path $genericWinBase -Value $patchedText -Encoding ASCII -NoNewline
+    }
+  }
+}
+
+# MSYS2's gnustep-base 1.31.1 puts __block (BLOCK_SCOPE) on an instance
+# variable, which clang 23 rejects; apply libs-base's fix (gnustep/libs-base#809).
+foreach ($scheduler in @((Join-Path $Prefix 'clang64\include\Foundation\NSBackgroundActivityScheduler.h'), (Join-Path $Prefix 'include\Foundation\NSBackgroundActivityScheduler.h'))) {
+  if (Test-Path $scheduler) {
+    $schedulerText = Get-Content -Path $scheduler -Raw
+    $patchedText = $schedulerText -replace 'BLOCK_SCOPE GSScheduledBlock _block;', 'GSScheduledBlock _block;'
+    if ($patchedText -ne $schedulerText) {
+      Set-Content -Path $scheduler -Value $patchedText -Encoding ASCII -NoNewline
     }
   }
 }

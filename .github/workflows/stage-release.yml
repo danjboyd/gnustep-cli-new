@@ -20,6 +20,9 @@ on:
       reuse_release_tag:
         description: "Reuse mode: stage cli/toolchain by downloading existing assets from this release tag (e.g. v0.1.0) instead of workflow-run artifacts"
         required: false
+      source_run_ids:
+        description: "Multi-run mode: space-separated workflow run ids whose artifacts hold gnustep-cli-*/gnustep-toolchain-* archives for this version (for example three Linux Managed Artifacts runs and one Windows Current Source Artifacts run)"
+        required: false
       linux_source_artifact_run_id:
         description: Optional workflow run id containing Linux input artifacts
         required: false
@@ -97,7 +100,7 @@ jobs:
           run-id: ${{ inputs.windows_source_artifact_run_id || inputs.source_artifact_run_id }}
 
       - name: Stage release directory
-        if: ${{ inputs.reuse_release_tag == '' }}
+        if: ${{ inputs.reuse_release_tag == '' && inputs.source_run_ids == '' }}
         run: |
           resolve_input() {
             kind="$1"
@@ -181,6 +184,47 @@ jobs:
           python3 scripts/internal/build_infra.py "${args[@]}"
           if [ -f "$reuse_dir/windows-current-source-artifact.json" ]; then
             cp "$reuse_dir/windows-current-source-artifact.json" "$RELEASE_DIR/windows-current-source-artifact.json"
+          fi
+          python3 scripts/internal/build_infra.py --json verify-release --release-dir "$RELEASE_DIR"
+
+      # Multi-run mode: stage every cli/toolchain archive labelled with this
+      # version from the listed runs' artifacts, byte for byte, plus the
+      # Windows current-source marker.
+      - name: Stage release directory from multiple runs
+        if: ${{ inputs.reuse_release_tag == '' && inputs.source_run_ids != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          version="${{ inputs.version }}"
+          runs_dir="$INPUT_ROOT/runs"
+          mkdir -p "$runs_dir"
+          for run_id in ${{ inputs.source_run_ids }}; do
+            gh run download "$run_id" --repo "${{ github.repository }}" --dir "$runs_dir/$run_id"
+          done
+          args=(--json stage-release
+            --version "$version"
+            --channel "${{ inputs.channel }}"
+            --base-url "${{ inputs.base_url }}"
+            --output-dir "$OUTPUT_ROOT")
+          seen=""
+          for kind in cli toolchain; do
+            while IFS= read -r f; do
+              base="$(basename "$f")"
+              target="${base#gnustep-$kind-}"
+              target="${target%-$version.tar.gz}"
+              target="${target%-$version.zip}"
+              case " $seen " in
+                *" $kind/$target "*) echo "duplicate $kind input for $target: $f" >&2; exit 2 ;;
+              esac
+              seen="$seen $kind/$target"
+              args+=("--$kind-input" "$target=$f")
+            done < <(find "$runs_dir" -type f \( -name "gnustep-$kind-*-$version.tar.gz" -o -name "gnustep-$kind-*-$version.zip" \) | sort)
+          done
+          python3 scripts/internal/build_infra.py "${args[@]}"
+          marker=$(find "$runs_dir" -type f -name windows-current-source-artifact.json | sort | head -n 1)
+          if [ -n "$marker" ]; then
+            cp "$marker" "$RELEASE_DIR/windows-current-source-artifact.json"
           fi
           python3 scripts/internal/build_infra.py --json verify-release --release-dir "$RELEASE_DIR"
 

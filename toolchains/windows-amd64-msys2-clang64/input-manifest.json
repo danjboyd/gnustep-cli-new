@@ -8,12 +8,12 @@
     "toolchain_flavor": "msys2-clang64"
   },
   "strategy": "msys2-assembly",
-  "repository_snapshot": "TBD",
+  "repository_snapshot": "2026-10-17T00:44:46Z",
   "installer": {
     "name": "msys2-x86_64",
-    "version": "latest",
-    "url": "https://github.com/msys2/msys2-installer/releases/latest/download/msys2-x86_64-latest.exe",
-    "sha256": "TBD",
+    "version": "2026-09-27",
+    "url": "https://github.com/msys2/msys2-installer/releases/download/2026-09-27/msys2-x86_64-20260927.exe",
+    "sha256": "416d506c839a2da4bc184eeec8cbaaf1055ee698618228c62dfc4232a6970f0e",
     "source_channel": "msys2-installer"
   },
   "root_layout": {
@@ -29,112 +29,118 @@
   "host_packages": [
     {
       "name": "make",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "4.4.1-3",
+      "sha256": "af0bdba17f06fe037f0194069adaa31a8fe45f1a11381501896aea1fae37bd5d",
       "source_channel": "msys2"
     }
   ],
   "packages": [
     {
       "name": "mingw-w64-clang-x86_64-clang",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "23.1.3-1",
+      "sha256": "1fee2841a761d739b96c7de1ebd08dec55c603b2c11ea47ce19b56161f2b031d",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-libobjc2",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "2.2.1-7",
+      "sha256": "a56f38c3488df0350f1e1fea041bc24e1d5ad67a13799c77571f59e70e983bdc",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-libdispatch",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "6.1.1-4",
+      "sha256": "26237b9234436be4439f485f75f2a6d4ce4c1424ece40f3fe7fc2a98e98538fc",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-make",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "2.9.3-2",
+      "sha256": "ddc86eef3614a80a82a2ab8a12f1c989df7dabbfe9b1211e76081dfbf1c5851c",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-base",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "1.31.1-10",
+      "sha256": "b97c4f0ca49bd4f768d1281762a7a52995f2e9d9b761d63654f090423d25c540",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-gui",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "0.32.0-7",
+      "sha256": "a5652688cd10fa020cf77ffbbabfe9f80a97ae63bf8dbdd0a580ab4ecaeb2cfa",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-back",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "0.32.0-6",
+      "sha256": "48a9ed318554e561e8f39970c5bbae98847a82b5fc634f3fab4d53060cbafd78",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-cairo",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "1.18.6-2",
+      "sha256": "aaf9db0022f890f9907c7b6de5bcbea8802a195f8c721f033461d037b8e11045",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-fontconfig",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "2.18.3-1",
+      "sha256": "cc73526e86356510ddd51b41297364fa8a6f82a4ea65b01e110fcff1fa952507",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-freetype",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "2.15.0-1",
+      "sha256": "8ed71c4dd4d7b1f99b53ed2c3cf29516a7f0a60006c9d28b0af3e10f8a2c0c3f",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-harfbuzz",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "14.6.0-1",
+      "sha256": "782b9c8b12df6984e52de051b2d4f97ffe43e421a6eb1f4757912d4cdb43401f",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-icu",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "78.3-4",
+      "sha256": "5ad1328ee46d205ac21bd099bac26844c4818d398fa22ad7c5676ace0b1625b0",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-libjpeg-turbo",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "3.2.0-1",
+      "sha256": "7e6f0ecbe5b4b35aa56d38126e07874a57a6d31409d8be7f653ad5252f46a275",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-libpng",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "1.6.59-1",
+      "sha256": "6f8bdbad4cf8dad8dd2105bfb673e32fd96a5c967766f1180be67b75a3f09324",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-libtiff",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "4.7.2-2",
+      "sha256": "1a16a4b3e3518e1d2a4b3903c74d7cc7be8b52366b0fd773724cd8a8ed285767",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-pixman",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "0.46.4-3",
+      "sha256": "1104bac77fb10bba4ddfd83c6220149e0a7e56127f9f57c7946c2d0299c9b8a3",
       "source_channel": "msys2-mingw-clang64"
     },
     {
       "name": "mingw-w64-clang-x86_64-pkgconf",
-      "version": "TBD",
-      "sha256": "TBD",
+      "version": "1~3.0.9-1",
+      "sha256": "69832a4f152edabe16514d8797d4a6e25acccdde86f1a9b23d3adc99d5e9e05c",
+      "source_channel": "msys2-mingw-clang64"
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-curl",
+      "version": "8.23.0-1",
+      "sha256": "ae98a8ce8c87b8342d9a54ab751c71f76a90bddb2fead67d84fbefa0fa2c7ec3",
       "source_channel": "msys2-mingw-clang64"
     }
   ],
@@ -148,6 +154,1491 @@
       "path": "clang64/include/objc/blocks_runtime.h",
       "policy": "allow-managed-overwrite",
       "reason": "Known overlap between libobjc2 and blocks runtime packaging."
+    }
+  ],
+  "locked_packages": [
+    {
+      "name": "base",
+      "version": "2022.06-1",
+      "repo": "msys",
+      "filename": "base-2022.06-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/base-2022.06-1-any.pkg.tar.zst",
+      "sha256": "1501b0f9e8859c4cee080cf89ea07dc16bcc5cd490383484bbff861ed88c3f4f",
+      "size": 2540
+    },
+    {
+      "name": "bash",
+      "version": "5.3.20-2",
+      "repo": "msys",
+      "filename": "bash-5.3.20-2-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/bash-5.3.20-2-x86_64.pkg.tar.zst",
+      "sha256": "0951e809c552dd7dd2835df1b2d590822187f14e717d809e942e4eb677d0adfd",
+      "size": 2579823
+    },
+    {
+      "name": "bash-completion",
+      "version": "2.18.0-1",
+      "repo": "msys",
+      "filename": "bash-completion-2.18.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/bash-completion-2.18.0-1-any.pkg.tar.zst",
+      "sha256": "1babcc1d94e5e0d4e96d18c532ea2c5a6841dc64709cbe8365385511df5e932d",
+      "size": 234160
+    },
+    {
+      "name": "brotli",
+      "version": "1.2.0-1",
+      "repo": "msys",
+      "filename": "brotli-1.2.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/brotli-1.2.0-1-x86_64.pkg.tar.zst",
+      "sha256": "6642bd8fcb238119b167038614ad4eaf44a25b4978a34f74349e0359565ac671",
+      "size": 381349
+    },
+    {
+      "name": "bsdtar",
+      "version": "3.8.10-1",
+      "repo": "msys",
+      "filename": "bsdtar-3.8.10-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/bsdtar-3.8.10-1-x86_64.pkg.tar.zst",
+      "sha256": "d6519b1e0c62a868abf8c1cc5982be69f8d92cfa6badbf4f7de6102c72bcb009",
+      "size": 394493
+    },
+    {
+      "name": "bzip2",
+      "version": "1.0.8-4",
+      "repo": "msys",
+      "filename": "bzip2-1.0.8-4-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/bzip2-1.0.8-4-x86_64.pkg.tar.zst",
+      "sha256": "635c483775de60663bd38859bb4624e6aaa1086354acf8e36513b75c24f64b3c",
+      "size": 58549
+    },
+    {
+      "name": "ca-certificates",
+      "version": "20260816-1",
+      "repo": "msys",
+      "filename": "ca-certificates-20260816-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/ca-certificates-20260816-1-any.pkg.tar.zst",
+      "sha256": "b7b2344aa87022919d6c4fd2bd9410e6490835c9a2d43092c1284186bae8c5d0",
+      "size": 395521
+    },
+    {
+      "name": "coreutils",
+      "version": "8.32-5",
+      "repo": "msys",
+      "filename": "coreutils-8.32-5-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/coreutils-8.32-5-x86_64.pkg.tar.zst",
+      "sha256": "62dfee1c39fd15f99c39802b35e82643bc14fffc16d6c76d4001caa385ec77e3",
+      "size": 2755209
+    },
+    {
+      "name": "curl",
+      "version": "8.23.0-1",
+      "repo": "msys",
+      "filename": "curl-8.23.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/curl-8.23.0-1-x86_64.pkg.tar.zst",
+      "sha256": "6f21e0187e3f309199e01f729d415ccfeb304cc9f8a27365c8aa9c216351022e",
+      "size": 942782
+    },
+    {
+      "name": "dash",
+      "version": "0.5.13.5-1",
+      "repo": "msys",
+      "filename": "dash-0.5.13.5-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/dash-0.5.13.5-1-x86_64.pkg.tar.zst",
+      "sha256": "842aa48bae2fe394ab0587ad3405d3ac4c70c367c676a47c1049f62ef7f0fbcc",
+      "size": 83150
+    },
+    {
+      "name": "file",
+      "version": "5.48-1",
+      "repo": "msys",
+      "filename": "file-5.48-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/file-5.48-1-x86_64.pkg.tar.zst",
+      "sha256": "f55026638fe4ed4b31ee3cf316843ac190d9332816bff8dcb0a99fd8c6350608",
+      "size": 468042
+    },
+    {
+      "name": "filesystem",
+      "version": "2026.03.06-1",
+      "repo": "msys",
+      "filename": "filesystem-2026.03.06-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/filesystem-2026.03.06-1-x86_64.pkg.tar.zst",
+      "sha256": "4506b2dbb496281b7645ee2b2d3700f6a2fab3d74a800733f3b3b44eeb8edc5c",
+      "size": 94696
+    },
+    {
+      "name": "findutils",
+      "version": "4.11.0-2",
+      "repo": "msys",
+      "filename": "findutils-4.11.0-2-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/findutils-4.11.0-2-x86_64.pkg.tar.zst",
+      "sha256": "f19d3c6b1b073d4c5759ae83f5639d11a5f0227b772f7d86d600db573d9d5d32",
+      "size": 582781
+    },
+    {
+      "name": "gawk",
+      "version": "5.4.1-1",
+      "repo": "msys",
+      "filename": "gawk-5.4.1-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/gawk-5.4.1-1-x86_64.pkg.tar.zst",
+      "sha256": "4b1322cb6c83d61fde5100e229e3cabc5b7d01fc0d0d8bc311edc08df91916be",
+      "size": 1519178
+    },
+    {
+      "name": "gcc-libs",
+      "version": "15.3.0-1",
+      "repo": "msys",
+      "filename": "gcc-libs-15.3.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/gcc-libs-15.3.0-1-x86_64.pkg.tar.zst",
+      "sha256": "0d99a122c453c05ae21ba3dcea910f2e0d93d38ae067c677a112a315b0f3cec5",
+      "size": 1082211
+    },
+    {
+      "name": "getent",
+      "version": "2.18.90-6",
+      "repo": "msys",
+      "filename": "getent-2.18.90-6-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/getent-2.18.90-6-x86_64.pkg.tar.zst",
+      "sha256": "d6bcece7733d5080c6125aedf7996bbbfd33067f432dd659447f34d8136d97ca",
+      "size": 11791
+    },
+    {
+      "name": "gettext",
+      "version": "0.22.5-1",
+      "repo": "msys",
+      "filename": "gettext-0.22.5-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/gettext-0.22.5-1-x86_64.pkg.tar.zst",
+      "sha256": "b31ab065c3538ecb1fb6ab48ab2b3049243d6d9e585331c882f38326eefc1831",
+      "size": 1885957
+    },
+    {
+      "name": "gmp",
+      "version": "6.3.0-2",
+      "repo": "msys",
+      "filename": "gmp-6.3.0-2-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/gmp-6.3.0-2-x86_64.pkg.tar.zst",
+      "sha256": "f84536138e618d47a1df2da83916cfebbd449f159ffad52f994a71060a41cf34",
+      "size": 396914
+    },
+    {
+      "name": "gnupg",
+      "version": "2.4.9-3",
+      "repo": "msys",
+      "filename": "gnupg-2.4.9-3-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/gnupg-2.4.9-3-x86_64.pkg.tar.zst",
+      "sha256": "ff78c8391e894c53ad0e3054f1e885e34f22072ad7f8578cd199e0d5657592b2",
+      "size": 2697631
+    },
+    {
+      "name": "grep",
+      "version": "1~3.0-7",
+      "repo": "msys",
+      "filename": "grep-1~3.0-7-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/grep-1~3.0-7-x86_64.pkg.tar.zst",
+      "sha256": "2909b3bbef8d33d66980339fb7bd2d3d9145bae0f04191e6671df39868aea427",
+      "size": 249241
+    },
+    {
+      "name": "gzip",
+      "version": "1.15-1",
+      "repo": "msys",
+      "filename": "gzip-1.15-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/gzip-1.15-1-x86_64.pkg.tar.zst",
+      "sha256": "3f967c87cf041391d0d43819c91174742917ccc2d1bb9419050df29ef22f4bfd",
+      "size": 95115
+    },
+    {
+      "name": "inetutils",
+      "version": "2.8-1",
+      "repo": "msys",
+      "filename": "inetutils-2.8-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/inetutils-2.8-1-x86_64.pkg.tar.zst",
+      "sha256": "b0a00adbdc549b54292db23530caf58bb0f150fc39359b99d074d6dee9aed677",
+      "size": 229914
+    },
+    {
+      "name": "info",
+      "version": "7.2-3",
+      "repo": "msys",
+      "filename": "info-7.2-3-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/info-7.2-3-x86_64.pkg.tar.zst",
+      "sha256": "69242603357aa7011356f7d15a2017ad086e5682c8577f13520943c94bd2b03e",
+      "size": 189742
+    },
+    {
+      "name": "less",
+      "version": "710-1",
+      "repo": "msys",
+      "filename": "less-710-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/less-710-1-x86_64.pkg.tar.zst",
+      "sha256": "894a643ecd01861490e5767873d67b55cd5a2faf2c77b0b24a62dbba7bd038fd",
+      "size": 156690
+    },
+    {
+      "name": "libargp",
+      "version": "20260115-1",
+      "repo": "msys",
+      "filename": "libargp-20260115-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libargp-20260115-1-x86_64.pkg.tar.zst",
+      "sha256": "34ff307975c269d552045bab47019551d0e643d5c129e6080d1e26140d35735d",
+      "size": 40238
+    },
+    {
+      "name": "libasprintf",
+      "version": "0.22.5-1",
+      "repo": "msys",
+      "filename": "libasprintf-0.22.5-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libasprintf-0.22.5-1-x86_64.pkg.tar.zst",
+      "sha256": "fdd59ae72d355ae1c5615f12429493611782f3e38bf1f7ca9ca83b61fcfb6c26",
+      "size": 5553
+    },
+    {
+      "name": "libassuan",
+      "version": "3.0.2-1",
+      "repo": "msys",
+      "filename": "libassuan-3.0.2-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libassuan-3.0.2-1-x86_64.pkg.tar.zst",
+      "sha256": "f6414e08f432e2fb130b23deb3c5c99f68c1f09768599f634c6138db50d1823f",
+      "size": 99262
+    },
+    {
+      "name": "libbz2",
+      "version": "1.0.8-4",
+      "repo": "msys",
+      "filename": "libbz2-1.0.8-4-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libbz2-1.0.8-4-x86_64.pkg.tar.zst",
+      "sha256": "89fb0e1478b22b80effda55ab4ae7549388d01245d3841a096d8a2d63236c2a1",
+      "size": 30786
+    },
+    {
+      "name": "libcurl",
+      "version": "8.23.0-1",
+      "repo": "msys",
+      "filename": "libcurl-8.23.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libcurl-8.23.0-1-x86_64.pkg.tar.zst",
+      "sha256": "3034aae7fb58e129c7af62a7e7d2ae12e0a3475a5310d7fdad38fe9a3c672c9d",
+      "size": 398836
+    },
+    {
+      "name": "libexpat",
+      "version": "2.9.0-1",
+      "repo": "msys",
+      "filename": "libexpat-2.9.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libexpat-2.9.0-1-x86_64.pkg.tar.zst",
+      "sha256": "3021e1119cbe6a384977914c1dc099a98ce861505cc07229a842e8e1253597e5",
+      "size": 64459
+    },
+    {
+      "name": "libffi",
+      "version": "3.8.0-1",
+      "repo": "msys",
+      "filename": "libffi-3.8.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libffi-3.8.0-1-x86_64.pkg.tar.zst",
+      "sha256": "e0a21ae5ee3f0ce1ff3f446ea2c95ad462803081014aecfa8fc1cd22bc4df187",
+      "size": 37793
+    },
+    {
+      "name": "libgcrypt",
+      "version": "1.12.4-1",
+      "repo": "msys",
+      "filename": "libgcrypt-1.12.4-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libgcrypt-1.12.4-1-x86_64.pkg.tar.zst",
+      "sha256": "640aafc35d064279de3529679feccecced41267923f4e6b77e3b3dbe8614aa88",
+      "size": 566930
+    },
+    {
+      "name": "libgettextpo",
+      "version": "0.22.5-1",
+      "repo": "msys",
+      "filename": "libgettextpo-0.22.5-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libgettextpo-0.22.5-1-x86_64.pkg.tar.zst",
+      "sha256": "a9f3ef6b3712e20f0dc6eecaf8c2ec6aff5f259b2dbe87422a0aaca7b27c98d5",
+      "size": 128573
+    },
+    {
+      "name": "libgnutls",
+      "version": "3.8.13-2",
+      "repo": "msys",
+      "filename": "libgnutls-3.8.13-2-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libgnutls-3.8.13-2-x86_64.pkg.tar.zst",
+      "sha256": "144a34bda1456dfbc0ca83ce8ed1ce49e89d750987ef096ab4083676dbcb373e",
+      "size": 1499887
+    },
+    {
+      "name": "libgpg-error",
+      "version": "1.61-1",
+      "repo": "msys",
+      "filename": "libgpg-error-1.61-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libgpg-error-1.61-1-x86_64.pkg.tar.zst",
+      "sha256": "4c760c81be9c3875837f9b3c2a61e2c6247cbc73903e2c8696fb58df0d683e43",
+      "size": 203007
+    },
+    {
+      "name": "libhogweed",
+      "version": "4.0-1",
+      "repo": "msys",
+      "filename": "libhogweed-4.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libhogweed-4.0-1-x86_64.pkg.tar.zst",
+      "sha256": "1302b7e86c5c54c93bd431685ccefa89df5f1b01257c68e24f2609df953cfdc2",
+      "size": 183739
+    },
+    {
+      "name": "libiconv",
+      "version": "1.19-1",
+      "repo": "msys",
+      "filename": "libiconv-1.19-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libiconv-1.19-1-x86_64.pkg.tar.zst",
+      "sha256": "0fa55ea2a6ccf97cf8c58b24b2615815e15e16e6e4e888091c263c2c83c5313d",
+      "size": 718353
+    },
+    {
+      "name": "libidn2",
+      "version": "2.3.8-1",
+      "repo": "msys",
+      "filename": "libidn2-2.3.8-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libidn2-2.3.8-1-x86_64.pkg.tar.zst",
+      "sha256": "55e0de96b893e9f67f14a4283d411fc2a45d7b59333bc16e2a9b16e5bfc9282f",
+      "size": 150443
+    },
+    {
+      "name": "libintl",
+      "version": "0.22.5-1",
+      "repo": "msys",
+      "filename": "libintl-0.22.5-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libintl-0.22.5-1-x86_64.pkg.tar.zst",
+      "sha256": "336d66b9d95cf9c1804958f8e260762a3e83bf158ed5981f783bc772a31073cf",
+      "size": 50537
+    },
+    {
+      "name": "libksba",
+      "version": "1.8.1-1",
+      "repo": "msys",
+      "filename": "libksba-1.8.1-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libksba-1.8.1-1-x86_64.pkg.tar.zst",
+      "sha256": "fd0e37456f563504740afab92ddbf8372471f6c0fea557dc60ec08ce8bd745ad",
+      "size": 139067
+    },
+    {
+      "name": "liblz4",
+      "version": "1.10.0-1",
+      "repo": "msys",
+      "filename": "liblz4-1.10.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/liblz4-1.10.0-1-x86_64.pkg.tar.zst",
+      "sha256": "1cbbe51ee91bf32691aabb15bdb7c8548e8b5ef8195122ef31f10edcca6e952f",
+      "size": 65386
+    },
+    {
+      "name": "liblzma",
+      "version": "5.8.4-1",
+      "repo": "msys",
+      "filename": "liblzma-5.8.4-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/liblzma-5.8.4-1-x86_64.pkg.tar.zst",
+      "sha256": "4b7d61656e72a5651a797680b66186338dce4f8fbc62a637ab3b59922dd01074",
+      "size": 90529
+    },
+    {
+      "name": "libnettle",
+      "version": "4.0-1",
+      "repo": "msys",
+      "filename": "libnettle-4.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libnettle-4.0-1-x86_64.pkg.tar.zst",
+      "sha256": "aa2a398eb5af88247f29d5de683c6d1d7411733c07cc5e6c62803e1e77337cf7",
+      "size": 147354
+    },
+    {
+      "name": "libnghttp2",
+      "version": "1.70.0-1",
+      "repo": "msys",
+      "filename": "libnghttp2-1.70.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libnghttp2-1.70.0-1-x86_64.pkg.tar.zst",
+      "sha256": "9b3443ff1b26a3ece9394409efca60f3ac8eee94309e5be1e6b05706f3386110",
+      "size": 66251
+    },
+    {
+      "name": "libnghttp3",
+      "version": "1.18.0-1",
+      "repo": "msys",
+      "filename": "libnghttp3-1.18.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libnghttp3-1.18.0-1-x86_64.pkg.tar.zst",
+      "sha256": "45fdd8613fa1da08f6c0504377194497fea540ed1fec438bc557736459040669",
+      "size": 69613
+    },
+    {
+      "name": "libngtcp2",
+      "version": "1.25.0-1",
+      "repo": "msys",
+      "filename": "libngtcp2-1.25.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libngtcp2-1.25.0-1-x86_64.pkg.tar.zst",
+      "sha256": "a4c389078632e64ac2b320473651e80d44c97f9fed7a746a232d95b400b14fe8",
+      "size": 162594
+    },
+    {
+      "name": "libnpth",
+      "version": "1.8-1",
+      "repo": "msys",
+      "filename": "libnpth-1.8-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libnpth-1.8-1-x86_64.pkg.tar.zst",
+      "sha256": "29803ea796a2766396351d4c7786e33f7a64ebe2576968ec5dd55338eada08fb",
+      "size": 7194
+    },
+    {
+      "name": "libopenssl",
+      "version": "3.6.5-1",
+      "repo": "msys",
+      "filename": "libopenssl-3.6.5-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libopenssl-3.6.5-1-x86_64.pkg.tar.zst",
+      "sha256": "05f6cc946f0dde3aecc3632007fa1d874e40720226117b750327bc2a01846325",
+      "size": 2096427
+    },
+    {
+      "name": "libp11-kit",
+      "version": "0.26.5-1",
+      "repo": "msys",
+      "filename": "libp11-kit-0.26.5-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libp11-kit-0.26.5-1-x86_64.pkg.tar.zst",
+      "sha256": "62707348cea67bf4ee009dbf25548c84e9f06a76b688590bd14e76321d58e125",
+      "size": 254512
+    },
+    {
+      "name": "libpcre",
+      "version": "8.45-5",
+      "repo": "msys",
+      "filename": "libpcre-8.45-5-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libpcre-8.45-5-x86_64.pkg.tar.zst",
+      "sha256": "b4dc2eb7795cbacaa683101d720fa67f536262497a1d89934a58f5dab8d17d17",
+      "size": 96135
+    },
+    {
+      "name": "libpcre2_8",
+      "version": "10.49-1",
+      "repo": "msys",
+      "filename": "libpcre2_8-10.49-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libpcre2_8-10.49-1-x86_64.pkg.tar.zst",
+      "sha256": "2de42bf4656e3952a72809663e85899be76c7020e016687055ac0acd05145a3b",
+      "size": 151223
+    },
+    {
+      "name": "libpsl",
+      "version": "0.23.2-1",
+      "repo": "msys",
+      "filename": "libpsl-0.23.2-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libpsl-0.23.2-1-x86_64.pkg.tar.zst",
+      "sha256": "749014f86a1ae5f5a5adccec518e0296a03a838db9874aa9803dffaa8d30abc8",
+      "size": 72764
+    },
+    {
+      "name": "libreadline",
+      "version": "8.3.006-1",
+      "repo": "msys",
+      "filename": "libreadline-8.3.006-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libreadline-8.3.006-1-x86_64.pkg.tar.zst",
+      "sha256": "29e25c50bf6cd7a5e6f2253af76f54fe3c1a915313c7c18e98bedaa665c6adea",
+      "size": 388090
+    },
+    {
+      "name": "libsqlite",
+      "version": "3.54.0-1",
+      "repo": "msys",
+      "filename": "libsqlite-3.54.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libsqlite-3.54.0-1-x86_64.pkg.tar.zst",
+      "sha256": "089e17fe8647da22b790dc2d5629d56cf53b5da5685d6555cb172400f32fe70f",
+      "size": 765782
+    },
+    {
+      "name": "libssh2",
+      "version": "1.11.1-1",
+      "repo": "msys",
+      "filename": "libssh2-1.11.1-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libssh2-1.11.1-1-x86_64.pkg.tar.zst",
+      "sha256": "f79883af85a2bb4778e1352c0b7ea27737a05e4110ef14461f0a842a40ff893d",
+      "size": 230653
+    },
+    {
+      "name": "libtasn1",
+      "version": "4.21.0-1",
+      "repo": "msys",
+      "filename": "libtasn1-4.21.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libtasn1-4.21.0-1-x86_64.pkg.tar.zst",
+      "sha256": "14f15c4b2b6ebeb6bfcf060cab27a32cd8967f70b0e68cc14670062cce546f04",
+      "size": 100727
+    },
+    {
+      "name": "libunistring",
+      "version": "1.4.2-1",
+      "repo": "msys",
+      "filename": "libunistring-1.4.2-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libunistring-1.4.2-1-x86_64.pkg.tar.zst",
+      "sha256": "bcd04706d95b5e7127d39834565bceed6b400192f5fb51599745aba28d5da018",
+      "size": 772641
+    },
+    {
+      "name": "libutil-linux",
+      "version": "2.40.2-2",
+      "repo": "msys",
+      "filename": "libutil-linux-2.40.2-2-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libutil-linux-2.40.2-2-x86_64.pkg.tar.zst",
+      "sha256": "148ec8e668cb0a30ea0c4e2687e16e0953d6628305598f4c3225bedf2564192d",
+      "size": 308527
+    },
+    {
+      "name": "libxcrypt",
+      "version": "4.5.2-1",
+      "repo": "msys",
+      "filename": "libxcrypt-4.5.2-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libxcrypt-4.5.2-1-x86_64.pkg.tar.zst",
+      "sha256": "e63db0aa2b708359e25f61f506e2d2c92c315febf5f88cc9f386e4ec0bdf4fa5",
+      "size": 87371
+    },
+    {
+      "name": "libzstd",
+      "version": "1.5.7-1",
+      "repo": "msys",
+      "filename": "libzstd-1.5.7-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/libzstd-1.5.7-1-x86_64.pkg.tar.zst",
+      "sha256": "5e370b2e725a0a7e5ff58d84653c9a0cd5a10b9cfe930f2d949a28ad2a11c1f2",
+      "size": 399681
+    },
+    {
+      "name": "make",
+      "version": "4.4.1-3",
+      "repo": "msys",
+      "filename": "make-4.4.1-3-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/make-4.4.1-3-x86_64.pkg.tar.zst",
+      "sha256": "af0bdba17f06fe037f0194069adaa31a8fe45f1a11381501896aea1fae37bd5d",
+      "size": 514683
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-brotli",
+      "version": "1.2.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-brotli-1.2.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-brotli-1.2.0-1-any.pkg.tar.zst",
+      "sha256": "29bfbb9783ec5b86b6a51bacbd47708f75e854a3e05b0850360dcf6e901a485d",
+      "size": 469729
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-bzip2",
+      "version": "1.0.8-4",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-bzip2-1.0.8-4-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-bzip2-1.0.8-4-any.pkg.tar.zst",
+      "sha256": "bee14f4d52c1d58b59a17eb8953f1f4361689798d15709966a3d35ef7ce52dcf",
+      "size": 100308
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-c-ares",
+      "version": "1.34.8-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-c-ares-1.34.8-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-c-ares-1.34.8-1-any.pkg.tar.zst",
+      "sha256": "e9f5f065de8262a953ec3fc4421a306b9b2a7370d769a761a11a67ce9d23e0a2",
+      "size": 310113
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-ca-certificates",
+      "version": "20260816-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-ca-certificates-20260816-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-ca-certificates-20260816-1-any.pkg.tar.zst",
+      "sha256": "308604b18495cf2642d5af6a9ed237703cf705221e23aaa8d3a78e3ce2ab8619",
+      "size": 403910
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-cairo",
+      "version": "1.18.6-2",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-cairo-1.18.6-2-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-cairo-1.18.6-2-any.pkg.tar.zst",
+      "sha256": "aaf9db0022f890f9907c7b6de5bcbea8802a195f8c721f033461d037b8e11045",
+      "size": 890183
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-clang",
+      "version": "23.1.3-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-clang-23.1.3-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-clang-23.1.3-1-any.pkg.tar.zst",
+      "sha256": "1fee2841a761d739b96c7de1ebd08dec55c603b2c11ea47ce19b56161f2b031d",
+      "size": 34232947
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-clang-libs",
+      "version": "23.1.3-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-clang-libs-23.1.3-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-clang-libs-23.1.3-1-any.pkg.tar.zst",
+      "sha256": "3de0accee7d5fc87dad60977f099948d1c59353ae9031365cdf39526bcf0f3d0",
+      "size": 25039872
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-compiler-rt",
+      "version": "23.1.3-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-compiler-rt-23.1.3-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-compiler-rt-23.1.3-1-any.pkg.tar.zst",
+      "sha256": "3f0926a9b74eee208f0add40f05684ca1766bd44b64137de72c73eac165dc244",
+      "size": 814081
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-crt",
+      "version": "14.0.0.r426.g4564ee4b5-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-crt-14.0.0.r426.g4564ee4b5-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-crt-14.0.0.r426.g4564ee4b5-1-any.pkg.tar.zst",
+      "sha256": "9b548e032108faeee31a2d8ffa9336db12ed2cde48e7d74919cfee54f5d8e6b4",
+      "size": 3031501
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-curl",
+      "version": "8.23.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-curl-8.23.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-curl-8.23.0-1-any.pkg.tar.zst",
+      "sha256": "ae98a8ce8c87b8342d9a54ab751c71f76a90bddb2fead67d84fbefa0fa2c7ec3",
+      "size": 1776920
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-expat",
+      "version": "2.9.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-expat-2.9.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-expat-2.9.0-1-any.pkg.tar.zst",
+      "sha256": "4b6d086323da94fb2d63cb7a54b8b2e072515de8707066648007352359e8e730",
+      "size": 191764
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-fontconfig",
+      "version": "2.18.3-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-fontconfig-2.18.3-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-fontconfig-2.18.3-1-any.pkg.tar.zst",
+      "sha256": "cc73526e86356510ddd51b41297364fa8a6f82a4ea65b01e110fcff1fa952507",
+      "size": 310369
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-freetype",
+      "version": "2.15.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-freetype-2.15.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-freetype-2.15.0-1-any.pkg.tar.zst",
+      "sha256": "8ed71c4dd4d7b1f99b53ed2c3cf29516a7f0a60006c9d28b0af3e10f8a2c0c3f",
+      "size": 667970
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-gettext-runtime",
+      "version": "1.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-gettext-runtime-1.0-1-any.pkg.tar.zst",
+      "sha256": "6f22a64727816c9d9c8289bac9493a3c50691da678de22489d0545114568bb90",
+      "size": 424222
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-giflib",
+      "version": "6.1.3-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-giflib-6.1.3-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-giflib-6.1.3-1-any.pkg.tar.zst",
+      "sha256": "9a3f4394f7b431135f85ee817a31e43f39165208f9f80c22641cf91126d45ba0",
+      "size": 126030
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-glib2",
+      "version": "2.90.1-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-glib2-2.90.1-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-glib2-2.90.1-1-any.pkg.tar.zst",
+      "sha256": "174290215f3e5022d23c783b59c8127abed71527f648e28e429a22d9c494ae69",
+      "size": 5431064
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-gmp",
+      "version": "6.3.0-2",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-gmp-6.3.0-2-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-gmp-6.3.0-2-any.pkg.tar.zst",
+      "sha256": "69f2f77c6c25e9f6bb0fed4ce0df1883054282236857cd17e6eb1aa0e717470e",
+      "size": 602611
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-gnustep-back",
+      "version": "0.32.0-6",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-gnustep-back-0.32.0-6-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-gnustep-back-0.32.0-6-any.pkg.tar.zst",
+      "sha256": "48a9ed318554e561e8f39970c5bbae98847a82b5fc634f3fab4d53060cbafd78",
+      "size": 506979
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-gnustep-base",
+      "version": "1.31.1-10",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-gnustep-base-1.31.1-10-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-gnustep-base-1.31.1-10-any.pkg.tar.zst",
+      "sha256": "b97c4f0ca49bd4f768d1281762a7a52995f2e9d9b761d63654f090423d25c540",
+      "size": 2122609
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-gnustep-gui",
+      "version": "0.32.0-7",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-gnustep-gui-0.32.0-7-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-gnustep-gui-0.32.0-7-any.pkg.tar.zst",
+      "sha256": "a5652688cd10fa020cf77ffbbabfe9f80a97ae63bf8dbdd0a580ab4ecaeb2cfa",
+      "size": 2586368
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-gnustep-make",
+      "version": "2.9.3-2",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-gnustep-make-2.9.3-2-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-gnustep-make-2.9.3-2-any.pkg.tar.zst",
+      "sha256": "ddc86eef3614a80a82a2ab8a12f1c989df7dabbfe9b1211e76081dfbf1c5851c",
+      "size": 190199
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-gnutls",
+      "version": "3.8.13-3",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-gnutls-3.8.13-3-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-gnutls-3.8.13-3-any.pkg.tar.zst",
+      "sha256": "e49375bcfd776c0eafdddbfedf6e4a87dde308a502ea4ce7052267f6762187c2",
+      "size": 2387055
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-graphite2",
+      "version": "1.3.15-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-graphite2-1.3.15-1-any.pkg.tar.zst",
+      "sha256": "1933e839670e5c94084c2f7ec7a9c1a6c47c3cac5992a610d2dd2af0a006ad3e",
+      "size": 142767
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-harfbuzz",
+      "version": "14.6.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-harfbuzz-14.6.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-harfbuzz-14.6.0-1-any.pkg.tar.zst",
+      "sha256": "782b9c8b12df6984e52de051b2d4f97ffe43e421a6eb1f4757912d4cdb43401f",
+      "size": 2117562
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-headers",
+      "version": "14.0.0.r426.g4564ee4b5-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-headers-14.0.0.r426.g4564ee4b5-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-headers-14.0.0.r426.g4564ee4b5-1-any.pkg.tar.zst",
+      "sha256": "df9c33e06797d9eb38e7b0bd75ead43567beeca3aac873f74d62ebe3168a118b",
+      "size": 6890259
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-icu",
+      "version": "78.3-4",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-icu-78.3-4-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-icu-78.3-4-any.pkg.tar.zst",
+      "sha256": "5ad1328ee46d205ac21bd099bac26844c4818d398fa22ad7c5676ace0b1625b0",
+      "size": 23852812
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-jbigkit",
+      "version": "2.1-6",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-jbigkit-2.1-6-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-jbigkit-2.1-6-any.pkg.tar.zst",
+      "sha256": "b58d83d6ee8f88270927a193235ad4cb848f7b2ec09c39304f6492702787ec3d",
+      "size": 72975
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-lerc",
+      "version": "4.1.1-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-lerc-4.1.1-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-lerc-4.1.1-1-any.pkg.tar.zst",
+      "sha256": "517787ee63915bc3a9661f998518ce0eb270e3b030e6a75f481d667b489fbc3d",
+      "size": 268813
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libb2",
+      "version": "0.98.1-3",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libb2-0.98.1-3-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libb2-0.98.1-3-any.pkg.tar.zst",
+      "sha256": "6f2c69f1ea27abbdb84c1e991e94dadae17a5e6d6e64859dc783f5b037edc2e2",
+      "size": 27655
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libblocksruntime-swift",
+      "version": "6.1.1-4",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libblocksruntime-swift-6.1.1-4-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libblocksruntime-swift-6.1.1-4-any.pkg.tar.zst",
+      "sha256": "d0e7502d0f9b8229939dd3e821ebb9df6acac969b5628402e75106c7809635ae",
+      "size": 15380
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libc++",
+      "version": "23.1.3-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libc++-23.1.3-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libc++-23.1.3-1-any.pkg.tar.zst",
+      "sha256": "df3744b6bb6a39472d29424e0d45f573e750ee86058100b6d227e5294b98da39",
+      "size": 1963078
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libdeflate",
+      "version": "1.26-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libdeflate-1.26-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libdeflate-1.26-1-any.pkg.tar.zst",
+      "sha256": "c8612c6296336c8336376d34ecbcb049295dfad24e833ba12cb918c0c0c58079",
+      "size": 93951
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libdispatch",
+      "version": "6.1.1-4",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libdispatch-6.1.1-4-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libdispatch-6.1.1-4-any.pkg.tar.zst",
+      "sha256": "26237b9234436be4439f485f75f2a6d4ce4c1424ece40f3fe7fc2a98e98538fc",
+      "size": 173643
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libffi",
+      "version": "3.8.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libffi-3.8.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libffi-3.8.0-1-any.pkg.tar.zst",
+      "sha256": "4d27339b52eabae86a1dff79cf432191ad8dd6acfa653b1179b12490234c66a6",
+      "size": 51575
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libiconv",
+      "version": "1.19-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libiconv-1.19-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libiconv-1.19-1-any.pkg.tar.zst",
+      "sha256": "26c4ac9f2023eecdfffb291cab40c60585a0cd0f72539ca03c5558f3ecd309ec",
+      "size": 736821
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libidn2",
+      "version": "2.3.8-4",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libidn2-2.3.8-4-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libidn2-2.3.8-4-any.pkg.tar.zst",
+      "sha256": "91b56797068c2e73c4ee26fa89dd8e9d2de464c639f01c948c12886dbc5b138d",
+      "size": 174549
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libjpeg-turbo",
+      "version": "3.2.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libjpeg-turbo-3.2.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libjpeg-turbo-3.2.0-1-any.pkg.tar.zst",
+      "sha256": "7e6f0ecbe5b4b35aa56d38126e07874a57a6d31409d8be7f653ad5252f46a275",
+      "size": 752183
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libobjc2",
+      "version": "2.2.1-7",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libobjc2-2.2.1-7-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libobjc2-2.2.1-7-any.pkg.tar.zst",
+      "sha256": "a56f38c3488df0350f1e1fea041bc24e1d5ad67a13799c77571f59e70e983bdc",
+      "size": 103086
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libpng",
+      "version": "1.6.59-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libpng-1.6.59-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libpng-1.6.59-1-any.pkg.tar.zst",
+      "sha256": "6f8bdbad4cf8dad8dd2105bfb673e32fd96a5c967766f1180be67b75a3f09324",
+      "size": 416117
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libpsl",
+      "version": "0.21.5-3",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libpsl-0.21.5-3-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libpsl-0.21.5-3-any.pkg.tar.zst",
+      "sha256": "4c73a70283a095e53c58be5e0598e3f51a92e42d7933a0dc6983c548dbe36741",
+      "size": 95334
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libssh2",
+      "version": "1.11.1-2",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libssh2-1.11.1-2-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libssh2-1.11.1-2-any.pkg.tar.zst",
+      "sha256": "65abda38e96a8a07d379bcbffd1ecb8a888655d29f09d0ec8ed00e442e02c818",
+      "size": 310530
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libsystre",
+      "version": "1.0.2-3",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libsystre-1.0.2-3-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libsystre-1.0.2-3-any.pkg.tar.zst",
+      "sha256": "0158a1f32f17d8b68ad7f813df41dfbd453d7120c078326f5a4a328fb7eb1d4a",
+      "size": 9018
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libtasn1",
+      "version": "4.21.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libtasn1-4.21.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libtasn1-4.21.0-1-any.pkg.tar.zst",
+      "sha256": "964ea9469d8c71e9f44fed7aa0c437806dac3a71d4c0612046cd9243eb49b20e",
+      "size": 205386
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libtiff",
+      "version": "4.7.2-2",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libtiff-4.7.2-2-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libtiff-4.7.2-2-any.pkg.tar.zst",
+      "sha256": "1a16a4b3e3518e1d2a4b3903c74d7cc7be8b52366b0fd773724cd8a8ed285767",
+      "size": 728789
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libtre",
+      "version": "0.9.0-2",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libtre-0.9.0-2-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libtre-0.9.0-2-any.pkg.tar.zst",
+      "sha256": "ce8b27b32545029dd072fb481ae0427f3b8ef34128f9a6b9c12fdbd1c85f5c47",
+      "size": 81864
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libunistring",
+      "version": "1.4.2-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libunistring-1.4.2-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libunistring-1.4.2-1-any.pkg.tar.zst",
+      "sha256": "5e7c731bd1db6fa508f6347689cee9335b581c84c0f6d2de155fd3792e5484b1",
+      "size": 849338
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libunwind",
+      "version": "23.1.3-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libunwind-23.1.3-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libunwind-23.1.3-1-any.pkg.tar.zst",
+      "sha256": "6dc583bd260a65e36ac7fe3bcf6669848032ed5edf4308591a338a3c02c88241",
+      "size": 63334
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libwebp",
+      "version": "1.6.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libwebp-1.6.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libwebp-1.6.0-1-any.pkg.tar.zst",
+      "sha256": "441f8d7a5bcb9a435bf567e8414ac489e4d72e415e6ccab4d048b6e3a986571d",
+      "size": 604990
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libwinpthread",
+      "version": "14.0.0.r426.g4564ee4b5-2",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libwinpthread-14.0.0.r426.g4564ee4b5-2-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libwinpthread-14.0.0.r426.g4564ee4b5-2-any.pkg.tar.zst",
+      "sha256": "bc934ff154f4e3d8a7c4468e3d3d68fe7690fc61d9707da0662575042a38fff0",
+      "size": 31342
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libxml2",
+      "version": "2.15.4-2",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libxml2-2.15.4-2-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libxml2-2.15.4-2-any.pkg.tar.zst",
+      "sha256": "926f5cf56128d96580ea2e86759fa3ecaf76a8b852b91ef20878b516b81e3a0e",
+      "size": 1012502
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-libxslt",
+      "version": "1.1.45-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-libxslt-1.1.45-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-libxslt-1.1.45-1-any.pkg.tar.zst",
+      "sha256": "f85593a15af50a78f9ac9c91e070c79ac0b615908034e07ea8de50c274226d98",
+      "size": 341777
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-lld",
+      "version": "23.1.3-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-lld-23.1.3-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-lld-23.1.3-1-any.pkg.tar.zst",
+      "sha256": "dfbaf81be26c354348f5b372665077c75f3c0f54b9e9b8e5b8e769752507b23c",
+      "size": 3628208
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-llvm-libs",
+      "version": "23.1.3-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-llvm-libs-23.1.3-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-llvm-libs-23.1.3-1-any.pkg.tar.zst",
+      "sha256": "5711b4b57e69fb55afcc93c873d8dea72d997489fb273b1f88df800638eaa5f9",
+      "size": 34502244
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-llvm-tools",
+      "version": "23.1.3-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-llvm-tools-23.1.3-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-llvm-tools-23.1.3-1-any.pkg.tar.zst",
+      "sha256": "be6386e7d28fdea73fdc03f5627183f06486052e1d51e01f2a411f6d0870233c",
+      "size": 23348660
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-lzo2",
+      "version": "2.10-3",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-lzo2-2.10-3-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-lzo2-2.10-3-any.pkg.tar.zst",
+      "sha256": "014d7700a4a81b71d73b29e64cbc32c02be1ae7b0c170aa731bf4d0ad700f578",
+      "size": 121558
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-mpdecimal",
+      "version": "4.0.1-3",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-mpdecimal-4.0.1-3-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-mpdecimal-4.0.1-3-any.pkg.tar.zst",
+      "sha256": "ee3946fa273e98c3b0e0da1a6e85c3ceb92cf231b2aea16ee16e1cc1996f5ac9",
+      "size": 166819
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-ncurses",
+      "version": "6.6-4",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-ncurses-6.6-4-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-ncurses-6.6-4-any.pkg.tar.zst",
+      "sha256": "cbb44c61b2eb4cad7eb14f4b70b229b3e5661213f38e23b9f56f42fc0ff22055",
+      "size": 1571250
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-nettle",
+      "version": "4.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-nettle-4.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-nettle-4.0-1-any.pkg.tar.zst",
+      "sha256": "626c06c8e2198c2e5cc5c8e2ba0a1faa2670039ae1f5968ac8df8655a594b64c",
+      "size": 581370
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-nghttp2",
+      "version": "1.70.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-nghttp2-1.70.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-nghttp2-1.70.0-1-any.pkg.tar.zst",
+      "sha256": "d2e375e98c996e65c83e01e18e4ed86f56d3d79b9e659e7936e69a50fac1d2c0",
+      "size": 199777
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-nghttp3",
+      "version": "1.18.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-nghttp3-1.18.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-nghttp3-1.18.0-1-any.pkg.tar.zst",
+      "sha256": "370af368e29f42d9ac2c4ccf5b0dc1dcf6445bba9b8289b237eb529a4fca79c2",
+      "size": 136407
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-ngtcp2",
+      "version": "1.25.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-ngtcp2-1.25.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-ngtcp2-1.25.0-1-any.pkg.tar.zst",
+      "sha256": "2e7c41ae5d5561829a5ce5c08e09608f6494fe2d3b98ac93c2bed3de97e883d4",
+      "size": 308387
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-openssl",
+      "version": "3.6.5-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-openssl-3.6.5-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-openssl-3.6.5-1-any.pkg.tar.zst",
+      "sha256": "c6be6a00e4c5672306d3abefa195d8341d57f6d9c52a066bc6145d50038e4c62",
+      "size": 8178262
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-p11-kit",
+      "version": "0.26.5-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-p11-kit-0.26.5-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-p11-kit-0.26.5-1-any.pkg.tar.zst",
+      "sha256": "e80802646ba0e9dba2bc881258476735920ded7d288cb386e0d26c77c7a46fea",
+      "size": 665483
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-pcre2",
+      "version": "10.49-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-pcre2-10.49-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-pcre2-10.49-1-any.pkg.tar.zst",
+      "sha256": "8ea1407808aa043ed38c910406172b5a393efaa3712cd3bbcd0eb4bbc16b1d83",
+      "size": 1461689
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-pixman",
+      "version": "0.46.4-3",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-pixman-0.46.4-3-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-pixman-0.46.4-3-any.pkg.tar.zst",
+      "sha256": "1104bac77fb10bba4ddfd83c6220149e0a7e56127f9f57c7946c2d0299c9b8a3",
+      "size": 351650
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-pkgconf",
+      "version": "1~3.0.9-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-pkgconf-1~3.0.9-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-pkgconf-1~3.0.9-1-any.pkg.tar.zst",
+      "sha256": "69832a4f152edabe16514d8797d4a6e25acccdde86f1a9b23d3adc99d5e9e05c",
+      "size": 148817
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-python",
+      "version": "3.14.8-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-python-3.14.8-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-python-3.14.8-1-any.pkg.tar.zst",
+      "sha256": "703db05ec467614773c29ceeea54684f1b77de5e8d16096b2e3a100cb2600f01",
+      "size": 27939784
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-python-packaging",
+      "version": "26.3-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-python-packaging-26.3-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-python-packaging-26.3-1-any.pkg.tar.zst",
+      "sha256": "f0e694ed156c7561820b3ff3681407fafdf0dc07f09815b53cced26db207054c",
+      "size": 263423
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-sqlite3",
+      "version": "3.54.0-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-sqlite3-3.54.0-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-sqlite3-3.54.0-1-any.pkg.tar.zst",
+      "sha256": "9da6a075924798a9f183657d2db29edbb0abca71ea15c5f6e38a3547f942d4e5",
+      "size": 2908081
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-tcl",
+      "version": "8.6.18-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-tcl-8.6.18-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-tcl-8.6.18-1-any.pkg.tar.zst",
+      "sha256": "007c0c97a703089c2afde17ed1ac62a5eb68c1ad5e47f9402d5919ff52f1264b",
+      "size": 2740603
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-tk",
+      "version": "8.6.18-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-tk-8.6.18-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-tk-8.6.18-1-any.pkg.tar.zst",
+      "sha256": "c85db1bccfabf1037a4cf8433ba9113bf467ae7dea1feb70da5b23913a244ea4",
+      "size": 2108869
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-tzdata",
+      "version": "2026e-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-tzdata-2026e-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-tzdata-2026e-1-any.pkg.tar.zst",
+      "sha256": "a48ad3ed31a5a6bdc6e6407ebba50ba347ede0d5f31996a551fb806d0422c9ea",
+      "size": 226189
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-wineditline",
+      "version": "2.208-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-wineditline-2.208-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-wineditline-2.208-1-any.pkg.tar.zst",
+      "sha256": "853aa831a43b781c157181c6bd35589014721e864d823f0c0a13dc80ba0a2d75",
+      "size": 61748
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-winpthreads",
+      "version": "14.0.0.r426.g4564ee4b5-2",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-winpthreads-14.0.0.r426.g4564ee4b5-2-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-winpthreads-14.0.0.r426.g4564ee4b5-2-any.pkg.tar.zst",
+      "sha256": "f270c1daee661d1737f2afce4bd3d1952ccd6faf0f36e5102ac9f414596cc84a",
+      "size": 42769
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-xz",
+      "version": "5.8.4-1",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-xz-5.8.4-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-xz-5.8.4-1-any.pkg.tar.zst",
+      "sha256": "6fc8efc101a0a638f7d637731b24cc2989f479a0a41d76a6723fd82ae3bffac9",
+      "size": 913351
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-zlib",
+      "version": "1.3.2-2",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-zlib-1.3.2-2-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-zlib-1.3.2-2-any.pkg.tar.zst",
+      "sha256": "96d8db2f2bf24c0d4e82b899d50a3497d97536a8bd38ce275401d0f2b9580b5e",
+      "size": 111651
+    },
+    {
+      "name": "mingw-w64-clang-x86_64-zstd",
+      "version": "1.5.7-2",
+      "repo": "clang64",
+      "filename": "mingw-w64-clang-x86_64-zstd-1.5.7-2-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-zstd-1.5.7-2-any.pkg.tar.zst",
+      "sha256": "2d75c4ddf8f4f7b76fe33e3f1eea16450f9b3aede14285c886462d72f0ffd87d",
+      "size": 597342
+    },
+    {
+      "name": "mintty",
+      "version": "1~3.8.3-1",
+      "repo": "msys",
+      "filename": "mintty-1~3.8.3-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/mintty-1~3.8.3-1-x86_64.pkg.tar.zst",
+      "sha256": "a6b74c4beb29e4298b4d253baebfc38b1c67811f2259ab980e17dbaa5a76ac6e",
+      "size": 1361640
+    },
+    {
+      "name": "mpfr",
+      "version": "4.2.2-1",
+      "repo": "msys",
+      "filename": "mpfr-4.2.2-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/mpfr-4.2.2-1-x86_64.pkg.tar.zst",
+      "sha256": "8f1b6c17c53e00494a488e03dfdf8fc742027ed03a5bd7b1b3a6a33f595a7498",
+      "size": 395839
+    },
+    {
+      "name": "msys2-keyring",
+      "version": "1~20260814-1",
+      "repo": "msys",
+      "filename": "msys2-keyring-1~20260814-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/msys2-keyring-1~20260814-1-any.pkg.tar.zst",
+      "sha256": "a9a02c41bc14eb0965fb23b7e7d43a1d0eb20d9e70cbfeb193fcbf68bb0dc5d0",
+      "size": 42254
+    },
+    {
+      "name": "msys2-launcher",
+      "version": "1.5-3",
+      "repo": "msys",
+      "filename": "msys2-launcher-1.5-3-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/msys2-launcher-1.5-3-x86_64.pkg.tar.zst",
+      "sha256": "56b1170274fc33014e6d857e4e4d32a20975be0e23ed8385bb7372520118aa84",
+      "size": 98694
+    },
+    {
+      "name": "msys2-runtime",
+      "version": "3.6.11-3",
+      "repo": "msys",
+      "filename": "msys2-runtime-3.6.11-3-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/msys2-runtime-3.6.11-3-x86_64.pkg.tar.zst",
+      "sha256": "b6478bd1b4cb4b2e07c45db725fee93f9424c19fa248240dcb7b7f4187cd92db",
+      "size": 2069202
+    },
+    {
+      "name": "nano",
+      "version": "9.2-1",
+      "repo": "msys",
+      "filename": "nano-9.2-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/nano-9.2-1-x86_64.pkg.tar.zst",
+      "sha256": "0fd23077af18ab656e4a082ce0455ab16217c852f3968343e903843c204a12b2",
+      "size": 688103
+    },
+    {
+      "name": "ncurses",
+      "version": "6.6-2",
+      "repo": "msys",
+      "filename": "ncurses-6.6-2-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/ncurses-6.6-2-x86_64.pkg.tar.zst",
+      "sha256": "828c92f09b17f00d3b49362fcfa4affa58e5e50e238f290ea36eb7a690da3acb",
+      "size": 1286284
+    },
+    {
+      "name": "nettle",
+      "version": "4.0-1",
+      "repo": "msys",
+      "filename": "nettle-4.0-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/nettle-4.0-1-x86_64.pkg.tar.zst",
+      "sha256": "6e8809a2dc5f98dd199a3dd7c7e3783bdaf2fec1699a0c5b9eb4480ab7dd6365",
+      "size": 98825
+    },
+    {
+      "name": "openssl",
+      "version": "3.6.5-1",
+      "repo": "msys",
+      "filename": "openssl-3.6.5-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/openssl-3.6.5-1-x86_64.pkg.tar.zst",
+      "sha256": "4dc7c1199010b26d6382c59d8b16a9dbc857d314d76d9668f0f333bc5fecdd38",
+      "size": 685267
+    },
+    {
+      "name": "p11-kit",
+      "version": "0.26.5-1",
+      "repo": "msys",
+      "filename": "p11-kit-0.26.5-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/p11-kit-0.26.5-1-x86_64.pkg.tar.zst",
+      "sha256": "db341cc3e91c68f5de25d9a2eda3beb752ec8ac74a89f001f60453c817ce5f51",
+      "size": 514293
+    },
+    {
+      "name": "pacman",
+      "version": "6.1.0-25",
+      "repo": "msys",
+      "filename": "pacman-6.1.0-25-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/pacman-6.1.0-25-x86_64.pkg.tar.zst",
+      "sha256": "cb375279a44b37f646dbe834b440c233fddbacb97d6173e5c7d91362717c970f",
+      "size": 5735552
+    },
+    {
+      "name": "pacman-contrib",
+      "version": "1.10.6-2",
+      "repo": "msys",
+      "filename": "pacman-contrib-1.10.6-2-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/pacman-contrib-1.10.6-2-x86_64.pkg.tar.zst",
+      "sha256": "99300a1ee81c991e78f866566b05d59d824d4774e0b5ab011d8f6b117f9ee2ae",
+      "size": 4103908
+    },
+    {
+      "name": "pacman-mirrors",
+      "version": "20260129-1",
+      "repo": "msys",
+      "filename": "pacman-mirrors-20260129-1-any.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/pacman-mirrors-20260129-1-any.pkg.tar.zst",
+      "sha256": "e7f8aa620cd29c7449e5a8177d83799f7ea2a5fc7afad0ec9c11b07fa46670b6",
+      "size": 2556
+    },
+    {
+      "name": "pinentry",
+      "version": "1.3.3-1",
+      "repo": "msys",
+      "filename": "pinentry-1.3.3-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/pinentry-1.3.3-1-x86_64.pkg.tar.zst",
+      "sha256": "6a72ff654a57181dbb168951a24147dd6cf3f53c0df6250b96a4cca6eeb4837c",
+      "size": 50253
+    },
+    {
+      "name": "rebase",
+      "version": "4.5.0-5",
+      "repo": "msys",
+      "filename": "rebase-4.5.0-5-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/rebase-4.5.0-5-x86_64.pkg.tar.zst",
+      "sha256": "d67e710f40b36fe2154fc32e63fdc4e2da7b7615a2e59ec996ce9b292ba85430",
+      "size": 279218
+    },
+    {
+      "name": "sed",
+      "version": "4.9-1",
+      "repo": "msys",
+      "filename": "sed-4.9-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/sed-4.9-1-x86_64.pkg.tar.zst",
+      "sha256": "3748af28f69e946ec5a42e6670c9bbf6da7352dc93baaa537f69e99c5483b9fc",
+      "size": 249918
+    },
+    {
+      "name": "tar",
+      "version": "1.35-3",
+      "repo": "msys",
+      "filename": "tar-1.35-3-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/tar-1.35-3-x86_64.pkg.tar.zst",
+      "sha256": "71983bed200c4026cdec157837d989728d3de65e8cf644e03876df41a0f1b7c4",
+      "size": 815230
+    },
+    {
+      "name": "time",
+      "version": "1.10-1",
+      "repo": "msys",
+      "filename": "time-1.10-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/time-1.10-1-x86_64.pkg.tar.zst",
+      "sha256": "53bd332145effa8afec1209c105fe9b5264a5692ff35e0d03d96d2058ea7ae61",
+      "size": 25855
+    },
+    {
+      "name": "tzcode",
+      "version": "2026e-1",
+      "repo": "msys",
+      "filename": "tzcode-2026e-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/tzcode-2026e-1-x86_64.pkg.tar.zst",
+      "sha256": "8dbce9e8ff470b36ec7666fba6cf86c56384a618da9568a192b79f0008d55df1",
+      "size": 269622
+    },
+    {
+      "name": "util-linux",
+      "version": "2.40.2-2",
+      "repo": "msys",
+      "filename": "util-linux-2.40.2-2-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/util-linux-2.40.2-2-x86_64.pkg.tar.zst",
+      "sha256": "969edb185d37986e6feddb3c54807598e3cc6774b736fec3a27d5d27731f7fdd",
+      "size": 2265288
+    },
+    {
+      "name": "wget",
+      "version": "1.25.0-4",
+      "repo": "msys",
+      "filename": "wget-1.25.0-4-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/wget-1.25.0-4-x86_64.pkg.tar.zst",
+      "sha256": "533bd9beb98fe40789558de0343aa29361709876af6a3b9eb2e83f88a18645d3",
+      "size": 778748
+    },
+    {
+      "name": "which",
+      "version": "2.25-1",
+      "repo": "msys",
+      "filename": "which-2.25-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/which-2.25-1-x86_64.pkg.tar.zst",
+      "sha256": "a299e7b9076e5d9381e59fd67538aa39346eb36bb16a93834fb99cccc3f2055b",
+      "size": 19913
+    },
+    {
+      "name": "xz",
+      "version": "5.8.4-1",
+      "repo": "msys",
+      "filename": "xz-5.8.4-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/xz-5.8.4-1-x86_64.pkg.tar.zst",
+      "sha256": "cad72459be8f5b99920bed2f122dfe81e05fc599c33f5b871bd35d72b726ef9e",
+      "size": 733040
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.2-1",
+      "repo": "msys",
+      "filename": "zlib-1.3.2-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/zlib-1.3.2-1-x86_64.pkg.tar.zst",
+      "sha256": "a04aa79996c57f0db936be66cf94326d7e67e9cd8dbffe4cf6e97693d0a1d9ef",
+      "size": 52245
+    },
+    {
+      "name": "zstd",
+      "version": "1.5.7-1",
+      "repo": "msys",
+      "filename": "zstd-1.5.7-1-x86_64.pkg.tar.zst",
+      "url": "https://repo.msys2.org/msys/x86_64/zstd-1.5.7-1-x86_64.pkg.tar.zst",
+      "sha256": "7b8ab77828c5a1efe53ebc53e3ea9d719bfbd609bf4c810eaa88d626188ed407",
+      "size": 91266
+    }
+  ],
+  "sync_databases": [
+    {
+      "repo": "msys",
+      "file": "msys.db",
+      "sha256": "969004e6e9c09f1b023e6932ec3540a241ecceeb24ed1ec5dc11434ff562483b",
+      "signature": "msys.db.sig",
+      "signature_sha256": "02f1aaf37ca176af69e9d339a22f6d8c8b25310c6bf57ed7ba6fb90e3e79257d"
+    },
+    {
+      "repo": "clang64",
+      "file": "clang64.db",
+      "sha256": "6089dd6d03546ed4d5fdd5096dac22074b2b1d4062604bbf388c65bb43bdefc1",
+      "signature": "clang64.db.sig",
+      "signature_sha256": "03d9d90e02fda954cd0732e51ec9bcd9a94775002a2b78fa20c23a7822aa02ad"
     }
   ]
 }
