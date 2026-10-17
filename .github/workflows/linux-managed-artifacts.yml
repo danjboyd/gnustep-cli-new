@@ -28,6 +28,11 @@ on:
         required: false
         default: ""
         type: string
+      reuse_toolchain_version:
+        description: "Optional with reuse_toolchain_tag: version label of the reused toolchain asset when it differs from version (for example 0.1.0, to build a 0.1.1 CLI against the v0.1.0 toolchain); the bytes are re-labelled, not changed"
+        required: false
+        default: ""
+        type: string
       qualify_image:
         description: "Optional: container image of the target distro release (for example ubuntu:26.04) to qualify the built artifacts in"
         required: false
@@ -93,10 +98,15 @@ jobs:
           esac
           echo "STAGING_PREFIX=$staging_prefix" >> "$GITHUB_ENV"
           if [ -n "${{ inputs.reuse_toolchain_tag }}" ]; then
+            source_version="${{ inputs.reuse_toolchain_version || inputs.version }}"
             gh release download "${{ inputs.reuse_toolchain_tag }}" \
               --repo "${{ github.repository }}" \
               --dir "$out" \
-              --pattern "gnustep-toolchain-${{ inputs.target }}-${{ inputs.version }}.tar.gz"
+              --pattern "gnustep-toolchain-${{ inputs.target }}-$source_version.tar.gz"
+            if [ "$source_version" != "${{ inputs.version }}" ]; then
+              mv "$out/gnustep-toolchain-${{ inputs.target }}-$source_version.tar.gz" \
+                "$out/gnustep-toolchain-${{ inputs.target }}-${{ inputs.version }}.tar.gz"
+            fi
           fi
           cat > "$out/container-build.sh" <<'CONTAINER_BUILD'
           set -eu

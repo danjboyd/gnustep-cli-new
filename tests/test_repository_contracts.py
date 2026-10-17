@@ -187,6 +187,10 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("resolve_input toolchain windows-amd64-msys2-clang64", content)
         self.assertIn("actions/upload-artifact@v4", content)
         self.assertIn("gnustep-staged-release", content)
+        # Multi-run mode stages several targets' fresh builds into one release.
+        self.assertIn("source_run_ids", content)
+        self.assertIn('gh run download "$run_id"', content)
+        self.assertIn("duplicate $kind input for $target", content)
 
     def test_release_inputs_workflow_publishes_verified_source_artifacts(self):
         workflow = ROOT / ".github" / "workflows" / "release-inputs.yml"
@@ -320,6 +324,9 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("build-toolchain.sh", content)
         self.assertIn("package-source-built-linux-toolchain", content)
         self.assertIn("build-linux-cli-against-managed-toolchain", content)
+        # A new CLI version can be built against an older release's toolchain bytes.
+        self.assertIn("reuse_toolchain_version", content)
+        self.assertIn('mv "$out/gnustep-toolchain-${{ inputs.target }}-$source_version.tar.gz"', content)
         self.assertIn("gnustep-toolchain-", content)
         self.assertIn("gnustep-cli-", content)
         self.assertIn("actions/upload-artifact@v4", content)
