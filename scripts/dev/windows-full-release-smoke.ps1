@@ -76,6 +76,28 @@ $oldFixture.releases[0].version = '0.0.9-windows-update-fixture'
 foreach ($artifact in $oldFixture.releases[0].artifacts) {
   $artifact.version = '0.0.9-windows-update-fixture'
 }
+# When old and new stage the same CLI zip there is nothing to update. Give the
+# fixture's CLI distinct bytes: the same zip plus one marker entry, so the
+# bootstrap/new/build/run/Gorm scenarios still exercise the release's own
+# gnustep.exe while update cli has a real CLI layer to download.
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$fixtureCliArtifact = @($oldFixture.releases[0].artifacts | Where-Object { $_.kind -eq 'cli' -and $_.os -eq 'windows' })[0]
+$fixtureCliSource = Join-Path 'C:\gnustep-smoke\release-old-fixture' ([System.IO.Path]::GetFileName($fixtureCliArtifact.url))
+$fixtureCliName = 'gnustep-cli-windows-amd64-msys2-clang64-0.0.9-windows-update-fixture.zip'
+$fixtureCliPath = Join-Path 'C:\gnustep-smoke\release-old-fixture' $fixtureCliName
+Copy-Item -Force $fixtureCliSource $fixtureCliPath
+$fixtureZip = [System.IO.Compression.ZipFile]::Open($fixtureCliPath, [System.IO.Compression.ZipArchiveMode]::Update)
+try {
+  $marker = New-Object System.IO.StreamWriter($fixtureZip.CreateEntry('bin/windows-update-fixture.txt').Open())
+  try { $marker.Write('0.0.9-windows-update-fixture') } finally { $marker.Dispose() }
+} finally {
+  $fixtureZip.Dispose()
+}
+$fixtureCliSha = (Get-FileHash -Algorithm SHA256 $fixtureCliPath).Hash.ToLowerInvariant()
+$fixtureCliArtifact.url = ($fixtureCliArtifact.url -replace '[^/]+$', $fixtureCliName)
+$fixtureCliArtifact.sha256 = $fixtureCliSha
+if ($fixtureCliArtifact.PSObject.Properties['integrity']) { $fixtureCliArtifact.integrity.sha256 = $fixtureCliSha }
+if ($fixtureCliArtifact.PSObject.Properties['size']) { $fixtureCliArtifact.size = (Get-Item $fixtureCliPath).Length }
 $oldFixture | ConvertTo-Json -Depth 12 | Out-File -Encoding utf8 $oldFixtureManifest
 
 Remove-Item -Recurse -Force 'C:\gnustep-smoke\release-new-cli-only' -ErrorAction SilentlyContinue
