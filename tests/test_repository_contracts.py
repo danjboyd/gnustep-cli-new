@@ -308,6 +308,10 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("source = $ReleaseSource", content)
         self.assertIn("runner_id = $RunnerId", content)
         self.assertIn("$env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE = '1'", content)
+        self.assertIn("$env:RELEASE_TRUST_ROOT = $fixtureTrustRoot", content)
+        self.assertIn("openssl dgst -sha256 -sign $fixtureKey", content)
+        self.assertIn("update cli --check --json --root $root", content)
+        self.assertNotIn("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED", content)
 
     def test_package_release_asset_verifier_checks_release_digest_and_downloads(self):
         script = ROOT / "scripts" / "dev" / "verify-package-release-assets.sh"

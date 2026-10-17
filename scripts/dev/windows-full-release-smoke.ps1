@@ -175,6 +175,9 @@ if ($bootstrapOk) {
       } else {
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
       }
+      # gnustep run leaves Gorm, gdnc and the MSYS2 shell running under the smoke root.
+      Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } |
+        Stop-Process -Force -ErrorAction SilentlyContinue
     } finally {
       Pop-Location
     }
@@ -204,7 +207,26 @@ set DEST=%1
 powershell -NoProfile -Command "Expand-Archive -Force -LiteralPath '%ARCHIVE%' -DestinationPath '%DEST%'"
 '@
     $env:PATH = "$shimDir;$root\usr\bin;$root\bin;$root\clang64\bin;" + $env:PATH
-    & $exe update --check --manifest $newCliOnlyManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-update-check.txt'
+    # update verifies the manifest signature, and the fixture manifests are
+    # rewritten copies, so sign them with a throwaway key and trust only that.
+    $keyDir = Join-Path $work 'fixture-trust'
+    New-Item -ItemType Directory -Force $keyDir | Out-Null
+    $fixtureKey = Join-Path $keyDir 'fixture-signing-private.pem'
+    $fixtureTrustRoot = Join-Path $keyDir 'fixture-trust-root.pem'
+    & openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out $fixtureKey
+    if ($LASTEXITCODE -ne 0) { throw 'openssl could not generate the fixture signing key' }
+    & openssl pkey -in $fixtureKey -pubout -out $fixtureTrustRoot
+    if ($LASTEXITCODE -ne 0) { throw 'openssl could not derive the fixture trust root' }
+    foreach ($fixtureManifest in @($oldFixtureManifest, $newCliOnlyManifest)) {
+      & openssl dgst -sha256 -sign $fixtureKey -out "$fixtureManifest.sig" $fixtureManifest
+      if ($LASTEXITCODE -ne 0) { throw "openssl could not sign $fixtureManifest" }
+    }
+    $env:RELEASE_TRUST_ROOT = $fixtureTrustRoot
+    & $exe update cli --check --json --root $root --manifest $newCliOnlyManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-update-check.json'
+    $checkPayload = Get-Content 'C:\gnustep-smoke\full-update-check.json' -Raw | ConvertFrom-Json
+    if (-not $checkPayload.ok) { throw "update check failed: $($checkPayload.summary)" }
+    if (-not $checkPayload.plan.cli.update_available) { throw "update check did not detect the newer release: $($checkPayload.summary)" }
+    if ($checkPayload.plan.cli.layer_update_kind -ne 'cli_only') { throw "update plan is not CLI-only: $($checkPayload.plan.cli.layer_update_kind)" }
     & $exe update cli --yes --json --root $root --manifest $newCliOnlyManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-update-cli.json'
     $updatePayload = Get-Content 'C:\gnustep-smoke\full-update-cli.json' -Raw | ConvertFrom-Json
     if (-not $updatePayload.ok) { throw "update cli failed: $($updatePayload.summary)" }
