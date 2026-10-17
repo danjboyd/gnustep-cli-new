@@ -312,6 +312,7 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("openssl dgst -sha256 -sign $fixtureKey", content)
         self.assertIn("update cli --check --json --root $root", content)
         self.assertNotIn("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED", content)
+        self.assertIn("$_.Path.StartsWith($work, [StringComparison]::OrdinalIgnoreCase)", content)
 
     def test_package_release_asset_verifier_checks_release_digest_and_downloads(self):
         script = ROOT / "scripts" / "dev" / "verify-package-release-assets.sh"

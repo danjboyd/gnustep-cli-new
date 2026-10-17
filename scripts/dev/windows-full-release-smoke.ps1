@@ -175,9 +175,11 @@ if ($bootstrapOk) {
       } else {
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
       }
-      # gnustep run leaves Gorm, gdnc and the MSYS2 shell running under the smoke root.
-      Get-Process | Where-Object { $_.Path -and $_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) } |
-        Stop-Process -Force -ErrorAction SilentlyContinue
+      # gnustep run leaves Gorm (under $work), gdnc and the MSYS2 shell (under $root) running.
+      Get-Process | Where-Object {
+        $_.Path -and ($_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -or
+                      $_.Path.StartsWith($work, [StringComparison]::OrdinalIgnoreCase))
+      } | Stop-Process -Force -ErrorAction SilentlyContinue
     } finally {
       Pop-Location
     }
