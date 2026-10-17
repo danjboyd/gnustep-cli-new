@@ -5,6 +5,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# The smoke installs into a throwaway root; keep bootstrap from repointing the
+# host's persistent user PATH, GNUSTEP_MAKEFILES and GNUSTEP_CONFIG_FILE at it.
+$env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE = '1'
 
 $runId = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $root = "C:\gnustep-smoke\install-full-$runId"

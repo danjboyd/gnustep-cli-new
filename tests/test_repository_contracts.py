@@ -307,6 +307,7 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("suite_id = $SuiteId", content)
         self.assertIn("source = $ReleaseSource", content)
         self.assertIn("runner_id = $RunnerId", content)
+        self.assertIn("$env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE = '1'", content)
 
     def test_package_release_asset_verifier_checks_release_digest_and_downloads(self):
         script = ROOT / "scripts" / "dev" / "verify-package-release-assets.sh"
