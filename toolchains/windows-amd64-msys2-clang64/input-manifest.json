@@ -8,7 +8,7 @@
     "toolchain_flavor": "msys2-clang64"
   },
   "strategy": "msys2-assembly",
-  "repository_snapshot": "2026-10-16T23:42:29Z",
+  "repository_snapshot": "2026-10-17T00:44:46Z",
   "installer": {
     "name": "msys2-x86_64",
     "version": "2026-09-27",
@@ -1623,6 +1623,22 @@
       "url": "https://repo.msys2.org/msys/x86_64/zstd-1.5.7-1-x86_64.pkg.tar.zst",
       "sha256": "7b8ab77828c5a1efe53ebc53e3ea9d719bfbd609bf4c810eaa88d626188ed407",
       "size": 91266
+    }
+  ],
+  "sync_databases": [
+    {
+      "repo": "msys",
+      "file": "msys.db",
+      "sha256": "969004e6e9c09f1b023e6932ec3540a241ecceeb24ed1ec5dc11434ff562483b",
+      "signature": "msys.db.sig",
+      "signature_sha256": "02f1aaf37ca176af69e9d339a22f6d8c8b25310c6bf57ed7ba6fb90e3e79257d"
+    },
+    {
+      "repo": "clang64",
+      "file": "clang64.db",
+      "sha256": "6089dd6d03546ed4d5fdd5096dac22074b2b1d4062604bbf388c65bb43bdefc1",
+      "signature": "clang64.db.sig",
+      "signature_sha256": "03d9d90e02fda954cd0732e51ec9bcd9a94775002a2b78fa20c23a7822aa02ad"
     }
   ]
 }
