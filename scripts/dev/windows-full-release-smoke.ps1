@@ -1,4 +1,13 @@
+param(
+  [string]$ReleaseSource = 'final-staged-0.1.0-25342971361',
+  [string]$SuiteId = 'release',
+  [string]$RunnerId = 'otvm-lease'
+)
+
 $ErrorActionPreference = 'Stop'
+# The smoke installs into a throwaway root; keep bootstrap from repointing the
+# host's persistent user PATH, GNUSTEP_MAKEFILES and GNUSTEP_CONFIG_FILE at it.
+$env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE = '1'
 
 $runId = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
 $root = "C:\gnustep-smoke\install-full-$runId"
@@ -67,6 +76,28 @@ $oldFixture.releases[0].version = '0.0.9-windows-update-fixture'
 foreach ($artifact in $oldFixture.releases[0].artifacts) {
   $artifact.version = '0.0.9-windows-update-fixture'
 }
+# When old and new stage the same CLI zip there is nothing to update. Give the
+# fixture's CLI distinct bytes: the same zip plus one marker entry, so the
+# bootstrap/new/build/run/Gorm scenarios still exercise the release's own
+# gnustep.exe while update cli has a real CLI layer to download.
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$fixtureCliArtifact = @($oldFixture.releases[0].artifacts | Where-Object { $_.kind -eq 'cli' -and $_.os -eq 'windows' })[0]
+$fixtureCliSource = Join-Path 'C:\gnustep-smoke\release-old-fixture' ([System.IO.Path]::GetFileName($fixtureCliArtifact.url))
+$fixtureCliName = 'gnustep-cli-windows-amd64-msys2-clang64-0.0.9-windows-update-fixture.zip'
+$fixtureCliPath = Join-Path 'C:\gnustep-smoke\release-old-fixture' $fixtureCliName
+Copy-Item -Force $fixtureCliSource $fixtureCliPath
+$fixtureZip = [System.IO.Compression.ZipFile]::Open($fixtureCliPath, [System.IO.Compression.ZipArchiveMode]::Update)
+try {
+  $marker = New-Object System.IO.StreamWriter($fixtureZip.CreateEntry('bin/windows-update-fixture.txt').Open())
+  try { $marker.Write('0.0.9-windows-update-fixture') } finally { $marker.Dispose() }
+} finally {
+  $fixtureZip.Dispose()
+}
+$fixtureCliSha = (Get-FileHash -Algorithm SHA256 $fixtureCliPath).Hash.ToLowerInvariant()
+$fixtureCliArtifact.url = ($fixtureCliArtifact.url -replace '[^/]+$', $fixtureCliName)
+$fixtureCliArtifact.sha256 = $fixtureCliSha
+if ($fixtureCliArtifact.PSObject.Properties['integrity']) { $fixtureCliArtifact.integrity.sha256 = $fixtureCliSha }
+if ($fixtureCliArtifact.PSObject.Properties['size']) { $fixtureCliArtifact.size = (Get-Item $fixtureCliPath).Length }
 $oldFixture | ConvertTo-Json -Depth 12 | Out-File -Encoding utf8 $oldFixtureManifest
 
 Remove-Item -Recurse -Force 'C:\gnustep-smoke\release-new-cli-only' -ErrorAction SilentlyContinue
@@ -166,6 +197,11 @@ if ($bootstrapOk) {
       } else {
         Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
       }
+      # gnustep run leaves Gorm (under $work), gdnc and the MSYS2 shell (under $root) running.
+      Get-Process | Where-Object {
+        $_.Path -and ($_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -or
+                      $_.Path.StartsWith($work, [StringComparison]::OrdinalIgnoreCase))
+      } | Stop-Process -Force -ErrorAction SilentlyContinue
     } finally {
       Pop-Location
     }
@@ -195,7 +231,26 @@ set DEST=%1
 powershell -NoProfile -Command "Expand-Archive -Force -LiteralPath '%ARCHIVE%' -DestinationPath '%DEST%'"
 '@
     $env:PATH = "$shimDir;$root\usr\bin;$root\bin;$root\clang64\bin;" + $env:PATH
-    & $exe update --check --manifest $newCliOnlyManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-update-check.txt'
+    # update verifies the manifest signature, and the fixture manifests are
+    # rewritten copies, so sign them with a throwaway key and trust only that.
+    $keyDir = Join-Path $work 'fixture-trust'
+    New-Item -ItemType Directory -Force $keyDir | Out-Null
+    $fixtureKey = Join-Path $keyDir 'fixture-signing-private.pem'
+    $fixtureTrustRoot = Join-Path $keyDir 'fixture-trust-root.pem'
+    & openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out $fixtureKey
+    if ($LASTEXITCODE -ne 0) { throw 'openssl could not generate the fixture signing key' }
+    & openssl pkey -in $fixtureKey -pubout -out $fixtureTrustRoot
+    if ($LASTEXITCODE -ne 0) { throw 'openssl could not derive the fixture trust root' }
+    foreach ($fixtureManifest in @($oldFixtureManifest, $newCliOnlyManifest)) {
+      & openssl dgst -sha256 -sign $fixtureKey -out "$fixtureManifest.sig" $fixtureManifest
+      if ($LASTEXITCODE -ne 0) { throw "openssl could not sign $fixtureManifest" }
+    }
+    $env:RELEASE_TRUST_ROOT = $fixtureTrustRoot
+    & $exe update cli --check --json --root $root --manifest $newCliOnlyManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-update-check.json'
+    $checkPayload = Get-Content 'C:\gnustep-smoke\full-update-check.json' -Raw | ConvertFrom-Json
+    if (-not $checkPayload.ok) { throw "update check failed: $($checkPayload.summary)" }
+    if (-not $checkPayload.plan.cli.update_available) { throw "update check did not detect the newer release: $($checkPayload.summary)" }
+    if ($checkPayload.plan.cli.layer_update_kind -ne 'cli_only') { throw "update plan is not CLI-only: $($checkPayload.plan.cli.layer_update_kind)" }
     & $exe update cli --yes --json --root $root --manifest $newCliOnlyManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-update-cli.json'
     $updatePayload = Get-Content 'C:\gnustep-smoke\full-update-cli.json' -Raw | ConvertFrom-Json
     if (-not $updatePayload.ok) { throw "update cli failed: $($updatePayload.summary)" }
@@ -215,11 +270,11 @@ $overallOk = -not (@($scenarioReports | Where-Object { -not $_.ok }).Count)
 $evidence | ConvertTo-Json -Depth 12 | Out-File -Encoding utf8 $evidencePath
 [ordered]@{
   schema_version = 1
-  suite_id = 'release'
+  suite_id = $SuiteId
   target_id = 'windows-amd64-msys2-clang64'
-  runner_id = 'otvm-lease'
+  runner_id = $RunnerId
   release_under_test = [ordered]@{
-    source = 'final-staged-0.1.0-25342971361'
+    source = $ReleaseSource
     old_manifest = $oldManifest
     new_manifest = $newManifest
   }
