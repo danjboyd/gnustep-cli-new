@@ -12,7 +12,7 @@ on:
         required: true
         default: assemble-msys2
       toolchain_zip_url:
-        description: Existing Windows toolchain zip URL when toolchain_source is existing-zip
+        description: Existing Windows toolchain zip URL when toolchain_source is existing-zip; its bytes are published unchanged under this run's version label
         required: false
       toolchain_zip_sha256:
         description: SHA256 for existing Windows toolchain zip
@@ -121,7 +121,12 @@ jobs:
           $cliZip = Join-Path $env:OUTPUT_ROOT "gnustep-cli-windows-amd64-msys2-clang64-$version.zip"
           $toolchainZip = Join-Path $env:OUTPUT_ROOT "gnustep-toolchain-windows-amd64-msys2-clang64-$version.zip"
           Compress-Archive -Path (Join-Path $cliRoot '*') -DestinationPath $cliZip -Force
-          Compress-Archive -Path (Join-Path $env:TOOLCHAIN_ROOT '*') -DestinationPath $toolchainZip -Force
+          if ('${{ inputs.toolchain_source }}' -eq 'existing-zip') {
+            # Keep the verified input zip byte for byte; re-zipping changes its sha256.
+            Copy-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'windows-toolchain.zip') -Destination $toolchainZip -Force
+          } else {
+            Compress-Archive -Path (Join-Path $env:TOOLCHAIN_ROOT '*') -DestinationPath $toolchainZip -Force
+          }
           $sourceRevision = (git rev-parse HEAD).Trim()
           $marker = [ordered]@{
             schema_version = 1

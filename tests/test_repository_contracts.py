@@ -385,6 +385,8 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("resolve-msys2", content)
         self.assertIn("gnustep-windows-msys2-resolve", content)
         self.assertIn("GNUSTEP_CLI_VERSION=${{ inputs.version }}", content)
+        # A reused toolchain zip is copied, not re-compressed, so its digest is kept.
+        self.assertIn("Copy-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'windows-toolchain.zip') -Destination $toolchainZip", content)
 
     def test_linux_current_source_artifacts_workflow_exists(self):
         workflow = ROOT / ".github" / "workflows" / "linux-current-source-artifacts.yml"
