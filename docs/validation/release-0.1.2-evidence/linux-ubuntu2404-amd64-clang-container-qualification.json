@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "kind": "linux-container-qualification",
+  "mode": "pre-publication",
+  "bootstrap_url": null,
+  "target_id": "linux-ubuntu2404-amd64-clang",
+  "version": "0.1.2",
+  "ok": true,
+  "evidence_tier": "github-actions-container",
+  "evidence_tier_note": "Clean container of the target distro release on a GitHub-hosted runner: real distro userland and package archive, but the runner's kernel, not a VM or physical host.",
+  "host": {
+    "distribution": "Ubuntu 24.04.5 LTS",
+    "os_version": "ubuntu-24.04",
+    "kernel": "6.17.0-1022-azure",
+    "glibc": "2.39",
+    "expected_icu_major": 74,
+    "container": true
+  },
+  "artifacts": {
+    "gnustep-toolchain-linux-ubuntu2404-amd64-clang-0.1.2.tar.gz": "e2430e584d5d7b191a3d2253ba0b8c3c11f26eb700fa34b5bc33d3a6770ac438",
+    "gnustep-cli-linux-ubuntu2404-amd64-clang-0.1.2.tar.gz": "13a1b019d2531f939016d0b06dc54a61714cab2edbc3b90e475a7eaa5df9400c"
+  },
+  "results": {
+    "soname_check": "passed",
+    "bootstrap_setup": "passed",
+    "cli_version": "passed",
+    "cli_help": "passed",
+    "doctor": "passed",
+    "new_build_run": "passed",
+    "foundation_probe": "passed",
+    "package_install_remove": "passed"
+  },
+  "step_exit_codes": {
+    "setup": "0",
+    "version": "0",
+    "help": "0",
+    "doctor": "0",
+    "doctor_default": "0",
+    "new": "0",
+    "build": "0",
+    "run": "0",
+    "probe": "0",
+    "package_smoke": "0"
+  },
+  "evidence": {
+    "soname_check": [
+      "== gnustep-toolchain-linux-ubuntu2404-amd64-clang-0.1.2.tar.gz",
+      "ok: no bundled libc/libm/loader/libstdc++/libgcc_s/non-ICU-74 libraries",
+      "icu_needed: libicudata.so.74 libicui18n.so.74 libicuuc.so.74",
+      "max_glibc_symbol: GLIBC_2.38",
+      "== gnustep-cli-linux-ubuntu2404-amd64-clang-0.1.2.tar.gz",
+      "ok: no bundled libc/libm/loader/libstdc++/libgcc_s/non-ICU-74 libraries",
+      "icu_needed: ",
+      "max_glibc_symbol: GLIBC_2.34"
+    ],
+    "cli_version_stdout": "0.1.2",
+    "setup_selected_artifacts": [
+      "cli-linux-ubuntu2404-amd64-clang",
+      "toolchain-linux-ubuntu2404-amd64-clang"
+    ],
+    "doctor_status": "ok",
+    "doctor_environment_classification": "toolchain_compatible",
+    "doctor_default_manifest_status": "ok",
+    "doctor_default_manifest_classification": "toolchain_compatible",
+    "run_stdout": "Hello from CLI tool",
+    "probe_runtime_resolution": [
+      "libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f21c488b000)",
+      "libicui18n.so.74 => /lib/x86_64-linux-gnu/libicui18n.so.74 (0x00007f21c3f82000)",
+      "libicuuc.so.74 => /lib/x86_64-linux-gnu/libicuuc.so.74 (0x00007f21c3d75000)",
+      "libicudata.so.74 => /lib/x86_64-linux-gnu/libicudata.so.74 (0x00007f21c2015000)"
+    ],
+    "package_smoke": [
+      "installed_path=packages/org.gnustep.qualify-demo/bin/gnustep-qualify-demo"
+    ]
+  }
+}
