@@ -154,13 +154,24 @@ function Get-Sha256 {
     return (Get-FileHash -Algorithm SHA256 -Path $Path).Hash.ToLowerInvariant()
 }
 
+function Get-WindowsTarPath {
+    # Prefer the Windows bsdtar: an MSYS2 GNU tar earlier on PATH reads "D:" as a remote host.
+    if ($env:SystemRoot) {
+        $systemTar = Join-Path $env:SystemRoot "System32\tar.exe"
+        if (Test-Path -LiteralPath $systemTar) {
+            return $systemTar
+        }
+    }
+    return "tar"
+}
+
 function Expand-Artifact {
     param([string]$ArchivePath, [string]$Destination)
     Write-TraceEvent "extract.start" "$ArchivePath -> $Destination"
     New-Item -ItemType Directory -Force -Path $Destination | Out-Null
     if ($ArchivePath.ToLowerInvariant().EndsWith(".zip")) {
         if ($Script:IsWindowsHost) {
-            tar -xf $ArchivePath -C $Destination
+            & (Get-WindowsTarPath) -xf $ArchivePath -C $Destination
             if ($LASTEXITCODE -ne 0) {
                 throw "Failed to extract $ArchivePath"
             }
@@ -196,7 +207,8 @@ function Expand-Artifact {
         }
     }
     else {
-        tar -xzf $ArchivePath -C $Destination
+        $tarPath = if ($Script:IsWindowsHost) { Get-WindowsTarPath } else { "tar" }
+        & $tarPath -xzf $ArchivePath -C $Destination
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to extract $ArchivePath"
         }
@@ -275,7 +287,12 @@ function Copy-TreeContentsWindows {
         }
         $sourceFull = [System.IO.Path]::GetFullPath($copySource).TrimEnd('\')
         $destinationFull = [System.IO.Path]::GetFullPath($Destination).TrimEnd('\')
-        $command = 'tar -cf - -C "' + $sourceFull + '" . | tar -xf - -C "' + $destinationFull + '"'
+        # Left unquoted: cmd.exe /c strips the outer quotes when a command line starts with one.
+        $tarPath = Get-WindowsTarPath
+        if ($tarPath.Contains(" ")) {
+            $tarPath = "tar"
+        }
+        $command = $tarPath + ' -cf - -C "' + $sourceFull + '" . | ' + $tarPath + ' -xf - -C "' + $destinationFull + '"'
         cmd.exe /d /c $command | Out-Null
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to copy $Source to $Destination with tar pipeline exit code $LASTEXITCODE."
