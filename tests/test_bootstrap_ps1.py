@@ -13,9 +13,17 @@ BOOTSTRAP = ROOT / "scripts" / "bootstrap" / "gnustep-bootstrap.ps1"
 
 
 class BootstrapPowerShellTests(unittest.TestCase):
-    def run_script(self, *args):
+    def run_script(self, *args, verify_signatures=False, trust_root=None):
         env = os.environ.copy()
         env["GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE"] = "1"
+        # Most fixtures are unsigned; the signature tests opt back in.
+        env.pop("RELEASE_TRUST_ROOT", None)
+        if verify_signatures:
+            env.pop("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED", None)
+        else:
+            env["GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED"] = "1"
+        if trust_root is not None:
+            env["RELEASE_TRUST_ROOT"] = str(trust_root)
         shell = shutil.which("pwsh") or shutil.which("powershell.exe") or shutil.which("powershell")
         if shell is None:
             self.skipTest("PowerShell is not available")
@@ -245,6 +253,95 @@ class BootstrapPowerShellTests(unittest.TestCase):
             self.assertIn('"step":"setup.start"', trace)
             self.assertIn('"step":"install.state.complete"', trace)
             self.assertIn('"step":"setup.success"', trace)
+
+
+
+    # --- release-manifest signature verification ---------------------------
+
+    def _signed_manifest(self, directory, *, sign=True, tamper=False, key_type="ec"):
+        if shutil.which("openssl") is None:
+            self.skipTest("openssl not available")
+        manifest = directory / "release-manifest.json"
+        manifest.write_text(json.dumps({"schema_version": 1, "releases": [
+            {"version": "0.1.3-test", "artifacts": []}]}, indent=2) + "\n")
+        public_key = directory / "trust.pub.pem"
+        if sign:
+            key = directory / "key.pem"
+            if key_type == "ec":
+                generate = ["openssl", "genpkey", "-algorithm", "EC", "-pkeyopt", "ec_paramgen_curve:P-256", "-out", str(key)]
+            else:
+                generate = ["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(key)]
+            subprocess.run(generate, check=True, capture_output=True)
+            subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(key), "-out", f"{manifest}.sig", str(manifest)],
+                           check=True, capture_output=True)
+            subprocess.run(["openssl", "pkey", "-in", str(key), "-pubout", "-out", str(public_key)],
+                           check=True, capture_output=True)
+        if tamper:
+            manifest.write_text(manifest.read_text().replace("0.1.3-test", "9.9.9-evil"))
+        return manifest, public_key
+
+    def _setup_trust(self, manifest, **kwargs):
+        proc = self.run_script("--json", "setup", "--root", str(manifest.parent / "root"),
+                               "--manifest", str(manifest), **kwargs)
+        return proc, json.loads(proc.stdout)
+
+    def test_setup_refuses_unsigned_manifest(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tempdir:
+            manifest, _ = self._signed_manifest(Path(tempdir), sign=False)
+            proc, payload = self._setup_trust(manifest, verify_signatures=True)
+            self.assertEqual(proc.returncode, 1)
+            self.assertFalse(payload["trust"]["verified"])
+            self.assertIn("not signed", payload["trust"]["reason"])
+            self.assertEqual(payload["actions"][0]["kind"], "verify_release_signature")
+
+    def test_setup_refuses_tampered_manifest(self):
+        for key_type in ("ec", "rsa"):
+            with self.subTest(key_type=key_type), tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tempdir:
+                manifest, public_key = self._signed_manifest(Path(tempdir), tamper=True, key_type=key_type)
+                proc, payload = self._setup_trust(manifest, verify_signatures=True, trust_root=public_key)
+                self.assertEqual(proc.returncode, 1)
+                self.assertIn("did not verify", payload["trust"]["reason"])
+
+    def test_setup_accepts_signed_manifest_with_trust_root(self):
+        for key_type in ("ec", "rsa"):
+            with self.subTest(key_type=key_type), tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tempdir:
+                manifest, public_key = self._signed_manifest(Path(tempdir), key_type=key_type)
+                proc, payload = self._setup_trust(manifest, verify_signatures=True, trust_root=public_key)
+                # Trust passes, so setup gets as far as artifact selection.
+                self.assertNotIn("trust", payload)
+                self.assertIn("No matching release artifacts", payload["summary"])
+
+    def test_signed_manifest_fails_against_pinned_key(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tempdir:
+            manifest, _ = self._signed_manifest(Path(tempdir))
+            proc, payload = self._setup_trust(manifest, verify_signatures=True)
+            self.assertEqual(proc.returncode, 1)
+            self.assertIn("did not verify", payload["trust"]["reason"])
+
+    def test_allow_unsigned_option_skips_verification(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tempdir:
+            manifest, _ = self._signed_manifest(Path(tempdir), sign=False)
+            proc = self.run_script("--json", "setup", "--allow-unsigned", "--root", str(Path(tempdir) / "root"),
+                                   "--manifest", str(manifest), verify_signatures=True)
+            self.assertNotIn("trust", json.loads(proc.stdout))
+            self.assertIn("verification skipped", proc.stderr)
+
+    def test_pinned_trust_roots_match_posix_bootstrap(self):
+        import re
+        sh = (ROOT / "scripts" / "bootstrap" / "gnustep-bootstrap.sh").read_text()
+        ps1 = BOOTSTRAP.read_text()
+        pem = re.compile(r"-----BEGIN PUBLIC KEY-----.*?-----END PUBLIC KEY-----", re.S)
+        self.assertEqual(pem.findall(sh), pem.findall(ps1))
+        self.assertEqual(len(pem.findall(ps1)), 2)
+
+    def test_missing_local_manifest_reports_json_error(self):
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tempdir:
+            proc = self.run_script("--json", "setup", "--root", str(Path(tempdir) / "root"),
+                                   "--manifest", str(Path(tempdir) / "missing" / "release-manifest.json"))
+            payload = json.loads(proc.stdout)
+            self.assertEqual(proc.returncode, 1)
+            self.assertFalse(payload["ok"])
+            self.assertIn("not found", payload["summary"])
 
 
 if __name__ == "__main__":

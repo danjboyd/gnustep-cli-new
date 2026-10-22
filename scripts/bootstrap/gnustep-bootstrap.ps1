@@ -14,6 +14,31 @@ $Script:DogfoodManifestUrl = if ($env:DOGFOOD_MANIFEST_URL) { $env:DOGFOOD_MANIF
 $Script:DogfoodMode = $false
 $Script:TracePath = $env:GNUSTEP_BOOTSTRAP_TRACE
 $Script:IsWindowsHost = $env:OS -eq "Windows_NT"
+$Script:AllowUnsigned = $env:GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED -eq "1"
+$Script:TrustFailureReason = $null
+# Pinned release-manifest trust roots; keep in sync with gnustep-bootstrap.sh.
+$Script:ProductionTrustRootPem = @"
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAp8xT2pS/hozuvG+IvUOt
+5btJ+iuedUNysW37vWTLwPpRBAuX3Hra61ZChAWo0DiTGU+ka6IuxMgpNLAOLglr
+E5COu1YHwJsm5u+yJ9ujLVQVWP4zhAhJmC7+MAK2wbg3HK1cT8UMBaWZkkELLe3t
+1uFGGVqtr5R/HZmoI6KowBTYC8l6unD6N8GRq6Y59Xq6oHlVe2UekWeBtwKDtFRk
+jTuGq+ctl8pxe8tXxIB/fEBT/UcOY+ZPQxdNCF6IbfSJGBFltSbUleuYl8LEH+ys
+z1rf/W/l/owwryvGgH0FzsYOzQnK2BxX03tSshKT5EPpvxsOQ//xCCFcRhejmnkY
+UwIDAQAB
+-----END PUBLIC KEY-----
+"@
+$Script:DogfoodTrustRootPem = @"
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApqGh2TATl3jFarwQQ/9O
+au+YSXOTgKsP/vrWmYdQ7fIplJqP/Zci+L1OLYu6K6MPsFfwFSxYNTfvXSNnEVVS
+x1nI6+sbdQGeWkzhWeYC7iCgxvLmLwkTYC2aiquZ0bG3iWWbIox3VTKMASU8+0Mq
+UDncWa8IkoFOg9uu/mhDABbnzjwuTxHR6BAVQKN7/yT0gIDL313+fD6WX0ZPE177
+wrT8s8k8u8TQif1A9sonvuPj4nriLzlO+FR6S4Kpdz8VILnUk0FyK4toiCAISO/8
+e6doSwUJjNockivsbU5JhVUwvoUJUb+ubbuEWKUc8UNDjLqmF0vfmtait/Yy7LRm
+cwIDAQAB
+-----END PUBLIC KEY-----
+"@
 
 
 function Write-SetupProgress {
@@ -109,6 +134,157 @@ function Write-TraceEvent {
     }
 }
 
+function Get-ByteRange {
+    param([byte[]]$Bytes, [int]$Start, [int]$Length)
+    $result = New-Object byte[] $Length
+    if ($Length -gt 0) {
+        [Array]::Copy($Bytes, $Start, $result, 0, $Length)
+    }
+    return ,$result
+}
+
+function Read-DerElement {
+    param([byte[]]$Bytes, [int]$Offset)
+    if ($Offset + 2 -gt $Bytes.Length) { throw "Truncated DER element." }
+    $length = [int]$Bytes[$Offset + 1]
+    $headerLength = 2
+    if ($length -band 0x80) {
+        $count = $length -band 0x7f
+        if ($count -lt 1 -or $count -gt 4) { throw "Unsupported DER length encoding." }
+        $length = 0
+        for ($i = 0; $i -lt $count; $i++) {
+            $length = ($length * 256) + [int]$Bytes[$Offset + 2 + $i]
+        }
+        $headerLength = 2 + $count
+    }
+    $start = $Offset + $headerLength
+    if ($start + $length -gt $Bytes.Length) { throw "Truncated DER element." }
+    return @{ tag = [int]$Bytes[$Offset]; start = $start; length = $length; end = $start + $length }
+}
+
+function ConvertTo-UnsignedBytes {
+    param([byte[]]$Bytes, [int]$Size = 0)
+    $index = 0
+    while ($index -lt $Bytes.Length - 1 -and $Bytes[$index] -eq 0) { $index++ }
+    $trimmed = Get-ByteRange $Bytes $index ($Bytes.Length - $index)
+    if ($Size -le 0) { return ,$trimmed }
+    if ($trimmed.Length -gt $Size) { throw "Signature integer is larger than $Size bytes." }
+    $padded = New-Object byte[] $Size
+    [Array]::Copy($trimmed, 0, $padded, $Size - $trimmed.Length, $trimmed.Length)
+    return ,$padded
+}
+
+# Verify an OpenSSL `dgst -sha256 -sign` signature with a PEM SubjectPublicKeyInfo
+# key: RSA (PKCS#1 v1.5) or P-256 ECDSA (DER signature). Uses only APIs present
+# in both Windows PowerShell 5.1 (.NET Framework 4.7+) and PowerShell 7.
+function Test-DataSignature {
+    param([byte[]]$Data, [byte[]]$Signature, [string]$PublicKeyPem)
+    $base64 = ($PublicKeyPem -replace '-----[A-Z ]+-----', '') -replace '\s', ''
+    $der = [Convert]::FromBase64String($base64)
+    $spki = Read-DerElement $der 0
+    $algorithm = Read-DerElement $der $spki.start
+    $oid = Read-DerElement $der $algorithm.start
+    $oidHex = [BitConverter]::ToString((Get-ByteRange $der $oid.start $oid.length))
+    $bitString = Read-DerElement $der $algorithm.end
+    $key = Get-ByteRange $der ($bitString.start + 1) ($bitString.length - 1)
+    $sha256 = [System.Security.Cryptography.HashAlgorithmName]::SHA256
+    if ($oidHex -eq "2A-86-48-86-F7-0D-01-01-01") {
+        $sequence = Read-DerElement $key 0
+        $modulus = Read-DerElement $key $sequence.start
+        $exponent = Read-DerElement $key $modulus.end
+        $parameters = New-Object System.Security.Cryptography.RSAParameters
+        $parameters.Modulus = ConvertTo-UnsignedBytes (Get-ByteRange $key $modulus.start $modulus.length)
+        $parameters.Exponent = ConvertTo-UnsignedBytes (Get-ByteRange $key $exponent.start $exponent.length)
+        $rsa = [System.Security.Cryptography.RSA]::Create()
+        try {
+            $rsa.ImportParameters($parameters)
+            return $rsa.VerifyData($Data, $Signature, $sha256, [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+        }
+        finally {
+            $rsa.Dispose()
+        }
+    }
+    if ($oidHex -eq "2A-86-48-CE-3D-02-01") {
+        $curve = Read-DerElement $der $oid.end
+        $curveHex = [BitConverter]::ToString((Get-ByteRange $der $curve.start $curve.length))
+        if ($curveHex -ne "2A-86-48-CE-3D-03-01-07" -or $key.Length -ne 65 -or $key[0] -ne 4) {
+            throw "Unsupported elliptic-curve trust root; only uncompressed P-256 keys are supported."
+        }
+        $point = New-Object System.Security.Cryptography.ECPoint
+        $point.X = Get-ByteRange $key 1 32
+        $point.Y = Get-ByteRange $key 33 32
+        $parameters = New-Object System.Security.Cryptography.ECParameters
+        $parameters.Curve = [System.Security.Cryptography.ECCurve+NamedCurves]::nistP256
+        $parameters.Q = $point
+        $sequence = Read-DerElement $Signature 0
+        $r = Read-DerElement $Signature $sequence.start
+        $s = Read-DerElement $Signature $r.end
+        $raw = (ConvertTo-UnsignedBytes (Get-ByteRange $Signature $r.start $r.length) 32) + (ConvertTo-UnsignedBytes (Get-ByteRange $Signature $s.start $s.length) 32)
+        $ecdsa = [System.Security.Cryptography.ECDsa]::Create($parameters)
+        try {
+            return $ecdsa.VerifyData($Data, [byte[]]$raw, $sha256)
+        }
+        finally {
+            $ecdsa.Dispose()
+        }
+    }
+    throw "Unsupported trust root key type."
+}
+
+function Get-PinnedTrustRootPem {
+    # Dogfood mode and pre-release (-dev/-dogfood) versions fetch dev-key-signed
+    # manifests; release versions fetch the production-key-signed manifest.
+    if ($Script:DogfoodMode -or $Script:CliVersion -match '-(dev|dogfood)') {
+        return $Script:DogfoodTrustRootPem
+    }
+    return $Script:ProductionTrustRootPem
+}
+
+function Assert-ManifestSignature {
+    param([string]$ManifestPath, [string]$ManifestSource)
+    $Script:TrustFailureReason = $null
+    if ($Script:AllowUnsigned) {
+        [Console]::Error.WriteLine("setup: warning: release signature verification skipped (--allow-unsigned)")
+        return
+    }
+    $signaturePath = $null
+    if ($ManifestSource -match '^https?://') {
+        $signaturePath = "$ManifestPath.sig"
+        try {
+            Save-UrlToFile -Url "$ManifestSource.sig" -OutFile $signaturePath -Label "release manifest signature"
+        }
+        catch {
+            $signaturePath = $null
+        }
+    }
+    elseif (Test-Path -LiteralPath "$ManifestPath.sig") {
+        $signaturePath = "$ManifestPath.sig"
+    }
+    if (-not $signaturePath -or -not (Test-Path -LiteralPath $signaturePath)) {
+        $Script:TrustFailureReason = "the release manifest is not signed (no release-manifest.json.sig); refusing to trust unsigned release metadata"
+        throw "The release manifest signature could not be verified."
+    }
+    $trustRootPem = $null
+    if ($env:RELEASE_TRUST_ROOT -and (Test-Path -LiteralPath $env:RELEASE_TRUST_ROOT)) {
+        $trustRootPem = Get-Content -Raw -LiteralPath $env:RELEASE_TRUST_ROOT
+    }
+    else {
+        $trustRootPem = Get-PinnedTrustRootPem
+    }
+    $verified = $false
+    try {
+        $verified = Test-DataSignature -Data ([System.IO.File]::ReadAllBytes($ManifestPath)) -Signature ([System.IO.File]::ReadAllBytes($signaturePath)) -PublicKeyPem $trustRootPem
+    }
+    catch {
+        $verified = $false
+    }
+    if (-not $verified) {
+        $Script:TrustFailureReason = "the release manifest signature did not verify against the pinned trusted key"
+        throw "The release manifest signature could not be verified."
+    }
+    Write-TraceEvent "manifest.signature.verified" $signaturePath
+}
+
 function Get-ManifestObject {
     param([string]$ManifestSource)
     Write-TraceEvent "manifest.start" $ManifestSource
@@ -128,9 +304,13 @@ function Get-ManifestObject {
         Write-TraceEvent "manifest.downloaded" $manifestPath
     }
     else {
-        $manifestPath = (Resolve-Path $ManifestSource).Path
+        if (-not (Test-Path -LiteralPath $ManifestSource)) {
+            throw "The release manifest was not found: $ManifestSource"
+        }
+        $manifestPath = (Resolve-Path -LiteralPath $ManifestSource).Path
         Write-TraceEvent "manifest.local" $manifestPath
     }
+    Assert-ManifestSignature -ManifestPath $manifestPath -ManifestSource $ManifestSource
     Write-TraceEvent "manifest.loaded" $manifestPath
     return @{
         path = $manifestPath
@@ -551,6 +731,7 @@ foreach ($arg in $ArgsList) {
         "--system" { $Script:SetupScope = "system" }
         "--user" { $Script:SetupScope = "user" }
         "--manifest" { }
+        "--allow-unsigned" { $Script:AllowUnsigned = $true }
         default {
             if ($arg.StartsWith("--")) {
                 if ($arg -eq "--root" -or $arg -eq "--manifest" -or $arg -eq "--trace") {
@@ -894,6 +1075,40 @@ switch ($command) {
             exit 0
         }
         catch {
+            if ($Script:TrustFailureReason) {
+                Write-TraceEvent "setup.error" $Script:TrustFailureReason
+                if ($Script:JsonMode) {
+                    Write-JsonObject @{
+                        schema_version = 1
+                        command = "setup"
+                        cli_version = $Script:CliVersion
+                        ok = $false
+                        status = "error"
+                        summary = "The release manifest signature could not be verified."
+                        doctor = @{
+                            status = "error"
+                            environment_classification = "no_toolchain"
+                            summary = "Release metadata authenticity could not be established."
+                            os = "windows"
+                        }
+                        plan = @{
+                            scope = $Script:SetupScope
+                            install_root = $selectedRoot
+                            channel = "stable"
+                            selected_release = $null
+                            selected_artifacts = @()
+                            system_privileges_ok = $true
+                        }
+                        trust = @{ verified = $false; reason = $Script:TrustFailureReason }
+                        actions = @(@{ kind = "verify_release_signature"; priority = 1; message = $Script:TrustFailureReason })
+                    }
+                }
+                else {
+                    [Console]::Error.WriteLine("setup: refusing to install: $($Script:TrustFailureReason)")
+                    [Console]::Error.WriteLine("next: Use a signed release, set RELEASE_TRUST_ROOT to the correct pinned key, or rerun with --allow-unsigned.")
+                }
+                exit 1
+            }
             if ($Script:JsonMode) {
                 Write-JsonObject @{
                     schema_version = 1
