@@ -391,6 +391,11 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("GNUSTEP_CLI_VERSION=${{ inputs.version }}", content)
         # A reused toolchain zip is copied, not re-compressed, so its digest is kept.
         self.assertIn("Copy-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'windows-toolchain.zip') -Destination $toolchainZip", content)
+        # The pacman keyring is not shipped, and a toolchain zip (assembled or
+        # reused) carrying keyring secrets fails the build.
+        self.assertIn("'etc\\pacman.d\\gnupg'", content)
+        self.assertLess(content.index("'etc\\pacman.d\\gnupg'"), content.index("Compress-Archive -Path (Join-Path $env:TOOLCHAIN_ROOT '*')"))
+        self.assertIn("Toolchain zip contains private key material", content)
 
     def test_linux_current_source_artifacts_workflow_exists(self):
         workflow = ROOT / ".github" / "workflows" / "linux-current-source-artifacts.yml"
