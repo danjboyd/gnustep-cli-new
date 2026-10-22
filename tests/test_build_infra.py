@@ -707,6 +707,38 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("prebuilt-cli/bin/gnustep", names)
             self.assertNotIn("prebuilt-cli.tar.gz", "\n".join(names))
 
+    def test_stage_release_assets_records_toolchain_metadata_from_archive_inputs(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            toolchain_root = temp / "toolchain-root"
+            toolchain_root.mkdir()
+            (toolchain_root / "source-lock.json").write_text('{"lock": 1}\n')
+            (toolchain_root / "component-inventory.json").write_text('{"inventory": 1}\n')
+            (toolchain_root / "lib").mkdir()
+            (toolchain_root / "lib" / "toolchain-manifest.json").write_text("nested, not the root manifest")
+            toolchain_archive = temp / "toolchain.tar.gz"
+            with tarfile.open(toolchain_archive, "w:gz") as archive:
+                archive.add(toolchain_root, arcname="toolchain")
+
+            payload = stage_release_assets(
+                "0.1.3",
+                temp / "dist",
+                "https://github.com/danjboyd/gnustep-cli/releases",
+                toolchain_inputs={"linux-amd64-clang": toolchain_archive},
+            )
+            metadata = payload["artifacts"][0]["metadata"]
+            self.assertEqual(metadata["lock_file"], "source-lock.json")
+            self.assertEqual(metadata["component_inventory"], "component-inventory.json")
+            self.assertIsNone(metadata["toolchain_manifest"])
+            self.assertEqual(
+                metadata["file_sha256"]["source-lock.json"],
+                hashlib.sha256(b'{"lock": 1}\n').hexdigest(),
+            )
+            provenance = json.loads((Path(payload["release_dir"]) / "release-provenance.json").read_text())
+            toolchain_entry = next(entry for entry in provenance["artifacts"] if entry["kind"] == "toolchain")
+            self.assertEqual(toolchain_entry["lock_file"], "source-lock.json")
+            self.assertEqual(toolchain_entry["metadata_file_sha256"], metadata["file_sha256"])
+
     def test_stage_release_assets_copies_extensionless_action_archive_inputs_without_wrapping(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp = Path(tempdir)
