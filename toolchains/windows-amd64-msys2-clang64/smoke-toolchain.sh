@@ -7,6 +7,7 @@
 # - clang 23 compiling gnustep-base headers (gnustep/libs-base#807)
 # - python's pyexpat loading its libexpat (xml.etree)
 # - curl with TLS and asynchronous DNS
+# - MSYS perl, which v0.1.1 dropped (Arlen's test helpers use it)
 set -euo pipefail
 
 root=${1:?usage: smoke-toolchain.sh <toolchain-root>}
@@ -67,3 +68,5 @@ for feature in SSL AsynchDNS; do
   esac
 done
 echo "ok: curl with SSL and AsynchDNS ($(curl -V | head -n 1))"
+
+perl -e 'use strict; use warnings; alarm 5; print "ok: perl $^V\n"'
