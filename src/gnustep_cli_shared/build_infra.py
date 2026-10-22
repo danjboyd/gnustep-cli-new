@@ -1934,6 +1934,34 @@ def _archive_file(source_file: Path, archive_path: Path, root_name: str) -> None
         archive.add(source_file, arcname=str(Path(root_name) / source_file.name))
 
 
+def _archive_root_file_digests(archive_path: Path, names: tuple[str, ...]) -> dict[str, str]:
+    """Return sha256 digests of the named files at the top of an artifact's root."""
+
+    def root_name(member_name: str) -> str | None:
+        parts = [part for part in member_name.replace("\\", "/").split("/") if part not in ("", ".")]
+        if len(parts) == 1 or len(parts) == 2:
+            return parts[-1] if parts[-1] in names else None
+        return None
+
+    digests: dict[str, str] = {}
+    if is_zipfile(archive_path):
+        with ZipFile(archive_path) as archive:
+            for info in archive.infolist():
+                name = root_name(info.filename)
+                if name is not None and not info.is_dir() and name not in digests:
+                    digests[name] = hashlib.sha256(archive.read(info)).hexdigest()
+        return digests
+    with tarfile.open(archive_path) as archive:
+        for member in archive:
+            name = root_name(member.name)
+            if name is None or not member.isfile() or name in digests:
+                continue
+            handle = archive.extractfile(member)
+            if handle is not None:
+                digests[name] = hashlib.sha256(handle.read()).hexdigest()
+    return digests
+
+
 def _single_archive_in_directory(source_dir: Path) -> Path | None:
     candidates = [path for path in source_dir.iterdir() if path.is_file() and _is_supported_archive(path)]
     if len(candidates) == 1:
@@ -2946,6 +2974,7 @@ def release_provenance_document(release_dir: str | Path, *, builder_identity: st
             "lock_file": artifact.get("metadata", {}).get("lock_file"),
             "component_inventory": artifact.get("metadata", {}).get("component_inventory"),
             "toolchain_manifest": artifact.get("metadata", {}).get("toolchain_manifest"),
+            "metadata_file_sha256": artifact.get("metadata", {}).get("file_sha256", {}),
         })
     return {
         "schema_version": 1,
@@ -4007,11 +4036,17 @@ def stage_release_assets(
             }
             if kind == "toolchain":
                 lock_file = "source-lock.json" if target["strategy"] == "source-build" else "input-manifest.json"
+                # Read the staged archive so archive inputs (as CI passes them) are covered too.
+                digests = _archive_root_file_digests(
+                    archive_path,
+                    (lock_file, "component-inventory.json", "toolchain-manifest.json", "toolchain-assembly.json"),
+                )
                 artifact["metadata"] = {
-                    "lock_file": lock_file if (source / lock_file).exists() else None,
-                    "component_inventory": "component-inventory.json" if (source / "component-inventory.json").exists() else None,
-                    "toolchain_manifest": "toolchain-manifest.json" if (source / "toolchain-manifest.json").exists() else None,
-                    "assembly_metadata": "toolchain-assembly.json" if (source / "toolchain-assembly.json").exists() else None,
+                    "lock_file": lock_file if lock_file in digests else None,
+                    "component_inventory": "component-inventory.json" if "component-inventory.json" in digests else None,
+                    "toolchain_manifest": "toolchain-manifest.json" if "toolchain-manifest.json" in digests else None,
+                    "assembly_metadata": "toolchain-assembly.json" if "toolchain-assembly.json" in digests else None,
+                    "file_sha256": digests,
                     "source_policy": "source-build" if target["strategy"] == "source-build" else target["strategy"],
                 }
             target_artifacts.append(artifact)
@@ -4558,7 +4593,7 @@ def publish_github_release(
     title = title or f"GNUstep CLI {version}"
     prerelease_args = ["--prerelease"] if channel != "stable" else []
     view_proc = subprocess.run(
-        ["gh", "release", "view", tag, "--repo", repo],
+        ["gh", "release", "view", tag, "--repo", repo, "--json", "assets"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -4569,10 +4604,40 @@ def publish_github_release(
     stderr_parts = []
 
     if view_proc.returncode == 0:
+        # Policy: a published asset is never replaced in place; a fix ships as a
+        # new version or a new asset name. Re-uploading identical bytes (a retried
+        # publish) is skipped, and anything else refuses before any upload.
+        published = {
+            entry.get("name"): entry.get("digest")
+            for entry in json.loads(view_proc.stdout or "{}").get("assets", [])
+        }
+        conflicts = []
+        skipped = []
+        uploads = []
+        for asset in plan["assets"]:
+            name = Path(asset).name
+            if name not in published:
+                uploads.append(asset)
+            elif published[name] == f"sha256:{_sha256(Path(asset))}":
+                skipped.append(name)
+            else:
+                conflicts.append({"name": name, "published_digest": published[name], "local_sha256": _sha256(Path(asset))})
+        plan["skipped_identical_assets"] = skipped
+        if conflicts:
+            plan.update({
+                "ok": False,
+                "status": "error",
+                "summary": "Refusing to replace published release assets in place; ship the fix as a new version or a new asset name.",
+                "conflicting_assets": conflicts,
+                "release_existed": True,
+                "executed_commands": [],
+                "exit_status": 1,
+            })
+            return plan
         edit_command = ["gh", "release", "edit", tag, "--repo", repo, "--title", title, *prerelease_args]
         commands.append(edit_command)
-        for asset in plan["assets"]:
-            commands.append(["gh", "release", "upload", tag, "--repo", repo, "--clobber", asset])
+        for asset in uploads:
+            commands.append(["gh", "release", "upload", tag, "--repo", repo, asset])
     else:
         create_command = list(plan["command_line"])
         commands.append(create_command)

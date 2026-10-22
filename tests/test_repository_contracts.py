@@ -309,7 +309,11 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("runner_id = $RunnerId", content)
         self.assertIn("$env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE = '1'", content)
         self.assertIn("$env:RELEASE_TRUST_ROOT = $fixtureTrustRoot", content)
-        self.assertIn("openssl dgst -sha256 -sign $fixtureKey", content)
+        # Fixtures are signed (without openssl) before the bootstrap step verifies them.
+        self.assertIn("Write-FixtureSignature $fixtureManifest", content)
+        self.assertLess(content.index("$env:RELEASE_TRUST_ROOT = $fixtureTrustRoot"),
+                        content.index("$bootstrapOk = Invoke-SmokeCommand"))
+        self.assertIn("bootstrap accepted a tampered release manifest", content)
         self.assertIn("update cli --check --json --root $root", content)
         self.assertNotIn("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED", content)
         self.assertIn("$_.Path.StartsWith($work, [StringComparison]::OrdinalIgnoreCase)", content)

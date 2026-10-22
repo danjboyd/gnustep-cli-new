@@ -73,6 +73,23 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("checks", payload)
         self.assertIn("actions", payload)
 
+    def test_json_option_is_recognized_after_command(self):
+        proc = self.run_script("doctor", "--json")
+        self.assertIn(proc.returncode, (0, 3))
+        self.assertEqual(json.loads(proc.stdout)["command"], "doctor")
+        proc = self.run_script("doctor", "--yes", "--json")
+        self.assertIn(proc.returncode, (0, 3))
+        self.assertEqual(json.loads(proc.stdout)["command"], "doctor")
+
+    def test_setup_reports_missing_local_manifest_as_json(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            missing = Path(tempdir) / "missing" / "release-manifest.json"
+            proc = self.run_script("--json", "setup", "--root", f"{tempdir}/root", "--manifest", str(missing))
+        self.assertEqual(proc.returncode, 1)
+        payload = json.loads(proc.stdout)
+        self.assertFalse(payload["ok"])
+        self.assertIn("not found", payload["summary"])
+
     def test_doctor_reports_tools_scripts_host_prerequisites(self):
         proc = self.run_script("--json", "doctor")
         self.assertIn(proc.returncode, (0, 3))
@@ -85,12 +102,19 @@ class BootstrapShTests(unittest.TestCase):
             self.assertIn("libcurl4-gnutls-dev", host_prereqs["packages"])
 
     def test_setup_json_shape(self):
-        proc = self.run_script("--json", "setup")
-        self.assertIn(proc.returncode, (0, 3, 4))
+        # A local signed fixture keeps this offline and deterministic; it fails
+        # at artifact selection, after the envelope fields are known.
+        if not self._openssl():
+            self.skipTest("openssl not available")
+        directory, pubkey = self._signed_release_dir(sign=True)
+        proc = self._setup(directory / "release-manifest.json", trust_root=pubkey)
         payload = json.loads(proc.stdout)
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["command"], "setup")
+        self.assertFalse(payload["ok"])
         self.assertIn("summary", payload)
+        self.assertIn("plan", payload)
+        self.assertIn("actions", payload)
 
     # --- release-manifest signature verification ---------------------------
 
@@ -184,6 +208,54 @@ class BootstrapShTests(unittest.TestCase):
         proc = self._setup(directory / "release-manifest.json", "--allow-unsigned")
         self.assertFalse(self._trust_failed(proc))
         self.assertIn("verification skipped", proc.stderr)
+
+    def test_setup_records_artifact_digests_in_cli_state(self):
+        import hashlib
+        import shutil
+        import tarfile
+
+        doctor =json.loads(self.run_script("--json", "doctor").stdout)
+        if doctor["environment"]["os"] != "linux" or doctor["environment"]["platform"] not in {"debian", "ubuntu"}:
+            self.skipTest("managed target mapping exercised on Debian/Ubuntu hosts only")
+        directory = Path(tempfile.mkdtemp(prefix="gnustep-state-test-"))
+        self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+
+        def tarball(name, files):
+            staging = directory / f"{name}-src" / name
+            for relative, text in files.items():
+                path = staging / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+                path.chmod(0o755)
+            archive = directory / f"{name}.tar.gz"
+            with tarfile.open(archive, "w:gz") as handle:
+                handle.add(staging, arcname=name)
+            return archive, hashlib.sha256(archive.read_bytes()).hexdigest()
+
+        cli, cli_sha = tarball("cli", {"bin/gnustep": "#!/bin/sh\necho 0.1.3-test\n"})
+        toolchain, toolchain_sha = tarball("toolchain", {"share/GNUstep/Makefiles/GNUstep.sh": "true\n"})
+        artifacts = []
+        for suffix in ("linux-amd64-clang", "linux-arm64-clang", "linux-ubuntu2404-amd64-clang",
+                       "linux-ubuntu2604-amd64-clang"):
+            artifacts += [
+                {"id": f"cli-{suffix}", "kind": "cli", "published": True,
+                 "url": f"https://example.invalid/{cli.name}", "sha256": cli_sha},
+                {"id": f"toolchain-{suffix}", "kind": "toolchain", "version": "2026.10.17", "published": True,
+                 "url": f"https://example.invalid/{toolchain.name}", "sha256": toolchain_sha},
+            ]
+        manifest = directory / "release-manifest.json"
+        manifest.write_text(json.dumps({"version": "0.1.3-test", "releases": [
+            {"version": "0.1.3-test", "artifacts": artifacts}]}, indent=2) + "\n", encoding="utf-8")
+
+        proc = self._setup(manifest, "--allow-unsigned")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        state = json.loads((directory / "install-root" / "state" / "cli-state.json").read_text())
+        self.assertEqual(state["cli_artifact_sha256"], cli_sha)
+        self.assertEqual(state["toolchain_artifact_sha256"], toolchain_sha)
+        self.assertEqual(state["cli_version"], "0.1.3-test")
+        self.assertEqual(state["toolchain_version"], "2026.10.17")
+        self.assertTrue(state["cli_artifact_id"].startswith("cli-linux-"))
+        self.assertEqual(state["toolchain_artifact_id"], state["cli_artifact_id"].replace("cli-", "toolchain-", 1))
 
 
     def test_bootstrap_knows_ubuntu_distro_scoped_target(self):

@@ -184,7 +184,9 @@ candidate.
   upload 504 after the release already existed. Commit
   `e09f90545d71d48fe37f115f975b5418ce364050` hardened publication by editing
   existing releases and retrying `gh release upload --clobber` one asset at a
-  time; the rerun passed and published the dogfood release.
+  time; the rerun passed and published the dogfood release. (Superseded on
+  October 22, 2026: publication no longer uses `--clobber`; it skips assets
+  already published with identical bytes and refuses to replace any other.)
 - May 4, 2026 production-rehearsal execution:
   the repository now has a non-published stable-channel rehearsal path. Package
   Index run `25337125505` passed with CI-held package-index signing material;

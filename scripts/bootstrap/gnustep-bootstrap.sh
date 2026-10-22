@@ -575,6 +575,23 @@ install_root_writable() {
   [ -w "$candidate" ]
 }
 
+# Report a setup failure after the manifest was selected: JSON on stdout in
+# --json mode, otherwise a message on stderr.
+setup_failure() {
+  summary="$1"
+  next="$2"
+  if [ "${JSON_MODE:-0}" = "1" ]; then
+    summary_json=$(json_escape "$summary")
+    next_json=$(json_escape "$next")
+    cat <<EOF
+{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":false,"status":"error","summary":$summary_json,"doctor":{"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","selected_release":"${release_version:-unknown}","selected_artifacts":[],"system_privileges_ok":true},"actions":[{"kind":"report_bug","priority":1,"message":$next_json}]}
+EOF
+  else
+    printf '%s\n' "setup: $summary" >&2
+    printf '%s\n' "next: $next" >&2
+  fi
+}
+
 perform_setup() {
   selected_scope=${SETUP_SCOPE:-user}
   host_os=$(detect_os)
@@ -680,6 +697,18 @@ EOF
       ;;
     *)
       manifest_path="$manifest_source"
+      if [ ! -f "$manifest_path" ]; then
+        if [ "${JSON_MODE:-0}" = "1" ]; then
+          missing_json=$(json_escape "The release manifest was not found: $manifest_path")
+          cat <<EOF
+{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":false,"status":"error","summary":$missing_json,"doctor":{"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","selected_release":null,"selected_artifacts":[],"system_privileges_ok":true},"actions":[{"kind":"report_bug","priority":1,"message":"Check the --manifest path, then rerun setup."}]}
+EOF
+        else
+          printf '%s\n' "setup: the release manifest was not found: $manifest_path"
+          printf '%s\n' "next: Check the --manifest path, then rerun setup."
+        fi
+        return 1
+      fi
       manifest_dir=$(CDPATH= cd -- "$(dirname "$manifest_path")" && pwd)
       ;;
   esac
@@ -707,6 +736,10 @@ EOF
   cli_sha=$(json_file_value "$manifest_path" "$target_id" "sha256")
   toolchain_url=$(json_file_value "$manifest_path" "$toolchain_id" "url")
   toolchain_sha=$(json_file_value "$manifest_path" "$toolchain_id" "sha256")
+  toolchain_version=$(json_file_value "$manifest_path" "$toolchain_id" "version")
+  if [ -z "$toolchain_version" ]; then
+    toolchain_version="$release_version"
+  fi
 
   if [ "$cli_published" != "true" ] || [ "$toolchain_published" != "true" ]; then
     cli_url=""
@@ -742,18 +775,18 @@ EOF
   if [ -f "$manifest_dir/$(basename "$cli_url")" ]; then
     cp "$manifest_dir/$(basename "$cli_url")" "$cli_file"
   elif ! download_to "$cli_url" "$cli_file"; then
-    printf '%s\n' "setup: failed to download CLI artifact" >&2
+    setup_failure "failed to download the CLI artifact" "Check the manifest's artifact URLs, checksums and network access, then rerun setup."
     return 1
   fi
   if [ -f "$manifest_dir/$(basename "$toolchain_url")" ]; then
     cp "$manifest_dir/$(basename "$toolchain_url")" "$toolchain_file"
   elif ! download_to "$toolchain_url" "$toolchain_file"; then
-    printf '%s\n' "setup: failed to download toolchain artifact" >&2
+    setup_failure "failed to download the toolchain artifact" "Check the manifest's artifact URLs, checksums and network access, then rerun setup."
     return 1
   fi
 
   if [ "$(sha256_file "$cli_file")" != "$cli_sha" ] || [ "$(sha256_file "$toolchain_file")" != "$toolchain_sha" ]; then
-    printf '%s\n' "setup: artifact checksum verification failed" >&2
+    setup_failure "artifact checksum verification failed" "Check the manifest's artifact URLs, checksums and network access, then rerun setup."
     return 1
   fi
 
@@ -774,7 +807,11 @@ EOF
 {
   "schema_version": 1,
   "cli_version": "$release_version",
-  "toolchain_version": "$release_version",
+  "toolchain_version": "$toolchain_version",
+  "cli_artifact_id": "$target_id",
+  "cli_artifact_sha256": "$cli_sha",
+  "toolchain_artifact_id": "$toolchain_id",
+  "toolchain_artifact_sha256": "$toolchain_sha",
   "channel": "$([ "$DOGFOOD_MODE" = "1" ] && printf dogfood || printf stable)",
   "manifest_path": "$manifest_source",
   "packages_version": 1,
@@ -1051,6 +1088,10 @@ shift
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --json)
+      JSON_MODE=1
+      shift
+      ;;
     --system)
       SETUP_SCOPE="system"
       shift

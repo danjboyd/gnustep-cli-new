@@ -117,7 +117,41 @@ foreach ($artifact in $newCliOnly.releases[0].artifacts) {
 $newCliOnly.releases[0].artifacts = @($newArtifacts)
 $newCliOnly | ConvertTo-Json -Depth 12 | Out-File -Encoding utf8 $newCliOnlyManifest
 
+# Bootstrap and update both verify the manifest signature, and the fixture
+# manifests are rewritten copies, so sign them with a throwaway P-256 key and
+# trust only that. .NET does the signing because the host has no openssl until
+# the managed root is installed; the signature is DER-encoded like openssl's.
+function ConvertTo-DerInteger {
+  param([byte[]]$Bytes)
+  $index = 0
+  while ($index -lt $Bytes.Length - 1 -and $Bytes[$index] -eq 0) { $index++ }
+  $value = [byte[]]($Bytes[$index..($Bytes.Length - 1)])
+  if ($value[0] -band 0x80) { $value = [byte[]](@([byte]0) + $value) }
+  return ,([byte[]](@([byte]0x02, [byte]$value.Length) + $value))
+}
+$fixtureSigner = [System.Security.Cryptography.ECDsa]::Create([System.Security.Cryptography.ECCurve+NamedCurves]::nistP256)
+$fixtureQ = $fixtureSigner.ExportParameters($false).Q
+$fixtureSpki = [byte[]](0x30,0x59,0x30,0x13,0x06,0x07,0x2A,0x86,0x48,0xCE,0x3D,0x02,0x01,0x06,0x08,0x2A,0x86,0x48,0xCE,0x3D,0x03,0x01,0x07,0x03,0x42,0x00,0x04) + $fixtureQ.X + $fixtureQ.Y
+$fixtureTrustRoot = Join-Path $work 'fixture-trust-root.pem'
+"-----BEGIN PUBLIC KEY-----`n" + [Convert]::ToBase64String([byte[]]$fixtureSpki, 'InsertLineBreaks') + "`n-----END PUBLIC KEY-----`n" | Set-Content -Encoding ASCII -NoNewline $fixtureTrustRoot
+function Write-FixtureSignature {
+  param([string]$Path)
+  $raw = $fixtureSigner.SignData([System.IO.File]::ReadAllBytes($Path), [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+  $body = (ConvertTo-DerInteger ([byte[]]$raw[0..31])) + (ConvertTo-DerInteger ([byte[]]$raw[32..63]))
+  [System.IO.File]::WriteAllBytes("$Path.sig", [byte[]](@([byte]0x30, [byte]$body.Length) + $body))
+}
+foreach ($fixtureManifest in @($oldFixtureManifest, $newCliOnlyManifest)) { Write-FixtureSignature $fixtureManifest }
+$env:RELEASE_TRUST_ROOT = $fixtureTrustRoot
+
 $bootstrapOk = Invoke-SmokeCommand 'bootstrap-install' {
+  # A tampered manifest must be refused before anything is downloaded.
+  $tamperedDir = Join-Path $work 'tampered-manifest'
+  New-Item -ItemType Directory -Force $tamperedDir | Out-Null
+  $tamperedManifest = Join-Path $tamperedDir 'release-manifest.json'
+  (Get-Content $oldFixtureManifest -Raw).Replace('0.0.9-windows-update-fixture', '9.9.9-tampered') | Set-Content -Encoding UTF8 -NoNewline $tamperedManifest
+  Copy-Item -Force "$oldFixtureManifest.sig" "$tamperedManifest.sig"
+  $tampered = (& $bootstrap --json setup --root (Join-Path $work 'tampered-root') --manifest $tamperedManifest | Out-String) | ConvertFrom-Json
+  if ($tampered.ok -or $tampered.trust.verified -ne $false) { throw "bootstrap accepted a tampered release manifest: $($tampered.summary)" }
   & $bootstrap --json setup --root $root --manifest $oldFixtureManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-setup.json'
   $setup = Get-Content 'C:\gnustep-smoke\full-setup.json' -Raw | ConvertFrom-Json
   if (-not $setup.ok) { throw "bootstrap setup failed: $($setup.summary)" }
@@ -128,7 +162,8 @@ $bootstrapOk = Invoke-SmokeCommand 'bootstrap-install' {
   & $exe --json doctor --manifest $oldFixtureManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-doctor.json'
   $doctor = Get-Content 'C:\gnustep-smoke\full-doctor.json' -Raw | ConvertFrom-Json
   if ($doctor.command -ne 'doctor') { throw 'doctor JSON command metadata was not doctor' }
-  @{ version = (Get-Content 'C:\gnustep-smoke\full-version-before.txt' -Raw).Trim(); doctor_status = $doctor.status }
+  if ($doctor.environment_classification -eq 'toolchain_incompatible') { throw "doctor misclassified the managed toolchain as incompatible: $($doctor.summary)" }
+  @{ version = (Get-Content 'C:\gnustep-smoke\full-version-before.txt' -Raw).Trim(); doctor_status = $doctor.status; doctor_classification = $doctor.environment_classification }
 }
 Add-Scenario 'bootstrap-install-usable-cli' $bootstrapOk @(
   'bootstrap-command-succeeds',
@@ -231,21 +266,6 @@ set DEST=%1
 powershell -NoProfile -Command "Expand-Archive -Force -LiteralPath '%ARCHIVE%' -DestinationPath '%DEST%'"
 '@
     $env:PATH = "$shimDir;$root\usr\bin;$root\bin;$root\clang64\bin;" + $env:PATH
-    # update verifies the manifest signature, and the fixture manifests are
-    # rewritten copies, so sign them with a throwaway key and trust only that.
-    $keyDir = Join-Path $work 'fixture-trust'
-    New-Item -ItemType Directory -Force $keyDir | Out-Null
-    $fixtureKey = Join-Path $keyDir 'fixture-signing-private.pem'
-    $fixtureTrustRoot = Join-Path $keyDir 'fixture-trust-root.pem'
-    & openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out $fixtureKey
-    if ($LASTEXITCODE -ne 0) { throw 'openssl could not generate the fixture signing key' }
-    & openssl pkey -in $fixtureKey -pubout -out $fixtureTrustRoot
-    if ($LASTEXITCODE -ne 0) { throw 'openssl could not derive the fixture trust root' }
-    foreach ($fixtureManifest in @($oldFixtureManifest, $newCliOnlyManifest)) {
-      & openssl dgst -sha256 -sign $fixtureKey -out "$fixtureManifest.sig" $fixtureManifest
-      if ($LASTEXITCODE -ne 0) { throw "openssl could not sign $fixtureManifest" }
-    }
-    $env:RELEASE_TRUST_ROOT = $fixtureTrustRoot
     & $exe update cli --check --json --root $root --manifest $newCliOnlyManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-update-check.json'
     $checkPayload = Get-Content 'C:\gnustep-smoke\full-update-check.json' -Raw | ConvertFrom-Json
     if (-not $checkPayload.ok) { throw "update check failed: $($checkPayload.summary)" }
@@ -254,6 +274,7 @@ powershell -NoProfile -Command "Expand-Archive -Force -LiteralPath '%ARCHIVE%' -
     & $exe update cli --yes --json --root $root --manifest $newCliOnlyManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-update-cli.json'
     $updatePayload = Get-Content 'C:\gnustep-smoke\full-update-cli.json' -Raw | ConvertFrom-Json
     if (-not $updatePayload.ok) { throw "update cli failed: $($updatePayload.summary)" }
+    if ($updatePayload.summary -notlike 'CLI update completed*') { throw "update summary does not describe a CLI-only update: $($updatePayload.summary)" }
     & $exe --version | Out-File -Encoding utf8 'C:\gnustep-smoke\full-version-after.txt'
     @{ update_summary = $updatePayload.summary; version = (Get-Content 'C:\gnustep-smoke\full-version-after.txt' -Raw).Trim() }
   }
