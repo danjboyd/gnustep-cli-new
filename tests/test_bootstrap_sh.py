@@ -102,12 +102,19 @@ class BootstrapShTests(unittest.TestCase):
             self.assertIn("libcurl4-gnutls-dev", host_prereqs["packages"])
 
     def test_setup_json_shape(self):
-        proc = self.run_script("--json", "setup")
-        self.assertIn(proc.returncode, (0, 3, 4))
+        # A local signed fixture keeps this offline and deterministic; it fails
+        # at artifact selection, after the envelope fields are known.
+        if not self._openssl():
+            self.skipTest("openssl not available")
+        directory, pubkey = self._signed_release_dir(sign=True)
+        proc = self._setup(directory / "release-manifest.json", trust_root=pubkey)
         payload = json.loads(proc.stdout)
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["command"], "setup")
+        self.assertFalse(payload["ok"])
         self.assertIn("summary", payload)
+        self.assertIn("plan", payload)
+        self.assertIn("actions", payload)
 
     # --- release-manifest signature verification ---------------------------
 
@@ -233,7 +240,7 @@ class BootstrapShTests(unittest.TestCase):
             artifacts += [
                 {"id": f"cli-{suffix}", "kind": "cli", "published": True,
                  "url": f"https://example.invalid/{cli.name}", "sha256": cli_sha},
-                {"id": f"toolchain-{suffix}", "kind": "toolchain", "published": True,
+                {"id": f"toolchain-{suffix}", "kind": "toolchain", "version": "2026.10.17", "published": True,
                  "url": f"https://example.invalid/{toolchain.name}", "sha256": toolchain_sha},
             ]
         manifest = directory / "release-manifest.json"
@@ -245,6 +252,8 @@ class BootstrapShTests(unittest.TestCase):
         state = json.loads((directory / "install-root" / "state" / "cli-state.json").read_text())
         self.assertEqual(state["cli_artifact_sha256"], cli_sha)
         self.assertEqual(state["toolchain_artifact_sha256"], toolchain_sha)
+        self.assertEqual(state["cli_version"], "0.1.3-test")
+        self.assertEqual(state["toolchain_version"], "2026.10.17")
         self.assertTrue(state["cli_artifact_id"].startswith("cli-linux-"))
         self.assertEqual(state["toolchain_artifact_id"], state["cli_artifact_id"].replace("cli-", "toolchain-", 1))
 
