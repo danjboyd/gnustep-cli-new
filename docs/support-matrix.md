@@ -62,6 +62,13 @@ root. Evidence:
   unless a validated packaged Clang plus `libobjc2` path is proven; fresh
   libvirt host evidence was rerun on April 14, 2026 using the same operator
   keypair
+  GCC fixture: a `debian:13` container with `apt-get install gobjc
+  libgnustep-base-dev gnustep-make` is a cheap GCC/legacy-runtime environment
+  for exercising `doctor`'s GCC classification and the GCC guidance messages
+  (used by Performance Dashboard, October 2026). Keep it separate from managed
+  roots: Debian's GCC `libobjc` and the managed `libobjc2` both use the SONAME
+  `libobjc.so.4`, so a process that can see both library directories may load
+  the wrong runtime.
 - `debian-amd64-managed-clang`
   status: `dogfood_ready_partial`
   notes: Debian libvirt dogfood validation passed on April 16, 2026 against
