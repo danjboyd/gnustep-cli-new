@@ -6379,7 +6379,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                         @"setup", @"command",
                         [NSNumber numberWithBool: (*exitCode == 0)], @"ok",
                         (*exitCode == 0 ? @"ok" : @"error"), @"status",
-                        (downgradeDetected ? @"The selected release manifest is older than the installed CLI." : (updateAvailable ? @"A compatible update is available." : @"The managed install is already current.")), @"summary",
+                        (downgradeDetected ? @"The selected release manifest is older than the installed CLI." : (updateAvailable ? ([layerUpdateKind isEqualToString: @"cli_only"] ? @"A compatible CLI update is available; the managed toolchain is unchanged." : @"A compatible update is available.") : @"The managed install is already current.")), @"summary",
                         @"check_updates", @"operation",
                         expandedRoot, @"install_root",
                         resolvedManifest, @"manifest_path",
@@ -6927,6 +6927,25 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 }
 
 
+- (NSString *)updateCLISummaryForSetupPayload:(NSDictionary *)setupPayload
+{
+  NSArray *installedArtifacts = [[setupPayload objectForKey: @"install"] objectForKey: @"installed_artifacts"];
+  NSUInteger i = 0;
+
+  if ([[setupPayload objectForKey: @"ok"] boolValue] == NO)
+    {
+      return [setupPayload objectForKey: @"summary"];
+    }
+  for (i = 0; i < [installedArtifacts count]; i++)
+    {
+      if ([[[installedArtifacts objectAtIndex: i] objectForKey: @"reused_existing_layer"] boolValue])
+        {
+          return @"CLI update completed; the managed toolchain was unchanged.";
+        }
+    }
+  return @"CLI and toolchain update completed.";
+}
+
 - (NSDictionary *)updatePayloadFromSetupPayload:(NSDictionary *)setupPayload
                                           scope:(NSString *)scope
                                            mode:(NSString *)mode
@@ -7289,7 +7308,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                                scope: @"cli"
                                                 mode: @"apply"
                                            operation: @"update_cli"
-                                             summary: [[setupPayload objectForKey: @"ok"] boolValue] ? @"CLI and toolchain update completed." : [setupPayload objectForKey: @"summary"]];
+                                             summary: [self updateCLISummaryForSetupPayload: setupPayload]];
         }
     }
 

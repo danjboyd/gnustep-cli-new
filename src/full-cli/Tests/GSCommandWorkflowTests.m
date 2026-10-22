@@ -726,6 +726,56 @@
   XCTAssertEqualObjects([payload objectForKey: @"scope"], @"cli");
   XCTAssertEqualObjects([payload objectForKey: @"mode"], @"check");
   XCTAssertTrue([[plan objectForKey: @"update_available"] boolValue]);
+  XCTAssertEqualObjects([plan objectForKey: @"layer_update_kind"], @"toolchain_required");
+  XCTAssertEqualObjects([payload objectForKey: @"summary"], @"A compatible update is available.");
+}
+
+- (void)testUpdateCliCheckSummaryNamesCliOnlyUpdate
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-cli-check-cli-only"];
+  NSString *installRoot = [tempRoot stringByAppendingPathComponent: @"managed-root"];
+  NSString *manifestRoot = [tempRoot stringByAppendingPathComponent: @"manifest"];
+  NSString *statePath = [[installRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+  NSString *manifestPath = nil;
+  GSCommandContext *context = nil;
+  NSDictionary *payload = nil;
+  NSDictionary *plan = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubManagedDoctorPayload]];
+  [self ensureDirectory: [statePath stringByDeletingLastPathComponent]];
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               @"0.0.9", @"cli_version",
+                                               @"0.0.9", @"toolchain_version",
+                                               @"old-cli", @"cli_artifact_sha256",
+                                               @"unused-toolchain", @"toolchain_artifact_sha256",
+                                               @"healthy", @"status",
+                                               nil]
+                       toPath: statePath];
+  manifestPath = [self releaseManifestPathInDirectory: manifestRoot
+                                           cliSHA256: @"unused-cli"
+                                     toolchainSHA256: @"unused-toolchain"
+                                              cliURL: @"file:///unused-cli"
+                                        toolchainURL: @"file:///unused-toolchain"];
+
+  context = [GSCommandContext contextWithArguments:
+                              [NSArray arrayWithObjects:
+                                         @"update",
+                                         @"cli",
+                                         @"--check",
+                                         @"--root",
+                                         installRoot,
+                                         @"--manifest",
+                                         manifestPath,
+                                         nil]];
+  payload = [runner executeUpdateForContext: context exitCode: &exitCode];
+  plan = [[payload objectForKey: @"plan"] objectForKey: @"cli"];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertEqualObjects([plan objectForKey: @"layer_update_kind"], @"cli_only");
+  XCTAssertEqualObjects([payload objectForKey: @"summary"], @"A compatible CLI update is available; the managed toolchain is unchanged.");
 }
 
 
@@ -1101,6 +1151,7 @@
   XCTAssertEqualObjects([payload objectForKey: @"scope"], @"cli");
   XCTAssertEqualObjects([payload objectForKey: @"mode"], @"apply");
   XCTAssertEqualObjects([payload objectForKey: @"operation"], @"update_cli");
+  XCTAssertEqualObjects([payload objectForKey: @"summary"], @"CLI and toolchain update completed.");
   XCTAssertEqualObjects([state objectForKey: @"last_action"], @"upgrade");
   XCTAssertTrue([[[payload objectForKey: @"install"] objectForKey: @"path_hint"] rangeOfString: @"export PATH"].location != NSNotFound);
   XCTAssertEqualObjects([state objectForKey: @"active_release"], @"0.1.0-test");
