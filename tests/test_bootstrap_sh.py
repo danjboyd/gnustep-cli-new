@@ -193,6 +193,52 @@ class BootstrapShTests(unittest.TestCase):
         self.assertFalse(self._trust_failed(proc))
         self.assertIn("verification skipped", proc.stderr)
 
+    def test_setup_records_artifact_digests_in_cli_state(self):
+        import hashlib
+        import shutil
+        import tarfile
+
+        doctor =json.loads(self.run_script("--json", "doctor").stdout)
+        if doctor["environment"]["os"] != "linux" or doctor["environment"]["platform"] not in {"debian", "ubuntu"}:
+            self.skipTest("managed target mapping exercised on Debian/Ubuntu hosts only")
+        directory = Path(tempfile.mkdtemp(prefix="gnustep-state-test-"))
+        self.addCleanup(shutil.rmtree, directory, ignore_errors=True)
+
+        def tarball(name, files):
+            staging = directory / f"{name}-src" / name
+            for relative, text in files.items():
+                path = staging / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(text, encoding="utf-8")
+                path.chmod(0o755)
+            archive = directory / f"{name}.tar.gz"
+            with tarfile.open(archive, "w:gz") as handle:
+                handle.add(staging, arcname=name)
+            return archive, hashlib.sha256(archive.read_bytes()).hexdigest()
+
+        cli, cli_sha = tarball("cli", {"bin/gnustep": "#!/bin/sh\necho 0.1.3-test\n"})
+        toolchain, toolchain_sha = tarball("toolchain", {"share/GNUstep/Makefiles/GNUstep.sh": "true\n"})
+        artifacts = []
+        for suffix in ("linux-amd64-clang", "linux-arm64-clang", "linux-ubuntu2404-amd64-clang",
+                       "linux-ubuntu2604-amd64-clang"):
+            artifacts += [
+                {"id": f"cli-{suffix}", "kind": "cli", "published": True,
+                 "url": f"https://example.invalid/{cli.name}", "sha256": cli_sha},
+                {"id": f"toolchain-{suffix}", "kind": "toolchain", "published": True,
+                 "url": f"https://example.invalid/{toolchain.name}", "sha256": toolchain_sha},
+            ]
+        manifest = directory / "release-manifest.json"
+        manifest.write_text(json.dumps({"version": "0.1.3-test", "releases": [
+            {"version": "0.1.3-test", "artifacts": artifacts}]}, indent=2) + "\n", encoding="utf-8")
+
+        proc = self._setup(manifest, "--allow-unsigned")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        state = json.loads((directory / "install-root" / "state" / "cli-state.json").read_text())
+        self.assertEqual(state["cli_artifact_sha256"], cli_sha)
+        self.assertEqual(state["toolchain_artifact_sha256"], toolchain_sha)
+        self.assertTrue(state["cli_artifact_id"].startswith("cli-linux-"))
+        self.assertEqual(state["toolchain_artifact_id"], state["cli_artifact_id"].replace("cli-", "toolchain-", 1))
+
 
     def test_bootstrap_knows_ubuntu_distro_scoped_target(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")
