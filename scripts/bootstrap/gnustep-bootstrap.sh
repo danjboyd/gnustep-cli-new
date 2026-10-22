@@ -1051,6 +1051,10 @@ shift
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --json)
+      JSON_MODE=1
+      shift
+      ;;
     --system)
       SETUP_SCOPE="system"
       shift

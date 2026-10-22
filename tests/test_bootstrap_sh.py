@@ -73,6 +73,14 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn("checks", payload)
         self.assertIn("actions", payload)
 
+    def test_json_option_is_recognized_after_command(self):
+        proc = self.run_script("doctor", "--json")
+        self.assertIn(proc.returncode, (0, 3))
+        self.assertEqual(json.loads(proc.stdout)["command"], "doctor")
+        proc = self.run_script("doctor", "--yes", "--json")
+        self.assertIn(proc.returncode, (0, 3))
+        self.assertEqual(json.loads(proc.stdout)["command"], "doctor")
+
     def test_doctor_reports_tools_scripts_host_prerequisites(self):
         proc = self.run_script("--json", "doctor")
         self.assertIn(proc.returncode, (0, 3))
