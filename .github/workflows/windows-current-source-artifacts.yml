@@ -125,8 +125,20 @@ jobs:
             # Keep the verified input zip byte for byte; re-zipping changes its sha256.
             Copy-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'windows-toolchain.zip') -Destination $toolchainZip -Force
           } else {
+            # The pacman keyring is per-installation state and is not shipped.
+            # Users who need pacman run `pacman-key --init` and
+            # `pacman-key --populate msys2` in their own root.
+            Remove-Item -Recurse -Force -LiteralPath (Join-Path $env:TOOLCHAIN_ROOT 'etc\pacman.d\gnupg') -ErrorAction SilentlyContinue
             Compress-Archive -Path (Join-Path $env:TOOLCHAIN_ROOT '*') -DestinationPath $toolchainZip -Force
           }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $archive = [System.IO.Compression.ZipFile]::OpenRead($toolchainZip)
+          try {
+            $secret = @($archive.Entries | Where-Object { $_.FullName -match '(^|[\\/])(private-keys-v1\.d[\\/]|secring\.gpg$)' } | ForEach-Object { $_.FullName })
+          } finally {
+            $archive.Dispose()
+          }
+          if ($secret.Count -gt 0) { throw "Toolchain zip contains private key material: $($secret -join ', ')" }
           $sourceRevision = (git rev-parse HEAD).Trim()
           $marker = [ordered]@{
             schema_version = 1
