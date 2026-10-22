@@ -128,7 +128,8 @@ $bootstrapOk = Invoke-SmokeCommand 'bootstrap-install' {
   & $exe --json doctor --manifest $oldFixtureManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-doctor.json'
   $doctor = Get-Content 'C:\gnustep-smoke\full-doctor.json' -Raw | ConvertFrom-Json
   if ($doctor.command -ne 'doctor') { throw 'doctor JSON command metadata was not doctor' }
-  @{ version = (Get-Content 'C:\gnustep-smoke\full-version-before.txt' -Raw).Trim(); doctor_status = $doctor.status }
+  if ($doctor.environment_classification -eq 'toolchain_incompatible') { throw "doctor misclassified the managed toolchain as incompatible: $($doctor.summary)" }
+  @{ version = (Get-Content 'C:\gnustep-smoke\full-version-before.txt' -Raw).Trim(); doctor_status = $doctor.status; doctor_classification = $doctor.environment_classification }
 }
 Add-Scenario 'bootstrap-install-usable-cli' $bootstrapOk @(
   'bootstrap-command-succeeds',
@@ -254,6 +255,7 @@ powershell -NoProfile -Command "Expand-Archive -Force -LiteralPath '%ARCHIVE%' -
     & $exe update cli --yes --json --root $root --manifest $newCliOnlyManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-update-cli.json'
     $updatePayload = Get-Content 'C:\gnustep-smoke\full-update-cli.json' -Raw | ConvertFrom-Json
     if (-not $updatePayload.ok) { throw "update cli failed: $($updatePayload.summary)" }
+    if ($updatePayload.summary -notlike 'CLI update completed*') { throw "update summary does not describe a CLI-only update: $($updatePayload.summary)" }
     & $exe --version | Out-File -Encoding utf8 'C:\gnustep-smoke\full-version-after.txt'
     @{ update_summary = $updatePayload.summary; version = (Get-Content 'C:\gnustep-smoke\full-version-after.txt' -Raw).Trim() }
   }

@@ -3418,7 +3418,25 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   NSDictionary *compiler = nil;
   NSDictionary *probe = nil;
   NSString *compilerFamily = nil;
-  BOOL present = (gnustepConfig != nil || gnustepMakefiles != nil);
+  BOOL present = NO;
+
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  if (windowsManagedHint == NO)
+    {
+      /* A fresh shell may not carry the GNUstep environment yet; fall back to
+         the managed root this executable runs from, as build and run do. */
+      NSString *managedMakefiles = [[self managedChildProcessEnvironment] objectForKey: @"GNUSTEP_MAKEFILES"];
+      if ([managedMakefiles length] > 0 &&
+          [managedMakefiles isEqualToString: gnustepMakefiles] == NO &&
+          [[NSFileManager defaultManager] fileExistsAtPath: managedMakefiles] &&
+          [self hasWindowsManagedToolchainHintWithMakefiles: managedMakefiles])
+        {
+          gnustepMakefiles = managedMakefiles;
+          windowsManagedHint = YES;
+        }
+    }
+#endif
+  present = (gnustepConfig != nil || gnustepMakefiles != nil);
 
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
   if (windowsManagedHint)
