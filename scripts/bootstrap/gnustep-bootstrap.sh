@@ -680,6 +680,18 @@ EOF
       ;;
     *)
       manifest_path="$manifest_source"
+      if [ ! -f "$manifest_path" ]; then
+        if [ "${JSON_MODE:-0}" = "1" ]; then
+          missing_json=$(json_escape "The release manifest was not found: $manifest_path")
+          cat <<EOF
+{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":false,"status":"error","summary":$missing_json,"doctor":{"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","selected_release":null,"selected_artifacts":[],"system_privileges_ok":true},"actions":[{"kind":"report_bug","priority":1,"message":"Check the --manifest path, then rerun setup."}]}
+EOF
+        else
+          printf '%s\n' "setup: the release manifest was not found: $manifest_path"
+          printf '%s\n' "next: Check the --manifest path, then rerun setup."
+        fi
+        return 1
+      fi
       manifest_dir=$(CDPATH= cd -- "$(dirname "$manifest_path")" && pwd)
       ;;
   esac

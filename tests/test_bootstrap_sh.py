@@ -81,6 +81,15 @@ class BootstrapShTests(unittest.TestCase):
         self.assertIn(proc.returncode, (0, 3))
         self.assertEqual(json.loads(proc.stdout)["command"], "doctor")
 
+    def test_setup_reports_missing_local_manifest_as_json(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            missing = Path(tempdir) / "missing" / "release-manifest.json"
+            proc = self.run_script("--json", "setup", "--root", f"{tempdir}/root", "--manifest", str(missing))
+        self.assertEqual(proc.returncode, 1)
+        payload = json.loads(proc.stdout)
+        self.assertFalse(payload["ok"])
+        self.assertIn("not found", payload["summary"])
+
     def test_doctor_reports_tools_scripts_host_prerequisites(self):
         proc = self.run_script("--json", "doctor")
         self.assertIn(proc.returncode, (0, 3))
