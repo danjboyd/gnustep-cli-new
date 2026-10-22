@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "kind": "linux-container-qualification",
+  "mode": "pre-publication",
+  "bootstrap_url": null,
+  "target_id": "linux-arm64-clang",
+  "version": "0.1.3",
+  "ok": true,
+  "evidence_tier": "github-actions-container",
+  "evidence_tier_note": "Clean container of the target distro release on a GitHub-hosted runner: real distro userland and package archive, but the runner's kernel, not a VM or physical host.",
+  "host": {
+    "distribution": "Debian GNU/Linux 13 (trixie)",
+    "os_version": "debian-13",
+    "kernel": "6.17.0-1022-azure",
+    "glibc": "2.41",
+    "expected_icu_major": 76,
+    "container": true
+  },
+  "artifacts": {
+    "gnustep-toolchain-linux-arm64-clang-0.1.3.tar.gz": "0f8593f634f24c6f5ce1785ce43f26b2fca0d5af2ffb34d55f0be09c18444976",
+    "gnustep-cli-linux-arm64-clang-0.1.3.tar.gz": "24b9378ebaab7e074c229393d634209ea74579765715828b7de37d48c8e747fb"
+  },
+  "results": {
+    "soname_check": "passed",
+    "bootstrap_setup": "passed",
+    "cli_version": "passed",
+    "cli_help": "passed",
+    "doctor": "passed",
+    "new_build_run": "passed",
+    "foundation_probe": "passed",
+    "package_install_remove": "passed"
+  },
+  "step_exit_codes": {
+    "setup": "0",
+    "version": "0",
+    "help": "0",
+    "doctor": "0",
+    "doctor_default": "0",
+    "new": "0",
+    "build": "0",
+    "run": "0",
+    "probe": "0",
+    "package_smoke": "0"
+  },
+  "evidence": {
+    "soname_check": [
+      "== gnustep-toolchain-linux-arm64-clang-0.1.3.tar.gz",
+      "ok: no bundled libc/libm/loader/libstdc++/libgcc_s/non-ICU-76 libraries",
+      "icu_needed: libicudata.so.76 libicui18n.so.76 libicuuc.so.76",
+      "max_glibc_symbol: GLIBC_2.38",
+      "== gnustep-cli-linux-arm64-clang-0.1.3.tar.gz",
+      "ok: no bundled libc/libm/loader/libstdc++/libgcc_s/non-ICU-76 libraries",
+      "icu_needed: ",
+      "max_glibc_symbol: GLIBC_2.34"
+    ],
+    "cli_version_stdout": "0.1.3",
+    "setup_selected_artifacts": [
+      "cli-linux-arm64-clang",
+      "toolchain-linux-arm64-clang"
+    ],
+    "doctor_status": "ok",
+    "doctor_environment_classification": "toolchain_compatible",
+    "doctor_default_manifest_status": "ok",
+    "doctor_default_manifest_classification": "toolchain_compatible",
+    "run_stdout": "Hello from CLI tool",
+    "probe_runtime_resolution": [
+      "libc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x0000ff26f61f0000)",
+      "libicui18n.so.76 => /lib/aarch64-linux-gnu/libicui18n.so.76 (0x0000ff26f5730000)",
+      "libicuuc.so.76 => /lib/aarch64-linux-gnu/libicuuc.so.76 (0x0000ff26f54f0000)",
+      "libicudata.so.76 => /lib/aarch64-linux-gnu/libicudata.so.76 (0x0000ff26f3660000)"
+    ],
+    "package_smoke": [
+      "installed_path=packages/org.gnustep.qualify-demo/bin/gnustep-qualify-demo"
+    ]
+  }
+}
