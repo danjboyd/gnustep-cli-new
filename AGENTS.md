@@ -825,6 +825,15 @@
 - Bootstrap and the full CLI should verify integrity metadata before installation.
 - Artifact URLs should be discoverable through the release manifest and package index rather than hardcoded in client logic.
 
+## Immutable Release Assets
+- Never replace a released file in place.
+- Once an asset is published on a release, its bytes are fixed for good: no re-upload, no `--clobber`, no delete-and-reupload under the same name.
+- This covers every asset: CLI and toolchain archives, bootstrap scripts and their `.sha256` files, release manifests, signatures, provenance, package indexes and checksum lists.
+- A fix ships as a new version (for example `v0.1.3`), or as an asset with a new name when only an added file is needed.
+- Downstream projects pin release assets by URL and sha256, so an in-place replacement breaks their verification or silently changes what a pinned URL installs.
+- Release tooling must enforce this: `github-release-publish` refuses to upload an asset whose name already exists on the release unless its published sha256 is identical, which allows retrying a publish.
+- Adopted October 22, 2026. Earlier in-place replacements on `v0.1.0` (October 13 and 15, 2026) predate the policy and are recorded in `docs/release-status.md`.
+
 ## Update and Upgrade Policy
 - The full CLI and managed toolchains should be independently versioned even if `setup` commonly installs them together.
 - Upgrades should consult the signed release manifest and package index rather than relying on implicit latest-version behavior alone.

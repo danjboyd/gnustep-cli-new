@@ -4593,7 +4593,7 @@ def publish_github_release(
     title = title or f"GNUstep CLI {version}"
     prerelease_args = ["--prerelease"] if channel != "stable" else []
     view_proc = subprocess.run(
-        ["gh", "release", "view", tag, "--repo", repo],
+        ["gh", "release", "view", tag, "--repo", repo, "--json", "assets"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -4604,10 +4604,40 @@ def publish_github_release(
     stderr_parts = []
 
     if view_proc.returncode == 0:
+        # Policy: a published asset is never replaced in place; a fix ships as a
+        # new version or a new asset name. Re-uploading identical bytes (a retried
+        # publish) is skipped, and anything else refuses before any upload.
+        published = {
+            entry.get("name"): entry.get("digest")
+            for entry in json.loads(view_proc.stdout or "{}").get("assets", [])
+        }
+        conflicts = []
+        skipped = []
+        uploads = []
+        for asset in plan["assets"]:
+            name = Path(asset).name
+            if name not in published:
+                uploads.append(asset)
+            elif published[name] == f"sha256:{_sha256(Path(asset))}":
+                skipped.append(name)
+            else:
+                conflicts.append({"name": name, "published_digest": published[name], "local_sha256": _sha256(Path(asset))})
+        plan["skipped_identical_assets"] = skipped
+        if conflicts:
+            plan.update({
+                "ok": False,
+                "status": "error",
+                "summary": "Refusing to replace published release assets in place; ship the fix as a new version or a new asset name.",
+                "conflicting_assets": conflicts,
+                "release_existed": True,
+                "executed_commands": [],
+                "exit_status": 1,
+            })
+            return plan
         edit_command = ["gh", "release", "edit", tag, "--repo", repo, "--title", title, *prerelease_args]
         commands.append(edit_command)
-        for asset in plan["assets"]:
-            commands.append(["gh", "release", "upload", tag, "--repo", repo, "--clobber", asset])
+        for asset in uploads:
+            commands.append(["gh", "release", "upload", tag, "--repo", repo, asset])
     else:
         create_command = list(plan["command_line"])
         commands.append(create_command)

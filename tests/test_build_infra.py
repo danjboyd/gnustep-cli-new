@@ -1862,7 +1862,7 @@ class BuildInfraTests(unittest.TestCase):
             (release_dir / "b.tar.gz").write_text("b")
             calls = []
             results = [
-                subprocess.CompletedProcess(["gh", "release", "view"], 0, stdout="exists", stderr=""),
+                subprocess.CompletedProcess(["gh", "release", "view"], 0, stdout='{"assets": []}', stderr=""),
                 subprocess.CompletedProcess(["gh", "release", "edit"], 0, stdout="", stderr=""),
                 subprocess.CompletedProcess(["gh", "release", "upload"], 1, stdout="", stderr="HTTP 504"),
                 subprocess.CompletedProcess(["gh", "release", "upload"], 0, stdout="", stderr=""),
@@ -1882,6 +1882,40 @@ class BuildInfraTests(unittest.TestCase):
             self.assertEqual(len(upload_calls), 3)
             self.assertEqual(upload_calls[0], upload_calls[1])
             self.assertNotEqual(upload_calls[1][-1], upload_calls[2][-1])
+
+    def _publish_against_existing_assets(self, assets):
+        with tempfile.TemporaryDirectory() as tempdir:
+            release_dir = Path(tempdir)
+            (release_dir / "a.tar.gz").write_text("a")
+            (release_dir / "b.tar.gz").write_text("b")
+            calls = []
+
+            def fake_run(command, **kwargs):
+                calls.append(command)
+                if command[:3] == ["gh", "release", "view"]:
+                    return subprocess.CompletedProcess(command, 0, stdout=json.dumps({"assets": assets}), stderr="")
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+            with patch("gnustep_cli_shared.build_infra.subprocess.run", side_effect=fake_run):
+                payload = publish_github_release("danjboyd/gnustep-cli-new", "0.1.0", release_dir)
+        return payload, calls
+
+    def test_publish_github_release_refuses_to_replace_published_assets(self):
+        for digest in ("sha256:" + "0" * 64, None):
+            with self.subTest(digest=digest):
+                payload, calls = self._publish_against_existing_assets([{"name": "a.tar.gz", "digest": digest}])
+                self.assertFalse(payload["ok"])
+                self.assertEqual(payload["conflicting_assets"][0]["name"], "a.tar.gz")
+                self.assertEqual([call[:3] for call in calls], [["gh", "release", "view"]])
+
+    def test_publish_github_release_skips_identical_assets_and_never_clobbers(self):
+        identical = "sha256:" + hashlib.sha256(b"a").hexdigest()
+        payload, calls = self._publish_against_existing_assets([{"name": "a.tar.gz", "digest": identical}])
+        self.assertTrue(payload["ok"], json.dumps(payload, indent=2))
+        self.assertEqual(payload["skipped_identical_assets"], ["a.tar.gz"])
+        uploads = [call for call in calls if call[:3] == ["gh", "release", "upload"]]
+        self.assertEqual([Path(call[-1]).name for call in uploads], ["b.tar.gz"])
+        self.assertTrue(all("--clobber" not in call for call in calls))
 
     def test_prepare_github_release(self):
         with tempfile.TemporaryDirectory() as tempdir:

@@ -3,6 +3,16 @@
 Detailed release, validation, and known-gap notes for maintainers. The
 user-facing overview is in the [README](../README.md).
 
+## Release Asset Policy
+
+Published release assets are immutable (see "Immutable Release Assets" in
+[AGENTS.md](../AGENTS.md); adopted October 22, 2026). A fix ships as a new
+version, or as a new asset name, never by overwriting a published file.
+`github-release-publish` enforces this: it skips assets already published with
+identical bytes and refuses the whole publish if any existing asset would
+change. The October 13 and 15, 2026 replacements on `v0.1.0` listed below
+predate the policy.
+
 ## Current Status
 
 The repository currently contains:
