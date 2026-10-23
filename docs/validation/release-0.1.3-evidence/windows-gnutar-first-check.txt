@@ -1,0 +1,8 @@
+bare tar resolves to: C:\gnustep-smoke\install-full-1792708392\usr\bin\tar.exe (tar (GNU tar) 1.35)
+setup ok=True summary=Managed installation completed.
+gnustep.exe present: True
+perl: v5.42.3
+keyring dir present in installed roots: False / False
+manifest.signature.verified release-manifest.json.sig
+extract.complete gnustep-cli-windows-amd64-msys2-clang64-0.0.9-windows-update-fixture.zip
+extract.complete gnustep-toolchain-windows-amd64-msys2-clang64-0.1.3.zip

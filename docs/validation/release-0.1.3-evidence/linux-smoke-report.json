@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "suite_id": "tier1-core",
+  "target_id": "linux-amd64-clang",
+  "runner_id": "github-actions-linux-container-qualification",
+  "release_under_test": {
+    "source": "stage-release run 39863701167 (v0.1.3, pre-publication)"
+  },
+  "overall_ok": true,
+  "summary": "Linux 0.1.3 container qualification passed on linux-amd64-clang, linux-arm64-clang, linux-ubuntu2604-amd64-clang, linux-ubuntu2404-amd64-clang: bootstrap setup, version/help, doctor, new/build/run.",
+  "scenario_reports": [
+    {
+      "scenario_id": "bootstrap-install-usable-cli",
+      "ok": true,
+      "status": "passed",
+      "summary": "bootstrap setup, --version, --help and doctor passed on all four Linux targets."
+    },
+    {
+      "scenario_id": "new-cli-project-build-run",
+      "ok": true,
+      "status": "passed",
+      "summary": "new/build/run passed on all four Linux targets."
+    }
+  ],
+  "evidence": {
+    "derived_from": [
+      {
+        "path": "linux-amd64-clang-container-qualification.json",
+        "sha256": "c1151d5563d4c7d0a2e9f3e7ee58f2fb285c7c45c142f82ff795051f73984a05",
+        "target_id": "linux-amd64-clang",
+        "os_version": "debian-13",
+        "artifacts": {
+          "gnustep-toolchain-linux-amd64-clang-0.1.3.tar.gz": "41fd4b8323f877d70b5cb1fa08403f0c6edbea2afe799de2c0d0024781a73acb",
+          "gnustep-cli-linux-amd64-clang-0.1.3.tar.gz": "a411d914088f0b4529abcef949dc679b9c8ec97987d1834c4ba30af25b9dd910"
+        }
+      },
+      {
+        "path": "linux-arm64-clang-container-qualification.json",
+        "sha256": "30f3be67893049c0bfed9a18d01b36bee72f864cb2eedf174d33decf64e26ed1",
+        "target_id": "linux-arm64-clang",
+        "os_version": "debian-13",
+        "artifacts": {
+          "gnustep-toolchain-linux-arm64-clang-0.1.3.tar.gz": "0f8593f634f24c6f5ce1785ce43f26b2fca0d5af2ffb34d55f0be09c18444976",
+          "gnustep-cli-linux-arm64-clang-0.1.3.tar.gz": "24b9378ebaab7e074c229393d634209ea74579765715828b7de37d48c8e747fb"
+        }
+      },
+      {
+        "path": "linux-ubuntu2604-amd64-clang-container-qualification.json",
+        "sha256": "c5e83f801bebd81b0a78b146dd268cb8bf7c577ea74efe1825b18cd9f7f460a4",
+        "target_id": "linux-ubuntu2604-amd64-clang",
+        "os_version": "ubuntu-26.04",
+        "artifacts": {
+          "gnustep-toolchain-linux-ubuntu2604-amd64-clang-0.1.3.tar.gz": "1acde52f3d719e867ec4ec3c0a9bf854330e1a8d88dd98f17695d526cfe24708",
+          "gnustep-cli-linux-ubuntu2604-amd64-clang-0.1.3.tar.gz": "c1fc731b84773292073d5f9399aa90597a1754b282165c4e82235e53e977e9f8"
+        }
+      },
+      {
+        "path": "linux-ubuntu2404-amd64-clang-container-qualification.json",
+        "sha256": "9cf37f4870c13b613e7a85e538f4c07bed6525f254122629b1e9428f1b6f16a9",
+        "target_id": "linux-ubuntu2404-amd64-clang",
+        "os_version": "ubuntu-24.04",
+        "artifacts": {
+          "gnustep-toolchain-linux-ubuntu2404-amd64-clang-0.1.3.tar.gz": "e2430e584d5d7b191a3d2253ba0b8c3c11f26eb700fa34b5bc33d3a6770ac438",
+          "gnustep-cli-linux-ubuntu2404-amd64-clang-0.1.3.tar.gz": "a4f4dad8d8c685b8c574fe77ea89dcf6dd3c8e8aab5494c045ba38552a1216d7"
+        }
+      }
+    ]
+  }
+}
