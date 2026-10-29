@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "org.gnustep.tools-xctest",
   "name": "tools-xctest",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "kind": "cli-tool",
   "summary": "XCTest runner and harness for native GNUstep Objective-C unit tests.",
   "license": "LGPL-2.1-or-later",
