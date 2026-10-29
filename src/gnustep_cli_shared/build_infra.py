@@ -5352,6 +5352,8 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
                 artifact_blockers.append("missing_artifact_url")
             if artifact_publishable and (not artifact_sha or str(artifact_sha).endswith("tbd") or "placeholder" in str(artifact_sha).lower() or "published-artifact-checksum-tbd" == str(artifact_sha)):
                 artifact_blockers.append("missing_published_artifact_digest")
+            if artifact_publishable and "pending_rebuild" in str(artifact.get("status", "")):
+                artifact_blockers.append("artifact_pending_rebuild")
             for evidence_field, blocker_code in (
                 ("build_evidence", "missing_build_evidence"),
                 ("validation_evidence", "missing_validation_evidence"),
