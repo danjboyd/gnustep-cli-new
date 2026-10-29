@@ -437,6 +437,8 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn('docker build -t "$image" "toolchains/${{ inputs.target }}"', content)
         self.assertIn("sha256sum -c -", content)
         self.assertIn("--manifest /out/inputs/release-manifest.json", content)
+        # The bootstrap verifies the local manifest against <manifest>.sig and refuses it unsigned.
+        self.assertIn("--pattern release-manifest.json.sig", content)
         self.assertIn('GNUSTEP_MAKEFILES_DIR="$managed_root/System/Library/Makefiles"', content)
         self.assertIn('GCC_OBJC_HEADERS="$managed_root/include"', content)
         self.assertNotIn("gnustep-devel", content)
