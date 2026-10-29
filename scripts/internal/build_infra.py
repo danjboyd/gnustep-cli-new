@@ -300,7 +300,7 @@ def main() -> int:
     tools_xctest_artifact.add_argument("--source-revision")
     tools_xctest_artifact.add_argument("--installed-root")
     tools_xctest_artifact.add_argument("--target", default="linux-amd64-clang")
-    tools_xctest_artifact.add_argument("--version", default="0.1.0")
+    tools_xctest_artifact.add_argument("--version", default="0.1.1")
     tools_xctest_artifact.add_argument("--rebuild", action="store_true")
 
     managed_package_artifact = subparsers.add_parser("package-managed-source-artifact", add_help=False)

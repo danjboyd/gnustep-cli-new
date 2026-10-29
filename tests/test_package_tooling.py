@@ -18,6 +18,14 @@ class PackageToolingTests(unittest.TestCase):
         payload = validate_package_manifest(ROOT / "packages" / "org.gnustep.tools-xctest" / "package.json")
         self.assertTrue(payload["ok"])
 
+    def test_repo_tools_xctest_version_matches_pinned_upstream_tag(self):
+        manifest = json.loads((ROOT / "packages" / "org.gnustep.tools-xctest" / "package.json").read_text())
+        # 2aac3e5 is gnustep/tools-xctest tag v0.1.1; update both together when re-pinning.
+        upstream_tags = {"2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3": "0.1.1"}
+        self.assertEqual(manifest["version"], upstream_tags[manifest["source"]["revision"]])
+        build_infra = (ROOT / "scripts" / "internal" / "build_infra.py").read_text()
+        self.assertIn(f'tools_xctest_artifact.add_argument("--version", default="{manifest["version"]}")', build_infra)
+
     def test_init_and_validate_gui_package(self):
         with tempfile.TemporaryDirectory() as tempdir:
             result = init_package_manifest(tempdir, "HelloApp", "gui-app")
