@@ -449,6 +449,8 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertNotIn("--installed-root", content)
         self.assertIn('grep -q -- "-only-testing:"', content)
         self.assertIn("sh Tests/run.sh", content)
+        # GNUstep.sh is not nounset-safe; the container script runs with set -eu.
+        self.assertIn('set +u\n            . "$GNUSTEP_MAKEFILES_DIR/GNUstep.sh"\n            set -u', content)
         # Version input must match the package manifest, and nothing is published.
         self.assertIn('manifest["version"] != sys.argv[1]', content)
         self.assertIn("actions/upload-artifact@v4", content)

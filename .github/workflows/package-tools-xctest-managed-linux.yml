@@ -88,7 +88,10 @@ jobs:
           # Upstream's own regression and CLI suite, on the patched tree just built.
           (
             export HOME=/out/package/install-home
+            # GNUstep.sh reads unset variables such as ZSH_VERSION.
+            set +u
             . "$GNUSTEP_MAKEFILES_DIR/GNUstep.sh"
+            set -u
             cd /out/package/work/tools-xctest-src
             sh Tests/run.sh
           ) > /out/upstream-tests.log 2>&1
