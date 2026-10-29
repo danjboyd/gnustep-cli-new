@@ -746,7 +746,7 @@
         {
           "id": "add-apple-style-xctest-cli-filters",
           "path": "patches/add-apple-style-xctest-cli-filters.patch",
-          "sha256": "f4cfb65bc56522df5b7e2342a0c9278c8bc8f833376ae7acfd5c7779d2cff9c4",
+          "sha256": "9934ff0fe23b30304a6f8efdec404985e8cb9948a9497723120d021a5ffb3a70",
           "strip": 1,
           "applies_to": [
             "tools-xctest-linux-amd64-clang",
@@ -759,7 +759,7 @@
           "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
           "upstream_status": "refresh_pending_upstream_pr_update",
           "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
-          "upstream_commit": "1ea04a02f647ea2dad348d5c99d4548e47a90428",
+          "upstream_commit": "01cdcb21c528f6b9a02945efbe840e5e8a71667d",
           "replaces_upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
           "base_revision": "5c84fc34da8275739dd2e26f9deb7bb0845ca2e1"
         }
@@ -852,7 +852,7 @@
             {
               "id": "add-apple-style-xctest-cli-filters",
               "path": "patches/add-apple-style-xctest-cli-filters.patch",
-              "sha256": "f4cfb65bc56522df5b7e2342a0c9278c8bc8f833376ae7acfd5c7779d2cff9c4",
+              "sha256": "9934ff0fe23b30304a6f8efdec404985e8cb9948a9497723120d021a5ffb3a70",
               "strip": 1,
               "applies_to": [
                 "tools-xctest-linux-amd64-clang",
@@ -865,7 +865,7 @@
               "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
               "upstream_status": "refresh_pending_upstream_pr_update",
               "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
-              "upstream_commit": "1ea04a02f647ea2dad348d5c99d4548e47a90428",
+              "upstream_commit": "01cdcb21c528f6b9a02945efbe840e5e8a71667d",
               "replaces_upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
               "base_revision": "5c84fc34da8275739dd2e26f9deb7bb0845ca2e1"
             }
@@ -914,7 +914,7 @@
             {
               "id": "add-apple-style-xctest-cli-filters",
               "path": "patches/add-apple-style-xctest-cli-filters.patch",
-              "sha256": "f4cfb65bc56522df5b7e2342a0c9278c8bc8f833376ae7acfd5c7779d2cff9c4",
+              "sha256": "9934ff0fe23b30304a6f8efdec404985e8cb9948a9497723120d021a5ffb3a70",
               "strip": 1,
               "applies_to": [
                 "tools-xctest-linux-amd64-clang",
@@ -927,7 +927,7 @@
               "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
               "upstream_status": "refresh_pending_upstream_pr_update",
               "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
-              "upstream_commit": "1ea04a02f647ea2dad348d5c99d4548e47a90428",
+              "upstream_commit": "01cdcb21c528f6b9a02945efbe840e5e8a71667d",
               "replaces_upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
               "base_revision": "5c84fc34da8275739dd2e26f9deb7bb0845ca2e1"
             }
@@ -969,7 +969,7 @@
             {
               "id": "add-apple-style-xctest-cli-filters",
               "path": "patches/add-apple-style-xctest-cli-filters.patch",
-              "sha256": "f4cfb65bc56522df5b7e2342a0c9278c8bc8f833376ae7acfd5c7779d2cff9c4",
+              "sha256": "9934ff0fe23b30304a6f8efdec404985e8cb9948a9497723120d021a5ffb3a70",
               "strip": 1,
               "applies_to": [
                 "tools-xctest-linux-amd64-clang",
@@ -982,7 +982,7 @@
               "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
               "upstream_status": "refresh_pending_upstream_pr_update",
               "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
-              "upstream_commit": "1ea04a02f647ea2dad348d5c99d4548e47a90428",
+              "upstream_commit": "01cdcb21c528f6b9a02945efbe840e5e8a71667d",
               "replaces_upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
               "base_revision": "5c84fc34da8275739dd2e26f9deb7bb0845ca2e1"
             }
@@ -1032,7 +1032,7 @@
             {
               "id": "add-apple-style-xctest-cli-filters",
               "path": "patches/add-apple-style-xctest-cli-filters.patch",
-              "sha256": "f4cfb65bc56522df5b7e2342a0c9278c8bc8f833376ae7acfd5c7779d2cff9c4",
+              "sha256": "9934ff0fe23b30304a6f8efdec404985e8cb9948a9497723120d021a5ffb3a70",
               "strip": 1,
               "applies_to": [
                 "tools-xctest-linux-amd64-clang",
@@ -1045,7 +1045,7 @@
               "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
               "upstream_status": "refresh_pending_upstream_pr_update",
               "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
-              "upstream_commit": "1ea04a02f647ea2dad348d5c99d4548e47a90428",
+              "upstream_commit": "01cdcb21c528f6b9a02945efbe840e5e8a71667d",
               "replaces_upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
               "base_revision": "5c84fc34da8275739dd2e26f9deb7bb0845ca2e1"
             }
@@ -1087,7 +1087,7 @@
             {
               "id": "add-apple-style-xctest-cli-filters",
               "path": "patches/add-apple-style-xctest-cli-filters.patch",
-              "sha256": "f4cfb65bc56522df5b7e2342a0c9278c8bc8f833376ae7acfd5c7779d2cff9c4",
+              "sha256": "9934ff0fe23b30304a6f8efdec404985e8cb9948a9497723120d021a5ffb3a70",
               "strip": 1,
               "applies_to": [
                 "tools-xctest-linux-amd64-clang",
@@ -1100,7 +1100,7 @@
               "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
               "upstream_status": "refresh_pending_upstream_pr_update",
               "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
-              "upstream_commit": "1ea04a02f647ea2dad348d5c99d4548e47a90428",
+              "upstream_commit": "01cdcb21c528f6b9a02945efbe840e5e8a71667d",
               "replaces_upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
               "base_revision": "5c84fc34da8275739dd2e26f9deb7bb0845ca2e1"
             }
@@ -1142,7 +1142,7 @@
             {
               "id": "add-apple-style-xctest-cli-filters",
               "path": "patches/add-apple-style-xctest-cli-filters.patch",
-              "sha256": "f4cfb65bc56522df5b7e2342a0c9278c8bc8f833376ae7acfd5c7779d2cff9c4",
+              "sha256": "9934ff0fe23b30304a6f8efdec404985e8cb9948a9497723120d021a5ffb3a70",
               "strip": 1,
               "applies_to": [
                 "tools-xctest-linux-amd64-clang",
@@ -1155,7 +1155,7 @@
               "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
               "upstream_status": "refresh_pending_upstream_pr_update",
               "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
-              "upstream_commit": "1ea04a02f647ea2dad348d5c99d4548e47a90428",
+              "upstream_commit": "01cdcb21c528f6b9a02945efbe840e5e8a71667d",
               "replaces_upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
               "base_revision": "5c84fc34da8275739dd2e26f9deb7bb0845ca2e1"
             }

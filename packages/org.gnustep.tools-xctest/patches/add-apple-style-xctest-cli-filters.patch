@@ -1,4 +1,4 @@
-From 1ea04a02f647ea2dad348d5c99d4548e47a90428 Mon Sep 17 00:00:00 2001
+From 01cdcb21c528f6b9a02945efbe840e5e8a71667d Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Thu, 29 Oct 2026 12:32:12 -0500
 Subject: [PATCH] Add Apple's -only-testing: and -skip-testing: options
@@ -27,16 +27,18 @@ fails the run without running it. Tests/run.sh checks the passing and
 failing combinations of the options, with -XCTest and in either order
 with the bundle path, plus malformed and other-target identifiers.
 
+AI assistance: this change, its test and this description were written
+with Claude (Anthropic's Claude Code).
+
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-Claude-Session: https://claude.ai/code/session_01GzSMSWibrDAvyn1UnRZUNy
 ---
  README.md               | 12 ++++++++-
  Tests/Regression.m      |  6 +++++
  Tests/run.sh            | 13 +++++++++
  XCTest/GSXCTestRunner.h |  1 +
- XCTest/GSXCTestRunner.m |  7 ++++-
+ XCTest/GSXCTestRunner.m |  6 ++++-
  main.m                  | 58 ++++++++++++++++++++++++++++++++++++++---
- 6 files changed, 91 insertions(+), 6 deletions(-)
+ 6 files changed, 90 insertions(+), 6 deletions(-)
 
 diff --git a/README.md b/README.md
 index ac9d30c..fa6d8bb 100644
@@ -120,21 +122,19 @@ index ca938f3..a80c2fb 100644
  - (void)waitForCompletion;
  
 diff --git a/XCTest/GSXCTestRunner.m b/XCTest/GSXCTestRunner.m
-index de3c30a..09a58ff 100644
+index de3c30a..95e3218 100644
 --- a/XCTest/GSXCTestRunner.m
 +++ b/XCTest/GSXCTestRunner.m
-@@ -67,7 +67,9 @@ static NSArray *TestClassNames(void)
+@@ -67,7 +67,7 @@ static NSArray *TestClassNames(void)
  }
  - (BOOL)runAll { return [self runTestsNamed:nil]; }
  
 -- (BOOL)runTestsNamed:(NSArray *)testNames
-+- (BOOL)runTestsNamed:(NSArray *)testNames { return [self runTestsNamed:testNames skipping:nil]; }
-+
 +- (BOOL)runTestsNamed:(NSArray *)testNames skipping:(NSArray *)skippedNames
  {
      [runLock lock];
      NSUInteger successes = 0, failures = 0, suiteFailures = 0;
-@@ -88,6 +90,9 @@ static NSArray *TestClassNames(void)
+@@ -88,6 +88,9 @@ static NSArray *TestClassNames(void)
                              [matched addObject:filter];
                          }
                      }
@@ -144,6 +144,14 @@ index de3c30a..09a58ff 100644
                      if (enabled) [selected addObject:invocation];
                  }
                  if (![selected count]) continue;
+@@ -133,6 +136,7 @@ static NSArray *TestClassNames(void)
+     if (successes + failures == 0) NSLog(@"XCTest: No tests executed.");
+     return successes + failures > 0 && failures == 0 && suiteFailures == 0;
+ }
++- (BOOL)runTestsNamed:(NSArray *)testNames { return [self runTestsNamed:testNames skipping:nil]; }
+ - (void)waitForCompletion
+ {
+     [runLock lock];
 diff --git a/main.m b/main.m
 index b52011c..48618a7 100644
 --- a/main.m
