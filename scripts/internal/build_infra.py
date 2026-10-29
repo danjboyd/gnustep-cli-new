@@ -302,6 +302,7 @@ def main() -> int:
     tools_xctest_artifact.add_argument("--target", default="linux-amd64-clang")
     tools_xctest_artifact.add_argument("--version", default="0.1.0")
     tools_xctest_artifact.add_argument("--rebuild", action="store_true")
+    tools_xctest_artifact.add_argument("--manifest", default=str(ROOT / "packages" / "org.gnustep.tools-xctest" / "package.json"))
 
     managed_package_artifact = subparsers.add_parser("package-managed-source-artifact", add_help=False)
     managed_package_artifact.add_argument("--packages-dir", required=True)
@@ -588,6 +589,7 @@ def main() -> int:
             target_id=args.target,
             version=args.version,
             rebuild=args.rebuild,
+            manifest_path=args.manifest,
         )
     elif args.subcommand == "package-managed-source-artifact":
         payload = package_managed_source_artifact(
