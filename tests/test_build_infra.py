@@ -2403,17 +2403,19 @@ class BuildInfraTests(unittest.TestCase):
                 "printf '// header\\n' > \"$HOME/GNUstep/Library/Headers/XCTest/XCTest.h\"\n"
                 "printf 'library\\n' > \"$HOME/GNUstep/Library/Libraries/libXCTest.so\"\n"
                 "printf '%s\\n' \"$HOME\" > \"$HOME/../make-home\"\n"
+                "printf '%s\\n' \"${VERSION-unset}\" > \"$HOME/../make-version\"\n"
             )
             fake_make.chmod(0o755)
             caller_home = temp / "caller-home"
             caller_home.mkdir()
-            env = {"GNUSTEP_MAKEFILES_DIR": str(makefiles), "MAKE": str(fake_make), "GCC_OBJC_HEADERS": str(temp), "HOME": str(caller_home)}
+            env = {"GNUSTEP_MAKEFILES_DIR": str(makefiles), "MAKE": str(fake_make), "GCC_OBJC_HEADERS": str(temp), "HOME": str(caller_home), "VERSION": "9.9.9"}
             with patch.dict("os.environ", env):
                 payload = package_tools_xctest_artifact(temp / "out", source_dir=source, rebuild=True, version="9.9.9", manifest_path=manifest)
             self.assertTrue(payload["ok"], payload.get("summary"))
             private_home = (temp / "out" / "install-home").resolve()
             self.assertEqual(Path(payload["installed_root"]), private_home / "GNUstep")
             self.assertEqual((temp / "out" / "make-home").read_text().strip(), str(private_home))
+            self.assertEqual((temp / "out" / "make-version").read_text().strip(), "unset")
             self.assertEqual(list(caller_home.iterdir()), [])
 
     def _windows_installed_tools_xctest(self, root: Path, *, dll: bool = True, import_lib: bool = True) -> Path:

@@ -81,7 +81,7 @@ jobs:
           python3 scripts/internal/build_infra.py --json package-tools-xctest-artifact \
             --output-dir /out/package \
             --target "$TARGET" \
-            --version "$VERSION" \
+            --version "$PACKAGE_VERSION" \
             --rebuild | tee /out/package-tools-xctest-artifact.json
           python3 -c 'import json,sys; raise SystemExit(0 if json.load(open(sys.argv[1]))["ok"] else 1)' /out/package-tools-xctest-artifact.json
 
@@ -99,7 +99,7 @@ jobs:
           # Smoke the packaged artifact itself: the declared filters must be present.
           smoke=/work/smoke
           mkdir -p "$smoke"
-          tar -xzf "/out/package/tools-xctest-$TARGET-$VERSION.tar.gz" -C "$smoke"
+          tar -xzf "/out/package/tools-xctest-$TARGET-$PACKAGE_VERSION.tar.gz" -C "$smoke"
           export LD_LIBRARY_PATH="$managed_root/Local/Library/Libraries:$managed_root/System/Library/Libraries:$managed_root/lib"
           "$smoke/bin/xctest" --help > /out/artifact-help.txt 2>&1 || true
           grep -q -- "-only-testing:" /out/artifact-help.txt
@@ -116,7 +116,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/src" \
             -v "$out:/out" \
             -e TARGET="${{ inputs.target }}" \
-            -e VERSION="${{ inputs.version }}" \
+            -e PACKAGE_VERSION="${{ inputs.version }}" \
             "$image" \
             bash /out/container-build.sh
           sudo chown -R "$(id -u):$(id -g)" "$out"
