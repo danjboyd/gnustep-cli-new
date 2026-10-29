@@ -424,6 +424,34 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("package-tools-xctest-artifact", content)
         self.assertIn("gnustep-package-tools-xctest", content)
 
+    def test_package_tools_xctest_managed_linux_workflow_builds_in_pinned_image_against_managed_toolchain(self):
+        workflow = ROOT / ".github" / "workflows" / "package-tools-xctest-managed-linux.yml"
+        self.assertTrue(workflow.exists())
+        content = workflow.read_text()
+        for target in ("linux-amd64-clang", "linux-ubuntu2404-amd64-clang", "linux-arm64-clang"):
+            self.assertIn(target, content)
+        self.assertIn("ubuntu-24.04-arm", content)
+        self.assertIn("uname -m", content)
+        # Build inside the target's pinned base image, against the managed toolchain
+        # installed by the checksum-pinned bootstrap, never the runner's distro GNUstep.
+        self.assertIn('docker build -t "$image" "toolchains/${{ inputs.target }}"', content)
+        self.assertIn("sha256sum -c -", content)
+        self.assertIn("--manifest /out/inputs/release-manifest.json", content)
+        self.assertIn('GNUSTEP_MAKEFILES_DIR="$managed_root/System/Library/Makefiles"', content)
+        self.assertIn('GCC_OBJC_HEADERS="$managed_root/include"', content)
+        self.assertNotIn("gnustep-devel", content)
+        self.assertNotIn("install-tools-xctest.sh", content)
+        # The packaging command applies the manifest's patches; the artifact must carry them.
+        self.assertIn("package-tools-xctest-artifact", content)
+        self.assertIn("--rebuild", content)
+        self.assertNotIn("--installed-root", content)
+        self.assertIn('grep -q -- "-only-testing:"', content)
+        self.assertIn("sh Tests/run.sh", content)
+        # Version input must match the package manifest, and nothing is published.
+        self.assertIn('manifest["version"] != sys.argv[1]', content)
+        self.assertIn("actions/upload-artifact@v4", content)
+        self.assertNotIn("gh release upload", content)
+
     def test_package_index_workflow_publishes_signed_artifact(self):
         workflow = ROOT / ".github" / "workflows" / "package-index.yml"
         self.assertTrue(workflow.exists())
