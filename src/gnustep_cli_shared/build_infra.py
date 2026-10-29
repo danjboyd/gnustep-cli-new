@@ -4683,13 +4683,38 @@ def package_tools_xctest_artifact(
     target_id: str = "linux-amd64-clang",
     version: str = "0.1.0",
     rebuild: bool = False,
+    manifest_path: str | Path | None = None,
 ) -> dict[str, Any]:
     out = Path(output_dir).resolve()
     out.mkdir(parents=True, exist_ok=True)
     work_root = out / "work"
     source = Path(source_dir).resolve() if source_dir else work_root / "tools-xctest-src"
-    install_root = Path(installed_root).resolve() if installed_root else Path.home() / "GNUstep"
     commands: list[list[str]] = []
+
+    def failure(summary: str, **extra: Any) -> dict[str, Any]:
+        return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": summary, "commands": commands, **extra}
+
+    # --rebuild installs into a private home under the output directory, never the
+    # caller's ~/GNUstep. Without --rebuild the installed tree must be named explicitly.
+    build_home = out / "install-home"
+    if rebuild and installed_root:
+        return failure("--installed-root cannot be combined with --rebuild; the rebuild installs into a private staging home under the output directory.")
+    if not rebuild and not installed_root:
+        return failure("Pass --installed-root with an already installed tools-xctest tree, or --rebuild.")
+    install_root = Path(installed_root).resolve() if installed_root else build_home / "GNUstep"
+
+    manifest: dict[str, Any] | None = None
+    if manifest_path is not None:
+        manifest_file = Path(manifest_path).resolve()
+        if not manifest_file.exists():
+            return failure("Package manifest not found.", manifest_path=str(manifest_file))
+        manifest = json.loads(manifest_file.read_text())
+        declared_source = manifest.get("source", {}) or {}
+        declared_revision = declared_source.get("revision")
+        if source_revision and declared_revision and source_revision != declared_revision:
+            return failure("Requested source revision differs from the package manifest's pinned revision.", requested_revision=source_revision, declared_revision=declared_revision)
+        source_revision = source_revision or declared_revision
+        source_url = declared_source.get("url") or source_url
 
     if not source.exists():
         source.parent.mkdir(parents=True, exist_ok=True)
@@ -4704,6 +4729,38 @@ def package_tools_xctest_artifact(
             return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Failed to check out tools-xctest source revision.", "stdout": checkout.stdout, "stderr": checkout.stderr, "commands": commands}
     revision_proc = subprocess.run(["git", "-C", str(source), "rev-parse", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
     revision = revision_proc.stdout.strip() if revision_proc.returncode == 0 else source_revision or "unknown"
+
+    # The source archive is the pinned upstream tree (git archive ignores the work
+    # tree), so it matches source.sha256; applied patches ship next to it.
+    source_archive = out / f"tools-xctest-source-{revision[:12]}.tar.gz"
+    archive_command = ["git", "-C", str(source), "archive", "--format=tar.gz", "-o", str(source_archive), "HEAD"]
+    archive_proc = subprocess.run(archive_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+    commands.append(archive_command)
+    if archive_proc.returncode != 0:
+        return failure("Failed to archive tools-xctest source.", stdout=archive_proc.stdout, stderr=archive_proc.stderr)
+    source_sha = _sha256(source_archive)
+
+    applied_patches: list[dict[str, Any]] = []
+    if manifest is not None:
+        declared_source = manifest.get("source", {}) or {}
+        if declared_source.get("revision") and revision != declared_source["revision"]:
+            return failure("Source checkout is not at the package manifest's pinned revision.", revision=revision, declared_revision=declared_source["revision"])
+        if declared_source.get("sha256") and source_sha != declared_source["sha256"]:
+            return failure("Source archive digest does not match the package manifest.", source_sha256=source_sha, declared_sha256=declared_source["sha256"])
+        status_proc = subprocess.run(["git", "-C", str(source), "status", "--porcelain", "--untracked-files=no"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        if status_proc.returncode != 0 or status_proc.stdout.strip():
+            return failure("Source checkout has local modifications; pass a clean checkout, the declared patches are applied by this command.", modified=status_proc.stdout.splitlines())
+        patch_result = apply_package_patches(manifest_file, source, target_id=f"tools-xctest-{target_id}")
+        if not patch_result["ok"]:
+            return failure("Declared package patches failed to apply.", patch_errors=patch_result["errors"])
+        patches_out = out / "patches"
+        for record in patch_result["applied_patches"]:
+            patch_copy = patches_out / Path(record["path"]).name
+            patch_copy.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(manifest_file.parent / record["path"], patch_copy)
+            if _sha256(patch_copy) != record["sha256"]:
+                return failure("Copied patch digest does not match the package manifest.", patch=record["id"])
+            applied_patches.append({"id": record["id"], "sha256": record["sha256"], "strip": record["strip"], "path": str(patch_copy)})
 
     if rebuild:
         makefiles = os.environ.get("GNUSTEP_MAKEFILES_DIR", "/usr/share/GNUstep/Makefiles")
@@ -4725,7 +4782,9 @@ def package_tools_xctest_artifact(
         else:
             build_script = "set -e\n. \"{}/GNUstep.sh\"\n\"{}\" -C \"{}\" clean >/dev/null || true\n\"{}\" -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\"\n\"{}\" -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\" GNUSTEP_INSTALLATION_DOMAIN=USER install\n".format(makefiles, make_command, source, make_command, source, gcc_headers, make_command, source, gcc_headers)
         commands.append(["sh", "-c", build_script])
-        built = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        build_home.mkdir(parents=True, exist_ok=True)
+        build_env = dict(os.environ, HOME=str(build_home))
+        built = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False, env=build_env)
         if built.returncode != 0:
             return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Failed to build and install tools-xctest.", "stdout": built.stdout, "stderr": built.stderr, "commands": commands}
 
@@ -4739,13 +4798,6 @@ def package_tools_xctest_artifact(
     missing = [str(item) for item in required if not item.exists()]
     if missing:
         return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Installed tools-xctest files are missing; run the tools-xctest install first or pass --rebuild.", "missing": missing, "installed_root": str(install_root), "commands": commands}
-
-    source_archive = out / f"tools-xctest-source-{revision[:12]}.tar.gz"
-    archive_command = ["git", "-C", str(source), "archive", "--format=tar.gz", "-o", str(source_archive), "HEAD"]
-    archive_proc = subprocess.run(archive_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
-    commands.append(archive_command)
-    if archive_proc.returncode != 0:
-        return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Failed to archive tools-xctest source.", "stdout": archive_proc.stdout, "stderr": archive_proc.stderr, "commands": commands}
 
     package_root = out / "staging" / "tools-xctest"
     if package_root.exists():
@@ -4787,7 +4839,6 @@ def package_tools_xctest_artifact(
     if artifact_path.exists():
         artifact_path.unlink()
     _archive_directory(package_root, artifact_path, ".")
-    source_sha = _sha256(source_archive)
     artifact_sha = _sha256(artifact_path)
     return {
         "schema_version": 1,
@@ -4799,6 +4850,8 @@ def package_tools_xctest_artifact(
         "version": version,
         "target": target_id,
         "source": {"type": "git", "url": source_url, "revision": revision, "archive": str(source_archive), "sha256": source_sha},
+        "manifest_path": str(manifest_file) if manifest is not None else None,
+        "patches": applied_patches,
         "artifact": {"id": f"tools-xctest-{target_id}", "path": str(artifact_path), "filename": artifact_filename, "sha256": artifact_sha, "format": "tar.gz"},
         "installed_root": str(install_root),
         "commands": commands,

@@ -2298,6 +2298,124 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("./Library/Libraries/libXCTest.so", names)
             self.assertIn("./Library/Libraries/libXCTest.so.0", names)
 
+    def _tools_xctest_patch_fixture(self, temp: Path) -> tuple[Path, Path, Path]:
+        source = temp / "src"
+        source.mkdir()
+        git = ["git", "-C", str(source)]
+        subprocess.run(git + ["init"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        subprocess.run(git + ["config", "user.email", "test@example.invalid"], check=True)
+        subprocess.run(git + ["config", "user.name", "Test"], check=True)
+        (source / "main.m").write_text("int main(void) { return 0; }\n")
+        subprocess.run(git + ["add", "main.m"], check=True)
+        subprocess.run(git + ["commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        revision = subprocess.run(git + ["rev-parse", "HEAD"], stdout=subprocess.PIPE, text=True, check=True).stdout.strip()
+        source_sha = hashlib.sha256(subprocess.run(git + ["archive", "--format=tar.gz", "HEAD"], stdout=subprocess.PIPE, check=True).stdout).hexdigest()
+        package_dir = temp / "packages" / "org.gnustep.tools-xctest"
+        (package_dir / "patches").mkdir(parents=True)
+        patch_file = package_dir / "patches" / "filters.patch"
+        patch_file.write_text(
+            "--- a/main.m\n+++ b/main.m\n@@ -1 +1 @@\n-int main(void) { return 0; }\n+int main(void) { return 42; } /* -only-testing: */\n"
+        )
+        manifest = package_dir / "package.json"
+        manifest.write_text(json.dumps({
+            "id": "org.gnustep.tools-xctest",
+            "source": {"type": "git", "url": str(source), "revision": revision, "sha256": source_sha},
+            "patches": [{"id": "filters", "path": "patches/filters.patch", "sha256": hashlib.sha256(patch_file.read_bytes()).hexdigest(), "strip": 1, "applies_to": ["tools-xctest-linux-amd64-clang"]}],
+        }))
+        installed = temp / "GNUstep"
+        (installed / "Tools").mkdir(parents=True)
+        (installed / "Library" / "Headers" / "XCTest").mkdir(parents=True)
+        (installed / "Library" / "Libraries").mkdir(parents=True)
+        (installed / "Tools" / "xctest").write_text("#!/bin/sh\n")
+        (installed / "Library" / "Headers" / "XCTest" / "XCTest.h").write_text("// header\n")
+        (installed / "Library" / "Libraries" / "libXCTest.so").write_text("library\n")
+        return source, manifest, installed
+
+    def test_package_tools_xctest_artifact_applies_declared_patches_and_keeps_upstream_source_archive(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            source, manifest, installed = self._tools_xctest_patch_fixture(temp)
+            declared = json.loads(manifest.read_text())
+            payload = package_tools_xctest_artifact(temp / "out", source_dir=source, installed_root=installed, version="9.9.9", manifest_path=manifest)
+            self.assertTrue(payload["ok"], payload.get("summary"))
+            self.assertIn("-only-testing:", (source / "main.m").read_text())
+            self.assertEqual(payload["source"]["revision"], declared["source"]["revision"])
+            self.assertEqual(payload["source"]["sha256"], declared["source"]["sha256"])
+            with tarfile.open(payload["source"]["archive"], "r:gz") as archive:
+                self.assertNotIn("-only-testing:", archive.extractfile("main.m").read().decode())
+            self.assertEqual([patch["id"] for patch in payload["patches"]], ["filters"])
+            self.assertEqual(payload["patches"][0]["sha256"], declared["patches"][0]["sha256"])
+            self.assertEqual(hashlib.sha256(Path(payload["patches"][0]["path"]).read_bytes()).hexdigest(), declared["patches"][0]["sha256"])
+
+    def test_package_tools_xctest_artifact_refuses_unclean_or_mismatched_sources(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            source, manifest, installed = self._tools_xctest_patch_fixture(temp)
+            declared = json.loads(manifest.read_text())
+
+            (source / "main.m").write_text("int main(void) { return 1; }\n")
+            dirty = package_tools_xctest_artifact(temp / "out-dirty", source_dir=source, installed_root=installed, manifest_path=manifest)
+            self.assertFalse(dirty["ok"])
+            self.assertIn("local modifications", dirty["summary"])
+            subprocess.run(["git", "-C", str(source), "checkout", "--", "main.m"], check=True)
+
+            other = package_tools_xctest_artifact(temp / "out-rev", source_dir=source, installed_root=installed, manifest_path=manifest, source_revision="0" * 40)
+            self.assertFalse(other["ok"])
+            self.assertIn("differs from the package manifest", other["summary"])
+
+            wrong_source = dict(declared, source=dict(declared["source"], sha256="a" * 64))
+            manifest.write_text(json.dumps(wrong_source))
+            digest = package_tools_xctest_artifact(temp / "out-digest", source_dir=source, installed_root=installed, manifest_path=manifest)
+            self.assertFalse(digest["ok"])
+            self.assertIn("Source archive digest", digest["summary"])
+
+            wrong_patch = dict(declared, patches=[dict(declared["patches"][0], sha256="b" * 64)])
+            manifest.write_text(json.dumps(wrong_patch))
+            patch_digest = package_tools_xctest_artifact(temp / "out-patch", source_dir=source, installed_root=installed, manifest_path=manifest)
+            self.assertFalse(patch_digest["ok"])
+            self.assertEqual(patch_digest["patch_errors"][0]["code"], "patch_digest_mismatch")
+            self.assertNotIn("-only-testing:", (source / "main.m").read_text())
+
+    def test_package_tools_xctest_artifact_never_defaults_to_the_callers_gnustep_home(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            source, manifest, installed = self._tools_xctest_patch_fixture(temp)
+            missing = package_tools_xctest_artifact(temp / "out-a", source_dir=source, manifest_path=manifest)
+            self.assertFalse(missing["ok"])
+            self.assertIn("--installed-root", missing["summary"])
+            both = package_tools_xctest_artifact(temp / "out-b", source_dir=source, installed_root=installed, rebuild=True, manifest_path=manifest)
+            self.assertFalse(both["ok"])
+            self.assertIn("cannot be combined with --rebuild", both["summary"])
+
+    def test_package_tools_xctest_artifact_rebuild_installs_into_private_home(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            source, manifest, _installed = self._tools_xctest_patch_fixture(temp)
+            makefiles = temp / "Makefiles"
+            makefiles.mkdir()
+            (makefiles / "GNUstep.sh").write_text("")
+            fake_make = temp / "fake-make"
+            fake_make.write_text(
+                "#!/bin/sh\n"
+                "case \" $* \" in *\" install \"*) ;; *) exit 0 ;; esac\n"
+                "mkdir -p \"$HOME/GNUstep/Tools\" \"$HOME/GNUstep/Library/Headers/XCTest\" \"$HOME/GNUstep/Library/Libraries\"\n"
+                "printf '#!/bin/sh\\n' > \"$HOME/GNUstep/Tools/xctest\"\n"
+                "printf '// header\\n' > \"$HOME/GNUstep/Library/Headers/XCTest/XCTest.h\"\n"
+                "printf 'library\\n' > \"$HOME/GNUstep/Library/Libraries/libXCTest.so\"\n"
+                "printf '%s\\n' \"$HOME\" > \"$HOME/../make-home\"\n"
+            )
+            fake_make.chmod(0o755)
+            caller_home = temp / "caller-home"
+            caller_home.mkdir()
+            env = {"GNUSTEP_MAKEFILES_DIR": str(makefiles), "MAKE": str(fake_make), "GCC_OBJC_HEADERS": str(temp), "HOME": str(caller_home)}
+            with patch.dict("os.environ", env):
+                payload = package_tools_xctest_artifact(temp / "out", source_dir=source, rebuild=True, version="9.9.9", manifest_path=manifest)
+            self.assertTrue(payload["ok"], payload.get("summary"))
+            private_home = (temp / "out" / "install-home").resolve()
+            self.assertEqual(Path(payload["installed_root"]), private_home / "GNUstep")
+            self.assertEqual((temp / "out" / "make-home").read_text().strip(), str(private_home))
+            self.assertEqual(list(caller_home.iterdir()), [])
+
     def test_package_managed_source_artifact_requires_toolchain_environment(self):
         with tempfile.TemporaryDirectory() as tempdir:
             payload = package_managed_source_artifact(
