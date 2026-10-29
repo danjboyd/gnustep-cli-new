@@ -1,0 +1,137 @@
+name: Package tools-xctest Managed Linux
+
+# Builds the org.gnustep.tools-xctest package artifact for one Linux target from
+# the checked-out ref's package manifest (pinned source plus declared patches),
+# against the published managed toolchain installed through the pinned bootstrap.
+# The build runs inside the target's pinned base image (toolchains/<target>/
+# Dockerfile) so the artifact links the same glibc/ICU as the managed toolchain.
+# Nothing is published: the artifact and its reports are uploaded for review.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Package target id
+        required: true
+        type: choice
+        options:
+          - linux-amd64-clang
+          - linux-ubuntu2404-amd64-clang
+          - linux-arm64-clang
+      version:
+        description: Package artifact version (must match the manifest's version)
+        required: true
+      toolchain_release_tag:
+        description: Release whose bootstrap and manifest install the managed toolchain
+        required: true
+        default: v0.1.3
+      bootstrap_sha256:
+        description: Expected sha256 of that release's gnustep-bootstrap.sh
+        required: true
+        default: 26ac6763fcc9dd6a86bf1d43dba140c45b84737ecb4fa3c1d1ef43d9fa437406
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  package-tools-xctest-managed-linux:
+    runs-on: ${{ inputs.target == 'linux-arm64-clang' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Enforce target architecture and manifest version
+        run: |
+          case "${{ inputs.target }}" in
+            linux-arm64-clang) test "$(uname -m)" = "aarch64" ;;
+            *) test "$(uname -m)" = "x86_64" ;;
+          esac
+          python3 - "${{ inputs.version }}" <<'PY'
+          import json, sys
+          manifest = json.load(open("packages/org.gnustep.tools-xctest/package.json"))
+          if manifest["version"] != sys.argv[1]:
+              raise SystemExit(f"version input {sys.argv[1]} does not match manifest version {manifest['version']}")
+          PY
+
+      - name: Download pinned bootstrap and release manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          out="$RUNNER_TEMP/tools-xctest-package"
+          mkdir -p "$out/inputs"
+          gh release download "${{ inputs.toolchain_release_tag }}" --repo "$GITHUB_REPOSITORY" \
+            --dir "$out/inputs" --pattern gnustep-bootstrap.sh --pattern release-manifest.json
+          echo "${{ inputs.bootstrap_sha256 }}  $out/inputs/gnustep-bootstrap.sh" | sha256sum -c -
+          cat > "$out/container-build.sh" <<'CONTAINER_BUILD'
+          set -eu
+          managed_root=/work/managed
+          mkdir -p /work
+          sh /out/inputs/gnustep-bootstrap.sh --json setup --yes --root "$managed_root" \
+            --manifest /out/inputs/release-manifest.json > /out/setup-report.json
+          export GNUSTEP_MAKEFILES_DIR="$managed_root/System/Library/Makefiles"
+          # The packaging command passes these as ADDITIONAL_OBJCFLAGS; point them at
+          # the managed libobjc2 headers, never a GCC objc include directory.
+          export GCC_OBJC_HEADERS="$managed_root/include"
+          cd /src
+          python3 scripts/internal/build_infra.py --json package-tools-xctest-artifact \
+            --output-dir /out/package \
+            --target "$TARGET" \
+            --version "$VERSION" \
+            --rebuild | tee /out/package-tools-xctest-artifact.json
+          python3 -c 'import json,sys; raise SystemExit(0 if json.load(open(sys.argv[1]))["ok"] else 1)' /out/package-tools-xctest-artifact.json
+
+          # Upstream's own regression and CLI suite, on the patched tree just built.
+          (
+            export HOME=/out/package/install-home
+            . "$GNUSTEP_MAKEFILES_DIR/GNUstep.sh"
+            cd /out/package/work/tools-xctest-src
+            sh Tests/run.sh
+          ) > /out/upstream-tests.log 2>&1
+
+          # Smoke the packaged artifact itself: the declared filters must be present.
+          smoke=/work/smoke
+          mkdir -p "$smoke"
+          tar -xzf "/out/package/tools-xctest-$TARGET-$VERSION.tar.gz" -C "$smoke"
+          export LD_LIBRARY_PATH="$managed_root/Local/Library/Libraries:$managed_root/System/Library/Libraries:$managed_root/lib"
+          "$smoke/bin/xctest" --help > /out/artifact-help.txt 2>&1 || true
+          grep -q -- "-only-testing:" /out/artifact-help.txt
+          grep -q -- "-skip-testing:" /out/artifact-help.txt
+          CONTAINER_BUILD
+
+      - name: Build and test in pinned base image
+        run: |
+          set -eu
+          out="$RUNNER_TEMP/tools-xctest-package"
+          image="gnustep-tools-xctest-${{ inputs.target }}"
+          docker build -t "$image" "toolchains/${{ inputs.target }}"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -v "$out:/out" \
+            -e TARGET="${{ inputs.target }}" \
+            -e VERSION="${{ inputs.version }}" \
+            "$image" \
+            bash /out/container-build.sh
+          sudo chown -R "$(id -u):$(id -g)" "$out"
+
+      - name: Write checksums
+        if: always()
+        run: |
+          cd "$RUNNER_TEMP/tools-xctest-package"
+          sha256sum package/tools-xctest-*.tar.gz package/tools-xctest-source-*.tar.gz package/patches/* > SHA256SUMS || true
+
+      - name: Upload tools-xctest package artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-package-tools-xctest-managed-${{ inputs.target }}-${{ inputs.version }}
+          path: |
+            ${{ runner.temp }}/tools-xctest-package/package/tools-xctest-*.tar.gz
+            ${{ runner.temp }}/tools-xctest-package/package/patches/
+            ${{ runner.temp }}/tools-xctest-package/*.json
+            ${{ runner.temp }}/tools-xctest-package/*.log
+            ${{ runner.temp }}/tools-xctest-package/*.txt
+            ${{ runner.temp }}/tools-xctest-package/SHA256SUMS
