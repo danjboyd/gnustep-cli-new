@@ -64,7 +64,8 @@ jobs:
           out="$RUNNER_TEMP/tools-xctest-package"
           mkdir -p "$out/inputs"
           gh release download "${{ inputs.toolchain_release_tag }}" --repo "$GITHUB_REPOSITORY" \
-            --dir "$out/inputs" --pattern gnustep-bootstrap.sh --pattern release-manifest.json
+            --dir "$out/inputs" --pattern gnustep-bootstrap.sh --pattern release-manifest.json \
+            --pattern release-manifest.json.sig
           echo "${{ inputs.bootstrap_sha256 }}  $out/inputs/gnustep-bootstrap.sh" | sha256sum -c -
           cat > "$out/container-build.sh" <<'CONTAINER_BUILD'
           set -eu
