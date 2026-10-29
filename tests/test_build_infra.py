@@ -2320,7 +2320,7 @@ class BuildInfraTests(unittest.TestCase):
         manifest.write_text(json.dumps({
             "id": "org.gnustep.tools-xctest",
             "source": {"type": "git", "url": str(source), "revision": revision, "sha256": source_sha},
-            "patches": [{"id": "filters", "path": "patches/filters.patch", "sha256": hashlib.sha256(patch_file.read_bytes()).hexdigest(), "strip": 1, "applies_to": ["tools-xctest-linux-amd64-clang"]}],
+            "patches": [{"id": "filters", "path": "patches/filters.patch", "sha256": hashlib.sha256(patch_file.read_bytes()).hexdigest(), "strip": 1, "applies_to": ["tools-xctest-linux-amd64-clang", "tools-xctest-windows-amd64-msys2-clang64"]}],
         }))
         installed = temp / "GNUstep"
         (installed / "Tools").mkdir(parents=True)
@@ -2415,6 +2415,73 @@ class BuildInfraTests(unittest.TestCase):
             self.assertEqual(Path(payload["installed_root"]), private_home / "GNUstep")
             self.assertEqual((temp / "out" / "make-home").read_text().strip(), str(private_home))
             self.assertEqual(list(caller_home.iterdir()), [])
+
+    def _windows_installed_tools_xctest(self, root: Path, *, dll: bool = True, import_lib: bool = True) -> Path:
+        (root / "Tools").mkdir(parents=True)
+        (root / "Library" / "Headers" / "XCTest").mkdir(parents=True)
+        (root / "Library" / "Libraries").mkdir(parents=True)
+        (root / "Tools" / "xctest.exe").write_bytes(b"MZ-xctest")
+        (root / "Library" / "Headers" / "XCTest" / "XCTest.h").write_text("// header\n")
+        if dll:
+            (root / "Tools" / "XCTest-0.dll").write_bytes(b"MZ-dll")
+        if import_lib:
+            (root / "Library" / "Libraries" / "libXCTest.dll.a").write_bytes(b"!<arch>\n")
+        return root
+
+    def test_package_tools_xctest_artifact_packages_windows_zip_with_cmd_launcher(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            source, manifest, _installed = self._tools_xctest_patch_fixture(temp)
+            installed = self._windows_installed_tools_xctest(temp / "WinGNUstep")
+            payload = package_tools_xctest_artifact(
+                temp / "out",
+                source_dir=source,
+                installed_root=installed,
+                target_id="windows-amd64-msys2-clang64",
+                version="9.9.9",
+                manifest_path=manifest,
+            )
+            self.assertTrue(payload["ok"], payload.get("summary"))
+            self.assertEqual(payload["artifact"]["format"], "zip")
+            self.assertEqual(payload["artifact"]["filename"], "tools-xctest-windows-amd64-msys2-clang64-9.9.9.zip")
+            self.assertEqual([patch["id"] for patch in payload["patches"]], ["filters"])
+            self.assertIn("-only-testing:", (source / "main.m").read_text())
+            with zipfile.ZipFile(payload["artifact"]["path"]) as archive:
+                names = set(archive.namelist())
+                launcher = archive.read("bin/xctest.cmd")
+            self.assertEqual(
+                names,
+                {
+                    "bin/xctest.cmd",
+                    "libexec/xctest.exe",
+                    "Library/Headers/XCTest/XCTest.h",
+                    "Library/Libraries/XCTest-0.dll",
+                    "Library/Libraries/libXCTest.dll.a",
+                },
+            )
+            self.assertNotIn(b"\n", launcher.replace(b"\r\n", b""))
+            text = launcher.decode("ascii")
+            self.assertIn("%package_root%\\Library\\Libraries;%managed_root%\\clang64\\bin;", text)
+            self.assertIn("%managed_root%\\clang64\\etc\\GNUstep\\GNUstep.conf", text)
+            self.assertIn('"%package_root%\\libexec\\xctest.exe" %*', text)
+            self.assertIn("exit /b %ERRORLEVEL%", text)
+
+    def test_package_tools_xctest_artifact_windows_requires_dll_and_import_library(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            source, manifest, _installed = self._tools_xctest_patch_fixture(temp)
+            installed = self._windows_installed_tools_xctest(temp / "WinGNUstep", dll=False, import_lib=False)
+            payload = package_tools_xctest_artifact(
+                temp / "out",
+                source_dir=source,
+                installed_root=installed,
+                target_id="windows-amd64-msys2-clang64",
+                version="9.9.9",
+            )
+            self.assertFalse(payload["ok"])
+            self.assertEqual(len(payload["missing"]), 2)
+            self.assertTrue(any(item.endswith("*XCTest*.dll") for item in payload["missing"]))
+            self.assertTrue(any(item.endswith("libXCTest*.a") for item in payload["missing"]))
 
     def test_package_managed_source_artifact_requires_toolchain_environment(self):
         with tempfile.TemporaryDirectory() as tempdir:
