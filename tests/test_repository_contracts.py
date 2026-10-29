@@ -437,6 +437,8 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn('docker build -t "$image" "toolchains/${{ inputs.target }}"', content)
         self.assertIn("sha256sum -c -", content)
         self.assertIn("--manifest /out/inputs/release-manifest.json", content)
+        # The bootstrap verifies the local manifest against <manifest>.sig and refuses it unsigned.
+        self.assertIn("--pattern release-manifest.json.sig", content)
         self.assertIn('GNUSTEP_MAKEFILES_DIR="$managed_root/System/Library/Makefiles"', content)
         self.assertIn('GCC_OBJC_HEADERS="$managed_root/include"', content)
         self.assertNotIn("gnustep-devel", content)
@@ -447,6 +449,11 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertNotIn("--installed-root", content)
         self.assertIn('grep -q -- "-only-testing:"', content)
         self.assertIn("sh Tests/run.sh", content)
+        # GNUstep.sh is not nounset-safe; the container script runs with set -eu.
+        self.assertIn('set +u\n            . "$GNUSTEP_MAKEFILES_DIR/GNUstep.sh"\n            set -u', content)
+        # GNUstep Make reads $VERSION as the library version; never export it into the build.
+        self.assertNotIn("-e VERSION=", content)
+        self.assertIn('-e PACKAGE_VERSION="${{ inputs.version }}"', content)
         # Version input must match the package manifest, and nothing is published.
         self.assertIn('manifest["version"] != sys.argv[1]', content)
         self.assertIn("actions/upload-artifact@v4", content)
