@@ -4783,7 +4783,10 @@ def package_tools_xctest_artifact(
             build_script = "set -e\n. \"{}/GNUstep.sh\"\n\"{}\" -C \"{}\" clean >/dev/null || true\n\"{}\" -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\"\n\"{}\" -C \"{}\" CC=clang OBJC=clang ADDITIONAL_OBJCFLAGS=\"-I{}\" GNUSTEP_INSTALLATION_DOMAIN=USER install\n".format(makefiles, make_command, source, make_command, source, gcc_headers, make_command, source, gcc_headers)
         commands.append(["sh", "-c", build_script])
         build_home.mkdir(parents=True, exist_ok=True)
-        build_env = dict(os.environ, HOME=str(build_home))
+        # GNUstep Make takes $VERSION as the library version, so a package version
+        # exported by the caller would leak into libXCTest's file name.
+        build_env = {key: value for key, value in os.environ.items() if key != "VERSION"}
+        build_env["HOME"] = str(build_home)
         built = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False, env=build_env)
         if built.returncode != 0:
             return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Failed to build and install tools-xctest.", "stdout": built.stdout, "stderr": built.stderr, "commands": commands}
@@ -5457,6 +5460,8 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
                 artifact_blockers.append("missing_artifact_url")
             if artifact_publishable and (not artifact_sha or str(artifact_sha).endswith("tbd") or "placeholder" in str(artifact_sha).lower() or "published-artifact-checksum-tbd" == str(artifact_sha)):
                 artifact_blockers.append("missing_published_artifact_digest")
+            if artifact_publishable and "pending_rebuild" in str(artifact.get("status", "")):
+                artifact_blockers.append("artifact_pending_rebuild")
             for evidence_field, blocker_code in (
                 ("build_evidence", "missing_build_evidence"),
                 ("validation_evidence", "missing_validation_evidence"),

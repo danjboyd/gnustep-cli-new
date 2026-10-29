@@ -2,7 +2,7 @@
   "schema_version": 1,
   "id": "org.gnustep.tools-xctest",
   "name": "tools-xctest",
-  "version": "0.1.1",
+  "version": "0.1.1+git5c84fc3",
   "kind": "cli-tool",
   "summary": "XCTest runner and harness for native GNUstep Objective-C unit tests.",
   "license": "LGPL-2.1-or-later",
@@ -14,8 +14,8 @@
   "source": {
     "type": "git",
     "url": "https://github.com/gnustep/tools-xctest.git",
-    "sha256": "892a65e5111696beb74855edf8bdab7b7bb1341078e55e1a0207ed7f00cc7cfa",
-    "revision": "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3",
+    "sha256": "b24b364a413f922259187a56d763c54dedea245c8f4344f49e113f5e88685cb0",
+    "revision": "5c84fc34da8275739dd2e26f9deb7bb0845ca2e1",
     "upstream": "gnustep/tools-xctest",
     "upstream_url": "https://github.com/gnustep/tools-xctest",
     "tracking_strategy": "commit-with-submitted-downstream-patch",
@@ -67,7 +67,7 @@
       "sha256": "8f1f2a7d224bb67f318fed31f21024a3eff7504bd3c82028834ee7589923e866",
       "format": "tar.gz",
       "publish": true,
-      "status": "validated_debian13_amd64_with_declared_patch_and_launcher",
+      "status": "pending_rebuild_for_source_5c84fc3",
       "notes": "Built on Debian 13 amd64 from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes a bin/xctest launcher that sets package-local and managed-root library paths before execing libexec/xctest.",
       "supported_distributions": [
         "debian"
@@ -75,7 +75,9 @@
       "portability_policy": "distribution-scoped",
       "supported_os_versions": [],
       "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-linux-amd64-clang-build.json",
-      "validation_evidence": "docs/validation/tools-xctest-debian-13-20260420/tools-xctest-linux-amd64-clang.json"
+      "validation_evidence": "docs/validation/tools-xctest-debian-13-20260420/tools-xctest-linux-amd64-clang.json",
+      "previous_status": "validated_debian13_amd64_with_declared_patch_and_launcher",
+      "rebuild_note": "url/sha256 still describe the binary built from 2aac3e5 plus the earlier patch. Rebuild from 5c84fc3 plus the refreshed patch and replace url, sha256 and evidence before this package is published or merged."
     },
     {
       "id": "tools-xctest-linux-ubuntu2404-amd64-clang",
@@ -96,13 +98,15 @@
       "sha256": "351311bb3496997edc5cac2fe7f3008cdcd425c166cbe0bca3f1a99699e7e842",
       "format": "tar.gz",
       "publish": true,
-      "status": "validated_ubuntu2404_amd64_docker_with_declared_patch_and_launcher",
+      "status": "pending_rebuild_for_source_5c84fc3",
       "notes": "Built in Ubuntu 24.04 Docker from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes a bin/xctest launcher that sets package-local and managed-root library paths before execing libexec/xctest.",
       "supported_os_versions": [
         "ubuntu-24.04"
       ],
       "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-linux-ubuntu2404-amd64-clang-build.json",
-      "validation_evidence": "docs/validation/tools-xctest-ubuntu-2404-20260420/tools-xctest-linux-ubuntu2404-amd64-clang.json"
+      "validation_evidence": "docs/validation/tools-xctest-ubuntu-2404-20260420/tools-xctest-linux-ubuntu2404-amd64-clang.json",
+      "previous_status": "validated_ubuntu2404_amd64_docker_with_declared_patch_and_launcher",
+      "rebuild_note": "url/sha256 still describe the binary built from 2aac3e5 plus the earlier patch. Rebuild from 5c84fc3 plus the refreshed patch and replace url, sha256 and evidence before this package is published or merged."
     },
     {
       "id": "tools-xctest-openbsd-amd64-clang",
@@ -119,10 +123,12 @@
       "sha256": "2a5ddaf9571cab9860eeadc1dba5317e72c9c0db0b9d1cbdcd4731365390e473",
       "publish": true,
       "format": "tar.gz",
-      "status": "validated_openbsd78_amd64_with_declared_patch_launcher_and_linker_workaround",
+      "status": "pending_rebuild_for_source_5c84fc3",
       "notes": "Built on OpenBSD 7.8 amd64 with clang/libobjc2 from OpenBSD packages, upstream tools-xctest revision plus PR #5 patch, package-local launcher, and OpenBSD libXCTest linker-name workaround. Validated with native CLI install/remove, xctest --help, and a minimal XCTest bundle run.",
       "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-openbsd-amd64-clang-build.json",
-      "validation_evidence": "docs/validation/tools-xctest-openbsd-78-20260420/tools-xctest-openbsd-amd64-clang.json"
+      "validation_evidence": "docs/validation/tools-xctest-openbsd-78-20260420/tools-xctest-openbsd-amd64-clang.json",
+      "previous_status": "validated_openbsd78_amd64_with_declared_patch_launcher_and_linker_workaround",
+      "rebuild_note": "url/sha256 still describe the binary built from 2aac3e5 plus the earlier patch. Rebuild from 5c84fc3 plus the refreshed patch and replace url, sha256 and evidence before this package is published or merged."
     },
     {
       "id": "tools-xctest-linux-arm64-clang",
@@ -144,13 +150,15 @@
       "sha256": "c38242213945c183b69508ce134f125a9ede6016cc518a837d433f6d4d7aed53",
       "format": "tar.gz",
       "publish": true,
-      "status": "validated_ubuntu2404_aarch64_managed_clang_with_declared_patch_and_launcher",
+      "status": "pending_rebuild_for_source_5c84fc3",
       "notes": "Built on OTVM ubuntu-24.04-aarch64 against the Phase 16.B2 managed Clang/libobjc2 toolchain from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes a symlink-safe bin/xctest launcher that sets package-local and managed-root library paths before execing libexec/xctest.",
       "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-linux-arm64-clang-build.json",
       "validation_evidence": "docs/validation/linux-arm64-hosted-package-install-remove-20260507.json",
       "supported_os_versions": [
         "ubuntu-24.04"
-      ]
+      ],
+      "previous_status": "validated_ubuntu2404_aarch64_managed_clang_with_declared_patch_and_launcher",
+      "rebuild_note": "url/sha256 still describe the binary built from 2aac3e5 plus the earlier patch. Rebuild from 5c84fc3 plus the refreshed patch and replace url, sha256 and evidence before this package is published or merged."
     },
     {
       "id": "tools-xctest-windows-amd64-msys2-clang64",
@@ -167,10 +175,12 @@
       "sha256": "6c66cd60bf95006c2429bde211fb7aebe885e8cc635b2a206b6ec7f8b828d27d",
       "format": "zip",
       "publish": true,
-      "status": "validated_windows_msys2_clang64_with_declared_patch_and_launcher",
+      "status": "pending_rebuild_for_source_5c84fc3",
       "notes": "Built on Windows Server 2022/MSYS2 clang64 from upstream revision 2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3 plus PR #5 downstream patch. Artifact includes cmd.exe and MSYS shell launchers that put package-local XCTest DLLs and the managed MSYS2 clang64 toolchain on PATH before execing xctest.exe.",
       "validation_evidence": "docs/validation/tools-xctest-windows-msys2-20260421/tools-xctest-windows-amd64-msys2-clang64.json",
-      "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-windows-amd64-msys2-clang64-build.json"
+      "build_evidence": "docs/validation/tools-xctest-build-evidence/tools-xctest-windows-amd64-msys2-clang64-build.json",
+      "previous_status": "validated_windows_msys2_clang64_with_declared_patch_and_launcher",
+      "rebuild_note": "url/sha256 still describe the binary built from 2aac3e5 plus the earlier patch. Rebuild from 5c84fc3 plus the refreshed patch and replace url, sha256 and evidence before this package is published or merged."
     },
     {
       "id": "tools-xctest-openbsd-arm64-clang",
@@ -187,10 +197,12 @@
       "sha256": "85efadaeea3c65c215ed533d93cbf2afcfe61627886d2f93f1d7df13f988b35e",
       "format": "tar.gz",
       "publish": true,
-      "status": "validated_openbsd_arm64_native_clang_with_declared_patch_and_launcher",
+      "status": "pending_rebuild_for_source_5c84fc3",
       "notes": "Built and validated on OTVM openbsd-7.8-arm64 lease lease-20260507215030-3q6vbf against OpenBSD packaged GNUstep/Clang. Artifact includes the declared PR #5 tools-xctest patch, an OpenBSD split-build fix for libXCTest.so.0, package-local launcher library paths, install by simple alias, xctest --help smoke, minimal XCTest bundle execution, and remove by simple alias.",
       "validation_evidence": "docs/validation/tools-xctest-openbsd-arm64-20260507/tools-xctest-openbsd-arm64-clang.json",
-      "build_evidence": "docs/validation/tools-xctest-openbsd-arm64-20260507/package-report.json"
+      "build_evidence": "docs/validation/tools-xctest-openbsd-arm64-20260507/package-report.json",
+      "previous_status": "validated_openbsd_arm64_native_clang_with_declared_patch_and_launcher",
+      "rebuild_note": "url/sha256 still describe the binary built from 2aac3e5 plus the earlier patch. Rebuild from 5c84fc3 plus the refreshed patch and replace url, sha256 and evidence before this package is published or merged."
     }
   ],
   "install": {
@@ -204,7 +216,7 @@
     {
       "id": "add-apple-style-xctest-cli-filters",
       "path": "patches/add-apple-style-xctest-cli-filters.patch",
-      "sha256": "a6311945e6c706864f9494b4b485326d40a63e92ef59fc26717ec422ee19dbed",
+      "sha256": "9934ff0fe23b30304a6f8efdec404985e8cb9948a9497723120d021a5ffb3a70",
       "strip": 1,
       "applies_to": [
         "tools-xctest-linux-amd64-clang",
@@ -215,9 +227,11 @@
         "tools-xctest-openbsd-arm64-clang"
       ],
       "rationale": "Add Apple-style -only-testing: and -skip-testing: CLI filters so our native tools-xctest runner can match common XCTest workflows.",
-      "upstream_status": "submitted",
+      "upstream_status": "refresh_pending_upstream_pr_update",
       "upstream_pr": "https://github.com/gnustep/tools-xctest/pull/5",
-      "upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc"
+      "upstream_commit": "01cdcb21c528f6b9a02945efbe840e5e8a71667d",
+      "replaces_upstream_commit": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
+      "base_revision": "5c84fc34da8275739dd2e26f9deb7bb0845ca2e1"
     }
   ],
   "build": {
