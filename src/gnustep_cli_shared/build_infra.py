@@ -4788,18 +4788,92 @@ def package_tools_xctest_artifact(
         if built.returncode != 0:
             return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Failed to build and install tools-xctest.", "stdout": built.stdout, "stderr": built.stderr, "commands": commands}
 
+    windows = target_id.startswith("windows-")
     installed_lib_dir = install_root / "Library" / "Libraries"
-    versioned_xctest_lib = installed_lib_dir / "libXCTest.so.0"
-    unversioned_xctest_lib = installed_lib_dir / "libXCTest.so"
-    if versioned_xctest_lib.exists() and not unversioned_xctest_lib.exists():
-        unversioned_xctest_lib.symlink_to(versioned_xctest_lib.name)
-
-    required = [install_root / "Tools" / "xctest", install_root / "Library" / "Headers" / "XCTest", install_root / "Library" / "Libraries" / "libXCTest.so"]
-    missing = [str(item) for item in required if not item.exists()]
-    if missing:
-        return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Installed tools-xctest files are missing; run the tools-xctest install first or pass --rebuild.", "missing": missing, "installed_root": str(install_root), "commands": commands}
-
     package_root = out / "staging" / "tools-xctest"
+
+    if windows:
+        # GNUstep Make on MSYS2 installs the tool and its DLL under Tools and the
+        # import library under Library/Libraries. Windows finds DLLs on PATH, so the
+        # package ships a .cmd launcher instead of an LD_LIBRARY_PATH shell script.
+        xctest_exe = install_root / "Tools" / "xctest.exe"
+        xctest_dlls = sorted({path for directory in (install_root / "Tools", installed_lib_dir) for path in directory.glob("*XCTest*.dll")})
+        import_libs = sorted(installed_lib_dir.glob("libXCTest*.a"))
+        missing = [str(item) for item in (xctest_exe, install_root / "Library" / "Headers" / "XCTest") if not item.exists()]
+        if not xctest_dlls:
+            missing.append(str(install_root / "Tools" / "*XCTest*.dll"))
+        if not import_libs:
+            missing.append(str(installed_lib_dir / "libXCTest*.a"))
+        if missing:
+            return failure("Installed tools-xctest files are missing; run the tools-xctest install first or pass --rebuild.", missing=missing, installed_root=str(install_root))
+        if package_root.exists():
+            shutil.rmtree(package_root)
+        package_libs = package_root / "Library" / "Libraries"
+        for directory in (package_root / "bin", package_root / "libexec", package_root / "Library" / "Headers", package_libs):
+            directory.mkdir(parents=True)
+        shutil.copy2(xctest_exe, package_root / "libexec" / "xctest.exe")
+        (package_root / "bin" / "xctest.cmd").write_bytes(
+            (
+                "@echo off\r\n"
+                "setlocal\r\n"
+                "set \"package_root=%~dp0..\"\r\n"
+                "for %%I in (\"%package_root%\") do set \"package_root=%%~fI\"\r\n"
+                "for %%I in (\"%package_root%\\..\\..\") do set \"managed_root=%%~fI\"\r\n"
+                "if exist \"%managed_root%\\clang64\\etc\\GNUstep\\GNUstep.conf\" (\r\n"
+                "  set \"GNUSTEP_CONFIG_FILE=%managed_root%\\clang64\\etc\\GNUstep\\GNUstep.conf\"\r\n"
+                ") else if exist \"%managed_root%\\etc\\GNUstep\\GNUstep.conf\" (\r\n"
+                "  set \"GNUSTEP_CONFIG_FILE=%managed_root%\\etc\\GNUstep\\GNUstep.conf\"\r\n"
+                ")\r\n"
+                "set \"PATH=%package_root%\\Library\\Libraries;%managed_root%\\clang64\\bin;%managed_root%\\bin;%managed_root%\\usr\\bin;%PATH%\"\r\n"
+                "\"%package_root%\\libexec\\xctest.exe\" %*\r\n"
+                "exit /b %ERRORLEVEL%\r\n"
+            ).encode("ascii")
+        )
+        shutil.copytree(install_root / "Library" / "Headers" / "XCTest", package_root / "Library" / "Headers" / "XCTest")
+        for lib in xctest_dlls + import_libs:
+            shutil.copy2(lib, package_libs / lib.name)
+        artifact_filename = f"tools-xctest-{target_id}-{version}.zip"
+        artifact_format = "zip"
+    else:
+        versioned_xctest_lib = installed_lib_dir / "libXCTest.so.0"
+        unversioned_xctest_lib = installed_lib_dir / "libXCTest.so"
+        if versioned_xctest_lib.exists() and not unversioned_xctest_lib.exists():
+            unversioned_xctest_lib.symlink_to(versioned_xctest_lib.name)
+
+        required = [install_root / "Tools" / "xctest", install_root / "Library" / "Headers" / "XCTest", install_root / "Library" / "Libraries" / "libXCTest.so"]
+        missing = [str(item) for item in required if not item.exists()]
+        if missing:
+            return failure("Installed tools-xctest files are missing; run the tools-xctest install first or pass --rebuild.", missing=missing, installed_root=str(install_root))
+        artifact_filename = f"tools-xctest-{target_id}-{version}.tar.gz"
+        artifact_format = "tar.gz"
+
+    if not windows:
+        _stage_unix_tools_xctest_package(install_root, package_root)
+
+    artifact_path = out / artifact_filename
+    if artifact_path.exists():
+        artifact_path.unlink()
+    _archive_directory(package_root, artifact_path, ".")
+    artifact_sha = _sha256(artifact_path)
+    return {
+        "schema_version": 1,
+        "command": "package-tools-xctest-artifact",
+        "ok": True,
+        "status": "ok",
+        "summary": "tools-xctest package artifact generated.",
+        "package_id": "org.gnustep.tools-xctest",
+        "version": version,
+        "target": target_id,
+        "source": {"type": "git", "url": source_url, "revision": revision, "archive": str(source_archive), "sha256": source_sha},
+        "manifest_path": str(manifest_file) if manifest is not None else None,
+        "patches": applied_patches,
+        "artifact": {"id": f"tools-xctest-{target_id}", "path": str(artifact_path), "filename": artifact_filename, "sha256": artifact_sha, "format": artifact_format},
+        "installed_root": str(install_root),
+        "commands": commands,
+    }
+
+
+def _stage_unix_tools_xctest_package(install_root: Path, package_root: Path) -> None:
     if package_root.exists():
         shutil.rmtree(package_root)
     (package_root / "bin").mkdir(parents=True)
@@ -4834,28 +4908,6 @@ def package_tools_xctest_artifact(
     for lib in sorted((install_root / "Library" / "Libraries").glob("libXCTest.so*")):
         shutil.copy2(lib, package_root / "Library" / "Libraries" / lib.name)
 
-    artifact_filename = f"tools-xctest-{target_id}-{version}.tar.gz"
-    artifact_path = out / artifact_filename
-    if artifact_path.exists():
-        artifact_path.unlink()
-    _archive_directory(package_root, artifact_path, ".")
-    artifact_sha = _sha256(artifact_path)
-    return {
-        "schema_version": 1,
-        "command": "package-tools-xctest-artifact",
-        "ok": True,
-        "status": "ok",
-        "summary": "tools-xctest package artifact generated.",
-        "package_id": "org.gnustep.tools-xctest",
-        "version": version,
-        "target": target_id,
-        "source": {"type": "git", "url": source_url, "revision": revision, "archive": str(source_archive), "sha256": source_sha},
-        "manifest_path": str(manifest_file) if manifest is not None else None,
-        "patches": applied_patches,
-        "artifact": {"id": f"tools-xctest-{target_id}", "path": str(artifact_path), "filename": artifact_filename, "sha256": artifact_sha, "format": "tar.gz"},
-        "installed_root": str(install_root),
-        "commands": commands,
-    }
 
 def _package_manifest_by_id(packages_dir: str | Path, package_id: str) -> tuple[Path, dict[str, Any]] | None:
     root = Path(packages_dir).resolve()
