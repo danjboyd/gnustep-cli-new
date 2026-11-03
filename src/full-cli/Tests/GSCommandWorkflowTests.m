@@ -33,6 +33,8 @@
 - (BOOL)writeJSONStringObject:(id)object toPath:(NSString *)path error:(NSString **)errorMessage;
 - (NSString *)renderHumanForPayload:(NSDictionary *)payload;
 - (BOOL)installManagedLauncherForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
++ (void)setExecutableExposureStyleOverride:(NSString *)style;
+- (NSString *)commandShimContentsForPackageExecutable:(NSString *)relativePath;
 - (NSString *)materializeVersionedReleaseForInstallRoot:(NSString *)installRoot version:(NSString *)version error:(NSString **)errorMessage;
 @end
 
@@ -1798,6 +1800,156 @@
   XCTAssertEqualObjects([payload objectForKey: @"package_id"], @"io.github.danjboyd.arlen");
   XCTAssertNil([[state objectForKey: @"packages"] objectForKey: @"io.github.danjboyd.arlen"]);
   XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: managedArlenLink]);
+}
+
+- (NSString *)writeArlenIndexWithExecutable:(NSString *)executableName
+                                     inRoot:(NSString *)tempRoot
+                                     runner:(GSCommandRunner *)runner
+{
+  NSString *payloadDir = [tempRoot stringByAppendingPathComponent: @"artifact-root"];
+  NSString *executablePath = [[payloadDir stringByAppendingPathComponent: @"bin"] stringByAppendingPathComponent: executableName];
+  NSString *archivePath = [tempRoot stringByAppendingPathComponent: @"arlen.tar.gz"];
+  NSString *indexPath = [tempRoot stringByAppendingPathComponent: @"package-index.json"];
+
+  [self ensureDirectory: [payloadDir stringByAppendingPathComponent: @"bin"]];
+  [@"arlen" writeToFile: executablePath atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [[NSFileManager defaultManager] setAttributes:
+                                      [NSDictionary dictionaryWithObject: [NSNumber numberWithUnsignedLong: 0755]
+                                                                  forKey: NSFilePosixPermissions]
+                                  ofItemAtPath: executablePath
+                                         error: NULL];
+  [self archiveDirectory: payloadDir toTarball: archivePath withRunner: runner];
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         @"stable", @"channel",
+                         [NSArray arrayWithObject:
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"io.github.danjboyd.arlen", @"id",
+                                                   @"Arlen", @"name",
+                                                   [NSArray arrayWithObject: @"arlen"], @"aliases",
+                                                   @"0.3.2", @"version",
+                                                   @"framework", @"kind",
+                                                   @"Headless framework fixture.", @"summary",
+                                                   [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                  [NSArray arrayWithObject: @"linux"], @"supported_os",
+                                                                  [NSArray arrayWithObject: @"amd64"], @"supported_arch",
+                                                                  [NSArray arrayWithObject: @"clang"], @"supported_compiler_families",
+                                                                  [NSArray arrayWithObject: @"libobjc2"], @"supported_objc_runtimes",
+                                                                  [NSArray arrayWithObject: @"modern"], @"supported_objc_abi",
+                                                                  [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                  [NSArray array], @"forbidden_features",
+                                                                  [NSArray arrayWithObject: @"org.gnustep.runtime.base"], @"runtime_components",
+                                                                  nil], @"requirements",
+                                                   [NSArray array], @"dependencies",
+                                                   [NSArray arrayWithObject:
+                                                              [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                             @"arlen-linux-clang-headless", @"id",
+                                                                             @"linux", @"os",
+                                                                             @"amd64", @"arch",
+                                                                             @"clang", @"compiler_family",
+                                                                             @"clang", @"toolchain_flavor",
+                                                                             @"libobjc2", @"objc_runtime",
+                                                                             @"modern", @"objc_abi",
+                                                                             [NSArray arrayWithObject: @"blocks"], @"required_features",
+                                                                             @"headless-base", @"runtime_profile",
+                                                                             [NSArray arrayWithObject: @"org.gnustep.runtime.base"], @"runtime_components",
+                                                                             [NSString stringWithFormat: @"file://%@", archivePath], @"url",
+                                                                             [runner sha256ForFile: archivePath], @"sha256",
+                                                                             nil]], @"artifacts",
+                                                   nil]], @"packages",
+                         nil]
+                 toPath: indexPath];
+  return indexPath;
+}
+
+- (void)testWindowsCommandShimSetsManagedPathAndPassesArgumentsAndExitCode
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *shim = [runner commandShimContentsForPackageExecutable: @"packages/io.github.danjboyd.arlen/bin/arlen.exe"];
+  NSArray *lines = [shim componentsSeparatedByString: @"\r\n"];
+
+  XCTAssertTrue([shim hasSuffix: @"\r\n"]);
+  XCTAssertEqual([[shim componentsSeparatedByString: @"\n"] count], [lines count]);
+  XCTAssertEqualObjects([lines objectAtIndex: 0], @"@echo off");
+  XCTAssertEqualObjects([lines objectAtIndex: 1], @"setlocal");
+  // The managed runtime DLLs must win over anything already on PATH.
+  XCTAssertEqualObjects([lines objectAtIndex: 2], @"set \"PATH=%~dp0..\\clang64\\bin;%~dp0..\\bin;%~dp0..\\usr\\bin;%PATH%\"");
+  XCTAssertTrue([[lines objectAtIndex: 3] rangeOfString: @"GNUSTEP_CONFIG_FILE=%~dp0..\\clang64\\etc\\GNUstep\\GNUstep.conf"].location != NSNotFound);
+  // Quoted executable path (managed roots may contain spaces), every argument passed through.
+  XCTAssertEqualObjects([lines objectAtIndex: 4], @"\"%~dp0..\\packages\\io.github.danjboyd.arlen\\bin\\arlen.exe\" %*");
+  XCTAssertEqualObjects([lines objectAtIndex: 5], @"exit /b %ERRORLEVEL%");
+  // The package path is converted to Windows separators (`exit /b` is the only slash).
+  XCTAssertTrue([[lines objectAtIndex: 4] rangeOfString: @"/"].location == NSNotFound);
+}
+
+- (void)testInstallExposesWindowsExecutablesAsCommandShimsAndRemoveDeletesThem
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"install-cmd-shims"];
+  NSString *managedRoot = [tempRoot stringByAppendingPathComponent: @"managed"];
+  NSString *shimPath = [managedRoot stringByAppendingPathComponent: @"bin/arlen.cmd"];
+  NSString *indexPath = nil;
+  NSDictionary *payload = nil;
+  NSDictionary *link = nil;
+  int exitCode = 0;
+
+  [GSCommandRunner setExecutableExposureStyleOverride: @"cmd-shim"];
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  indexPath = [self writeArlenIndexWithExecutable: @"arlen.exe" inRoot: tempRoot runner: runner];
+  payload = [runner executeInstallForContext:
+                        [GSCommandContext contextWithArguments:
+                                            [NSArray arrayWithObjects: @"install", @"--root", managedRoot, @"--index", indexPath, @"arlen", nil]]
+                                  exitCode: &exitCode];
+  link = [[payload objectForKey: @"executable_links"] lastObject];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue], @"%@", [payload objectForKey: @"summary"]);
+  XCTAssertEqualObjects([link objectForKey: @"name"], @"arlen");
+  XCTAssertEqualObjects([link objectForKey: @"kind"], @"cmd-shim");
+  XCTAssertEqualObjects([link objectForKey: @"path"], shimPath);
+  XCTAssertEqualObjects([NSString stringWithContentsOfFile: shimPath encoding: NSUTF8StringEncoding error: NULL],
+                        [runner commandShimContentsForPackageExecutable: @"packages/io.github.danjboyd.arlen/bin/arlen.exe"]);
+  // No symlink attempt: that is what fails without SeCreateSymbolicLinkPrivilege.
+  XCTAssertNil([[NSFileManager defaultManager] pathContentOfSymbolicLinkAtPath: [managedRoot stringByAppendingPathComponent: @"bin/arlen.exe"]]);
+
+  payload = [runner executeRemoveForContext:
+                        [GSCommandContext contextWithArguments:
+                                            [NSArray arrayWithObjects: @"remove", @"--root", managedRoot, @"arlen", nil]]
+                                 exitCode: &exitCode];
+  [GSCommandRunner setExecutableExposureStyleOverride: nil];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([[[payload objectForKey: @"removed_executable_links"] lastObject] objectForKey: @"name"], @"arlen");
+  XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: shimPath]);
+}
+
+- (void)testInstallRefusesToReplaceAForeignCommandFile
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"install-cmd-shim-conflict"];
+  NSString *managedRoot = [tempRoot stringByAppendingPathComponent: @"managed"];
+  NSString *shimPath = [managedRoot stringByAppendingPathComponent: @"bin/arlen.cmd"];
+  NSString *indexPath = nil;
+  NSDictionary *payload = nil;
+  int exitCode = 0;
+
+  [GSCommandRunner setExecutableExposureStyleOverride: @"cmd-shim"];
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  indexPath = [self writeArlenIndexWithExecutable: @"arlen.exe" inRoot: tempRoot runner: runner];
+  [self ensureDirectory: [managedRoot stringByAppendingPathComponent: @"bin"]];
+  [@"@echo user script\r\n" writeToFile: shimPath atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  payload = [runner executeInstallForContext:
+                        [GSCommandContext contextWithArguments:
+                                            [NSArray arrayWithObjects: @"install", @"--root", managedRoot, @"--index", indexPath, @"arlen", nil]]
+                                  exitCode: &exitCode];
+  [GSCommandRunner setExecutableExposureStyleOverride: nil];
+
+  XCTAssertNotEqual(exitCode, 0);
+  XCTAssertFalse([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertTrue([[payload objectForKey: @"summary"] rangeOfString: @"already exists"].location != NSNotFound, @"%@", [payload objectForKey: @"summary"]);
+  XCTAssertEqualObjects([NSString stringWithContentsOfFile: shimPath encoding: NSUTF8StringEncoding error: NULL], @"@echo user script\r\n");
 }
 
 - (void)testListCompatibleFiltersByDetectedEnvironment
