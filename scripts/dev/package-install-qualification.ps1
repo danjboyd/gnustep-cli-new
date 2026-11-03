@@ -7,7 +7,10 @@ param(
   [Parameter(Mandatory = $true)][string]$ArtifactFile,
   [Parameter(Mandatory = $true)][string]$Bootstrap,
   [Parameter(Mandatory = $true)][string]$OutDir,
-  [string]$Repo = (Get-Location).Path
+  [string]$Repo = (Get-Location).Path,
+  # Optional CLI zip (bin/gnustep.exe) to overlay on the bootstrap-installed root,
+  # so an unreleased CLI's installer is exercised against the published toolchain.
+  [string]$CliZip = ''
 )
 # Native stderr must not abort the run; each step records its own exit code.
 $ErrorActionPreference = 'Continue'
@@ -25,6 +28,13 @@ function Invoke-Step([string]$Name, [scriptblock]$Body) {
 }
 
 Invoke-Step 'setup' { & powershell -NoProfile -ExecutionPolicy Bypass -File $Bootstrap --json setup --yes --root $root }
+$cliUnderTest = 'published'
+if ($CliZip) {
+  $cliDir = Join-Path $work 'cli-under-test'
+  Expand-Archive -Force -Path $CliZip -DestinationPath $cliDir
+  Copy-Item -Force (Join-Path $cliDir 'bin\gnustep.exe') (Join-Path $root 'bin\gnustep.exe')
+  $cliUnderTest = (Get-FileHash -Algorithm SHA256 -Path $CliZip).Hash.ToLowerInvariant()
+}
 
 $index = Join-Path $work 'index.json'
 $env:PYTHONPATH = Join-Path $Repo 'src'
@@ -66,6 +76,18 @@ foreach ($exe in $executables) {
   $smoke += "$exe --help exit $rc"
   # Negative codes are NTSTATUS loader/crash failures (0xC0000135 = DLL not found).
   if ($rc -lt 0 -or $rc -ge 126) { $smokeOk = $false }
+  # The exposed command in <root>\bin must run the same program with the same result.
+  $shim = Join-Path $root "bin\$exe.cmd"
+  if (Test-Path $shim) {
+    $global:LASTEXITCODE = 0
+    & cmd.exe /c "`"$shim`" --help" *> $null
+    $shimRc = $LASTEXITCODE
+    $smoke += "$exe.cmd --help exit $shimRc"
+    if ($shimRc -ne $rc) { $smokeOk = $false }
+  } else {
+    $smoke += "$exe.cmd not exposed"
+    $smokeOk = $false
+  }
 }
 $smoke | Out-File -Encoding utf8 (Join-Path $OutDir 'smoke.out')
 $steps['smoke'] = $(if ($smokeOk) { 0 } else { 1 })
@@ -95,6 +117,7 @@ $summary = [ordered]@{
   package_id = $PackageId
   artifact_id = $ArtifactId
   artifact_sha256 = (Get-FileHash -Algorithm SHA256 -Path $ArtifactFile).Hash.ToLowerInvariant()
+  cli_under_test = $cliUnderTest
   os = (Get-CimInstance Win32_OperatingSystem).Caption
   steps = $steps
   selected_artifact = $selected

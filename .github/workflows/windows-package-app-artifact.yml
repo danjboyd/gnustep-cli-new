@@ -43,11 +43,17 @@ on:
         required: false
         default: ef9159c6f27d272eea6f9525029da584def3a88b89d4ce403b37b42f9f374150
         type: string
+      qualify_cli_run_id:
+        description: "Optional: Windows Current Source Artifacts run whose CLI zip replaces the published CLI during qualification"
+        required: false
+        default: ""
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -145,7 +151,14 @@ jobs:
           $actual = (Get-FileHash -Algorithm SHA256 -Path $bootstrap).Hash.ToLowerInvariant()
           if ($actual -ne '${{ inputs.qualify_bootstrap_sha256 }}') { throw "bootstrap checksum mismatch: $actual" }
           $report = Get-Content -Raw (Join-Path $env:OUTPUT_ROOT 'package-build-report.json') | ConvertFrom-Json
-          & pwsh -NoProfile -File scripts\dev\package-install-qualification.ps1 -PackageId '${{ inputs.package_id }}' -ArtifactId '${{ inputs.target }}' -ArtifactFile $report.artifact.path -Bootstrap $bootstrap -OutDir (Join-Path $env:RUNNER_TEMP 'qualify-out') -Repo $env:GITHUB_WORKSPACE
+          $cliZip = ''
+          if ('${{ inputs.qualify_cli_run_id }}') {
+            $cliDir = Join-Path $in 'cli-run'
+            gh run download '${{ inputs.qualify_cli_run_id }}' --repo $env:GITHUB_REPOSITORY --dir $cliDir
+            $cliZip = (Get-ChildItem -Recurse -Path $cliDir -Filter 'gnustep-cli-windows-*.zip' | Select-Object -First 1).FullName
+            if (-not $cliZip) { throw 'no gnustep-cli-windows-*.zip in run ${{ inputs.qualify_cli_run_id }}' }
+          }
+          & pwsh -NoProfile -File scripts\dev\package-install-qualification.ps1 -PackageId '${{ inputs.package_id }}' -ArtifactId '${{ inputs.target }}' -ArtifactFile $report.artifact.path -Bootstrap $bootstrap -OutDir (Join-Path $env:RUNNER_TEMP 'qualify-out') -Repo $env:GITHUB_WORKSPACE -CliZip $cliZip
           if ($LASTEXITCODE -ne 0) { throw "package install qualification failed" }
 
       - name: Upload qualification evidence
