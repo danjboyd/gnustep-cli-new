@@ -1,0 +1,242 @@
+From 543628d9984789f8eeac4b1298874887db9a5f96 Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Tue, 3 Nov 2026 18:43:36 +0000
+Subject: [PATCH] Parse and match the Command modifier in key bindings
+
+A key binding could not name Command: -parseKey:intoCharacter:andModifiers:
+rejected "Command-LeftArrow" as an unknown modifier, and
+-handleKeyboardEvents:client: cleared NSCommandKeyMask from the
+keystroke before looking it up, so Command-LeftArrow was matched as
+LeftArrow.  With Control mapped to Command (GSFirstCommandKey), no
+binding file could make Control-arrow move by words.
+
+Parse "Command" (or "Cmd") as NSCommandKeyMask and keep it when
+matching.  A Command keystroke with no binding of its own is looked up
+again without Command, so it still does what it did before, unless a
+binding names it.  Menu key equivalents are unaffected: they take a
+Command keystroke before it reaches the input manager.
+
+AI disclosure: the fix and test were drafted with an AI assistant
+(Claude).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GzSMSWX8J7ZC2bjkLBo7Kw
+---
+ Source/NSInputManager.m                    |  21 ++-
+ Tests/gui/NSInputManager/TestInfo          |   0
+ Tests/gui/NSInputManager/commandBindings.m | 152 +++++++++++++++++++++
+ 3 files changed, 171 insertions(+), 2 deletions(-)
+ create mode 100644 Tests/gui/NSInputManager/TestInfo
+ create mode 100644 Tests/gui/NSInputManager/commandBindings.m
+
+diff --git a/Source/NSInputManager.m b/Source/NSInputManager.m
+index a79fb695..57705535 100644
+--- a/Source/NSInputManager.m
++++ b/Source/NSInputManager.m
+@@ -167,7 +167,12 @@ static NSInputManager *currentInputManager = nil;
+     {
+       NSString *modifier = [components objectAtIndex: i];
+       
+-      if ([modifier isEqualToString: @"Control"] 
++      if ([modifier isEqualToString: @"Command"]
++          || [modifier isEqualToString: @"Cmd"])
++        {
++          flags |= NSCommandKeyMask;
++        }
++      else if ([modifier isEqualToString: @"Control"] 
+           || [modifier isEqualToString: @"Ctrl"] 
+           || [modifier isEqualToString: @"C"])
+         {
+@@ -501,6 +506,7 @@ static NSInputManager *currentInputManager = nil;
+       NSUInteger flags = [theEvent modifierFlags] & (NSShiftKeyMask 
+                                                    | NSAlternateKeyMask 
+                                                    | NSControlKeyMask
++                                                   | NSCommandKeyMask
+                                                    | NSNumericPadKeyMask);
+       BOOL isFunctionKey = ([theEvent modifierFlags] & NSFunctionKeyMask) 
+         == NSFunctionKeyMask;
+@@ -547,11 +553,22 @@ static NSInputManager *currentInputManager = nil;
+               break;
+             }
+ 
+-          /* Look up the character in the current keybindings table.  */
++          /* Look up the character in the current keybindings table.
++           * A keystroke with Command that has no binding of its own is
++           * looked up without Command, as it was before Command-
++           * bindings could be written, so Command-LeftArrow still moves
++           * left unless something binds it.  */
+           found = [_currentBindingTable lookupKeyStroke: character
+                                         modifiers: adaptedFlags
+                                         returningActionIn: &action
+                                         tableIn: &table];
++          if (!found && (adaptedFlags & NSCommandKeyMask))
++            {
++              found = [_currentBindingTable lookupKeyStroke: character
++                                            modifiers: adaptedFlags & ~NSCommandKeyMask
++                                            returningActionIn: &action
++                                            tableIn: &table];
++            }
+           
+           if (found)
+             {
+diff --git a/Tests/gui/NSInputManager/TestInfo b/Tests/gui/NSInputManager/TestInfo
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/Tests/gui/NSInputManager/commandBindings.m b/Tests/gui/NSInputManager/commandBindings.m
+new file mode 100644
+index 00000000..ab747c27
+--- /dev/null
++++ b/Tests/gui/NSInputManager/commandBindings.m
+@@ -0,0 +1,152 @@
++/* Key bindings can name the Command modifier.  A binding file entry such
++   as "Command-LeftArrow" is parsed (it used to be dropped as an unknown
++   modifier) and matched (the input manager used to clear Command from the
++   keystroke, so Command-LeftArrow was looked up as LeftArrow).  A Command
++   keystroke with no binding of its own still falls back to its binding
++   without Command, and a menu key equivalent still takes a Command
++   keystroke before the key bindings see it.  Key events and menus need
++   the backend, so the set is skipped without it. */
++#include "Testing.h"
++
++#include <Foundation/NSArray.h>
++#include <Foundation/NSAutoreleasePool.h>
++#include <Foundation/NSDictionary.h>
++#include <Foundation/NSFileManager.h>
++#include <Foundation/NSString.h>
++
++#include <AppKit/NSApplication.h>
++#include <AppKit/NSEvent.h>
++#include <AppKit/NSInputManager.h>
++#include <AppKit/NSMenu.h>
++#include <AppKit/NSMenuItem.h>
++#include <AppKit/NSWindow.h>
++
++/* A client that records the commands the input manager sends it.  */
++@interface Client : NSObject
++{
++@public
++  NSMutableArray *commands;
++}
++@end
++@implementation Client
++- (void) doCommandBySelector: (SEL)aSelector
++{
++  [commands addObject: NSStringFromSelector(aSelector)];
++}
++- (void) insertText: (id)aString
++{
++  [commands addObject: @"insertText:"];
++}
++@end
++
++@interface MenuTarget : NSObject
++{
++@public
++  int fired;
++}
++- (void) copyAction: (id)sender;
++@end
++@implementation MenuTarget
++- (void) copyAction: (id)sender
++{
++  fired++;
++}
++@end
++
++static NSEvent *
++keyEvent(unichar character, NSUInteger modifiers, NSInteger windowNumber)
++{
++  NSString *string = [NSString stringWithCharacters: &character length: 1];
++
++  return [NSEvent keyEventWithType: NSKeyDown
++			  location: NSZeroPoint
++		     modifierFlags: modifiers
++			 timestamp: 0
++		      windowNumber: windowNumber
++			   context: nil
++			characters: string
++       charactersIgnoringModifiers: string
++			 isARepeat: NO
++			   keyCode: 0];
++}
++
++int
++main(int argc, char **argv)
++{
++  NSAutoreleasePool *pool = [NSAutoreleasePool new];
++  NSInputManager *manager;
++  NSString *path;
++  Client *client;
++  NSWindow *window;
++  NSMenu *menu;
++  MenuTarget *target;
++  NSUInteger arrow = NSFunctionKeyMask;
++
++  START_SET("NSInputManager Command key bindings")
++
++  NS_DURING
++    {
++      [NSApplication sharedApplication];
++    }
++  NS_HANDLER
++    {
++      if ([[localException name] isEqualToString: NSInternalInconsistencyException])
++        SKIP("It looks like GNUstep backend is not yet installed")
++    }
++  NS_ENDHANDLER
++
++  PASS([NSInputManager parseKey: @"Command-LeftArrow"
++		  intoCharacter: NULL
++		   andModifiers: NULL],
++    "a key with the Command modifier is parsed");
++
++  path = [NSTemporaryDirectory() stringByAppendingPathComponent:
++    @"CommandWordMoves-test.dict"];
++  [[NSDictionary dictionaryWithObjectsAndKeys:
++    @"moveWordLeft:", @"Command-LeftArrow",
++    @"moveRight:", @"RightArrow",
++    @"selectAll:", @"Command-c",
++    nil] writeToFile: path atomically: YES];
++  manager = [NSInputManager currentInputManager];
++  [manager loadBindingsFromFile: path];
++  [[NSFileManager defaultManager] removeFileAtPath: path handler: nil];
++
++  client = AUTORELEASE([Client new]);
++  client->commands = [NSMutableArray array];
++  [manager handleKeyboardEvents:
++    [NSArray arrayWithObject: keyEvent(NSLeftArrowFunctionKey,
++      arrow | NSCommandKeyMask, 0)] client: client];
++  PASS_EQUAL(client->commands, [NSArray arrayWithObject: @"moveWordLeft:"],
++    "a Command-LeftArrow binding fires");
++
++  [client->commands removeAllObjects];
++  [manager handleKeyboardEvents:
++    [NSArray arrayWithObject: keyEvent(NSRightArrowFunctionKey,
++      arrow | NSCommandKeyMask, 0)] client: client];
++  PASS_EQUAL(client->commands, [NSArray arrayWithObject: @"moveRight:"],
++    "an unbound Command keystroke falls back to its binding without Command");
++
++  /* A menu key equivalent takes a Command keystroke first.  */
++  window = AUTORELEASE([[NSWindow alloc]
++    initWithContentRect: NSMakeRect(100, 100, 200, 100)
++	      styleMask: NSTitledWindowMask
++		backing: NSBackingStoreBuffered
++		  defer: NO]);
++  [window setReleasedWhenClosed: NO];
++  [window makeKeyAndOrderFront: nil];
++  target = AUTORELEASE([MenuTarget new]);
++  menu = AUTORELEASE([[NSMenu alloc] initWithTitle: @"Main"]);
++  [[menu addItemWithTitle: @"Copy"
++		   action: @selector(copyAction:)
++	    keyEquivalent: @"c"] setTarget: target];
++  [NSApp setMainMenu: menu];
++  [client->commands removeAllObjects];
++  [NSApp sendEvent: keyEvent('c', NSCommandKeyMask, [window windowNumber])];
++  PASS(target->fired == 1 && [client->commands count] == 0,
++    "a menu key equivalent takes a Command keystroke before the bindings");
++
++  END_SET("NSInputManager Command key bindings")
++
++  [pool release];
++  return 0;
++}

@@ -7,6 +7,7 @@ BUILD_ROOT="/tmp/gnustep-cli-linux-toolchain/build"
 HOST_OS="linux"
 JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
 
+RECIPE_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 mkdir -p "$PREFIX" "$SOURCES_DIR" "$BUILD_ROOT"
 
 if [ ! -d "$SOURCES_DIR/libobjc2/.git" ]; then
@@ -43,7 +44,21 @@ if [ ! -d "$SOURCES_DIR/libs-gui/.git" ]; then
   git clone "https://github.com/gnustep/libs-gui.git" "$SOURCES_DIR/libs-gui"
 fi
 git -C "$SOURCES_DIR/libs-gui" fetch --tags origin
+git -C "$SOURCES_DIR/libs-gui" reset -q --hard
 git -C "$SOURCES_DIR/libs-gui" checkout --detach "7892137bdedd007eba8425f766e41481ddb4fda6"
+# Carried libs-gui fix (source-lock.json libs-gui patches): Command-modifier key bindings.
+LIBS_GUI_PATCH="$RECIPE_DIR/../patches/libs-gui/0001-parse-and-match-the-command-modifier-in-key-bindings.patch"
+LIBS_GUI_PATCH_SHA256="724ea8342f4027beb9c81781b18c94594cb4a9ea2b7f7cbb63efbc9b2a20c5e9"
+if command -v sha256sum >/dev/null 2>&1; then
+  libs_gui_patch_sha=$(sha256sum "$LIBS_GUI_PATCH" | awk '{print $1}')
+else
+  libs_gui_patch_sha=$(sha256 -q "$LIBS_GUI_PATCH")
+fi
+if [ "$libs_gui_patch_sha" != "$LIBS_GUI_PATCH_SHA256" ]; then
+  echo "libs-gui patch digest mismatch: $libs_gui_patch_sha" >&2
+  exit 1
+fi
+git -C "$SOURCES_DIR/libs-gui" apply -p1 "$LIBS_GUI_PATCH"
 
 if [ ! -d "$SOURCES_DIR/libs-back/.git" ]; then
   git clone "https://github.com/gnustep/libs-back.git" "$SOURCES_DIR/libs-back"

@@ -204,6 +204,37 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("gnustep-input-linux-cli", content)
         self.assertIn("gnustep-input-windows-toolchain", content)
 
+    SOURCE_BUILT_TOOLCHAIN_TARGETS = (
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2604-amd64-clang",
+        "openbsd-amd64-clang",
+        "openbsd-arm64-clang",
+    )
+
+    def test_source_built_toolchains_carry_the_libs_gui_command_key_binding_patch(self):
+        # Ctrl+Left/Right word moves need libs-gui to parse the Command modifier in key
+        # bindings (danjboyd/libs-gui 543628d9). The lock declares the carried patch and
+        # the official recipe must verify and apply exactly that file.
+        import hashlib
+        for target in self.SOURCE_BUILT_TOOLCHAIN_TARGETS:
+            lock = json.loads((ROOT / "toolchains" / target / "source-lock.json").read_text())
+            libs_gui = next(component for component in lock["components"] if component["name"] == "libs-gui")
+            patches = {patch["id"]: patch for patch in libs_gui.get("patches", [])}
+            self.assertIn("command-modifier-key-bindings", patches, target)
+            patch = patches["command-modifier-key-bindings"]
+            patch_file = ROOT / patch["path"]
+            self.assertTrue(patch_file.is_file(), target)
+            self.assertEqual(hashlib.sha256(patch_file.read_bytes()).hexdigest(), patch["sha256"], target)
+            self.assertEqual(patch["source"]["commit"], "543628d9984789f8eeac4b1298874887db9a5f96")
+            self.assertEqual(patch["applies_to_revision"], libs_gui["revision"], target)
+            recipe = (ROOT / "toolchains" / target / "build-toolchain.sh").read_text()
+            self.assertIn(f'LIBS_GUI_PATCH_SHA256="{patch["sha256"]}"', recipe, target)
+            self.assertIn(Path(patch["path"]).name, recipe, target)
+            checkout = recipe.index(f'checkout --detach "{libs_gui["revision"]}"')
+            self.assertLess(checkout, recipe.index('apply -p1 "$LIBS_GUI_PATCH"'), target)
+
     def test_package_app_artifact_workflow_builds_from_explicit_toolchain(self):
         workflow = ROOT / ".github" / "workflows" / "package-app-artifact.yml"
         self.assertTrue(workflow.exists())

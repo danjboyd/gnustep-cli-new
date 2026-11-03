@@ -83,7 +83,22 @@
       "revision_type": "commit",
       "archive_sha256": null,
       "configure_args": [],
-      "patches": []
+      "patches": [
+        {
+          "id": "command-modifier-key-bindings",
+          "path": "toolchains/patches/libs-gui/0001-parse-and-match-the-command-modifier-in-key-bindings.patch",
+          "sha256": "724ea8342f4027beb9c81781b18c94594cb4a9ea2b7f7cbb63efbc9b2a20c5e9",
+          "strip": 1,
+          "source": {
+            "repository": "https://github.com/danjboyd/libs-gui.git",
+            "commit": "543628d9984789f8eeac4b1298874887db9a5f96",
+            "tag": "gnustep-swift-2026-11-03b"
+          },
+          "applies_to_revision": "7892137bdedd007eba8425f766e41481ddb4fda6",
+          "rationale": "NSInputManager never parsed or matched the Command modifier in key bindings, so Ctrl+Left/Right word moves under the Ctrl->Command remap did nothing in GNUstep apps. Falls back to the previous lookup when a Command key has no binding of its own.",
+          "upstream_status": "carried from the danjboyd/libs-gui fork; not yet submitted upstream"
+        }
+      ]
     },
     {
       "name": "libs-back",
