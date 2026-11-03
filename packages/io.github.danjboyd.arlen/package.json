@@ -5,7 +5,7 @@
   "aliases": [
     "arlen"
   ],
-  "version": "0.1.0-snapshot.20260507.1",
+  "version": "0.3.2",
   "kind": "framework",
   "summary": "GNUstep web application framework and command-line tooling.",
   "license": "LGPL-2.0-or-later",
@@ -16,20 +16,20 @@
   ],
   "source": {
     "type": "git-archive",
-    "url": "https://github.com/danjboyd/Arlen/archive/7561910f3cdb249d8d8805aed88c7a250d227028.tar.gz",
-    "sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
-    "revision": "7561910f3cdb249d8d8805aed88c7a250d227028",
+    "url": "https://github.com/danjboyd/Arlen/archive/e26a755e0c250ec972c99eca9fb51a4259d48307.tar.gz",
+    "sha256": "7360dc7d1f6816603dcb9a025e7366e9a1892aab9022371499a8702c4897621f",
+    "revision": "e26a755e0c250ec972c99eca9fb51a4259d48307",
     "upstream": "danjboyd/Arlen",
     "upstream_url": "https://github.com/danjboyd/Arlen",
-    "tracking_strategy": "reviewed-commit-snapshot-with-externalized-submodules",
-    "update_cadence": "manual-until-first-stable-package-release",
+    "tracking_strategy": "tagged-release-with-externalized-submodules",
+    "update_cadence": "manual-per-arlen-release",
     "channel_policy": "dogfood snapshots may track reviewed commits; stable should track a tagged Arlen release or approved package exception.",
     "submodule_policy": "do-not-inline",
     "externalized_submodules": [
       {
         "path": "vendor/tools-xctest",
-        "url": "https://github.com/gnustep/tools-xctest.git",
-        "revision": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
+        "url": "https://github.com/danjboyd/tools-xctest.git",
+        "revision": "a84f053e8546bb3e03bb470e2a0a17863ecabd62",
         "package": "org.gnustep.tools-xctest",
         "relationship": "build-test-dependency",
         "notes": "Arlen's tools-xctest patch is delivered by the org.gnustep.tools-xctest package."
@@ -41,7 +41,8 @@
         "relationship": "build-tooling",
         "notes": "The GNUstep CLI is supplied by the official package build environment, not vendored into Arlen."
       }
-    ]
+    ],
+    "tag": "v0.3.2"
   },
   "requirements": {
     "supported_os": [
@@ -112,7 +113,7 @@
       ],
       "format": "tar.gz",
       "publish": true,
-      "status": "published_linux_amd64_clang_headless",
+      "status": "pending_rebuild_for_source_e26a755e",
       "filename": "arlen-arlen-linux-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
       "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/arlen-arlen-linux-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
       "artifact_path": ".artifacts/package-output/source-built-linux-20260505/arlen-arlen-linux-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
@@ -125,7 +126,8 @@
       "otvm_managed_preflight_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-otvm-managed-preflight.json",
       "source_built_toolchain_evidence": "docs/validation/package-build-boundary-20260505/linux-amd64-clang-source-built-toolchain-otvm-package.json",
       "source_built_build_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-source-built-otvm-build.json",
-      "validation_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-local-install-remove.json"
+      "validation_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-local-install-remove.json",
+      "previous_status": "published_linux_amd64_clang_headless"
     },
     {
       "id": "arlen-linux-ubuntu2404-amd64-clang-headless",
@@ -151,7 +153,7 @@
       ],
       "format": "tar.gz",
       "publish": false,
-      "status": "controlled_binary_built_pending_publication",
+      "status": "pending_rebuild_for_source_e26a755e",
       "filename": "arlen-arlen-linux-ubuntu2404-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
       "artifact_path": ".artifacts/package-app-arlen-ubuntu2404-25402322391/arlen-arlen-linux-ubuntu2404-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
       "sha256": "253d4bb8bea2408f0f0389dd6b6295d2cd7fc6e715021c063148e576bf450114",
@@ -159,7 +161,8 @@
       "notes": "GitHub Actions Package App Artifact run 25402322391 built this package from the Linux Ubuntu 24.04 amd64 managed toolchain produced by run 25401769317. Publication remains pending release promotion.",
       "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25402322391",
       "managed_toolchain_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25401769317",
-      "build_blockers": []
+      "build_blockers": [],
+      "previous_status": "controlled_binary_built_pending_publication"
     },
     {
       "id": "arlen-linux-arm64-clang-headless",
@@ -183,7 +186,7 @@
       ],
       "format": "tar.gz",
       "publish": true,
-      "status": "hosted_validated_linux_arm64_install_remove",
+      "status": "pending_rebuild_for_source_e26a755e",
       "filename": "arlen-arlen-linux-arm64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
       "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/arlen-arlen-linux-arm64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
       "artifact_path": ".artifacts/arm64-otvm-lease-20260507195517-xfh2au/packages/arlen-arlen-linux-arm64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
@@ -192,7 +195,8 @@
       "build_evidence": "docs/validation/linux-arm64-otvm-build-20260507.json",
       "validation_evidence": "docs/validation/linux-arm64-hosted-package-install-remove-20260507.json",
       "notes": "OTVM lease lease-20260507195517-xfh2au built this package from the Linux arm64 managed toolchain produced on a native aarch64 host. OTVM lease lease-20260507202841-cvp23y installed and removed the hosted artifact from the signed v0.1.0-dev package index.",
-      "build_blockers": []
+      "build_blockers": [],
+      "previous_status": "hosted_validated_linux_arm64_install_remove"
     },
     {
       "id": "arlen-openbsd-amd64-clang-headless",
@@ -211,7 +215,7 @@
       ],
       "format": "tar.gz",
       "publish": true,
-      "status": "published_openbsd_amd64_clang_headless",
+      "status": "pending_rebuild_for_source_e26a755e",
       "filename": "arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
       "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0-dev/arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
       "artifact_path": ".artifacts/openbsd-arlen-native-20260507-clean/arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
@@ -221,7 +225,8 @@
       "build_evidence": "docs/validation/package-publication-20260506/arlen-openbsd-amd64-clang-headless-build.json",
       "validation_evidence": "docs/validation/package-install-remove-20260506/arlen-openbsd-amd64-clang-headless-install-remove.json",
       "install_remove_evidence": "docs/validation/package-install-remove-20260506/arlen-openbsd-amd64-clang-headless-install-remove.json",
-      "build_blockers": []
+      "build_blockers": [],
+      "previous_status": "published_openbsd_amd64_clang_headless"
     },
     {
       "id": "arlen-windows-amd64-msys2-clang64-headless",
@@ -240,7 +245,7 @@
       ],
       "format": "zip",
       "publish": true,
-      "status": "published_windows_amd64_msys2_clang64_headless",
+      "status": "pending_rebuild_for_source_e26a755e",
       "filename": "arlen-arlen-windows-amd64-msys2-clang64-headless-0.1.0-snapshot.20260505.zip",
       "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/arlen-arlen-windows-amd64-msys2-clang64-headless-0.1.0-snapshot.20260505.zip",
       "artifact_path": ".artifacts/windows-arlen-25448471373/gnustep-windows-package-app-io.github.danjboyd.arlen-arlen-windows-amd64-msys2-clang64-headless/arlen-arlen-windows-amd64-msys2-clang64-headless-0.1.0-snapshot.20260505.zip",
@@ -251,7 +256,8 @@
       "build_evidence": "docs/validation/package-publication-20260506/arlen-windows-amd64-msys2-clang64-headless-build.json",
       "validation_evidence": "docs/validation/package-install-remove-20260506/arlen-windows-amd64-msys2-clang64-headless-install-remove.json",
       "install_remove_evidence": "docs/validation/package-install-remove-20260506/arlen-windows-amd64-msys2-clang64-headless-install-remove.json",
-      "build_blockers": []
+      "build_blockers": [],
+      "previous_status": "published_windows_amd64_msys2_clang64_headless"
     }
   ],
   "install": {

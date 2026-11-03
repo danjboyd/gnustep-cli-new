@@ -84,7 +84,10 @@ class PackageRepositoryTests(unittest.TestCase):
         gorm_artifact = next(artifact for artifact in packages["org.gnustep.gorm"]["artifacts"] if artifact["id"] == "gorm-linux-amd64-clang")
 
         self.assertTrue(arlen_artifact["publish"])
-        self.assertEqual(arlen_artifact["status"], "published_linux_amd64_clang_headless")
+        # The package source moved to Arlen v0.3.2; every artifact stays blocked until rebuilt.
+        self.assertEqual(arlen_artifact["status"], "pending_rebuild_for_source_e26a755e")
+        self.assertEqual(arlen_artifact["previous_status"], "published_linux_amd64_clang_headless")
+        self.assertEqual(packages["io.github.danjboyd.arlen"]["version"], "0.3.2")
         self.assertIn("https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/", arlen_artifact["url"])
         self.assertEqual(arlen_artifact["build_blockers"], [])
         self.assertEqual(len(arlen_artifact["sha256"]), 64)
