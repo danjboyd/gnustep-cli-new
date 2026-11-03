@@ -36,7 +36,7 @@ if ($CliZip) {
   $cliUnderTest = (Get-FileHash -Algorithm SHA256 -Path $CliZip).Hash.ToLowerInvariant()
 }
 
-$index = Join-Path $work 'index.json'
+$index = Join-Path $work 'package-index.json'
 $env:PYTHONPATH = Join-Path $Repo 'src'
 $indexScript = Join-Path $work 'make-index.py'
 @'
@@ -57,7 +57,19 @@ python $indexScript (Join-Path $Repo 'packages') $PackageId $ArtifactId $Artifac
 $steps['index'] = $LASTEXITCODE
 
 $gnustep = Join-Path $root 'bin\gnustep.exe'
-Invoke-Step 'install' { & $gnustep --json install --root $root --index $index $PackageId }
+# The install goes through a throwaway signed manifest advertising this index, as a
+# stable install does, with no --index and no production keys.
+$env:RELEASE_TRUST_ROOT = (python (Join-Path $Repo 'scripts\dev\make-qualification-release.py') --work $work --root $root).Trim()
+
+# A changed index must be refused: its digest no longer matches the signed manifest.
+$goodIndex = [System.IO.File]::ReadAllBytes($index)
+[System.IO.File]::WriteAllBytes($index, $goodIndex + [byte]10)
+Invoke-Step 'tampered_list' { & $gnustep --json list --root $root }
+$tamperedOut = Get-Content -Raw (Join-Path $OutDir 'tampered_list.out')
+$steps['tampered_index'] = $(if ($steps['tampered_list'] -ne 0 -and $tamperedOut -match 'does not match the release manifest') { 0 } else { 1 })
+[System.IO.File]::WriteAllBytes($index, $goodIndex)
+
+Invoke-Step 'install' { & $gnustep --json install --root $root $PackageId }
 
 $manifest = Get-Content -Raw (Join-Path $Repo "packages\$PackageId\package.json") | ConvertFrom-Json
 $executables = @($manifest.install.executables)
@@ -110,7 +122,7 @@ $installJson = $null
 try { $installJson = Get-Content -Raw (Join-Path $OutDir 'install.out') | ConvertFrom-Json } catch { }
 $selected = $(if ($installJson) { $installJson.selected_artifact } else { $null })
 $ok = ($selected -eq $ArtifactId)
-foreach ($name in @('setup', 'index', 'install', 'smoke', 'remove', 'leftovers')) { if ($steps[$name] -ne 0) { $ok = $false } }
+foreach ($name in @('setup', 'index', 'tampered_index', 'install', 'smoke', 'remove', 'leftovers')) { if ($steps[$name] -ne 0) { $ok = $false } }
 $summary = [ordered]@{
   schema_version = 1
   kind = 'package-install-qualification'

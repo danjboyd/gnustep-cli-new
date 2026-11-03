@@ -257,8 +257,10 @@ class RepositoryContractsTests(unittest.TestCase):
         # Qualification runs after the package upload so a failed check keeps the artifact.
         self.assertLess(content.index("- name: Upload package artifact"), content.index("- name: Qualify install and remove"))
         script = (ROOT / "scripts" / "dev" / "package-install-qualification.sh").read_text()
-        for step in ("step setup", "step install", "step smoke", "step remove", "step leftovers"):
+        for step in ("step setup", "step tampered_index", "step install", "step smoke", "step remove", "step leftovers"):
             self.assertIn(step, script)
+        self.assertNotIn("--index", script.split("step install", 1)[1].split("\n", 1)[0])
+        self.assertIn("make-qualification-release.py", script)
         self.assertIn('install.get("selected_artifact") == artifact_id', script)
 
     def test_windows_package_app_artifact_workflow_can_qualify_install_and_remove(self):
@@ -268,8 +270,10 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("package-install-qualification.ps1", content)
         self.assertLess(content.index("- name: Upload package artifact"), content.index("- name: Qualify install and remove"))
         script = (ROOT / "scripts" / "dev" / "package-install-qualification.ps1").read_text()
-        for step in ("'setup'", "'install'", "'remove'", "$steps['smoke']", "$steps['leftovers']"):
+        for step in ("'setup'", "'install'", "'remove'", "$steps['smoke']", "$steps['leftovers']", "$steps['tampered_index']"):
             self.assertIn(step, script)
+        self.assertIn("make-qualification-release.py", script)
+        self.assertNotIn("install --root $root --index", script)
         self.assertIn("$rc -lt 0 -or $rc -ge 126", script)
 
     def test_windows_package_app_artifact_workflow_builds_msys2_packages(self):

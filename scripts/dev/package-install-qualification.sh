@@ -3,7 +3,11 @@
 # bootstrap, inside a clean container of the target distro release, then smoke
 # its declared executables and remove it again.
 #
-# usage: package-install-qualification.sh <package-id> <artifact-id> <artifact-file> <bootstrap.sh> <out-dir>
+# usage: package-install-qualification.sh <package-id> <artifact-id> <artifact-file> <bootstrap.sh> <out-dir> [cli-tarball]
+# cli-tarball overlays an unreleased CLI on the bootstrap-installed root. The install
+# goes through a throwaway signed manifest that advertises the one-package index
+# (scripts/dev/make-qualification-release.py), with no --index, and a tampered index
+# must be refused first.
 # The repository is expected at $REPO (default /src); it supplies the package
 # manifest the one-package index is generated from.
 set -eu
@@ -12,13 +16,14 @@ ARTIFACT_ID=$2
 ARTIFACT_FILE=$3
 BOOTSTRAP=$4
 OUT=$5
+CLI_TARBALL=${6:-}
 REPO=${REPO:-/src}
 USER_NAME=gsqualify
 mkdir -p "$OUT"
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update >/dev/null
-apt-get install -y --no-install-recommends sudo ca-certificates curl python3 binutils >/dev/null
+apt-get install -y --no-install-recommends sudo ca-certificates curl python3 binutils openssl >/dev/null
 
 id "$USER_NAME" >/dev/null 2>&1 || useradd -m -s /bin/sh "$USER_NAME"
 printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$USER_NAME" > /etc/sudoers.d/gsqualify
@@ -43,10 +48,14 @@ step() {
 }
 
 step setup "sh ./gnustep-bootstrap.sh --json setup --yes --root '$R'"
+if [ -n "$CLI_TARBALL" ]; then
+  tar -xzf "$CLI_TARBALL" --strip-components=1 -C "$R"
+  chown -R "$USER_NAME" "$R"
+fi
 
 # One-package index from the checkout's manifests; the artifact points at the
 # file under test so its bytes, not a published URL, are what gets installed.
-PYTHONPATH="$REPO/src" python3 - "$REPO/packages" "$PKG_ID" "$ARTIFACT_ID" "$artifact" "$work/index.json" <<'PY'
+PYTHONPATH="$REPO/src" python3 - "$REPO/packages" "$PKG_ID" "$ARTIFACT_ID" "$artifact" "$work/package-index.json" <<'PY'
 import hashlib, json, os, sys
 from gnustep_cli_shared.package_repository import generate_package_index
 packages_dir, package_id, artifact_id, artifact_path, output = sys.argv[1:]
@@ -63,9 +72,20 @@ artifact.update({"url": "file://" + artifact_path, "sha256": digest, "size": os.
                  "filename": os.path.basename(artifact_path), "publish": True})
 json.dump(index, open(output, "w"), indent=2)
 PY
-chown "$USER_NAME" "$work/index.json"
+chown "$USER_NAME" "$work/package-index.json"
 
-step install "'$R/bin/gnustep' --json install --root '$R' --index '$work/index.json' '$PKG_ID'"
+trust_root=$(python3 "$REPO/scripts/dev/make-qualification-release.py" --work "$work" --root "$R")
+chown -R "$USER_NAME" "$work"
+gnustep="RELEASE_TRUST_ROOT='$trust_root' '$R/bin/gnustep'"
+
+# A changed index must be refused: its digest no longer matches the signed manifest.
+cp "$work/package-index.json" "$work/package-index.good"
+printf '\n' >> "$work/package-index.json"
+step tampered_index "! $gnustep --json list --root '$R' > tampered.json; grep -q 'does not match the release manifest' tampered.json"
+cp "$work/package-index.good" "$work/package-index.json"
+chown "$USER_NAME" "$work/package-index.json"
+
+step install "$gnustep --json install --root '$R' '$PKG_ID'"
 
 # Smoke every declared executable through the managed environment.
 executables=$(python3 -c 'import json,sys; print(" ".join(json.load(open(sys.argv[1]))["install"].get("executables", [])))' "$REPO/packages/$PKG_ID/package.json")
@@ -91,7 +111,7 @@ SMOKE
 chown "$USER_NAME" "$work/smoke.sh"
 step smoke "sh ./smoke.sh"
 
-step remove "'$R/bin/gnustep' --json remove --root '$R' '$PKG_ID'"
+step remove "$gnustep --json remove --root '$R' '$PKG_ID'"
 step leftovers "test ! -e '$R/packages/$PKG_ID' && for exe in $executables; do test ! -e '$R/bin/'\$exe || exit 1; done && ! grep -q '\"$PKG_ID\"' '$R/state/installed-packages.json'"
 
 python3 - "$OUT" "$PKG_ID" "$ARTIFACT_ID" "$artifact" <<'PY'
@@ -121,7 +141,7 @@ summary = {
     "selected_artifact": install.get("selected_artifact"),
     "installed_version": install.get("version"),
     "smoke": open(os.path.join(out, "smoke.out")).read().strip().splitlines(),
-    "ok": all(steps.get(name) == "0" for name in ("setup", "install", "smoke", "remove", "leftovers"))
+    "ok": all(steps.get(name) == "0" for name in ("setup", "tampered_index", "install", "smoke", "remove", "leftovers"))
           and install.get("selected_artifact") == artifact_id,
 }
 json.dump(summary, open(os.path.join(out, "package-install-qualification.json"), "w"), indent=2)
