@@ -235,6 +235,18 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn('-v "$RUNNER_TEMP:$RUNNER_TEMP"', content)
         self.assertIn('run_build scripts/internal/build_infra.py "${args[@]}"', content)
 
+    def test_package_app_artifact_workflow_can_qualify_install_and_remove(self):
+        content = (ROOT / ".github" / "workflows" / "package-app-artifact.yml").read_text()
+        self.assertIn("qualify_image", content)
+        self.assertIn('sha256sum -c -', content)
+        self.assertIn("scripts/dev/package-install-qualification.sh", content)
+        # Qualification runs after the package upload so a failed check keeps the artifact.
+        self.assertLess(content.index("- name: Upload package artifact"), content.index("- name: Qualify install and remove"))
+        script = (ROOT / "scripts" / "dev" / "package-install-qualification.sh").read_text()
+        for step in ("step setup", "step install", "step smoke", "step remove", "step leftovers"):
+            self.assertIn(step, script)
+        self.assertIn('install.get("selected_artifact") == artifact_id', script)
+
     def test_windows_package_app_artifact_workflow_builds_msys2_packages(self):
         workflow = ROOT / ".github" / "workflows" / "windows-package-app-artifact.yml"
         self.assertTrue(workflow.exists())
