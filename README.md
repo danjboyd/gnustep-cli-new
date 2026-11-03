@@ -92,8 +92,8 @@ update: Everything is already current.
 ```
 
 The package commands (`list`, `search`, `install`, `remove`) are included, but
-the v0.1.0 release doesn't publish an official package index yet. Until it
-does, they only work with an index you pass explicitly:
+no stable release (v0.1.0 through v0.1.3) publishes an official package index
+yet. Until one does, they only work with an index you pass explicitly:
 `gnustep list --index <path-or-url>`.
 
 ## Already have GNUstep?
