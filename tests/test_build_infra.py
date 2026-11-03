@@ -1,3 +1,4 @@
+import os
 import sys
 import subprocess
 import hashlib
@@ -2346,6 +2347,36 @@ class BuildInfraTests(unittest.TestCase):
             self.assertEqual([patch["id"] for patch in payload["patches"]], ["filters"])
             self.assertEqual(payload["patches"][0]["sha256"], declared["patches"][0]["sha256"])
             self.assertEqual(hashlib.sha256(Path(payload["patches"][0]["path"]).read_bytes()).hexdigest(), declared["patches"][0]["sha256"])
+
+    def test_package_tools_xctest_artifact_source_digest_ignores_git_eol_conversion(self):
+        # Git for Windows ships core.autocrlf=true; core.eol defaults to native (CRLF
+        # on Windows). Either one used to change the clone and the `git archive` bytes,
+        # so the manifest source digest failed and LF patches stopped applying.
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            source, manifest, installed = self._tools_xctest_patch_fixture(temp)
+            (source / ".gitattributes").write_text("* text=auto\n")
+            git = ["git", "-C", str(source)]
+            subprocess.run(git + ["add", ".gitattributes"], check=True)
+            subprocess.run(git + ["commit", "-m", "attributes"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            revision = subprocess.run(git + ["rev-parse", "HEAD"], stdout=subprocess.PIPE, text=True, check=True).stdout.strip()
+            clean_sha = hashlib.sha256(subprocess.run(git + ["archive", "--format=tar.gz", "HEAD"], stdout=subprocess.PIPE, check=True).stdout).hexdigest()
+            declared = json.loads(manifest.read_text())
+            declared["source"].update({"revision": revision, "sha256": clean_sha})
+            manifest.write_text(json.dumps(declared))
+            # MinGit sets these in its *system* gitconfig, which repository config overrides.
+            system_config = temp / "mingit-gitconfig"
+            system_config.write_text("[core]\n\tautocrlf = true\n\teol = crlf\n")
+            windows_like_git = {"GIT_CONFIG_SYSTEM": str(system_config), "GIT_CONFIG_NOSYSTEM": "0"}
+            with patch.dict(os.environ, windows_like_git):
+                converted_sha = hashlib.sha256(subprocess.run(git + ["archive", "--format=tar.gz", "HEAD"], stdout=subprocess.PIPE, check=True).stdout).hexdigest()
+                self.assertNotEqual(converted_sha, clean_sha, "fixture must reproduce the EOL conversion")
+                payload = package_tools_xctest_artifact(temp / "out", installed_root=installed, version="9.9.9", manifest_path=manifest)
+            self.assertTrue(payload["ok"], payload.get("summary"))
+            self.assertEqual(payload["source"]["sha256"], clean_sha)
+            cloned = temp / "out" / "work" / "tools-xctest-src" / "main.m"
+            self.assertNotIn(b"\r\n", cloned.read_bytes())
+            self.assertIn(b"-only-testing:", cloned.read_bytes())
 
     def test_package_tools_xctest_artifact_refuses_unclean_or_mismatched_sources(self):
         with tempfile.TemporaryDirectory() as tempdir:
