@@ -1800,6 +1800,127 @@
   XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: managedArlenLink]);
 }
 
+- (NSString *)managedRootAdvertisingIndexInDirectory:(NSString *)tempRoot
+                                           runner:(GSCommandRunner *)runner
+                                       digestMode:(NSString *)digestMode
+{
+  NSString *manifestRoot = [tempRoot stringByAppendingPathComponent: @"manifest"];
+  NSString *managedRoot = [tempRoot stringByAppendingPathComponent: @"managed"];
+  NSString *statePath = [[managedRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+  NSString *indexPath = [manifestRoot stringByAppendingPathComponent: @"package-index.json"];
+  NSString *manifestPath = [self releaseManifestPathInDirectory: manifestRoot
+                                                      cliSHA256: @"unused-cli"
+                                                toolchainSHA256: @"unused-toolchain"
+                                                         cliURL: @"file:///unused-cli"
+                                                   toolchainURL: @"file:///unused-toolchain"];
+  NSMutableDictionary *manifest = nil;
+  NSMutableDictionary *indexEntry = nil;
+  NSString *digest = nil;
+
+  [self writeJSONStringObject:
+          [NSDictionary dictionaryWithObjectsAndKeys:
+                         [NSNumber numberWithInt: 1], @"schema_version",
+                         @"stable", @"channel",
+                         [NSArray arrayWithObject:
+                                    [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   @"io.github.danjboyd.arlen", @"id",
+                                                   @"Arlen", @"name",
+                                                   @"0.3.2", @"version",
+                                                   @"framework", @"kind",
+                                                   @"Advertised index fixture.", @"summary",
+                                                   [NSArray array], @"artifacts",
+                                                   nil]], @"packages",
+                         nil]
+                 toPath: indexPath];
+  digest = [runner sha256ForFile: indexPath];
+  if ([digestMode isEqualToString: @"tampered"])
+    {
+      // Still valid JSON; only the bytes differ from what the manifest signed.
+      NSMutableData *bytes = [NSMutableData dataWithContentsOfFile: indexPath];
+      [bytes appendData: [@"\n" dataUsingEncoding: NSUTF8StringEncoding]];
+      [bytes writeToFile: indexPath atomically: YES];
+    }
+  manifest = [NSJSONSerialization JSONObjectWithData: [NSData dataWithContentsOfFile: manifestPath]
+                                             options: NSJSONReadingMutableContainers
+                                               error: NULL];
+  indexEntry = [NSMutableDictionary dictionaryWithObjectsAndKeys:
+                                      @"package-index-stable", @"id",
+                                      @"package-index", @"kind",
+                                      @"package-index.json", @"filename",
+                                      nil];
+  if ([digestMode isEqualToString: @"missing"] == NO)
+    {
+      [indexEntry setObject: digest forKey: @"sha256"];
+    }
+  [[[[manifest objectForKey: @"releases"] objectAtIndex: 0] objectForKey: @"artifacts"] addObject: indexEntry];
+  [self writeJSONStringObject: manifest toPath: manifestPath];
+  [self ensureDirectory: [statePath stringByDeletingLastPathComponent]];
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               @"0.1.4", @"cli_version",
+                                               @"0.1.3", @"toolchain_version",
+                                               @"healthy", @"status",
+                                               manifestPath, @"manifest_path",
+                                               nil]
+                       toPath: statePath];
+  return managedRoot;
+}
+
+- (NSDictionary *)listWithoutIndexForRoot:(NSString *)managedRoot runner:(GSCommandRunner *)runner exitCode:(int *)exitCode
+{
+  return [runner executeListForContext:
+                   [GSCommandContext contextWithArguments: [NSArray arrayWithObjects: @"list", @"--root", managedRoot, nil]]
+                              exitCode: exitCode];
+}
+
+- (void)testAdvertisedPackageIndexIsUsedWhenItMatchesTheManifestDigest
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *managedRoot = nil;
+  NSDictionary *payload = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  managedRoot = [self managedRootAdvertisingIndexInDirectory: [self temporaryPathComponent: @"advertised-index-good"] runner: runner digestMode: @"match"];
+  payload = [self listWithoutIndexForRoot: managedRoot runner: runner exitCode: &exitCode];
+
+  XCTAssertEqual(exitCode, 0, @"%@", [payload objectForKey: @"summary"]);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([[[payload objectForKey: @"packages"] lastObject] objectForKey: @"id"], @"io.github.danjboyd.arlen");
+}
+
+- (void)testAdvertisedPackageIndexIsRejectedWhenItsBytesDifferFromTheManifest
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *managedRoot = nil;
+  NSDictionary *payload = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  managedRoot = [self managedRootAdvertisingIndexInDirectory: [self temporaryPathComponent: @"advertised-index-tampered"] runner: runner digestMode: @"tampered"];
+  payload = [self listWithoutIndexForRoot: managedRoot runner: runner exitCode: &exitCode];
+
+  XCTAssertNotEqual(exitCode, 0);
+  XCTAssertFalse([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertTrue([[payload objectForKey: @"summary"] rangeOfString: @"does not match the release manifest"].location != NSNotFound, @"%@", [payload objectForKey: @"summary"]);
+}
+
+- (void)testAdvertisedPackageIndexIsRejectedWhenTheManifestGivesNoDigest
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *managedRoot = nil;
+  NSDictionary *payload = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  managedRoot = [self managedRootAdvertisingIndexInDirectory: [self temporaryPathComponent: @"advertised-index-no-digest"] runner: runner digestMode: @"missing"];
+  payload = [self listWithoutIndexForRoot: managedRoot runner: runner exitCode: &exitCode];
+
+  XCTAssertNotEqual(exitCode, 0);
+  XCTAssertFalse([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertTrue([[payload objectForKey: @"summary"] rangeOfString: @"without a sha256"].location != NSNotFound, @"%@", [payload objectForKey: @"summary"]);
+}
+
 - (void)testListCompatibleFiltersByDetectedEnvironment
 {
   StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];

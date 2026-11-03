@@ -386,6 +386,45 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return [NSString stringWithUTF8String: hex];
 }
 
+static NSString *GSSHA256ForData(NSData *data)
+{
+  unsigned char digest[32];
+  char hex[65];
+  GSSHA256Context context;
+  unsigned int i = 0;
+
+  GSSHA256Init(&context);
+  GSSHA256Update(&context, (const unsigned char *)[data bytes], [data length]);
+  GSSHA256Final(&context, digest);
+  for (i = 0; i < 32; i++)
+    {
+      snprintf(hex + (i * 2), 3, "%02x", digest[i]);
+    }
+  hex[64] = '\0';
+  return [NSString stringWithUTF8String: hex];
+}
+
+// Package indexes advertised by a signature-verified release manifest, keyed by
+// their URL or path. The value is the manifest's sha256 for that index, or
+// NSNull when the manifest names an index without one. Loading an advertised
+// index requires its bytes to match; that chains the index to the signed manifest.
+static NSMutableDictionary *GSAdvertisedPackageIndexDigests = nil;
+
+static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
+{
+  if (reference == nil)
+    {
+      return;
+    }
+  if (GSAdvertisedPackageIndexDigests == nil)
+    {
+      GSAdvertisedPackageIndexDigests = [[NSMutableDictionary alloc] init];
+    }
+  [GSAdvertisedPackageIndexDigests setObject: ([sha256 isKindOfClass: [NSString class]] && [sha256 length] == 64)
+                                                ? [sha256 lowercaseString] : (id)[NSNull null]
+                                      forKey: reference];
+}
+
 @implementation GSCommandRunner
 
 - (NSArray *)knownCommands
@@ -5075,8 +5114,60 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
 - (NSDictionary *)packageIndexFromPath:(NSString *)indexPath error:(NSString **)errorMessage
 {
-  NSDictionary *index = [self readJSONFile: indexPath error: errorMessage];
+  NSDictionary *index = nil;
   NSArray *packages = nil;
+  id expectedDigest = [GSAdvertisedPackageIndexDigests objectForKey: indexPath];
+
+  if (expectedDigest != nil)
+    {
+      NSData *data = nil;
+      NSString *actualDigest = nil;
+      NSError *jsonError = nil;
+      id object = nil;
+
+      if (expectedDigest == (id)[NSNull null])
+        {
+          if (errorMessage != NULL)
+            {
+              *errorMessage = [NSString stringWithFormat: @"The release manifest advertises the package index %@ without a sha256; refusing to use unverified package metadata.", indexPath];
+            }
+          return nil;
+        }
+      data = ([indexPath hasPrefix: @"http://"] || [indexPath hasPrefix: @"https://"])
+        ? [self downloadURLData: indexPath error: errorMessage]
+        : [NSData dataWithContentsOfFile: indexPath];
+      if (data == nil)
+        {
+          if (errorMessage != NULL && (*errorMessage == nil || [*errorMessage length] == 0))
+            {
+              *errorMessage = [NSString stringWithFormat: @"Could not read JSON document at %@", indexPath];
+            }
+          return nil;
+        }
+      actualDigest = GSSHA256ForData(data);
+      if ([actualDigest isEqualToString: expectedDigest] == NO)
+        {
+          if (errorMessage != NULL)
+            {
+              *errorMessage = [NSString stringWithFormat: @"Package index %@ does not match the release manifest (sha256 %@, expected %@); refusing to use it.", indexPath, actualDigest, expectedDigest];
+            }
+          return nil;
+        }
+      object = [NSJSONSerialization JSONObjectWithData: data options: 0 error: &jsonError];
+      if ([object isKindOfClass: [NSDictionary class]] == NO)
+        {
+          if (errorMessage != NULL)
+            {
+              *errorMessage = [NSString stringWithFormat: @"Invalid JSON in %@", indexPath];
+            }
+          return nil;
+        }
+      index = (NSDictionary *)object;
+    }
+  else
+    {
+      index = [self readJSONFile: indexPath error: errorMessage];
+    }
 
   if (index == nil)
     {
@@ -5141,15 +5232,19 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
         {
           NSString *url = [artifact objectForKey: @"url"];
           NSString *filename = [artifact objectForKey: @"filename"];
+          id sha256 = [artifact objectForKey: @"sha256"];
           if (url != nil && url != (id)[NSNull null])
             {
+              GSRecordAdvertisedPackageIndex(url, sha256);
               return url;
             }
           if (filename != nil && filename != (id)[NSNull null] &&
               ![manifestPath hasPrefix: @"http://"] &&
               ![manifestPath hasPrefix: @"https://"])
             {
-              return [[manifestPath stringByDeletingLastPathComponent] stringByAppendingPathComponent: filename];
+              NSString *localPath = [[manifestPath stringByDeletingLastPathComponent] stringByAppendingPathComponent: filename];
+              GSRecordAdvertisedPackageIndex(localPath, sha256);
+              return localPath;
             }
         }
     }
@@ -5172,6 +5267,13 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
   packageState = [self loadInstalledPackagesState: root];
   candidate = [packageState objectForKey: @"last_package_index_path"];
+  if ([candidate isKindOfClass: [NSString class]] &&
+      ([candidate hasPrefix: @"http://"] || [candidate hasPrefix: @"https://"]))
+    {
+      // A saved remote index is downloaded again on every use; learn what the
+      // root's signed manifest advertises so that download is still verified.
+      [self packageIndexPathFromManifest: [self resolvedManifestPathForInstallRoot: root preferredManifest: nil]];
+    }
   if (candidate != nil && candidate != (id)[NSNull null] && [candidate length] > 0)
     {
       return candidate;
