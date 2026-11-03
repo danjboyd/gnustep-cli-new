@@ -82,6 +82,22 @@ TIER1_TARGETS = [
         "portability_notes": "Ubuntu 26.04 LTS amd64 managed target built in a base Ubuntu 26.04 Docker image (glibc 2.43, ICU 78, clang 21); qualified in a clean ubuntu:26.04 container (SONAME check, bootstrap setup, doctor, new/build/run, Foundation probe) before publication.",
     },
     {
+        "id": "linux-ubuntu2404-arm64-clang",
+        "os": "linux",
+        "arch": "arm64",
+        "compiler_family": "clang",
+        "toolchain_flavor": "clang",
+        "strategy": "source-build",
+        "publish": False,
+        "core_components": UNIX_CORE_COMPONENTS,
+        "supported_distributions": ["ubuntu"],
+        "supported_os_versions": ["ubuntu-24.04"],
+        "runtime_requirements": {"icu_major": 74, "glibc_min": "2.39"},
+        "build_host": "ubuntu:24.04 docker aarch64",
+        "portability_policy": "distribution-scoped",
+        "portability_notes": "Ubuntu 24.04 arm64 managed target built in a base ubuntu:24.04 Docker image on an aarch64 host (glibc 2.39, ICU 74); publish remains false until host-backed setup and SONAME qualification evidence exists.",
+    },
+    {
         "id": "linux-arm64-clang",
         "os": "linux",
         "arch": "arm64",
@@ -4332,7 +4348,7 @@ def toolchain_archive_audit(archive_path: str | Path, *, target_id: str | None =
             }
         )
         add_check("gnustep_env", "GNUstep environment activation script is present.", [r"/gnustep\.(sh|bat|ps1)$"], required=False)
-    elif inferred_target in {"linux-amd64-clang", "linux-ubuntu2404-amd64-clang", "linux-ubuntu2604-amd64-clang", "linux-arm64-clang", "openbsd-amd64-clang", "openbsd-arm64-clang"}:
+    elif inferred_target in {"linux-amd64-clang", "linux-ubuntu2404-amd64-clang", "linux-ubuntu2404-arm64-clang", "linux-ubuntu2604-amd64-clang", "linux-arm64-clang", "openbsd-amd64-clang", "openbsd-arm64-clang"}:
         add_check("runtime_tools", "Managed tool directory is present.", [r"/system/tools/", r"/tools/"])
         add_check("source_lock", "Source-built managed toolchain source lock is present.", [r"/source-lock\.json$"])
         add_check("component_inventory", "Managed toolchain component inventory is present.", [r"/component-inventory\.json$"])
