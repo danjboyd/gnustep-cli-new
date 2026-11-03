@@ -86,6 +86,8 @@ static NSString *GSCLIVersionString(void)
 - (NSArray *)expectedExecutableLinksForPackageID:(NSString *)packageID
                                      managedRoot:(NSString *)managedRoot
                                   installedFiles:(NSArray *)installedFiles;
+- (BOOL)exposesPackageExecutablesWithCommandShims;
+- (NSString *)commandShimContentsForPackageExecutable:(NSString *)relativePath;
 - (NSArray *)removePackageExecutableLinksForPackageID:(NSString *)packageID
                                           managedRoot:(NSString *)managedRoot
                                           installRoot:(NSString *)installRoot
@@ -910,6 +912,18 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
 
       if (linkPath == nil || targetPath == nil)
         {
+          continue;
+        }
+      if ([[entry objectForKey: @"kind"] isEqualToString: @"cmd-shim"])
+        {
+          // Only delete a shim this CLI generated for this executable, byte for byte.
+          NSData *shim = [[self commandShimContentsForPackageExecutable: targetPath] dataUsingEncoding: NSUTF8StringEncoding];
+
+          if ([[NSData dataWithContentsOfFile: linkPath] isEqualToData: shim])
+            {
+              [manager removeItemAtPath: linkPath error: NULL];
+              [removedLinks addObject: entry];
+            }
           continue;
         }
       existingTarget = [manager pathContentOfSymbolicLinkAtPath: linkPath];
@@ -8235,6 +8249,47 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
   return [self writeJSONStringObject: state toPath: statePath error: NULL];
 }
 
+// Windows cannot create symbolic links without SeCreateSymbolicLinkPrivilege or
+// Developer Mode, so package executables are exposed there as generated .cmd
+// shims instead. Tests can force either style through the override.
+static NSString *GSExecutableExposureStyleOverride = nil;
+
++ (void)setExecutableExposureStyleOverride:(NSString *)style
+{
+  NSString *copy = [style copy];
+  [GSExecutableExposureStyleOverride release];
+  GSExecutableExposureStyleOverride = copy;
+}
+
+- (BOOL)exposesPackageExecutablesWithCommandShims
+{
+  if (GSExecutableExposureStyleOverride != nil)
+    {
+      return [GSExecutableExposureStyleOverride isEqualToString: @"cmd-shim"];
+    }
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  return YES;
+#else
+  return NO;
+#endif
+}
+
+- (NSString *)commandShimContentsForPackageExecutable:(NSString *)relativePath
+{
+  // %~dp0 is the managed root's bin directory. Give the package executable the
+  // managed runtime DLLs and GNUstep configuration the CLI itself runs with, pass
+  // every argument through unchanged, and return the executable's exit code.
+  NSString *windowsPath = [relativePath stringByReplacingOccurrencesOfString: @"/" withString: @"\\"];
+  return [NSString stringWithFormat:
+                     @"@echo off\r\n"
+                     @"setlocal\r\n"
+                     @"set \"PATH=%%~dp0..\\clang64\\bin;%%~dp0..\\bin;%%~dp0..\\usr\\bin;%%PATH%%\"\r\n"
+                     @"if exist \"%%~dp0..\\clang64\\etc\\GNUstep\\GNUstep.conf\" set \"GNUSTEP_CONFIG_FILE=%%~dp0..\\clang64\\etc\\GNUstep\\GNUstep.conf\"\r\n"
+                     @"\"%%~dp0..\\%@\" %%*\r\n"
+                     @"exit /b %%ERRORLEVEL%%\r\n",
+                   windowsPath];
+}
+
 - (NSArray *)expectedExecutableLinksForPackageID:(NSString *)packageID
                                      managedRoot:(NSString *)managedRoot
                                   installedFiles:(NSArray *)installedFiles
@@ -8258,6 +8313,22 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
           continue;
         }
       linkName = [relativePath lastPathComponent];
+      if ([self exposesPackageExecutablesWithCommandShims])
+        {
+          NSString *extension = [[linkName pathExtension] lowercaseString];
+          NSString *commandName = ([extension isEqualToString: @"exe"] || [extension isEqualToString: @"cmd"] || [extension isEqualToString: @"bat"])
+            ? [linkName stringByDeletingPathExtension] : linkName;
+          linkPath = [[expandedRoot stringByAppendingPathComponent: @"bin"] stringByAppendingPathComponent:
+                                                                        [commandName stringByAppendingPathExtension: @"cmd"]];
+          [links addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                            commandName, @"name",
+                                            linkPath, @"path",
+                                            relativePath, @"target",
+                                            relativePath, @"source",
+                                            @"cmd-shim", @"kind",
+                                            nil]];
+          continue;
+        }
       linkPath = [[expandedRoot stringByAppendingPathComponent: @"bin"] stringByAppendingPathComponent: linkName];
       targetPath = [[@".." stringByAppendingPathComponent: relativePath] stringByStandardizingPath];
       [links addObject: [NSDictionary dictionaryWithObjectsAndKeys:
@@ -8265,6 +8336,7 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
                                         linkPath, @"path",
                                         targetPath, @"target",
                                         relativePath, @"source",
+                                        @"symlink", @"kind",
                                         nil]];
     }
   return links;
@@ -8292,6 +8364,34 @@ static NSString *GSSHA256ForFileAtPath(NSString *path)
       NSString *existingTarget = nil;
       BOOL isDir = NO;
 
+      if ([[entry objectForKey: @"kind"] isEqualToString: @"cmd-shim"])
+        {
+          NSData *shim = [[self commandShimContentsForPackageExecutable: targetPath] dataUsingEncoding: NSUTF8StringEncoding];
+
+          if ([manager fileExistsAtPath: linkPath isDirectory: &isDir])
+            {
+              if (isDir == NO && [[NSData dataWithContentsOfFile: linkPath] isEqualToData: shim])
+                {
+                  [activatedLinks addObject: entry];
+                  continue;
+                }
+              if (errorMessage != NULL)
+                {
+                  *errorMessage = [NSString stringWithFormat: @"Cannot expose package executable '%@'; %@ already exists.", [entry objectForKey: @"name"], linkPath];
+                }
+              return NO;
+            }
+          if ([shim writeToFile: linkPath atomically: YES] == NO)
+            {
+              if (errorMessage != NULL)
+                {
+                  *errorMessage = [NSString stringWithFormat: @"Cannot expose package executable '%@' at %@.", [entry objectForKey: @"name"], linkPath];
+                }
+              return NO;
+            }
+          [activatedLinks addObject: entry];
+          continue;
+        }
       if ([manager fileExistsAtPath: linkPath isDirectory: &isDir])
         {
           existingTarget = [manager pathContentOfSymbolicLinkAtPath: linkPath];
