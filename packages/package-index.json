@@ -249,6 +249,65 @@
           "patches": []
         },
         {
+          "id": "arlen-linux-ubuntu2604-amd64-clang-headless",
+          "os": "linux",
+          "arch": "amd64",
+          "compiler_family": "clang",
+          "toolchain_flavor": "clang",
+          "objc_runtime": "libobjc2",
+          "objc_abi": "modern",
+          "required_features": [
+            "blocks"
+          ],
+          "supported_distributions": [
+            "ubuntu"
+          ],
+          "supported_os_versions": [
+            "ubuntu-26.04"
+          ],
+          "portability_policy": "distribution-scoped",
+          "runtime_profile": "headless-base",
+          "runtime_components": [
+            "org.gnustep.runtime.base"
+          ],
+          "format": "tar.gz",
+          "publish": false,
+          "status": "pending_rebuild_for_source_e26a755e",
+          "notes": "New for v0.1.4: built against the v0.1.3 linux-ubuntu2604-amd64-clang managed toolchain in its pinned ubuntu:26.04 base image.",
+          "build_blockers": [],
+          "source": {
+            "type": "git-archive",
+            "url": "https://github.com/danjboyd/Arlen/archive/e26a755e0c250ec972c99eca9fb51a4259d48307.tar.gz",
+            "sha256": "7360dc7d1f6816603dcb9a025e7366e9a1892aab9022371499a8702c4897621f",
+            "revision": "e26a755e0c250ec972c99eca9fb51a4259d48307",
+            "upstream": "danjboyd/Arlen",
+            "upstream_url": "https://github.com/danjboyd/Arlen",
+            "tracking_strategy": "tagged-release-with-externalized-submodules",
+            "update_cadence": "manual-per-arlen-release",
+            "channel_policy": "dogfood snapshots may track reviewed commits; stable should track a tagged Arlen release or approved package exception.",
+            "submodule_policy": "do-not-inline",
+            "externalized_submodules": [
+              {
+                "path": "vendor/tools-xctest",
+                "url": "https://github.com/danjboyd/tools-xctest.git",
+                "revision": "a84f053e8546bb3e03bb470e2a0a17863ecabd62",
+                "package": "org.gnustep.tools-xctest",
+                "relationship": "build-test-dependency",
+                "notes": "Arlen's tools-xctest patch is delivered by the org.gnustep.tools-xctest package."
+              },
+              {
+                "path": "vendor/gnustep-cli-new",
+                "url": "https://github.com/danjboyd/gnustep-cli-new.git",
+                "revision": "5b83862fc81968d3614ebc2d92301a56354d7c15",
+                "relationship": "build-tooling",
+                "notes": "The GNUstep CLI is supplied by the official package build environment, not vendored into Arlen."
+              }
+            ],
+            "tag": "v0.3.2"
+          },
+          "patches": []
+        },
+        {
           "id": "arlen-linux-arm64-clang-headless",
           "os": "linux",
           "arch": "arm64",
