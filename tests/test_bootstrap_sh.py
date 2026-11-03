@@ -236,7 +236,7 @@ class BootstrapShTests(unittest.TestCase):
         toolchain, toolchain_sha = tarball("toolchain", {"share/GNUstep/Makefiles/GNUstep.sh": "true\n"})
         artifacts = []
         for suffix in ("linux-amd64-clang", "linux-arm64-clang", "linux-ubuntu2404-amd64-clang",
-                       "linux-ubuntu2604-amd64-clang"):
+                       "linux-ubuntu2404-arm64-clang", "linux-ubuntu2604-amd64-clang"):
             artifacts += [
                 {"id": f"cli-{suffix}", "kind": "cli", "published": True,
                  "url": f"https://example.invalid/{cli.name}", "sha256": cli_sha},
@@ -279,6 +279,12 @@ class BootstrapShTests(unittest.TestCase):
         self.assertEqual(self._managed_target_suffix("linux", "amd64", "ubuntu", "ubuntu-25.10"), "linux-ubuntu-unsupported-amd64-clang")
         self.assertEqual(self._managed_target_suffix("linux", "amd64", "debian", "debian-13"), "linux-amd64-clang")
         self.assertEqual(self._managed_target_suffix("linux", "arm64", "debian", "debian-13"), "linux-arm64-clang")
+
+    def test_managed_target_suffix_keeps_ubuntu_arm64_off_the_debian_build(self):
+        # The Debian 13 arm64 build links ICU 76 / glibc 2.41 and never loads on Ubuntu.
+        self.assertEqual(self._managed_target_suffix("linux", "arm64", "ubuntu", "ubuntu-24.04"), "linux-ubuntu2404-arm64-clang")
+        self.assertEqual(self._managed_target_suffix("linux", "arm64", "ubuntu", "ubuntu-26.04"), "linux-ubuntu-unsupported-arm64-clang")
+        self.assertEqual(self._managed_target_suffix("linux", "arm64", "ubuntu", "ubuntu-22.04"), "linux-ubuntu-unsupported-arm64-clang")
 
     def test_bootstrap_uses_canonical_arm64_architecture(self):
         content = BOOTSTRAP.read_text(encoding="utf-8")

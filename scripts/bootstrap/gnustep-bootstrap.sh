@@ -64,10 +64,13 @@ managed_target_suffix() {
   arch=$2
   platform=$3
   os_version=${4:-}
-  if [ "$os" = "linux" ] && [ "$platform" = "ubuntu" ] && [ "$arch" = "amd64" ]; then
-    case "$os_version" in
-      ubuntu-24.04) printf '%s\n' "linux-ubuntu2404-amd64-clang" ;;
-      ubuntu-26.04) printf '%s\n' "linux-ubuntu2604-amd64-clang" ;;
+  if [ "$os" = "linux" ] && [ "$platform" = "ubuntu" ]; then
+    # Ubuntu targets are scoped to one release and arch: the Debian builds link
+    # a different ICU/glibc and never load here.
+    case "$arch:$os_version" in
+      amd64:ubuntu-24.04) printf '%s\n' "linux-ubuntu2404-amd64-clang" ;;
+      arm64:ubuntu-24.04) printf '%s\n' "linux-ubuntu2404-arm64-clang" ;;
+      amd64:ubuntu-26.04) printf '%s\n' "linux-ubuntu2604-amd64-clang" ;;
       *) printf '%s\n' "linux-ubuntu-unsupported-$arch-clang" ;;
     esac
     return 0
