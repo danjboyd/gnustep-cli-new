@@ -62,7 +62,8 @@ if [ "$test_status" -ne 0 ]; then
   exit "$test_status"
 fi
 # xctest exits 0 when it loads nothing; an empty run is a failure, not a pass.
-if grep -q "No tests found" "$TEST_LOG" || ! grep -Eq "[1-9][0-9]* tests? executed" "$TEST_LOG"; then
+# tools-xctest reports "<Suite>: N tests PASSED" (or "... executed"); require at least one.
+if grep -q "No tests found" "$TEST_LOG" || ! grep -Eq "[1-9][0-9]* tests? (PASSED|executed)" "$TEST_LOG"; then
   printf '%s\n' "xctest ran no tests from $BUNDLE_PATH." >&2
   exit 1
 fi

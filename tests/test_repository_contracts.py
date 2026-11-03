@@ -216,7 +216,7 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertNotIn('| tee "$BUILD_LOG"', runner)
         self.assertIn("build_status=$?", runner)
         self.assertIn('grep -q "No tests found"', runner)
-        self.assertIn("tests? executed", runner)
+        self.assertIn("tests? (PASSED|executed)", runner)
 
     def test_package_app_artifact_workflow_builds_from_explicit_toolchain(self):
         workflow = ROOT / ".github" / "workflows" / "package-app-artifact.yml"
