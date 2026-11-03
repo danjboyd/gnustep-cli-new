@@ -3,7 +3,7 @@
   "kind": "package-install-qualification",
   "package_id": "io.github.danjboyd.arlen",
   "artifact_id": "arlen-linux-ubuntu2604-amd64-clang-headless",
-  "artifact_sha256": "c85db3b8ba7774a514038b0423f679d9ef9d818dd77c550dc616f136ea355346",
+  "artifact_sha256": "c4e4ae7530ce33126c222ee8e9b8fb6c53a2c48891891de1c908f68a586fae77",
   "os_release": {
     "PRETTY_NAME": "\"Ubuntu 26.04.1 LTS\"",
     "NAME": "\"Ubuntu\"",
@@ -21,6 +21,7 @@
   },
   "steps": {
     "setup": "0",
+    "tampered_index": "0",
     "install": "0",
     "smoke": "0",
     "remove": "0",
@@ -33,5 +34,6 @@
     "boomhauer --help exit 0"
   ],
   "ok": true,
-  "qualification_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41705467038"
+  "qualification_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41725928717",
+  "cli_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41723627164"
 }
