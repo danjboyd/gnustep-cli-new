@@ -1,1 +1,3 @@
 *.patch text eol=lf
+# tools-xctest patches carry CRLF context lines from upstream sources; keep bytes exact.
+packages/org.gnustep.tools-xctest/patches/*.patch -text

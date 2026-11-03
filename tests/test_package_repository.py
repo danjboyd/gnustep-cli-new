@@ -51,7 +51,8 @@ class PackageRepositoryTests(unittest.TestCase):
         artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-linux-amd64-clang")
         self.assertEqual(artifact["source"]["tracking_strategy"], "commit-with-submitted-downstream-patch")
         self.assertEqual(artifact["patches"][0]["id"], "add-apple-style-xctest-cli-filters")
-        self.assertEqual(artifact["patches"][0]["upstream_status"], "submitted")
+        self.assertEqual(artifact["patches"][0]["upstream_status"], "refresh_pending_upstream_pr_update")
+        self.assertEqual(artifact["patches"][0]["base_revision"], artifact["source"]["revision"])
 
     def test_package_index_records_runtime_component_profiles(self):
         payload = generate_package_index(ROOT / "packages")
