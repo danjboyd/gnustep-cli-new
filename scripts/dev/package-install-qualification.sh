@@ -40,7 +40,7 @@ steps="$OUT/steps.txt"
 step() {
   name=$1; shift
   set +e
-  su - "$USER_NAME" -c "cd '$work' && R='$R' $*" > "$OUT/$name.out" 2> "$OUT/$name.err"
+  su - "$USER_NAME" -c "cd '$work' && export R='$R' && $*" > "$OUT/$name.out" 2> "$OUT/$name.err"
   rc=$?
   set -e
   printf '%s %s\n' "$name" "$rc" >> "$steps"
