@@ -28,7 +28,8 @@ Invoke-Step 'setup' { & powershell -NoProfile -ExecutionPolicy Bypass -File $Boo
 
 $index = Join-Path $work 'index.json'
 $env:PYTHONPATH = Join-Path $Repo 'src'
-python - (Join-Path $Repo 'packages') $PackageId $ArtifactId $ArtifactFile $index @'
+$indexScript = Join-Path $work 'make-index.py'
+@'
 import hashlib, json, os, sys
 from gnustep_cli_shared.package_repository import generate_package_index
 packages_dir, package_id, artifact_id, artifact_path, output = sys.argv[1:]
@@ -41,7 +42,9 @@ digest = hashlib.sha256(open(artifact_path, "rb").read()).hexdigest()
 matches[0].update({"url": "file:///" + os.path.abspath(artifact_path).replace("\\", "/"), "sha256": digest,
                    "size": os.path.getsize(artifact_path), "filename": os.path.basename(artifact_path), "publish": True})
 json.dump(index, open(output, "w"), indent=2)
-'@
+'@ | Set-Content -Encoding utf8 -Path $indexScript
+python $indexScript (Join-Path $Repo 'packages') $PackageId $ArtifactId $ArtifactFile $index *> (Join-Path $OutDir 'index.out')
+$steps['index'] = $LASTEXITCODE
 
 $gnustep = Join-Path $root 'bin\gnustep.exe'
 Invoke-Step 'install' { & $gnustep --json install --root $root --index $index $PackageId }
@@ -85,7 +88,7 @@ $installJson = $null
 try { $installJson = Get-Content -Raw (Join-Path $OutDir 'install.out') | ConvertFrom-Json } catch { }
 $selected = $(if ($installJson) { $installJson.selected_artifact } else { $null })
 $ok = ($selected -eq $ArtifactId)
-foreach ($name in @('setup', 'install', 'smoke', 'remove', 'leftovers')) { if ($steps[$name] -ne 0) { $ok = $false } }
+foreach ($name in @('setup', 'index', 'install', 'smoke', 'remove', 'leftovers')) { if ($steps[$name] -ne 0) { $ok = $false } }
 $summary = [ordered]@{
   schema_version = 1
   kind = 'package-install-qualification'
