@@ -4673,6 +4673,13 @@ def publish_github_release(
 
 
 
+# Source digests are computed from `git archive` bytes, which honour end-of-line
+# conversion. Git for Windows ships core.autocrlf=true, and core.eol defaults to
+# native, so on Windows the same commit would archive to different bytes and fail
+# the manifest digest. Pin both off for every clone and archive of package sources.
+_GIT_PINNED_EOL_CONFIG = ["-c", "core.autocrlf=false", "-c", "core.eol=lf"]
+
+
 def package_tools_xctest_artifact(
     output_dir: str | Path,
     *,
@@ -4718,7 +4725,7 @@ def package_tools_xctest_artifact(
 
     if not source.exists():
         source.parent.mkdir(parents=True, exist_ok=True)
-        commands.append(["git", "clone", source_url, str(source)])
+        commands.append(["git", "clone", *_GIT_PINNED_EOL_CONFIG, source_url, str(source)])
         clone = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
         if clone.returncode != 0:
             return {"schema_version": 1, "command": "package-tools-xctest-artifact", "ok": False, "status": "error", "summary": "Failed to clone tools-xctest source.", "stdout": clone.stdout, "stderr": clone.stderr, "commands": commands}
@@ -4733,7 +4740,7 @@ def package_tools_xctest_artifact(
     # The source archive is the pinned upstream tree (git archive ignores the work
     # tree), so it matches source.sha256; applied patches ship next to it.
     source_archive = out / f"tools-xctest-source-{revision[:12]}.tar.gz"
-    archive_command = ["git", "-C", str(source), "archive", "--format=tar.gz", "-o", str(source_archive), "HEAD"]
+    archive_command = ["git", *_GIT_PINNED_EOL_CONFIG, "-C", str(source), "archive", "--format=tar.gz", "-o", str(source_archive), "HEAD"]
     archive_proc = subprocess.run(archive_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
     commands.append(archive_command)
     if archive_proc.returncode != 0:
@@ -5109,7 +5116,7 @@ def package_managed_source_artifact(
                 commands.append(["patch-toolchain", "windows-libdispatch-mode-t-conflict"])
     if not checkout.exists():
         checkout.parent.mkdir(parents=True, exist_ok=True)
-        commands.append(["git", "clone", str(source_url), str(checkout)])
+        commands.append(["git", "clone", *_GIT_PINNED_EOL_CONFIG, str(source_url), str(checkout)])
         clone = subprocess.run(commands[-1], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
         if clone.returncode != 0:
             return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Failed to clone package source.", "stdout": clone.stdout, "stderr": clone.stderr, "commands": commands}
@@ -5312,7 +5319,7 @@ def package_managed_source_artifact(
     revision_proc = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
     revision = revision_proc.stdout.strip() if revision_proc.returncode == 0 else source_revision or "unknown"
     source_archive = out / f"{package_id}-source-{revision[:12]}.tar.gz"
-    archive_command = ["git", "-C", str(checkout), "archive", "--format=tar.gz", "-o", str(source_archive), "HEAD"]
+    archive_command = ["git", *_GIT_PINNED_EOL_CONFIG, "-C", str(checkout), "archive", "--format=tar.gz", "-o", str(source_archive), "HEAD"]
     commands.append(archive_command)
     archived = subprocess.run(archive_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
     if archived.returncode != 0:
