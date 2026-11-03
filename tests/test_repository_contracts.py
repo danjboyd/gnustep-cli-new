@@ -212,6 +212,7 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertNotIn("gcc/x86_64-linux-gnu/14/include", runner)
         self.assertNotIn("gcc/x86_64-linux-gnu/14/include", activate)
         self.assertIn('ADDITIONAL_OBJCFLAGS="-I$GCC_OBJC_HEADERS"', runner)
+        self.assertIn('ADDITIONAL_LDFLAGS="-L$GCC_OBJC_LIBDIR"', runner)
         self.assertNotIn('| tee "$BUILD_LOG"', runner)
         self.assertIn("build_status=$?", runner)
         self.assertIn('grep -q "No tests found"', runner)

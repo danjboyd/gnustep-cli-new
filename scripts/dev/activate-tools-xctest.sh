@@ -14,6 +14,15 @@ if [ -z "${GCC_OBJC_HEADERS:-}" ] || [ ! -f "$GCC_OBJC_HEADERS/objc/objc.h" ]; t
   exit 1
 fi
 export GCC_OBJC_HEADERS
+# clang does not search GCC's version directory, where libobjc.so lives.
+if [ -z "${GCC_OBJC_LIBDIR:-}" ]; then
+  GCC_OBJC_LIBDIR=$(find /usr/lib/gcc -name libobjc.so -print 2>/dev/null | sort -V | tail -n 1 | sed 's,/libobjc\.so$,,')
+fi
+if [ -z "${GCC_OBJC_LIBDIR:-}" ] || [ ! -f "$GCC_OBJC_LIBDIR/libobjc.so" ]; then
+  printf '%s\n' "libobjc.so was not found under /usr/lib/gcc; set GCC_OBJC_LIBDIR." >&2
+  exit 1
+fi
+export GCC_OBJC_LIBDIR
 
 if [ ! -f "$GNUSTEP_MAKEFILES_DIR/GNUstep.sh" ]; then
   printf '%s\n' "GNUstep.sh was not found at $GNUSTEP_MAKEFILES_DIR/GNUstep.sh" >&2
@@ -32,3 +41,4 @@ export CPPFLAGS="-I$GCC_OBJC_HEADERS ${CPPFLAGS:-}"
 printf '%s\n' "Activated GNUstep + tools-xctest development environment."
 printf '%s\n' "xctest: $(command -v xctest || printf 'not found')"
 printf '%s\n' "GCC Objective-C headers: $GCC_OBJC_HEADERS"
+printf '%s\n' "GCC libobjc: $GCC_OBJC_LIBDIR"
