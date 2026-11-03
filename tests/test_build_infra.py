@@ -132,13 +132,13 @@ class BuildInfraTests(unittest.TestCase):
     def test_matrix_contains_tier1_targets(self):
         payload = build_matrix()
         self.assertEqual(payload["schema_version"], 1)
-        self.assertEqual(len(payload["targets"]), 8)
+        self.assertEqual(len(payload["targets"]), 9)
 
     def test_release_manifest_generation(self):
         payload = release_manifest_from_matrix("0.1.0", "https://example.invalid/releases")
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["releases"][0]["version"], "0.1.0")
-        self.assertEqual(len(payload["releases"][0]["artifacts"]), 16)
+        self.assertEqual(len(payload["releases"][0]["artifacts"]), 18)
         linux_artifacts = [artifact for artifact in payload["releases"][0]["artifacts"] if artifact["os"] == "linux"]
         self.assertTrue(linux_artifacts)
         distribution_by_id = {artifact["id"]: artifact["supported_distributions"] for artifact in linux_artifacts}
@@ -158,6 +158,11 @@ class BuildInfraTests(unittest.TestCase):
         self.assertTrue(published_by_id["toolchain-linux-ubuntu2604-amd64-clang"])
         runtime_by_id = {artifact["id"]: artifact["runtime_requirements"] for artifact in linux_artifacts}
         self.assertEqual(runtime_by_id["toolchain-linux-ubuntu2604-amd64-clang"], {"icu_major": 78, "glibc_min": "2.43"})
+        self.assertEqual(distribution_by_id["toolchain-linux-ubuntu2404-arm64-clang"], ["ubuntu"])
+        self.assertEqual(version_by_id["toolchain-linux-ubuntu2404-arm64-clang"], ["ubuntu-24.04"])
+        self.assertEqual(runtime_by_id["toolchain-linux-ubuntu2404-arm64-clang"], {"icu_major": 74, "glibc_min": "2.39"})
+        self.assertFalse(published_by_id["cli-linux-ubuntu2404-arm64-clang"])
+        self.assertFalse(published_by_id["toolchain-linux-ubuntu2404-arm64-clang"])
         self.assertTrue(all(artifact["portability_policy"] == "distribution-scoped" for artifact in linux_artifacts))
 
     def test_source_lock_template_for_linux(self):
