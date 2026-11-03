@@ -1,6 +1,10 @@
 # Windows counterpart of package-install-qualification.sh: install one package
 # artifact into a managed root set up by the PUBLISHED PowerShell bootstrap,
 # smoke its declared executables, then remove it and check nothing is left.
+#
+# Meant for disposable runners. On a real machine, note that the bootstrap's setup
+# adds the scratch root's bin to the persistent user PATH and this script does not
+# undo that; remove the entry afterwards. It doesn't touch an existing install.
 param(
   [Parameter(Mandatory = $true)][string]$PackageId,
   [Parameter(Mandatory = $true)][string]$ArtifactId,
