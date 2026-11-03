@@ -293,10 +293,10 @@
     "prefix_layout": "gnustep",
     "executables": [
       "arlen",
-      "arlen-doctor"
+      "boomhauer"
     ],
-    "frameworks": [
-      "Arlen"
+    "library_files": [
+      "libArlenFramework.a"
     ]
   },
   "patches": [],

@@ -4921,6 +4921,33 @@ def _package_manifest_by_id(packages_dir: str | Path, package_id: str) -> tuple[
     return None
 
 
+def package_install_layout_mismatches(install: dict[str, Any], package_root: str | Path, *, windows: bool = False) -> list[dict[str, str]]:
+    """Return the install-section entries that the staged package tree does not contain.
+
+    The install section is what `gnustep install` and the index promise; a staging
+    rule that silently skips a missing build output must not produce an artifact.
+    """
+    root = Path(package_root)
+    bundles = [root / "Applications" / name for name in install.get("application_bundles", [])]
+    missing: list[dict[str, str]] = []
+    for bundle in bundles:
+        if not bundle.is_dir():
+            missing.append({"field": "application_bundles", "entry": bundle.name, "expected": str(bundle.relative_to(root))})
+    suffixes = ["", ".exe", ".cmd"] if windows else [""]
+    for name in install.get("executables", []):
+        candidates = [root / "bin" / f"{name}{suffix}" for suffix in suffixes]
+        candidates += [bundle / f"{name}{suffix}" for bundle in bundles for suffix in suffixes]
+        if not any(candidate.is_file() for candidate in candidates):
+            missing.append({"field": "executables", "entry": name, "expected": f"bin/{name}" + (" (or .exe/.cmd)" if windows else "")})
+    for name in install.get("library_files", []):
+        if not (root / "Library" / "Libraries" / name).is_file():
+            missing.append({"field": "library_files", "entry": name, "expected": f"Library/Libraries/{name}"})
+    for name in install.get("frameworks", []):
+        if not (root / "Library" / "Frameworks" / f"{name}.framework").is_dir():
+            missing.append({"field": "frameworks", "entry": name, "expected": f"Library/Frameworks/{name}.framework"})
+    return missing
+
+
 def _copy_existing(paths: list[tuple[Path, Path]]) -> list[str]:
     copied: list[str] = []
     for source, destination in paths:
@@ -5334,6 +5361,8 @@ def package_managed_source_artifact(
         copied = _copy_existing([
             (checkout / "build" / "arlen", package_root / "bin" / "arlen"),
             (checkout / "build" / "boomhauer", package_root / "bin" / "boomhauer"),
+            (checkout / "build" / "arlen.exe", package_root / "bin" / "arlen.exe"),
+            (checkout / "build" / "boomhauer.exe", package_root / "bin" / "boomhauer.exe"),
             (checkout / "build" / "lib" / "libArlenFramework.a", package_root / "Library" / "Libraries" / "libArlenFramework.a"),
             (checkout / "templates", package_root / "Resources" / "templates"),
             (checkout / "modules", package_root / "Resources" / "modules"),
@@ -5395,6 +5424,9 @@ def package_managed_source_artifact(
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "No staging rule exists for package.", "package_id": package_id}
     if not copied:
         return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Managed build succeeded but no package outputs were staged.", "package_id": package_id, "target": target_id, "commands": commands}
+    layout_mismatches = package_install_layout_mismatches(manifest.get("install", {}) or {}, package_root, windows=is_windows)
+    if layout_mismatches:
+        return {"schema_version": 1, "command": command, "ok": False, "status": "error", "summary": "Staged package does not contain what its install section declares.", "package_id": package_id, "target": target_id, "missing": layout_mismatches, "staged_files": copied, "commands": commands}
     artifact_format = "zip" if is_windows else "tar.gz"
     artifact_filename = f"{package_id.split('.')[-1]}-{target_id}-{package_version}.{artifact_format}"
     artifact_path = out / artifact_filename
