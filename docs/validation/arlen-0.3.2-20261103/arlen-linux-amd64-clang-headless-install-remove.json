@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "kind": "package-install-remove-validation",
+  "date": "2026-11-03",
+  "package_id": "io.github.danjboyd.arlen",
+  "version": "0.3.2",
+  "artifact_id": "arlen-linux-amd64-clang-headless",
+  "artifact": {
+    "filename": "arlen-arlen-linux-amd64-clang-headless-0.3.2.tar.gz",
+    "sha256": "61a254fd5569357314a6a347e2c9f12e773e0f1f6d9961de82a6022083cac9c1",
+    "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41698657103",
+    "build_image": "toolchains/linux-amd64-clang/Dockerfile (debian:13)"
+  },
+  "managed_root": {
+    "release": "v0.1.3",
+    "cli_sha256": "a411d914088f0b4529abcef949dc679b9c8ec97987d1834c4ba30af25b9dd910",
+    "toolchain_sha256": "41fd4b8323f877d70b5cb1fa08403f0c6edbea2afe799de2c0d0024781a73acb",
+    "assembly": "scratch root assembled like gnustep-bootstrap.sh (copy CLI + toolchain, relocate __GNUSTEP_CLI_INSTALL_ROOT__); setup not run",
+    "host": "Debian 13 amd64"
+  },
+  "index": "local unsigned Arlen-only index generated from the PR #32 manifests, with this artifact's url set to a file:// path",
+  "install": {
+    "ok": true,
+    "summary": "Package installed.",
+    "selected_artifact": "arlen-linux-amd64-clang-headless",
+    "install_profile": "server",
+    "installed_files": 124,
+    "executable_links": [
+      "arlen",
+      "boomhauer"
+    ]
+  },
+  "smoke": {
+    "command": "env -i, managed GNUstep.sh, packages/io.github.danjboyd.arlen/bin/arlen --help",
+    "result": "usage printed",
+    "ldd": "libgnustep-base.so.1.31, libobjc.so.4.6, libdispatch.so resolved from the managed root"
+  },
+  "remove": {
+    "ok": true,
+    "summary": "Package removed.",
+    "leftovers": "none: packages/ and .staging/ empty, bin/arlen and bin/boomhauer links removed, installed-packages.json lists no packages"
+  },
+  "not_covered": [
+    "Ubuntu 24.04/26.04 amd64, Debian arm64 and Windows install/remove (need those hosts or containers)",
+    "signed index metadata (generated_at/expires_at were TBD in this local index)"
+  ]
+}
