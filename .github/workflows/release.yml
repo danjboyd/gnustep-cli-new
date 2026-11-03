@@ -183,7 +183,17 @@ jobs:
           test -f /tmp/package-index-trust/package-index.json.sig
           test -f /tmp/package-index-trust/package-index-provenance.json.sig
           python3 scripts/internal/package_repo.py --json packages --output /tmp/package-index-generated.json >/dev/null
-          diff -u /tmp/package-index-generated.json /tmp/package-index-trust/package-index.json
+          if ! cmp -s /tmp/package-index-generated.json /tmp/package-index-trust/package-index.json; then
+            # A release index may be signed for a subset of packages with only their
+            # published artifacts (package-index workflow: packages + published_only).
+            # It must still be exactly what the manifests here generate for that subset.
+            select=()
+            for id in $(python3 -c 'import json,sys; print(" ".join(p["id"] for p in json.load(open(sys.argv[1]))["packages"]))' /tmp/package-index-trust/package-index.json); do
+              select+=(--package "$id")
+            done
+            python3 scripts/internal/package_repo.py --json "${select[@]}" --published-only packages --output /tmp/package-index-generated.json >/dev/null
+            diff -u /tmp/package-index-generated.json /tmp/package-index-trust/package-index.json
+          fi
           printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT" > /tmp/gnustep-cli-package-index-trust-root.pem
           python3 scripts/internal/package_repo.py --json --trust-gate \
             --trusted-public-key /tmp/gnustep-cli-package-index-trust-root.pem \
@@ -241,6 +251,10 @@ jobs:
           cp /tmp/package-index-trust/package-index.json.sig "$RELEASE_DIR/package-index.json.sig"
           cp /tmp/package-index-trust/package-index-provenance.json.sig "$RELEASE_DIR/package-index-provenance.json.sig"
           cp /tmp/package-index-trust/package-index-signing-public.pem "$RELEASE_DIR/package-index-signing-public.pem"
+          # Advertise the index in the manifest (url + sha256) before the manifest is
+          # signed below; the CLI finds the index only through this entry and refuses
+          # an index whose bytes do not match it.
+          python3 scripts/internal/build_infra.py --json advertise-package-index --release-dir "$RELEASE_DIR"
 
       - name: Verify staged release contents
         run: |

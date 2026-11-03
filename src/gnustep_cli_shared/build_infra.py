@@ -4148,6 +4148,56 @@ def stage_release_assets(
     }
 
 
+def advertise_package_index(release_dir: str | Path) -> dict[str, Any]:
+    """Add the release's package-index.json to release-manifest.json and SHA256SUMS.
+
+    The CLI finds the package index only through a manifest entry of kind
+    "package-index" and refuses to use it unless the entry's sha256 matches.
+    Run this before the manifest is signed, so the signature covers the
+    index digest.
+    """
+    root = Path(release_dir).resolve()
+    manifest_path = root / "release-manifest.json"
+    index_path = root / "package-index.json"
+    checksums_path = root / "SHA256SUMS"
+
+    def failure(summary: str) -> dict[str, Any]:
+        return {"schema_version": 1, "command": "advertise-package-index", "ok": False, "status": "error", "summary": summary, "release_dir": str(root)}
+
+    for required in (manifest_path, index_path, checksums_path):
+        if not required.exists():
+            return failure(f"{required.name} is missing.")
+    if (root / "release-manifest.json.sig").exists():
+        return failure("release-manifest.json is already signed; advertise the package index before signing.")
+    manifest = json.loads(manifest_path.read_text())
+    release = manifest["releases"][0]
+    artifacts = release["artifacts"]
+    if any(artifact.get("kind") == "package-index" for artifact in artifacts):
+        return failure("The release manifest already advertises a package index.")
+    urls = [str(artifact.get("url")) for artifact in artifacts if artifact.get("url") and not artifact.get("reused")]
+    if not urls:
+        return failure("No release artifact URL to derive the package index URL from.")
+    base = urls[0].rsplit("/", 1)[0]
+    digest = _sha256(index_path)
+    entry = {
+        "id": f"package-index-{manifest.get('channel', 'stable')}",
+        "kind": "package-index",
+        "version": release.get("version"),
+        "format": "json",
+        "filename": "package-index.json",
+        "url": f"{base}/package-index.json",
+        "sha256": digest,
+        "size": index_path.stat().st_size,
+        "published": True,
+    }
+    artifacts.append(entry)
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    lines = [line for line in checksums_path.read_text().splitlines() if line.strip() and not line.endswith("  package-index.json")]
+    lines.append(f"{digest}  package-index.json")
+    checksums_path.write_text("\n".join(lines) + "\n")
+    return {"schema_version": 1, "command": "advertise-package-index", "ok": True, "status": "ok", "summary": "Package index advertised in the release manifest.", "release_dir": str(root), "artifact": entry}
+
+
 def verify_release_directory(release_dir: str | Path) -> dict[str, Any]:
     root = Path(release_dir).resolve()
     manifest_path = root / "release-manifest.json"
