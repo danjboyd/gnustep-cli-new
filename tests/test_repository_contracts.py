@@ -226,6 +226,15 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v4", content)
         self.assertIn("*.zip", content)
 
+    def test_package_app_artifact_workflow_can_build_in_the_pinned_base_image(self):
+        # Managed Linux toolchains link their base image's ICU/glibc; building on the
+        # runner OS (ubuntu-24.04, ICU 74) produces packages that never load on Debian 13.
+        content = (ROOT / ".github" / "workflows" / "package-app-artifact.yml").read_text()
+        self.assertIn("build_image_target", content)
+        self.assertIn('docker build -t "gnustep-package-app-${{ inputs.build_image_target }}" "toolchains/${{ inputs.build_image_target }}"', content)
+        self.assertIn('-v "$RUNNER_TEMP:$RUNNER_TEMP"', content)
+        self.assertIn('run_build scripts/internal/build_infra.py "${args[@]}"', content)
+
     def test_windows_package_app_artifact_workflow_builds_msys2_packages(self):
         workflow = ROOT / ".github" / "workflows" / "windows-package-app-artifact.yml"
         self.assertTrue(workflow.exists())

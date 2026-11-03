@@ -36,6 +36,11 @@ on:
         required: false
         default: ubuntu-latest
         type: string
+      build_image_target:
+        description: "Linux: managed toolchain target whose pinned base image (toolchains/<id>/Dockerfile) runs the build, e.g. linux-amd64-clang. Empty builds on the runner OS."
+        required: false
+        default: ""
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -103,9 +108,32 @@ jobs:
             fi
           done
 
+      # A managed Linux toolchain links its base image's glibc/ICU SONAMEs (Debian 13:
+      # ICU 76), not the runner OS's (ubuntu-24.04: ICU 74), so the package must be
+      # built in that same image. The workspace and RUNNER_TEMP are mounted at their
+      # host paths, so the relocated toolchain root stays valid inside the container.
+      - name: Build pinned base image
+        if: ${{ inputs.build_image_target != '' }}
+        run: |
+          set -eu
+          test -f "toolchains/${{ inputs.build_image_target }}/Dockerfile"
+          docker build -t "gnustep-package-app-${{ inputs.build_image_target }}" "toolchains/${{ inputs.build_image_target }}"
+
       - name: Build package artifact
+        env:
+          BUILD_IMAGE: ${{ inputs.build_image_target != '' && format('gnustep-package-app-{0}', inputs.build_image_target) || '' }}
         run: |
           mkdir -p "$RUNNER_TEMP/package-app-output"
+          if [ -n "$BUILD_IMAGE" ]; then
+            run_build() {
+              docker run --rm -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE" -v "$RUNNER_TEMP:$RUNNER_TEMP" \
+                -w "$GITHUB_WORKSPACE" -e HOME="$RUNNER_TEMP/package-app-home" \
+                --user "$(id -u):$(id -g)" "$BUILD_IMAGE" python3 "$@"
+            }
+            mkdir -p "$RUNNER_TEMP/package-app-home"
+          else
+            run_build() { python3 "$@"; }
+          fi
           args=(--json package-managed-source-artifact
             --packages-dir packages
             --package-id "${{ inputs.package_id }}"
@@ -115,7 +143,7 @@ jobs:
           if [ -n "${{ inputs.version }}" ]; then
             args+=(--version "${{ inputs.version }}")
           fi
-          python3 scripts/internal/build_infra.py "${args[@]}" | tee "$RUNNER_TEMP/package-app-output/package-build-report.json"
+          run_build scripts/internal/build_infra.py "${args[@]}" | tee "$RUNNER_TEMP/package-app-output/package-build-report.json"
           python3 -c 'import json,sys; payload=json.load(open(sys.argv[1])); raise SystemExit(0 if payload.get("ok") else 1)' "$RUNNER_TEMP/package-app-output/package-build-report.json"
 
       - name: Upload package artifact
