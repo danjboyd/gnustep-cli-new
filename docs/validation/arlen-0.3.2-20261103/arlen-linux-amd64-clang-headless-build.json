@@ -18,9 +18,9 @@
     "id": "arlen-linux-amd64-clang-headless",
     "path": "/home/runner/work/_temp/package-app-output/arlen-arlen-linux-amd64-clang-headless-0.3.2.tar.gz",
     "filename": "arlen-arlen-linux-amd64-clang-headless-0.3.2.tar.gz",
-    "sha256": "b1c1080d03fd8e6eaca3c1e7638dd8d49e0d82800d3dcccb4998b092714ad5a0",
+    "sha256": "cfc3000b6c1f47057ee0a1e0440942747f5b405e2bdd31c1c59ba8597e1c6ff4",
     "format": "tar.gz"
   },
   "toolchain_root": "/home/runner/work/_temp/package-app-toolchain/root",
-  "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41705463006"
+  "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41725920745"
 }

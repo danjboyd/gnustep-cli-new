@@ -3,7 +3,7 @@
   "kind": "package-install-qualification",
   "package_id": "io.github.danjboyd.arlen",
   "artifact_id": "arlen-linux-arm64-clang-headless",
-  "artifact_sha256": "27520e6c964cc74e025aac77adb3a94ad71c2ebcb325b1c1bada5b24574d6f4c",
+  "artifact_sha256": "293687628627f403ecc3653b48ebbc6e734049f8ecbdc688f2adeea8c555df61",
   "os_release": {
     "PRETTY_NAME": "\"Debian GNU/Linux 13 (trixie)\"",
     "NAME": "\"Debian GNU/Linux\"",
@@ -18,6 +18,7 @@
   },
   "steps": {
     "setup": "0",
+    "tampered_index": "0",
     "install": "0",
     "smoke": "0",
     "remove": "0",
@@ -30,5 +31,6 @@
     "boomhauer --help exit 0"
   ],
   "ok": true,
-  "qualification_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41705471780"
+  "qualification_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41725932816",
+  "cli_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41723631099"
 }

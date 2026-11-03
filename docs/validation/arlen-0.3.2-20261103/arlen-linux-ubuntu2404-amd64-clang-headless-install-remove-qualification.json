@@ -3,7 +3,7 @@
   "kind": "package-install-qualification",
   "package_id": "io.github.danjboyd.arlen",
   "artifact_id": "arlen-linux-ubuntu2404-amd64-clang-headless",
-  "artifact_sha256": "cf4e6af8e0cdfbce5a0f1386af74fb3eb51153846fe961be85b86c38b9b9a4e4",
+  "artifact_sha256": "70f0179d159294cc4fe0c8ec4aaafc7ecd3e72149c8f7279741a010cef933644",
   "os_release": {
     "PRETTY_NAME": "\"Ubuntu 24.04.5 LTS\"",
     "NAME": "\"Ubuntu\"",
@@ -21,6 +21,7 @@
   },
   "steps": {
     "setup": "0",
+    "tampered_index": "0",
     "install": "0",
     "smoke": "0",
     "remove": "0",
@@ -33,5 +34,6 @@
     "boomhauer --help exit 0"
   ],
   "ok": true,
-  "qualification_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41704889687"
+  "qualification_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41725924531",
+  "cli_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41723623036"
 }
