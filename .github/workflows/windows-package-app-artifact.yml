@@ -28,6 +28,21 @@ on:
         description: SHA256 for existing Windows toolchain zip
         required: false
         type: string
+      qualify:
+        description: "Install, smoke and remove the built artifact through the published PowerShell bootstrap"
+        required: false
+        default: false
+        type: boolean
+      qualify_release_tag:
+        description: Release whose gnustep-bootstrap.ps1 sets up the qualification root
+        required: false
+        default: v0.1.3
+        type: string
+      qualify_bootstrap_sha256:
+        description: Expected sha256 of that release's gnustep-bootstrap.ps1
+        required: false
+        default: ef9159c6f27d272eea6f9525029da584def3a88b89d4ce403b37b42f9f374150
+        type: string
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -115,3 +130,27 @@ jobs:
           path: |
             ${{ runner.temp }}\package-app-output\*.zip
             ${{ runner.temp }}\package-app-output\package-build-report.json
+
+      - name: Qualify install and remove
+        if: ${{ inputs.qualify }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $in = Join-Path $env:RUNNER_TEMP 'qualify-in'
+          New-Item -ItemType Directory -Force -Path $in | Out-Null
+          gh release download '${{ inputs.qualify_release_tag }}' --repo $env:GITHUB_REPOSITORY --dir $in --pattern gnustep-bootstrap.ps1
+          $bootstrap = Join-Path $in 'gnustep-bootstrap.ps1'
+          $actual = (Get-FileHash -Algorithm SHA256 -Path $bootstrap).Hash.ToLowerInvariant()
+          if ($actual -ne '${{ inputs.qualify_bootstrap_sha256 }}') { throw "bootstrap checksum mismatch: $actual" }
+          $report = Get-Content -Raw (Join-Path $env:OUTPUT_ROOT 'package-build-report.json') | ConvertFrom-Json
+          & pwsh -NoProfile -File scripts\dev\package-install-qualification.ps1 -PackageId '${{ inputs.package_id }}' -ArtifactId '${{ inputs.target }}' -ArtifactFile $report.artifact.path -Bootstrap $bootstrap -OutDir (Join-Path $env:RUNNER_TEMP 'qualify-out') -Repo $env:GITHUB_WORKSPACE
+          if ($LASTEXITCODE -ne 0) { throw "package install qualification failed" }
+
+      - name: Upload qualification evidence
+        if: ${{ always() && inputs.qualify }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-package-install-qualification-${{ inputs.package_id }}-${{ inputs.target }}
+          path: ${{ runner.temp }}\qualify-out
