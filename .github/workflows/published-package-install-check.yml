@@ -1,0 +1,151 @@
+name: Published Package Install Check
+
+# Verifies a PUBLISHED release end to end, as a user would see it: the
+# release's own bootstrap (sha256-pinned) sets up a fresh managed root, then
+# `gnustep install <package>` runs with no --index, so the package index the
+# signed release manifest advertises is what gets used. The index's signature
+# is checked independently with the trust gate. Nothing is built or published.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Published release to verify, e.g. v0.1.4
+        required: true
+        type: string
+      package:
+        description: Package id or alias to install
+        required: true
+        default: arlen
+        type: string
+      sh_bootstrap_sha256:
+        description: Expected sha256 of the release's gnustep-bootstrap.sh
+        required: true
+        type: string
+      ps1_bootstrap_sha256:
+        description: Expected sha256 of the release's gnustep-bootstrap.ps1
+        required: true
+        type: string
+      linux_image:
+        description: Clean Linux image for the Linux check
+        required: true
+        default: debian:13
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  index-trust:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Verify the advertised index against its signature
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          d="$RUNNER_TEMP/index"
+          mkdir -p "$d"
+          gh release download "${{ inputs.release_tag }}" --repo "$GITHUB_REPOSITORY" --dir "$d" \
+            --pattern release-manifest.json --pattern 'package-index*'
+          ls -l "$d"
+          python3 - "$d" <<'PY'
+          import hashlib, json, os, sys
+          d = sys.argv[1]
+          manifest = json.load(open(os.path.join(d, "release-manifest.json")))
+          entries = [a for r in manifest["releases"] for a in r["artifacts"] if a.get("kind") == "package-index"]
+          if len(entries) != 1:
+              raise SystemExit(f"expected one package-index artifact in the manifest, found {len(entries)}")
+          entry = entries[0]
+          print("manifest package-index entry:", json.dumps(entry, indent=2))
+          digest = hashlib.sha256(open(os.path.join(d, "package-index.json"), "rb").read()).hexdigest()
+          print("published package-index.json sha256:", digest)
+          if entry.get("sha256") != digest:
+              raise SystemExit("the manifest's package-index sha256 does not match the published index")
+          PY
+          python3 scripts/internal/package_repo.py --json --trust-gate \
+            --trusted-public-key packages/package-index-signing-public.pem "$d/package-index.json"
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install, smoke and remove in a clean container
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          in="$RUNNER_TEMP/in"
+          mkdir -p "$in" "$RUNNER_TEMP/out"
+          gh release download "${{ inputs.release_tag }}" --repo "$GITHUB_REPOSITORY" --dir "$in" --pattern gnustep-bootstrap.sh
+          echo "${{ inputs.sh_bootstrap_sha256 }}  $in/gnustep-bootstrap.sh" | sha256sum -c -
+          cat > "$in/check.sh" <<'CHECK'
+          set -eu
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update >/dev/null
+          apt-get install -y --no-install-recommends sudo ca-certificates curl python3 >/dev/null
+          useradd -m -s /bin/sh gsuser
+          printf 'gsuser ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/gsuser
+          cp /in/gnustep-bootstrap.sh /home/gsuser/ && chown gsuser /home/gsuser/gnustep-bootstrap.sh
+          su - gsuser -c 'sh ./gnustep-bootstrap.sh --json setup --yes' > /out/setup.json
+          R=/home/gsuser/.local/share/gnustep-cli
+          su - gsuser -c "$R/bin/gnustep --json install $PACKAGE" > /out/install.json
+          su - gsuser -c "set +u; . $R/System/Library/Makefiles/GNUstep.sh; set -u; $R/bin/arlen --help >/dev/null 2>&1; echo arlen_exit=\$?; ldd $R/packages/*/bin/arlen | grep 'not found' || echo ldd_ok" > /out/smoke.txt
+          su - gsuser -c "$R/bin/gnustep --json remove $PACKAGE" > /out/remove.json
+          test ! -e "$R/bin/arlen"
+          cat /out/smoke.txt
+          python3 -c 'import json; [print(f, json.load(open("/out/"+f+".json")).get("ok"), json.load(open("/out/"+f+".json")).get("summary")) for f in ("setup","install","remove")]'
+          python3 -c 'import json,sys; sys.exit(0 if all(json.load(open("/out/"+f+".json")).get("ok") for f in ("setup","install","remove")) else 1)'
+          CHECK
+          docker run --rm -e PACKAGE="${{ inputs.package }}" -v "$in:/in:ro" -v "$RUNNER_TEMP/out:/out" \
+            "${{ inputs.linux_image }}" sh /in/check.sh
+      - name: Upload Linux evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-install-check-linux
+          path: ${{ runner.temp }}/out
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Install, smoke and remove
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $in = Join-Path $env:RUNNER_TEMP 'in'
+          $out = Join-Path $env:RUNNER_TEMP 'out'
+          New-Item -ItemType Directory -Force -Path $in, $out | Out-Null
+          gh release download '${{ inputs.release_tag }}' --repo $env:GITHUB_REPOSITORY --dir $in --pattern gnustep-bootstrap.ps1
+          $bootstrap = Join-Path $in 'gnustep-bootstrap.ps1'
+          $actual = (Get-FileHash -Algorithm SHA256 -Path $bootstrap).Hash.ToLowerInvariant()
+          if ($actual -ne '${{ inputs.ps1_bootstrap_sha256 }}') { throw "bootstrap checksum mismatch: $actual" }
+          $root = Join-Path $env:RUNNER_TEMP 'gs-root'
+          & powershell -NoProfile -ExecutionPolicy Bypass -File $bootstrap --json setup --yes --root $root *> (Join-Path $out 'setup.json')
+          $gnustep = Join-Path $root 'bin\gnustep.exe'
+          & $gnustep --json install --root $root '${{ inputs.package }}' *> (Join-Path $out 'install.json')
+          $shim = Join-Path $root 'bin\arlen.cmd'
+          $global:LASTEXITCODE = 0
+          & cmd.exe /c "`"$shim`" --help" *> $null
+          "arlen.cmd --help exit $LASTEXITCODE" | Tee-Object -FilePath (Join-Path $out 'smoke.txt')
+          & $gnustep --json remove --root $root '${{ inputs.package }}' *> (Join-Path $out 'remove.json')
+          $ok = $true
+          foreach ($f in 'setup', 'install', 'remove') {
+            try { $j = Get-Content -Raw (Join-Path $out "$f.json") | ConvertFrom-Json } catch { $j = $null }
+            "$f ok=$($j.ok) $($j.summary)"
+            if (-not $j -or -not $j.ok) { $ok = $false }
+          }
+          if (Test-Path $shim) { 'shim left behind after remove'; $ok = $false }
+          if (-not $ok) { exit 1 }
+      - name: Upload Windows evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-install-check-windows
+          path: ${{ runner.temp }}\out
