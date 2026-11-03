@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "command": "package-managed-source-artifact",
+  "ok": true,
+  "status": "ok",
+  "summary": "Managed package artifact generated.",
+  "package_id": "io.github.danjboyd.arlen",
+  "version": "0.3.2",
+  "target": "arlen-windows-amd64-msys2-clang64-headless",
+  "source": {
+    "type": "git-archive",
+    "url": "https://github.com/danjboyd/Arlen",
+    "revision": "e26a755e0c250ec972c99eca9fb51a4259d48307",
+    "archive": "D:\\a\\_temp\\package-app-output\\io.github.danjboyd.arlen-source-e26a755e0c25.tar.gz",
+    "sha256": "7f49919422179a7a3347a18b3c207f154ea890deddd10cee1c150121a0619e20"
+  },
+  "artifact": {
+    "id": "arlen-windows-amd64-msys2-clang64-headless",
+    "path": "D:\\a\\_temp\\package-app-output\\arlen-arlen-windows-amd64-msys2-clang64-headless-0.3.2.zip",
+    "filename": "arlen-arlen-windows-amd64-msys2-clang64-headless-0.3.2.zip",
+    "sha256": "e8a4c1b73a708a671dfd1f96673d95bcfc59cdaa05637f55898856025d4d28de",
+    "format": "zip"
+  },
+  "toolchain_root": "D:\\a\\_temp\\package-app-toolchain",
+  "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41713128499"
+}

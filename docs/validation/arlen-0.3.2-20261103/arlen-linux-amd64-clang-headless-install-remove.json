@@ -43,5 +43,7 @@
   "not_covered": [
     "Ubuntu 24.04/26.04 amd64, Debian arm64 and Windows install/remove (need those hosts or containers)",
     "signed index metadata (generated_at/expires_at were TBD in this local index)"
-  ]
+  ],
+  "superseded_by": "docs/validation/arlen-0.3.2-20261103/arlen-linux-amd64-clang-headless-install-remove-qualification.json",
+  "superseded_note": "Local check of the earlier 61a254fd build; builds are not byte-reproducible, and the v0.1.4 candidate is b1c1080d."
 }

@@ -77,6 +77,18 @@ class PackageRepositoryTests(unittest.TestCase):
             for artifact in package["artifacts"]:
                 self.assertLessEqual(set(artifact.get("runtime_components", [])), valid_components)
 
+    def test_release_index_can_be_limited_to_published_artifacts_of_named_packages(self):
+        payload = generate_package_index(ROOT / "packages", package_ids=["io.github.danjboyd.arlen"], published_only=True)
+        self.assertEqual([package["id"] for package in payload["packages"]], ["io.github.danjboyd.arlen"])
+        artifacts = payload["packages"][0]["artifacts"]
+        self.assertTrue(artifacts)
+        self.assertTrue(all(artifact.get("publish", True) is not False for artifact in artifacts))
+        # The OpenBSD artifact still points at the 0.1.0 snapshot and is withheld.
+        self.assertNotIn("arlen-openbsd-amd64-clang-headless", [artifact["id"] for artifact in artifacts])
+        full = generate_package_index(ROOT / "packages")
+        self.assertGreater(len(full["packages"]), 1)
+        self.assertEqual(generate_package_index(ROOT / "packages", package_ids=["no.such.package"])["packages"], [])
+
     def test_arlen_and_gorm_artifacts_record_build_and_boundary_evidence(self):
         payload = generate_package_index(ROOT / "packages")
         packages = {package["id"]: package for package in payload["packages"]}
@@ -84,18 +96,16 @@ class PackageRepositoryTests(unittest.TestCase):
         gorm_artifact = next(artifact for artifact in packages["org.gnustep.gorm"]["artifacts"] if artifact["id"] == "gorm-linux-amd64-clang")
 
         self.assertTrue(arlen_artifact["publish"])
-        # The package source moved to Arlen v0.3.2; every artifact stays blocked until rebuilt.
-        self.assertEqual(arlen_artifact["status"], "pending_rebuild_for_source_e26a755e")
-        self.assertEqual(arlen_artifact["previous_status"], "published_linux_amd64_clang_headless")
+        # Arlen 0.3.2 was rebuilt on the v0.1.3 toolchains as a v0.1.4 release candidate.
+        self.assertEqual(arlen_artifact["status"], "release_candidate_v0.1.4")
         self.assertEqual(packages["io.github.danjboyd.arlen"]["version"], "0.3.2")
-        self.assertIn("https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/", arlen_artifact["url"])
+        self.assertIn("https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.4/", arlen_artifact["url"])
+        self.assertTrue((ROOT / arlen_artifact["validation_evidence"]).exists())
         self.assertEqual(arlen_artifact["build_blockers"], [])
         self.assertEqual(len(arlen_artifact["sha256"]), 64)
-        self.assertTrue(arlen_artifact["artifact_path"].endswith(".tar.gz"))
+        self.assertTrue(arlen_artifact["filename"].endswith("-0.3.2.tar.gz"))
         self.assertTrue((ROOT / arlen_artifact["build_evidence"]).exists())
-        self.assertTrue((ROOT / arlen_artifact["managed_build_evidence"]).exists())
-        self.assertTrue((ROOT / arlen_artifact["source_built_build_evidence"]).exists())
-        self.assertTrue((ROOT / arlen_artifact["validation_evidence"]).exists())
+        self.assertTrue(arlen_artifact["build_workflow_run"].startswith("https://github.com/danjboyd/gnustep-cli-new/actions/runs/"))
         self.assertTrue(gorm_artifact["publish"])
         self.assertEqual(gorm_artifact["status"], "published_linux_amd64_clang")
         self.assertIn("https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/", gorm_artifact["url"])

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "kind": "package-install-qualification",
+  "package_id": "io.github.danjboyd.arlen",
+  "artifact_id": "arlen-windows-amd64-msys2-clang64-headless",
+  "artifact_sha256": "e8a4c1b73a708a671dfd1f96673d95bcfc59cdaa05637f55898856025d4d28de",
+  "cli_under_test": "f784dbbcb36f2cad13f532ceae889c59924bad8697a04e9a97b00beeb100792b",
+  "os": "Microsoft Windows Server 2025 Datacenter",
+  "steps": {
+    "setup": 0,
+    "index": 0,
+    "install": 0,
+    "smoke": 0,
+    "remove": 0,
+    "leftovers": 0
+  },
+  "selected_artifact": "arlen-windows-amd64-msys2-clang64-headless",
+  "installed_version": "0.3.2",
+  "smoke": [
+    "arlen --help exit 2",
+    "arlen.cmd --help exit 2",
+    "boomhauer --help exit 0",
+    "boomhauer.cmd --help exit 0"
+  ],
+  "leftovers": [],
+  "ok": true,
+  "qualification_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41713128499"
+}
