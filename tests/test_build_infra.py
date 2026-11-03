@@ -18,6 +18,7 @@ if str(SRC) not in sys.path:
 
 from gnustep_cli_shared.compatibility import artifact_matches_host, evaluate_environment_against_artifact
 from gnustep_cli_shared.build_infra import (
+    package_install_layout_mismatches,
     cli_version_compile_defines,
     stamped_cli_version,
     assemble_linux_toolchain_artifact,
@@ -2353,6 +2354,44 @@ class BuildInfraTests(unittest.TestCase):
             self.assertEqual(payload["patches"][0]["sha256"], declared["patches"][0]["sha256"])
             self.assertEqual(hashlib.sha256(Path(payload["patches"][0]["path"]).read_bytes()).hexdigest(), declared["patches"][0]["sha256"])
 
+    def _stage(self, root: Path, files: list[str], dirs: list[str] = ()) -> Path:
+        for rel in dirs:
+            (root / rel).mkdir(parents=True, exist_ok=True)
+        for rel in files:
+            (root / rel).parent.mkdir(parents=True, exist_ok=True)
+            (root / rel).write_text("x")
+        return root
+
+    def test_install_layout_check_reports_declared_files_the_artifact_lacks(self):
+        # The May 2026 Windows Arlen zip shipped without bin/arlen: staging skipped the
+        # missing build output silently and nothing compared it to the install section.
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = self._stage(Path(tempdir), ["Library/Libraries/libArlenFramework.a"], ["Resources/templates"])
+            install = {"executables": ["arlen", "boomhauer"], "library_files": ["libArlenFramework.a"], "frameworks": ["Arlen"]}
+            missing = package_install_layout_mismatches(install, root)
+            self.assertEqual([(m["field"], m["entry"]) for m in missing],
+                             [("executables", "arlen"), ("executables", "boomhauer"), ("frameworks", "Arlen")])
+
+    def test_install_layout_check_accepts_windows_suffixes_and_bundle_executables(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = self._stage(Path(tempdir), ["bin/arlen.exe", "bin/xctest.cmd", "Applications/Gorm.app/Gorm.exe"])
+            install = {"executables": ["arlen", "xctest", "Gorm"], "application_bundles": ["Gorm.app"]}
+            self.assertEqual(package_install_layout_mismatches(install, root, windows=True), [])
+            # Off Windows a .exe does not satisfy a declared executable.
+            self.assertEqual([m["entry"] for m in package_install_layout_mismatches(install, root)], ["arlen", "xctest", "Gorm"])
+
+    def test_install_layout_check_requires_declared_bundles_and_frameworks_as_directories(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = self._stage(Path(tempdir), ["Applications/Gorm.app", "Library/Frameworks/GormCore.framework"])
+            missing = package_install_layout_mismatches({"application_bundles": ["Gorm.app"], "frameworks": ["GormCore"]}, root)
+            self.assertEqual([m["field"] for m in missing], ["application_bundles", "frameworks"])
+
+    def test_arlen_install_section_matches_what_its_staging_rule_produces(self):
+        manifest = json.loads((ROOT / "packages" / "io.github.danjboyd.arlen" / "package.json").read_text())
+        for windows, files in ((False, ["bin/arlen", "bin/boomhauer"]), (True, ["bin/arlen.exe", "bin/boomhauer.exe"])):
+            with tempfile.TemporaryDirectory() as tempdir:
+                root = self._stage(Path(tempdir), files + ["Library/Libraries/libArlenFramework.a"])
+                self.assertEqual(package_install_layout_mismatches(manifest["install"], root, windows=windows), [], windows)
     def test_package_tools_xctest_artifact_source_digest_ignores_git_eol_conversion(self):
         # Git for Windows ships core.autocrlf=true; core.eol defaults to native (CRLF
         # on Windows). Either one used to change the clone and the `git archive` bytes,

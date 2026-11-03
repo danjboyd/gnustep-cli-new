@@ -240,6 +240,38 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v4", content)
         self.assertIn("*.zip", content)
 
+    def test_package_app_artifact_workflow_can_build_in_the_pinned_base_image(self):
+        # Managed Linux toolchains link their base image's ICU/glibc; building on the
+        # runner OS (ubuntu-24.04, ICU 74) produces packages that never load on Debian 13.
+        content = (ROOT / ".github" / "workflows" / "package-app-artifact.yml").read_text()
+        self.assertIn("build_image_target", content)
+        self.assertIn('docker build -t "gnustep-package-app-${{ inputs.build_image_target }}" "toolchains/${{ inputs.build_image_target }}"', content)
+        self.assertIn('-v "$RUNNER_TEMP:$RUNNER_TEMP"', content)
+        self.assertIn('run_build scripts/internal/build_infra.py "${args[@]}"', content)
+
+    def test_package_app_artifact_workflow_can_qualify_install_and_remove(self):
+        content = (ROOT / ".github" / "workflows" / "package-app-artifact.yml").read_text()
+        self.assertIn("qualify_image", content)
+        self.assertIn('sha256sum -c -', content)
+        self.assertIn("scripts/dev/package-install-qualification.sh", content)
+        # Qualification runs after the package upload so a failed check keeps the artifact.
+        self.assertLess(content.index("- name: Upload package artifact"), content.index("- name: Qualify install and remove"))
+        script = (ROOT / "scripts" / "dev" / "package-install-qualification.sh").read_text()
+        for step in ("step setup", "step install", "step smoke", "step remove", "step leftovers"):
+            self.assertIn(step, script)
+        self.assertIn('install.get("selected_artifact") == artifact_id', script)
+
+    def test_windows_package_app_artifact_workflow_can_qualify_install_and_remove(self):
+        content = (ROOT / ".github" / "workflows" / "windows-package-app-artifact.yml").read_text()
+        self.assertIn("qualify_bootstrap_sha256", content)
+        self.assertIn("ef9159c6f27d272eea6f9525029da584def3a88b89d4ce403b37b42f9f374150", content)
+        self.assertIn("package-install-qualification.ps1", content)
+        self.assertLess(content.index("- name: Upload package artifact"), content.index("- name: Qualify install and remove"))
+        script = (ROOT / "scripts" / "dev" / "package-install-qualification.ps1").read_text()
+        for step in ("'setup'", "'install'", "'remove'", "$steps['smoke']", "$steps['leftovers']"):
+            self.assertIn(step, script)
+        self.assertIn("$rc -lt 0 -or $rc -ge 126", script)
+
     def test_windows_package_app_artifact_workflow_builds_msys2_packages(self):
         workflow = ROOT / ".github" / "workflows" / "windows-package-app-artifact.yml"
         self.assertTrue(workflow.exists())

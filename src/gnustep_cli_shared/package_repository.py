@@ -25,19 +25,39 @@ def _patches_for_artifact(package_patches: list[dict[str, Any]], artifact_id: st
     return selected
 
 
-def generate_package_index(packages_root: str | Path, channel: str = "stable") -> dict[str, Any]:
+def generate_package_index(
+    packages_root: str | Path,
+    channel: str = "stable",
+    *,
+    package_ids: list[str] | None = None,
+    published_only: bool = False,
+) -> dict[str, Any]:
+    """Build the package index from package manifests.
+
+    package_ids limits the index to those packages, and published_only drops
+    artifacts marked publish: false (and packages left with none). Release
+    indexes use both: neither the generator nor the installer otherwise filters
+    artifacts by publication state.
+    """
     manifests = discover_package_manifests(packages_root)
     packages: list[dict[str, Any]] = []
+    wanted = set(package_ids) if package_ids else None
     for manifest_path in manifests:
         payload = json.loads(manifest_path.read_text())
+        if wanted is not None and payload["id"] not in wanted:
+            continue
         package_source = payload.get("source", {})
         package_patches = payload.get("patches", [])
         artifacts = []
         for artifact in payload["artifacts"]:
+            if published_only and artifact.get("publish", True) is False:
+                continue
             enriched = dict(artifact)
             enriched["source"] = package_source
             enriched["patches"] = _patches_for_artifact(package_patches, str(artifact.get("id", "")))
             artifacts.append(enriched)
+        if published_only and not artifacts:
+            continue
         packages.append(
             {
                 "id": payload["id"],
@@ -69,8 +89,15 @@ def generate_package_index(packages_root: str | Path, channel: str = "stable") -
     }
 
 
-def write_package_index(packages_root: str | Path, output_path: str | Path, channel: str = "stable") -> Path:
-    payload = generate_package_index(packages_root, channel=channel)
+def write_package_index(
+    packages_root: str | Path,
+    output_path: str | Path,
+    channel: str = "stable",
+    *,
+    package_ids: list[str] | None = None,
+    published_only: bool = False,
+) -> Path:
+    payload = generate_package_index(packages_root, channel=channel, package_ids=package_ids, published_only=published_only)
     output = Path(output_path).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, indent=2) + "\n")
