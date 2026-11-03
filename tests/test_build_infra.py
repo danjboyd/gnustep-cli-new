@@ -19,6 +19,7 @@ if str(SRC) not in sys.path:
 from gnustep_cli_shared.compatibility import artifact_matches_host, evaluate_environment_against_artifact
 from gnustep_cli_shared.build_infra import (
     package_install_layout_mismatches,
+    advertise_package_index,
     cli_version_compile_defines,
     stamped_cli_version,
     assemble_linux_toolchain_artifact,
@@ -128,6 +129,53 @@ class BuildInfraTests(unittest.TestCase):
         for label in ("0.1.0-dev", "0.1.0-dev-current", "0.1.0-dogfood", "0.1.0-snapshot.20260505"):
             self.assertEqual(stamped_cli_version(label), "0.1.0-dev")
             self.assertEqual(cli_version_compile_defines(label), [])
+
+    def _release_dir_with_index(self, root: Path) -> Path:
+        release = root / "release"
+        release.mkdir()
+        cli = release / "gnustep-cli-linux-amd64-clang-9.9.9.tar.gz"
+        cli.write_bytes(b"cli")
+        cli_sha = hashlib.sha256(b"cli").hexdigest()
+        (release / "release-manifest.json").write_text(json.dumps({
+            "schema_version": 1, "channel": "stable",
+            "releases": [{"version": "9.9.9", "artifacts": [{
+                "id": "cli-linux-amd64-clang", "kind": "cli", "filename": cli.name, "sha256": cli_sha,
+                "url": f"https://github.com/danjboyd/gnustep-cli-new/releases/download/v9.9.9/{cli.name}"}]}]}))
+        (release / "SHA256SUMS").write_text(f"{cli_sha}  {cli.name}\n")
+        (release / "package-index.json").write_text(json.dumps({"schema_version": 1, "packages": []}) + "\n")
+        return release
+
+    def test_advertise_package_index_adds_a_verifiable_manifest_entry(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            release = self._release_dir_with_index(Path(tempdir))
+            payload = advertise_package_index(release)
+            self.assertTrue(payload["ok"], payload.get("summary"))
+            manifest = json.loads((release / "release-manifest.json").read_text())
+            entries = [a for a in manifest["releases"][0]["artifacts"] if a["kind"] == "package-index"]
+            self.assertEqual(len(entries), 1)
+            digest = hashlib.sha256((release / "package-index.json").read_bytes()).hexdigest()
+            self.assertEqual(entries[0]["sha256"], digest)
+            self.assertEqual(entries[0]["url"], "https://github.com/danjboyd/gnustep-cli-new/releases/download/v9.9.9/package-index.json")
+            self.assertIn(f"{digest}  package-index.json", (release / "SHA256SUMS").read_text())
+            # The existing release verifier now checks the index digest like any other
+            # asset (the fixture index is unsigned, so only the checksum result applies).
+            checks = [r for r in verify_release_directory(release)["results"] if r["filename"] == "package-index.json" and "sha256_matches" in r]
+            self.assertEqual([r["sha256_matches"] for r in checks], [True])
+            # Running twice must not add a second entry.
+            self.assertFalse(advertise_package_index(release)["ok"])
+
+    def test_advertise_package_index_refuses_an_already_signed_manifest(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            release = self._release_dir_with_index(Path(tempdir))
+            (release / "release-manifest.json.sig").write_bytes(b"sig")
+            payload = advertise_package_index(release)
+            self.assertFalse(payload["ok"])
+            self.assertIn("before signing", payload["summary"])
+
+    def test_release_workflow_advertises_the_index_before_signing_the_manifest(self):
+        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+        self.assertLess(workflow.index("advertise-package-index"), workflow.index("sign-release-metadata --release-dir"))
+        self.assertIn("--published-only packages --output /tmp/package-index-generated.json", workflow)
 
     def test_matrix_contains_tier1_targets(self):
         payload = build_matrix()
