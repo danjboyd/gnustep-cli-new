@@ -1879,7 +1879,8 @@
   // Quoted executable path (managed roots may contain spaces), every argument passed through.
   XCTAssertEqualObjects([lines objectAtIndex: 4], @"\"%~dp0..\\packages\\io.github.danjboyd.arlen\\bin\\arlen.exe\" %*");
   XCTAssertEqualObjects([lines objectAtIndex: 5], @"exit /b %ERRORLEVEL%");
-  XCTAssertTrue([shim rangeOfString: @"/"].location == NSNotFound);
+  // The package path is converted to Windows separators (`exit /b` is the only slash).
+  XCTAssertTrue([[lines objectAtIndex: 4] rangeOfString: @"/"].location == NSNotFound);
 }
 
 - (void)testInstallExposesWindowsExecutablesAsCommandShimsAndRemoveDeletesThem
