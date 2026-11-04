@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "command": "package-managed-source-artifact",
+  "ok": true,
+  "status": "ok",
+  "summary": "Managed package artifact generated.",
+  "package_id": "io.github.danjboyd.arlen",
+  "version": "0.3.2",
+  "target": "arlen-linux-ubuntu2604-amd64-clang-headless",
+  "source": {
+    "type": "git-archive",
+    "url": "https://github.com/danjboyd/Arlen",
+    "revision": "e26a755e0c250ec972c99eca9fb51a4259d48307",
+    "archive": "/home/runner/work/_temp/package-app-output/io.github.danjboyd.arlen-source-e26a755e0c25.tar.gz",
+    "sha256": "7f49919422179a7a3347a18b3c207f154ea890deddd10cee1c150121a0619e20"
+  },
+  "artifact": {
+    "id": "arlen-linux-ubuntu2604-amd64-clang-headless",
+    "path": "/home/runner/work/_temp/package-app-output/arlen-arlen-linux-ubuntu2604-amd64-clang-headless-0.3.2.tar.gz",
+    "filename": "arlen-arlen-linux-ubuntu2604-amd64-clang-headless-0.3.2.tar.gz",
+    "sha256": "c4e4ae7530ce33126c222ee8e9b8fb6c53a2c48891891de1c908f68a586fae77",
+    "format": "tar.gz"
+  },
+  "toolchain_root": "/home/runner/work/_temp/package-app-toolchain/root",
+  "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41725928717"
+}

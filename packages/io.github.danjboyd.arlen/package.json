@@ -5,7 +5,7 @@
   "aliases": [
     "arlen"
   ],
-  "version": "0.1.0-snapshot.20260507.1",
+  "version": "0.3.2",
   "kind": "framework",
   "summary": "GNUstep web application framework and command-line tooling.",
   "license": "LGPL-2.0-or-later",
@@ -16,20 +16,20 @@
   ],
   "source": {
     "type": "git-archive",
-    "url": "https://github.com/danjboyd/Arlen/archive/7561910f3cdb249d8d8805aed88c7a250d227028.tar.gz",
-    "sha256": "d5821b6e03b997b68e04d88f9d6c2c9e9e087093523d4d20f96a331af362a191",
-    "revision": "7561910f3cdb249d8d8805aed88c7a250d227028",
+    "url": "https://github.com/danjboyd/Arlen/archive/e26a755e0c250ec972c99eca9fb51a4259d48307.tar.gz",
+    "sha256": "7360dc7d1f6816603dcb9a025e7366e9a1892aab9022371499a8702c4897621f",
+    "revision": "e26a755e0c250ec972c99eca9fb51a4259d48307",
     "upstream": "danjboyd/Arlen",
     "upstream_url": "https://github.com/danjboyd/Arlen",
-    "tracking_strategy": "reviewed-commit-snapshot-with-externalized-submodules",
-    "update_cadence": "manual-until-first-stable-package-release",
+    "tracking_strategy": "tagged-release-with-externalized-submodules",
+    "update_cadence": "manual-per-arlen-release",
     "channel_policy": "dogfood snapshots may track reviewed commits; stable should track a tagged Arlen release or approved package exception.",
     "submodule_policy": "do-not-inline",
     "externalized_submodules": [
       {
         "path": "vendor/tools-xctest",
-        "url": "https://github.com/gnustep/tools-xctest.git",
-        "revision": "75cf4837adb9a8fd7caad3fcb7e3b7dd813088dc",
+        "url": "https://github.com/danjboyd/tools-xctest.git",
+        "revision": "a84f053e8546bb3e03bb470e2a0a17863ecabd62",
         "package": "org.gnustep.tools-xctest",
         "relationship": "build-test-dependency",
         "notes": "Arlen's tools-xctest patch is delivered by the org.gnustep.tools-xctest package."
@@ -41,7 +41,8 @@
         "relationship": "build-tooling",
         "notes": "The GNUstep CLI is supplied by the official package build environment, not vendored into Arlen."
       }
-    ]
+    ],
+    "tag": "v0.3.2"
   },
   "requirements": {
     "supported_os": [
@@ -112,20 +113,17 @@
       ],
       "format": "tar.gz",
       "publish": true,
-      "status": "published_linux_amd64_clang_headless",
-      "filename": "arlen-arlen-linux-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
-      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/arlen-arlen-linux-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
-      "artifact_path": ".artifacts/package-output/source-built-linux-20260505/arlen-arlen-linux-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
-      "sha256": "3f4bf13ca589bd4c79486a45425880a0406ff776efb312ed3b86f74dee632487",
-      "size": 5208775,
-      "notes": "Headless Arlen package must not require GNUstep GUI or Back. OracleTestVMs source-built Linux Clang/libobjc2 lane builds this artifact successfully, local install/remove validation passes, and the artifact is hosted on the v0.1.0 release with a verified digest.",
+      "status": "release_candidate_v0.1.4",
+      "filename": "arlen-arlen-linux-amd64-clang-headless-0.3.2.tar.gz",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.4/arlen-arlen-linux-amd64-clang-headless-0.3.2.tar.gz",
+      "sha256": "cfc3000b6c1f47057ee0a1e0440942747f5b405e2bdd31c1c59ba8597e1c6ff4",
+      "size": 6627778,
       "build_blockers": [],
-      "build_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-build-probe.json",
-      "managed_build_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-managed-build-probe.json",
-      "otvm_managed_preflight_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-otvm-managed-preflight.json",
-      "source_built_toolchain_evidence": "docs/validation/package-build-boundary-20260505/linux-amd64-clang-source-built-toolchain-otvm-package.json",
-      "source_built_build_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-source-built-otvm-build.json",
-      "validation_evidence": "docs/validation/package-build-boundary-20260505/arlen-linux-amd64-clang-headless-local-install-remove.json"
+      "build_evidence": "docs/validation/arlen-0.3.2-20261103/arlen-linux-amd64-clang-headless-build.json",
+      "validation_evidence": "docs/validation/arlen-0.3.2-20261103/arlen-linux-amd64-clang-headless-install-remove-qualification.json",
+      "previous_status": "published_linux_amd64_clang_headless",
+      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41725920745",
+      "notes": "Built from Arlen v0.3.2 on the v0.1.3 managed toolchain inside its pinned base image and qualified through the 0.1.4 CLI (run 41723618972): a tampered package index is refused, then install with no --index through a signed manifest, smoke, remove and a leftover check all pass."
     },
     {
       "id": "arlen-linux-ubuntu2404-amd64-clang-headless",
@@ -150,16 +148,53 @@
         "org.gnustep.runtime.base"
       ],
       "format": "tar.gz",
-      "publish": false,
-      "status": "controlled_binary_built_pending_publication",
-      "filename": "arlen-arlen-linux-ubuntu2404-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
-      "artifact_path": ".artifacts/package-app-arlen-ubuntu2404-25402322391/arlen-arlen-linux-ubuntu2404-amd64-clang-headless-0.1.0-snapshot.20260505.tar.gz",
-      "sha256": "253d4bb8bea2408f0f0389dd6b6295d2cd7fc6e715021c063148e576bf450114",
-      "size": 5225490,
-      "notes": "GitHub Actions Package App Artifact run 25402322391 built this package from the Linux Ubuntu 24.04 amd64 managed toolchain produced by run 25401769317. Publication remains pending release promotion.",
-      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25402322391",
-      "managed_toolchain_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25401769317",
-      "build_blockers": []
+      "publish": true,
+      "status": "release_candidate_v0.1.4",
+      "filename": "arlen-arlen-linux-ubuntu2404-amd64-clang-headless-0.3.2.tar.gz",
+      "sha256": "70f0179d159294cc4fe0c8ec4aaafc7ecd3e72149c8f7279741a010cef933644",
+      "size": 6650042,
+      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41725924531",
+      "build_blockers": [],
+      "previous_status": "controlled_binary_built_pending_publication",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.4/arlen-arlen-linux-ubuntu2404-amd64-clang-headless-0.3.2.tar.gz",
+      "build_evidence": "docs/validation/arlen-0.3.2-20261103/arlen-linux-ubuntu2404-amd64-clang-headless-build.json",
+      "validation_evidence": "docs/validation/arlen-0.3.2-20261103/arlen-linux-ubuntu2404-amd64-clang-headless-install-remove-qualification.json",
+      "notes": "Built from Arlen v0.3.2 on the v0.1.3 managed toolchain inside its pinned base image and qualified through the 0.1.4 CLI (run 41723623036): a tampered package index is refused, then install with no --index through a signed manifest, smoke, remove and a leftover check all pass."
+    },
+    {
+      "id": "arlen-linux-ubuntu2604-amd64-clang-headless",
+      "os": "linux",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "objc_runtime": "libobjc2",
+      "objc_abi": "modern",
+      "required_features": [
+        "blocks"
+      ],
+      "supported_distributions": [
+        "ubuntu"
+      ],
+      "supported_os_versions": [
+        "ubuntu-26.04"
+      ],
+      "portability_policy": "distribution-scoped",
+      "runtime_profile": "headless-base",
+      "runtime_components": [
+        "org.gnustep.runtime.base"
+      ],
+      "format": "tar.gz",
+      "publish": true,
+      "status": "release_candidate_v0.1.4",
+      "build_blockers": [],
+      "filename": "arlen-arlen-linux-ubuntu2604-amd64-clang-headless-0.3.2.tar.gz",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.4/arlen-arlen-linux-ubuntu2604-amd64-clang-headless-0.3.2.tar.gz",
+      "sha256": "c4e4ae7530ce33126c222ee8e9b8fb6c53a2c48891891de1c908f68a586fae77",
+      "size": 6629332,
+      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41725928717",
+      "build_evidence": "docs/validation/arlen-0.3.2-20261103/arlen-linux-ubuntu2604-amd64-clang-headless-build.json",
+      "validation_evidence": "docs/validation/arlen-0.3.2-20261103/arlen-linux-ubuntu2604-amd64-clang-headless-install-remove-qualification.json",
+      "notes": "Built from Arlen v0.3.2 on the v0.1.3 managed toolchain inside its pinned base image and qualified through the 0.1.4 CLI (run 41723627164): a tampered package index is refused, then install with no --index through a signed manifest, smoke, remove and a leftover check all pass."
     },
     {
       "id": "arlen-linux-arm64-clang-headless",
@@ -183,16 +218,17 @@
       ],
       "format": "tar.gz",
       "publish": true,
-      "status": "hosted_validated_linux_arm64_install_remove",
-      "filename": "arlen-arlen-linux-arm64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
-      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/arlen-arlen-linux-arm64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
-      "artifact_path": ".artifacts/arm64-otvm-lease-20260507195517-xfh2au/packages/arlen-arlen-linux-arm64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
-      "sha256": "610c65ddd36e9962f9332cacfbfad28a00966a30267967f298b3456024555e74",
-      "size": 5685813,
-      "build_evidence": "docs/validation/linux-arm64-otvm-build-20260507.json",
-      "validation_evidence": "docs/validation/linux-arm64-hosted-package-install-remove-20260507.json",
-      "notes": "OTVM lease lease-20260507195517-xfh2au built this package from the Linux arm64 managed toolchain produced on a native aarch64 host. OTVM lease lease-20260507202841-cvp23y installed and removed the hosted artifact from the signed v0.1.0-dev package index.",
-      "build_blockers": []
+      "status": "release_candidate_v0.1.4",
+      "filename": "arlen-arlen-linux-arm64-clang-headless-0.3.2.tar.gz",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.4/arlen-arlen-linux-arm64-clang-headless-0.3.2.tar.gz",
+      "sha256": "293687628627f403ecc3653b48ebbc6e734049f8ecbdc688f2adeea8c555df61",
+      "size": 7125838,
+      "build_evidence": "docs/validation/arlen-0.3.2-20261103/arlen-linux-arm64-clang-headless-build.json",
+      "validation_evidence": "docs/validation/arlen-0.3.2-20261103/arlen-linux-arm64-clang-headless-install-remove-qualification.json",
+      "build_blockers": [],
+      "previous_status": "hosted_validated_linux_arm64_install_remove",
+      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41725932816",
+      "notes": "Built from Arlen v0.3.2 on the v0.1.3 managed toolchain inside its pinned base image and qualified through the 0.1.4 CLI (run 41723631099): a tampered package index is refused, then install with no --index through a signed manifest, smoke, remove and a leftover check all pass."
     },
     {
       "id": "arlen-openbsd-amd64-clang-headless",
@@ -210,8 +246,8 @@
         "org.gnustep.runtime.base"
       ],
       "format": "tar.gz",
-      "publish": true,
-      "status": "published_openbsd_amd64_clang_headless",
+      "publish": false,
+      "status": "pending_rebuild_for_source_e26a755e",
       "filename": "arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
       "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0-dev/arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
       "artifact_path": ".artifacts/openbsd-arlen-native-20260507-clean/arlen-arlen-openbsd-amd64-clang-headless-0.1.0-snapshot.20260507.1.tar.gz",
@@ -221,7 +257,8 @@
       "build_evidence": "docs/validation/package-publication-20260506/arlen-openbsd-amd64-clang-headless-build.json",
       "validation_evidence": "docs/validation/package-install-remove-20260506/arlen-openbsd-amd64-clang-headless-install-remove.json",
       "install_remove_evidence": "docs/validation/package-install-remove-20260506/arlen-openbsd-amd64-clang-headless-install-remove.json",
-      "build_blockers": []
+      "build_blockers": [],
+      "previous_status": "published_openbsd_amd64_clang_headless"
     },
     {
       "id": "arlen-windows-amd64-msys2-clang64-headless",
@@ -240,18 +277,17 @@
       ],
       "format": "zip",
       "publish": true,
-      "status": "published_windows_amd64_msys2_clang64_headless",
-      "filename": "arlen-arlen-windows-amd64-msys2-clang64-headless-0.1.0-snapshot.20260505.zip",
-      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/arlen-arlen-windows-amd64-msys2-clang64-headless-0.1.0-snapshot.20260505.zip",
-      "artifact_path": ".artifacts/windows-arlen-25448471373/gnustep-windows-package-app-io.github.danjboyd.arlen-arlen-windows-amd64-msys2-clang64-headless/arlen-arlen-windows-amd64-msys2-clang64-headless-0.1.0-snapshot.20260505.zip",
-      "sha256": "d5349dc4fc3932b9c8091b27e14316c64c074fa2446150291378cb3aa4006111",
-      "size": 2904699,
-      "notes": "GitHub Actions Windows Package App Artifact run 25448471373 built this headless Arlen package from the Windows amd64 MSYS2 clang64 managed toolchain after applying the Windows portability source patches. Install/remove validation passed and the artifact is hosted on the v0.1.0 release with a verified digest.",
-      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/25448471373",
-      "build_evidence": "docs/validation/package-publication-20260506/arlen-windows-amd64-msys2-clang64-headless-build.json",
-      "validation_evidence": "docs/validation/package-install-remove-20260506/arlen-windows-amd64-msys2-clang64-headless-install-remove.json",
-      "install_remove_evidence": "docs/validation/package-install-remove-20260506/arlen-windows-amd64-msys2-clang64-headless-install-remove.json",
-      "build_blockers": []
+      "status": "release_candidate_v0.1.4",
+      "filename": "arlen-arlen-windows-amd64-msys2-clang64-headless-0.3.2.zip",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.4/arlen-arlen-windows-amd64-msys2-clang64-headless-0.3.2.zip",
+      "sha256": "fd39fb7d41f2ea330e8fa0c7083143a3c1eaa6783bedfcc8fab8558fe7e8dfb1",
+      "size": 6230908,
+      "build_workflow_run": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/41724056057",
+      "build_evidence": "docs/validation/arlen-0.3.2-20261103/arlen-windows-amd64-msys2-clang64-headless-build.json",
+      "validation_evidence": "docs/validation/arlen-0.3.2-20261103/arlen-windows-amd64-msys2-clang64-headless-install-remove-qualification.json",
+      "build_blockers": [],
+      "previous_status": "published_windows_amd64_msys2_clang64_headless",
+      "notes": "Built from Arlen v0.3.2 on the v0.1.3 managed toolchain and qualified through the 0.1.4 CLI (run 41723330586): a tampered package index is refused, then install with no --index through a signed manifest, smoke, remove and a leftover check all pass."
     }
   ],
   "install": {
@@ -259,10 +295,10 @@
     "prefix_layout": "gnustep",
     "executables": [
       "arlen",
-      "arlen-doctor"
+      "boomhauer"
     ],
-    "frameworks": [
-      "Arlen"
+    "library_files": [
+      "libArlenFramework.a"
     ]
   },
   "patches": [],
