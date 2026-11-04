@@ -64,6 +64,7 @@ static NSString *GSCLIVersionString(void)
 - (NSDictionary *)packageRecordFromIndexPath:(NSString *)indexPath packageSpecifier:(NSString *)packageSpecifier error:(NSString **)errorMessage;
 - (NSDictionary *)packageIndexFromPath:(NSString *)indexPath error:(NSString **)errorMessage;
 - (NSString *)normalizedPackageIndexReference:(NSString *)indexPath;
+- (BOOL)packageSpecifierLooksLikePath:(NSString *)specifier;
 - (NSString *)defaultPackageIndexPathForManagedRoot:(NSString *)managedRoot preferredIndex:(NSString *)indexPath;
 - (NSString *)packageIndexPathFromManifest:(NSString *)manifestPath;
 - (NSDictionary *)packageDiscoveryPayloadForCommand:(NSString *)command
@@ -5265,6 +5266,13 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
   return nil;
 }
 
+- (BOOL)packageSpecifierLooksLikePath:(NSString *)specifier
+{
+  return [specifier rangeOfString: @"/"].location != NSNotFound
+    || [specifier rangeOfString: @"\\"].location != NSNotFound
+    || [[[specifier pathExtension] lowercaseString] isEqualToString: @"json"];
+}
+
 - (NSString *)defaultPackageIndexPathForManagedRoot:(NSString *)managedRoot preferredIndex:(NSString *)indexPath
 {
   NSString *root = [self normalizedManagedInstallRootPath: managedRoot ? managedRoot : [self defaultManagedRoot]];
@@ -8963,7 +8971,9 @@ static NSString *GSExecutableExposureStyleOverride = nil;
     }
 
   [self appendInstallTrace: @"loading package record"];
-  if (indexPath == nil && [[NSFileManager defaultManager] fileExistsAtPath: packageSpecifier] == NO)
+  // A bare name means a package, even if the current directory happens to hold a
+  // file or folder of that name; a manifest must look like a path.
+  if (indexPath == nil && [self packageSpecifierLooksLikePath: packageSpecifier] == NO)
     {
       indexPath = [self defaultPackageIndexPathForManagedRoot: root preferredIndex: nil];
     }
