@@ -193,7 +193,7 @@ jobs:
             for id in $(python3 -c 'import json,sys; print(" ".join(p["id"] for p in json.load(open(sys.argv[1]))["packages"]))' /tmp/package-index-trust/package-index.json); do
               select+=(--package "$id")
             done
-            python3 scripts/internal/package_repo.py --json "${select[@]}" --published-only --generated-at "$stamp" packages --output /tmp/package-index-generated.json >/dev/null
+            python3 scripts/internal/package_repo.py --json "${select[@]}" --generated-at "$stamp" --published-only packages --output /tmp/package-index-generated.json >/dev/null
             diff -u /tmp/package-index-generated.json /tmp/package-index-trust/package-index.json
           fi
           printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT" > /tmp/gnustep-cli-package-index-trust-root.pem
