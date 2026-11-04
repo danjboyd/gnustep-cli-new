@@ -77,6 +77,35 @@ class PackageRepositoryTests(unittest.TestCase):
             for artifact in package["artifacts"]:
                 self.assertLessEqual(set(artifact.get("runtime_components", [])), valid_components)
 
+    def test_generated_at_is_recorded_when_given_and_placeholder_by_default(self):
+        self.assertEqual(generate_package_index(ROOT / "packages")["generated_at"], "TBD")
+        stamp = "2026-11-04T20:00:00Z"
+        self.assertEqual(generate_package_index(ROOT / "packages", generated_at=stamp)["generated_at"], stamp)
+
+    def test_cli_regenerates_byte_identically_with_the_signed_indexs_timestamp(self):
+        # release.yml compares the signed index with one regenerated using its stamp.
+        script = ROOT / "scripts" / "internal" / "package_repo.py"
+        stamp = "2026-11-04T20:00:00Z"
+        with tempfile.TemporaryDirectory() as tempdir:
+            outputs = []
+            for name in ("signed.json", "regenerated.json"):
+                output = Path(tempdir) / name
+                subprocess.run(
+                    [sys.executable, str(script), "--json", "--generated-at", stamp, str(ROOT / "packages"), "--output", str(output)],
+                    check=True,
+                    capture_output=True,
+                )
+                outputs.append(output.read_bytes())
+            self.assertEqual(outputs[0], outputs[1])
+            self.assertEqual(json.loads(outputs[0])["generated_at"], stamp)
+
+    def test_release_workflows_stamp_the_index_and_compare_with_its_own_stamp(self):
+        package_index = (ROOT / ".github" / "workflows" / "package-index.yml").read_text()
+        release = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+        self.assertIn('--generated-at "$(date -u', package_index)
+        self.assertIn('--generated-at "$(date -u', release)
+        self.assertEqual(release.count('--generated-at "$stamp"'), 2)
+
     def test_release_index_can_be_limited_to_published_artifacts_of_named_packages(self):
         payload = generate_package_index(ROOT / "packages", package_ids=["io.github.danjboyd.arlen"], published_only=True)
         self.assertEqual([package["id"] for package in payload["packages"]], ["io.github.danjboyd.arlen"])

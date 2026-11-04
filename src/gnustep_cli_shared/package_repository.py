@@ -31,6 +31,7 @@ def generate_package_index(
     *,
     package_ids: list[str] | None = None,
     published_only: bool = False,
+    generated_at: str = "TBD",
 ) -> dict[str, Any]:
     """Build the package index from package manifests.
 
@@ -77,7 +78,7 @@ def generate_package_index(
     return {
         "schema_version": 1,
         "channel": channel,
-        "generated_at": "TBD",
+        "generated_at": generated_at,
         "metadata_version": 1,
         "expires_at": "TBD",
         "trust": {
@@ -96,8 +97,11 @@ def write_package_index(
     *,
     package_ids: list[str] | None = None,
     published_only: bool = False,
+    generated_at: str = "TBD",
 ) -> Path:
-    payload = generate_package_index(packages_root, channel=channel, package_ids=package_ids, published_only=published_only)
+    payload = generate_package_index(
+        packages_root, channel=channel, package_ids=package_ids, published_only=published_only, generated_at=generated_at
+    )
     output = Path(output_path).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, indent=2) + "\n")
