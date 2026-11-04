@@ -204,6 +204,23 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("gnustep-input-linux-cli", content)
         self.assertIn("gnustep-input-windows-toolchain", content)
 
+    def test_native_test_runner_fails_when_the_suite_does_not_build_or_run(self):
+        # The runner hardcoded GCC 14's objc include dir (ubuntu-24.04 has GCC 13) and
+        # piped make into tee, so CI passed for weeks with "XCTest: No tests found."
+        runner = (ROOT / "scripts" / "dev" / "run-native-tests.sh").read_text()
+        activate = (ROOT / "scripts" / "dev" / "activate-tools-xctest.sh").read_text()
+        self.assertNotIn("gcc/x86_64-linux-gnu/14/include", runner)
+        self.assertNotIn("gcc/x86_64-linux-gnu/14/include", activate)
+        self.assertIn('ADDITIONAL_OBJCFLAGS="${GCC_OBJC_HEADERS:+-I$GCC_OBJC_HEADERS}"', runner)
+        self.assertIn('ADDITIONAL_LDFLAGS="${GCC_OBJC_LIBDIR:+-L$GCC_OBJC_LIBDIR}"', runner)
+        # GCC's runtime only when clang can't find one: a libobjc2 GNUstep crashes with both.
+        self.assertIn("#include <objc/objc.h>", activate)
+        self.assertIn("/usr/GNUstep/System/Library/Makefiles", activate)
+        self.assertNotIn('| tee "$BUILD_LOG"', runner)
+        self.assertIn("build_status=$?", runner)
+        self.assertIn('grep -q "No tests found"', runner)
+        self.assertIn("tests? (PASSED|executed)", runner)
+
     def test_package_app_artifact_workflow_builds_from_explicit_toolchain(self):
         workflow = ROOT / ".github" / "workflows" / "package-app-artifact.yml"
         self.assertTrue(workflow.exists())
