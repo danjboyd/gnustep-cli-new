@@ -211,8 +211,11 @@ class RepositoryContractsTests(unittest.TestCase):
         activate = (ROOT / "scripts" / "dev" / "activate-tools-xctest.sh").read_text()
         self.assertNotIn("gcc/x86_64-linux-gnu/14/include", runner)
         self.assertNotIn("gcc/x86_64-linux-gnu/14/include", activate)
-        self.assertIn('ADDITIONAL_OBJCFLAGS="-I$GCC_OBJC_HEADERS"', runner)
-        self.assertIn('ADDITIONAL_LDFLAGS="-L$GCC_OBJC_LIBDIR"', runner)
+        self.assertIn('ADDITIONAL_OBJCFLAGS="${GCC_OBJC_HEADERS:+-I$GCC_OBJC_HEADERS}"', runner)
+        self.assertIn('ADDITIONAL_LDFLAGS="${GCC_OBJC_LIBDIR:+-L$GCC_OBJC_LIBDIR}"', runner)
+        # GCC's runtime only when clang can't find one: a libobjc2 GNUstep crashes with both.
+        self.assertIn("#include <objc/objc.h>", activate)
+        self.assertIn("/usr/GNUstep/System/Library/Makefiles", activate)
         self.assertNotIn('| tee "$BUILD_LOG"', runner)
         self.assertIn("build_status=$?", runner)
         self.assertIn('grep -q "No tests found"', runner)
