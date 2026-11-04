@@ -41,6 +41,11 @@ on:
         required: false
         default: ""
         type: string
+      qualify_cli_run_id:
+        description: "Optional: Linux Managed Artifacts run whose CLI tarball replaces the published CLI during qualification"
+        required: false
+        default: ""
+        type: string
       qualify_release_tag:
         description: Release whose bootstrap sets up the qualification root
         required: false
@@ -182,11 +187,18 @@ jobs:
           echo "${{ inputs.qualify_bootstrap_sha256 }}  $in/gnustep-bootstrap.sh" | sha256sum -c -
           artifact=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["artifact"]["path"])' "$RUNNER_TEMP/package-app-output/package-build-report.json")
           cp "$artifact" "$in/"
+          cli_arg=""
+          if [ -n "${{ inputs.qualify_cli_run_id }}" ]; then
+            gh run download "${{ inputs.qualify_cli_run_id }}" --repo "$GITHUB_REPOSITORY" --dir "$in/cli-run" --pattern 'gnustep-linux-managed-*'
+            cli=$(find "$in/cli-run" -type f -name 'gnustep-cli-*.tar.gz' | head -n 1)
+            test -n "$cli"
+            cli_arg="/in/${cli#"$in/"}"
+          fi
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/src:ro" -v "$in:/in:ro" -v "$RUNNER_TEMP/qualify-out:/out" \
             "${{ inputs.qualify_image }}" \
             sh /src/scripts/dev/package-install-qualification.sh \
-              "${{ inputs.package_id }}" "${{ inputs.target }}" "/in/$(basename "$artifact")" /in/gnustep-bootstrap.sh /out
+              "${{ inputs.package_id }}" "${{ inputs.target }}" "/in/$(basename "$artifact")" /in/gnustep-bootstrap.sh /out $cli_arg
 
       - name: Upload qualification evidence
         if: ${{ always() && inputs.qualify_image != '' }}

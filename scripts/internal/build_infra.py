@@ -49,6 +49,7 @@ from gnustep_cli_shared.build_infra import (
     toolchain_manifest,
     toolchain_plan,
     verify_release_directory,
+    advertise_package_index,
     windows_extracted_toolchain_rebuild_plan,
     release_trust_gate,
     release_claim_consistency_gate,
@@ -196,6 +197,9 @@ def main() -> int:
 
     verify_release = subparsers.add_parser("verify-release", add_help=False)
     verify_release.add_argument("--release-dir", required=True)
+
+    advertise_index = subparsers.add_parser("advertise-package-index", add_help=False)
+    advertise_index.add_argument("--release-dir", required=True)
 
 
     release_provenance = subparsers.add_parser("release-provenance", add_help=False)
@@ -491,6 +495,8 @@ def main() -> int:
         )
     elif args.subcommand == "verify-release":
         payload = verify_release_directory(args.release_dir)
+    elif args.subcommand == "advertise-package-index":
+        payload = advertise_package_index(args.release_dir)
     elif args.subcommand == "release-provenance":
         path = write_release_provenance(args.release_dir)
         payload = {"schema_version": 1, "command": "release-provenance", "ok": True, "status": "ok", "provenance_path": str(path)}
