@@ -33,7 +33,7 @@ export LD_LIBRARY_PATH="$USER_GNUSTEP_ROOT/Library/Libraries:${LD_LIBRARY_PATH:-
 # runtimes into one process and crash. So use GCC's only when clang needs them.
 # Setting GCC_OBJC_HEADERS or GCC_OBJC_LIBDIR overrides the probe.
 if [ -z "${GCC_OBJC_HEADERS:-}" ] && [ -z "${GCC_OBJC_LIBDIR:-}" ] && \
-   ! printf '#include <objc/objc.h>\n' | clang $(gnustep-config --objc-flags 2>/dev/null) -E -x objective-c - >/dev/null 2>&1; then
+   ! printf '#include <objc/objc.h>\n' | clang $(gnustep-config --objc-flags 2>/dev/null) -E -x objective-c -MF /dev/null -o /dev/null - >/dev/null 2>&1; then
   GCC_OBJC_HEADERS=$(ls -d /usr/lib/gcc/*/*/include/objc 2>/dev/null | sort -V | tail -n 1 | sed 's|/objc$||')
   GCC_OBJC_LIBDIR=$(find /usr/lib/gcc -name libobjc.so -print 2>/dev/null | sort -V | tail -n 1 | sed 's,/libobjc\.so$,,')
   if [ -z "$GCC_OBJC_HEADERS" ] || [ ! -f "$GCC_OBJC_HEADERS/objc/objc.h" ]; then

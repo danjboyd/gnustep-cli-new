@@ -1,3 +1,4 @@
+import json
 import subprocess
 import unittest
 from pathlib import Path
@@ -16,8 +17,11 @@ src/full-cli/obj/gnustep --json update bogus
 '''
         proc = subprocess.run(['bash','-lc',script], cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.assertNotEqual(proc.stdout.find('gnustep update [all|cli|packages]'), -1, proc.stderr)
-        self.assertNotEqual(proc.stdout.find('"command": "update"'), -1, proc.stdout + proc.stderr)
-        self.assertNotEqual(proc.stdout.find('Unknown update scope'), -1, proc.stdout + proc.stderr)
+        # Parse the JSON: its spacing depends on the GNUstep Base the CLI was built with.
+        payload = json.loads(proc.stdout[proc.stdout.index('{'):])
+        self.assertEqual(payload['command'], 'update', proc.stdout + proc.stderr)
+        self.assertFalse(payload['ok'])
+        self.assertIn('Unknown update scope', payload['summary'])
 
 if __name__ == '__main__':
     unittest.main()
