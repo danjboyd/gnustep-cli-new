@@ -1,5 +1,6 @@
 # Based on msys2/MINGW-packages mingw-w64-gnustep-base at a083e03b7393 (1.31.1-10,
-# maintainer Frederik Carlier). Changed: pkgrel, the seven upstream TLS commits below,
+# maintainer Frederik Carlier). Changed: pkgrel, a vendored copy of its bace6f54 patch
+# (GitHub's generated patch text changes over time), the seven upstream TLS commits below,
 # and the BLOCK_SCOPE header fix assemble-toolchain.ps1 otherwise applies after install.
 
 _realname=gnustep-base
@@ -34,7 +35,7 @@ makedepends=("${MINGW_PACKAGE_PREFIX}-autotools"
              patchutils
              rsync)
 source=("${msys2_repository_url}/releases/download/base-${pkgver//./_}/${_realname}-${pkgver}.tar.gz"
-        "https://github.com/gnustep/libs-base/commit/bace6f54fd5fb882cb3adc79c87cc82d5c6d9c70.patch"
+        "bace6f54fd5fb882cb3adc79c87cc82d5c6d9c70.patch"
         "0001-Turn-on-strict-host-verification-by-default.patch"
         "0002-Fix-error-message-and-disable-server-validation-fo.patch"
         "0003-More-TLS-improvements.patch"
@@ -43,7 +44,7 @@ source=("${msys2_repository_url}/releases/download/base-${pkgver//./_}/${_realna
         "0006-tweak-tls-notification-posting.patch"
         "0007-Security-improvement-without-test-hunk.patch")
 sha256sums=('e7546f1c978a7c75b676953a360194a61e921cb45a4804497b4f346a460545cd'
-            '2f285c1b7f360537f4f73c063f7836febee2750a78494881ad9182d4d5ee6891'
+            '0cb96d42d72cb7219cd4f0473791dc89cfadce4b7cba171f191c3cb434237e20'
             'f1a8a5a5ce5f288c5325e5ab0c636e76054002eec2ce76f00b3862d787c73c0f'
             '81f9478edf50d8ecbbac6566bdeb2bd2968414663e587c4ca4de2fdcfc3fd659'
             'fa8861096cfb476130e0af8d773be2953c20df92454bd8d2be9b9167e217dc82'
