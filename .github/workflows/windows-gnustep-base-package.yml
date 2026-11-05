@@ -5,8 +5,6 @@ name: Windows gnustep-base Package
 
 on:
   workflow_dispatch:
-  push:
-    branches: [libs-base-tls-backport]
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
