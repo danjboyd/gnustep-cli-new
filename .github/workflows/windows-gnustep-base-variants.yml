@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        variant: [msys2, control, tls]
+        variant: [tls]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

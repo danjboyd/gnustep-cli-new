@@ -1,7 +1,8 @@
 # Based on msys2/MINGW-packages mingw-w64-gnustep-base at a083e03b7393 (1.31.1-10,
 # maintainer Frederik Carlier). Changed: pkgrel, a vendored copy of its bace6f54 patch
 # (GitHub's generated patch text changes over time), the seven upstream TLS commits below,
-# and the BLOCK_SCOPE header fix assemble-toolchain.ps1 otherwise applies after install.
+# the BLOCK_SCOPE header fix assemble-toolchain.ps1 otherwise applies after install, and
+# upstream 7c81d0c83's clang 23 workaround flag.
 
 _realname=gnustep-base
 pkgbase=mingw-w64-${_realname}
@@ -71,7 +72,9 @@ build() {
   rsync --recursive --times --links "${srcdir}/${_realname}-${pkgver}"/* "${srcdir}/build-${MSYSTEM}"
   cd "${srcdir}/build-${MSYSTEM}"
 
-  export OBJCFLAGS="-Wno-incompatible-pointer-types"
+  # clang 23 miscompiles GSPrivateFormat (llvm/llvm-project#231864): every NSLog
+  # crashes. Same workaround as upstream libs-base 7c81d0c83, as a flag.
+  export OBJCFLAGS="-Wno-incompatible-pointer-types -mllvm -enable-dfa-jump-thread=false"
 
   CC="$MINGW_PREFIX/bin/clang" \
   CXX="$MINGW_PREFIX/bin/clang++" \
