@@ -243,7 +243,7 @@ bundle=/etc/ssl/certs/ca-certificates.crt
 if [ -f "$bundle" ]; then
   mv "$bundle" "$bundle.qualify-hidden"
   no_ca_rc=0
-  su - "$USER_NAME" -c "set +u; . \$HOME/.local/share/gnustep-cli/System/Library/Makefiles/GNUstep.sh; cd '$work' && LD_LIBRARY_PATH=\$HOME/.local/share/gnustep-cli/lib ./tls https://github.com" > "$OUT/tls-no-ca.out" 2>&1 || no_ca_rc=$?
+  su - "$USER_NAME" -c "set +u; . \$HOME/.local/share/gnustep-cli/System/Library/Makefiles/GNUstep.sh; cd '$work' && LD_LIBRARY_PATH=\$HOME/.local/share/gnustep-cli/lib:\$LD_LIBRARY_PATH ./tls https://github.com" > "$OUT/tls-no-ca.out" 2>&1 || no_ca_rc=$?
   printf 'tls_no_ca %s\n' "$no_ca_rc" >> "$OUT/steps.txt"
   mv "$bundle.qualify-hidden" "$bundle"
 fi
