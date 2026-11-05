@@ -67,9 +67,9 @@
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-base",
-      "version": "1.31.1-10",
-      "sha256": "b97c4f0ca49bd4f768d1281762a7a52995f2e9d9b761d63654f090423d25c540",
-      "source_channel": "msys2-mingw-clang64"
+      "version": "1.31.1-10.1",
+      "sha256": "51dd620660a5dfa7d73831fd02ec2ae7360fa59aa7c69d7b16d0896066d4495d",
+      "source_channel": "gnustep-cli-msys2-inputs"
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-gui",
@@ -912,12 +912,12 @@
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-base",
-      "version": "1.31.1-10",
-      "repo": "clang64",
-      "filename": "mingw-w64-clang-x86_64-gnustep-base-1.31.1-10-any.pkg.tar.zst",
-      "url": "https://repo.msys2.org/mingw/clang64/mingw-w64-clang-x86_64-gnustep-base-1.31.1-10-any.pkg.tar.zst",
-      "sha256": "b97c4f0ca49bd4f768d1281762a7a52995f2e9d9b761d63654f090423d25c540",
-      "size": 2122609
+      "version": "1.31.1-10.1",
+      "repo": "gnustep-cli",
+      "filename": "mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.1-any.pkg.tar.zst",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/msys2-inputs-2026-11-05/mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.1-any.pkg.tar.zst",
+      "sha256": "51dd620660a5dfa7d73831fd02ec2ae7360fa59aa7c69d7b16d0896066d4495d",
+      "size": 2693720
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-gui",
@@ -1690,6 +1690,27 @@
       "sha256": "6089dd6d03546ed4d5fdd5096dac22074b2b1d4062604bbf388c65bb43bdefc1",
       "signature": "clang64.db.sig",
       "signature_sha256": "03d9d90e02fda954cd0732e51ec9bcd9a94775002a2b78fa20c23a7822aa02ad"
+    }
+  ],
+  "package_overrides": [
+    {
+      "name": "mingw-w64-clang-x86_64-gnustep-base",
+      "version": "1.31.1-10.1",
+      "repo": "gnustep-cli",
+      "filename": "mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.1-any.pkg.tar.zst",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/msys2-inputs-2026-11-05/mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.1-any.pkg.tar.zst",
+      "sha256": "51dd620660a5dfa7d73831fd02ec2ae7360fa59aa7c69d7b16d0896066d4495d",
+      "size": 2693720,
+      "replaces": {
+        "version": "1.31.1-10",
+        "sha256": "b97c4f0ca49bd4f768d1281762a7a52995f2e9d9b761d63654f090423d25c540"
+      },
+      "provenance": {
+        "recipe": "toolchains/windows-amd64-msys2-clang64/gnustep-base-package",
+        "source_commit": "919f46ba2cbc92f49c74d7bffdf5865e21e89031",
+        "build_run": 42087192927,
+        "reason": "MSYS2 gnustep-base 1.31.1-10 plus seven upstream libs-base TLS commits (586eba532 and follow-ups)"
+      }
     }
   ]
 }
