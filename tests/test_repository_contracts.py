@@ -246,6 +246,16 @@ class RepositoryContractsTests(unittest.TestCase):
                 self.assertGreater(recipe.index(entry), position, target)
                 position = recipe.index(entry)
 
+    def test_source_built_toolchains_configure_gnustep_make_with_optimisation(self):
+        # GNUstep Make copies CFLAGS into OPTFLAG at configure time; without -O2 there,
+        # every GNUstep library and app built with the toolchain is unoptimised.
+        recipes = sorted((ROOT / "toolchains").glob("*/build-toolchain.sh"))
+        self.assertGreaterEqual(len(recipes), 7)
+        for recipe in recipes:
+            text = recipe.read_text()
+            cflags = text.index('export CFLAGS="-g -O2 ')
+            self.assertLess(cflags, text.index('cd "$SOURCES_DIR/tools-make"'), recipe.parent.name)
+
     def test_package_app_artifact_workflow_builds_from_explicit_toolchain(self):
         workflow = ROOT / ".github" / "workflows" / "package-app-artifact.yml"
         self.assertTrue(workflow.exists())

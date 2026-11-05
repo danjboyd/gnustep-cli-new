@@ -124,7 +124,10 @@ export PATH="$PREFIX/System/Tools:$PREFIX/bin:$PATH"
 export LD_LIBRARY_PATH="$PREFIX/lib:$PREFIX/lib64:${LD_LIBRARY_PATH:-}"
 export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig:$PREFIX/lib64/pkgconfig:${PKG_CONFIG_PATH:-}"
 export CPPFLAGS="-I$PREFIX/include ${CPPFLAGS:-}"
-export CFLAGS="-I$PREFIX/include ${CFLAGS:-}"
+# GNUstep Make takes its default compile flags (OPTFLAG) from CFLAGS at configure
+# time, so CFLAGS must carry the optimisation level, or everything built with this
+# toolchain's GNUstep Make, its own libraries included, is compiled without it.
+export CFLAGS="-g -O2 -I$PREFIX/include ${CFLAGS:-}"
 export CXXFLAGS="-I$PREFIX/include ${CXXFLAGS:-}"
 export OBJCFLAGS="-I$PREFIX/include ${OBJCFLAGS:-}"
 export OBJCXXFLAGS="-I$PREFIX/include ${OBJCXXFLAGS:-}"
