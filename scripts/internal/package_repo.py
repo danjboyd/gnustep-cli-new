@@ -34,6 +34,7 @@ def main() -> int:
     parser.add_argument("--trusted-public-key")
     parser.add_argument("--package", action="append", dest="package_ids", help="limit the index to this package id (repeatable)")
     parser.add_argument("--published-only", action="store_true", help="drop artifacts marked publish: false")
+    parser.add_argument("--generated-at", default="TBD", help="timestamp to record in the index; the committed index keeps TBD so it stays diffable")
     parser.add_argument("packages_root")
     args = parser.parse_args()
 
@@ -45,10 +46,10 @@ def main() -> int:
         path = write_package_index_provenance(args.packages_root)
         payload = {"schema_version": 1, "command": "package-index-provenance", "ok": True, "status": "ok", "provenance_path": str(path)}
     elif args.output:
-        output = write_package_index(args.packages_root, args.output, channel=args.channel, package_ids=args.package_ids, published_only=args.published_only)
+        output = write_package_index(args.packages_root, args.output, channel=args.channel, package_ids=args.package_ids, published_only=args.published_only, generated_at=args.generated_at)
         payload = {"schema_version": 1, "command": "package-repo", "ok": True, "status": "ok", "output": str(output)}
     else:
-        payload = generate_package_index(args.packages_root, channel=args.channel, package_ids=args.package_ids, published_only=args.published_only)
+        payload = generate_package_index(args.packages_root, channel=args.channel, package_ids=args.package_ids, published_only=args.published_only, generated_at=args.generated_at)
 
     if args.json:
         print(json.dumps(payload, separators=(",", ":")))

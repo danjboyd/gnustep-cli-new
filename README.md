@@ -91,10 +91,13 @@ $ gnustep update --check
 update: Everything is already current.
 ```
 
-The package commands (`list`, `search`, `install`, `remove`) are included, but
-no stable release (v0.1.0 through v0.1.3) publishes an official package index
-yet. Until one does, they only work with an index you pass explicitly:
+The package commands are `list`, `search`, `install` and `remove`. From v0.1.4,
+stable releases advertise a signed package index, which currently contains only
+Arlen. On v0.1.0 through v0.1.3 they only work with an index you pass explicitly:
 `gnustep list --index <path-or-url>`.
+
+To move an existing install to a newer stable release, run that release's bootstrap:
+`gnustep update` doesn't yet find newer stable releases.
 
 ## Already have GNUstep?
 

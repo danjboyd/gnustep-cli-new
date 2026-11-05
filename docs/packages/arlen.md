@@ -12,18 +12,21 @@ This package is suitable for headless server deployment. Installing Arlen with t
 
 ## Install
 
-No stable release (v0.1.0 through v0.1.3) advertises a package index, so
-`gnustep install arlen` doesn't work against a stable install. It works only
-with an index you pass explicitly:
+From v0.1.4, stable releases advertise a signed package index containing Arlen:
 
 ```sh
-gnustep install arlen --profile server --index <path-or-url>
+gnustep install arlen
 ```
 
-Canonical package ID: `io.github.danjboyd.arlen`
+Canonical package ID: `io.github.danjboyd.arlen`. If a file or folder named `arlen`
+is in the current directory, use the canonical ID or run from another directory.
 
-To install Arlen today, use Arlen's own installer (`tools/install.sh` or
-`tools/install.ps1` in the Arlen repository):
+Arlen 0.3.2 is published for Debian 13 amd64 and arm64, Ubuntu 24.04 and 26.04 amd64,
+and Windows MSYS2 `clang64`. On v0.1.0 through v0.1.3, it works only with an index you
+pass with `--index <path-or-url>`.
+
+Arlen's own installer (`tools/install.sh` or `tools/install.ps1` in the Arlen
+repository) is the other route:
 
 - On Linux, it builds Arlen's patched runtime (libobjc2, libdispatch,
   libs-base, tools-make) from its own per-target locks. It does this with this
