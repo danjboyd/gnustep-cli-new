@@ -42,6 +42,9 @@ static NSString *GSCLIVersionString(void)
 - (NSString *)defaultManifestPath;
 - (NSString *)dogfoodManifestURL;
 - (NSString *)resolvedManifestPathForInstallRoot:(NSString *)installRoot preferredManifest:(NSString *)manifestPath;
+- (NSString *)latestStableManifestReference;
+- (NSString *)updateManifestForInstallRoot:(NSString *)installRoot warning:(NSString **)warning;
+- (NSString *)manifestReferenceToRecord:(NSString *)manifestReference version:(NSString *)version;
 - (NSString *)defaultManagedRoot;
 - (BOOL)arguments:(NSArray *)arguments containOption:(NSString *)option;
 - (NSDictionary *)readJSONFile:(NSString *)path error:(NSString **)errorMessage;
@@ -724,6 +727,61 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
       return [self dogfoodManifestURL];
     }
   return [self defaultManifestPath];
+}
+
+- (NSString *)latestStableManifestReference
+{
+  return @"https://github.com/danjboyd/gnustep-cli-new/releases/latest/download/release-manifest.json";
+}
+
+// An install records its own release's manifest, which never lists a newer release,
+// so updates also look at the latest stable release's manifest. It must pass the same
+// signature and policy checks. If it can't be read, the recorded manifest is used.
+- (NSString *)updateManifestForInstallRoot:(NSString *)installRoot warning:(NSString **)warning
+{
+  NSString *root = installRoot ? installRoot : [self defaultManagedRoot];
+  NSString *recorded = [self resolvedManifestPathForInstallRoot: root preferredManifest: nil];
+  NSDictionary *state = [self installedLifecycleStateForInstallRoot: root];
+  NSString *latest = [self latestStableManifestReference];
+  NSString *error = nil;
+  NSDictionary *manifest = nil;
+  NSString *latestVersion = nil;
+  NSString *installedVersion = [state objectForKey: @"cli_version"];
+
+  if ([[state objectForKey: @"channel"] isEqualToString: @"dogfood"]
+      || [recorded rangeOfString: @"/releases/download/v"].location == NSNotFound)
+    {
+      return recorded;
+    }
+  if ([self verifyReleaseManifestSignatureForReference: latest error: &error])
+    {
+      manifest = [self validateAndLoadManifest: latest error: &error];
+    }
+  if (manifest == nil)
+    {
+      if (warning != NULL)
+        {
+          *warning = [NSString stringWithFormat: @"Could not check the latest stable release, so a newer version may exist: %@", error ? error : @"unknown error"];
+        }
+      return recorded;
+    }
+  latestVersion = [[self selectReleaseFromManifest: manifest] objectForKey: @"version"];
+  if (latestVersion != nil
+      && (installedVersion == nil || [self compareVersionString: latestVersion toVersionString: installedVersion] == NSOrderedDescending))
+    {
+      return latest;
+    }
+  return recorded;
+}
+
+// The moving "latest" URL must not become what an install records as its own manifest.
+- (NSString *)manifestReferenceToRecord:(NSString *)manifestReference version:(NSString *)version
+{
+  if (version != nil && [manifestReference isEqualToString: [self latestStableManifestReference]])
+    {
+      return [NSString stringWithFormat: @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v%@/release-manifest.json", version];
+    }
+  return manifestReference;
 }
 
 - (NSString *)defaultManagedRoot
@@ -6323,7 +6381,8 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
   NSString *root = (installRoot != nil ? installRoot : ([scope isEqualToString: @"system"] ? @"/opt/gnustep-cli" : [self defaultManagedRoot]));
   NSString *expandedRoot = [self normalizedManagedInstallRootPath: root];
   NSDictionary *installedState = [self installedLifecycleStateForInstallRoot: expandedRoot];
-  NSString *resolvedManifest = [self resolvedManifestPathForInstallRoot: expandedRoot preferredManifest: manifestPath];
+  NSString *discoveryWarning = nil;
+  NSString *resolvedManifest = manifestPath ? [self resolvedManifestPathForInstallRoot: expandedRoot preferredManifest: manifestPath] : [self updateManifestForInstallRoot: expandedRoot warning: &discoveryWarning];
   NSDictionary *manifest = nil;
   NSDictionary *release = nil;
   NSDictionary *doctor = nil;
@@ -6510,6 +6569,7 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
                                       [NSNumber numberWithUnsignedLongLong: plannedDownloadSize], @"planned_download_size",
                                       layers, @"layers",
                                       effectiveSelectionErrors, @"selection_errors",
+                                      (discoveryWarning ? (id)discoveryWarning : (id)[NSNull null]), @"discovery_warning",
                                       nil], @"update_plan",
                         nil];
 }
@@ -6612,7 +6672,7 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
       NSDictionary *state = [self installedLifecycleStateForInstallRoot: upgradeRoot];
       if (manifestPath == nil)
         {
-          manifestPath = [self resolvedManifestPathForInstallRoot: upgradeRoot preferredManifest: nil];
+          manifestPath = [self updateManifestForInstallRoot: upgradeRoot warning: NULL];
         }
       if ([[state objectForKey: @"status"] isEqualToString: @"needs_repair"])
         {
@@ -6990,7 +7050,7 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
                                                    activeReleasePath ? activeReleasePath : installPath, @"active_release_path",
                                                    backupPath ? backupPath : [NSNull null], @"previous_release_path",
                                                    ([[[payload objectForKey: @"plan"] objectForKey: @"manifest_path"] rangeOfString: @"/dogfood/"].location != NSNotFound) ? @"dogfood" : @"stable", @"channel",
-                                                   [[payload objectForKey: @"plan"] objectForKey: @"manifest_path"], @"manifest_path",
+                                                   [self manifestReferenceToRecord: [[payload objectForKey: @"plan"] objectForKey: @"manifest_path"] version: [release objectForKey: @"version"]], @"manifest_path",
                                                    [manifest objectForKey: @"metadata_version"] ? [manifest objectForKey: @"metadata_version"] : [NSNull null], @"last_manifest_metadata_version",
                                                    [manifest objectForKey: @"generated_at"] ? [manifest objectForKey: @"generated_at"] : [NSNull null], @"last_manifest_generated_at",
                                                    [manifest objectForKey: @"expires_at"] ? [manifest objectForKey: @"expires_at"] : [NSNull null], @"last_manifest_expires_at",
