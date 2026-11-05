@@ -101,6 +101,8 @@ jobs:
             & $exe $case[0]
             if ($LASTEXITCODE -ne $case[1]) { throw "expected exit $($case[1]) for $($case[0]), got $LASTEXITCODE" }
           }
+          # The last case is an expected refusal (exit 1); don't let it become the step's status.
+          exit 0
 
       - name: Build full CLI from current source
         shell: pwsh
