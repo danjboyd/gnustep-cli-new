@@ -107,6 +107,46 @@ clang -fobjc-arc -fblocks $(gnustep-config --objc-flags) probe.m -o probe $(gnus
 LD_LIBRARY_PATH="$R/lib:${LD_LIBRARY_PATH:-}" ./probe
 LD_LIBRARY_PATH="$R/lib:${LD_LIBRARY_PATH:-}" ldd ./probe
 PROBE
+cat > "$work/tls.m" <<'OBJC'
+#import <Foundation/Foundation.h>
+int main(int argc, char **argv) {
+  @autoreleasepool {
+    NSURLRequest *r = [NSURLRequest requestWithURL: [NSURL URLWithString: [NSString stringWithUTF8String: argv[1]]]
+                                       cachePolicy: NSURLRequestReloadIgnoringCacheData
+                                   timeoutInterval: 30];
+    NSURLResponse *response = nil;
+    NSError *error = nil;
+    NSData *d = [NSURLConnection sendSynchronousRequest: r returningResponse: &response error: &error];
+    printf("%s %s\n", argv[1], (d != nil && error == nil) ? "fetched" : "refused");
+    return (d != nil && error == nil) ? 0 : 1;
+  }
+}
+OBJC
+
+# Strict TLS host verification: a trusted site must load; expired, wrong-host,
+# self-signed and untrusted-root certificates must be refused; the documented
+# per-process override must still work. Needs network access to badssl.com.
+cat > "$work/tls.sh" <<'TLS'
+set -u
+set +u
+. "$R/System/Library/Makefiles/GNUstep.sh"
+set -u
+export LD_LIBRARY_PATH="$R/lib:${LD_LIBRARY_PATH:-}"
+clang -fobjc-arc $(gnustep-config --objc-flags) tls.m -o tls $(gnustep-config --base-libs) -L"$R/lib" -ldispatch || exit 2
+expect() { want=$1; shift; "$@" >> "$OUT/tls-detail.txt" 2>/dev/null; got=$?; if [ "$want" = ok ]; then [ "$got" -eq 0 ]; else [ "$got" -ne 0 ]; fi || { echo "UNEXPECTED: $want $*" >> "$OUT/tls-detail.txt"; fail=1; }; }
+fail=0
+: > "$OUT/tls-detail.txt"
+expect ok ./tls https://github.com
+for host in expired wrong.host self-signed untrusted-root; do expect refused ./tls "https://$host.badssl.com"; done
+expect ok env GS_TLS_VERIFY_S=NO ./tls https://self-signed.badssl.com
+expect refused env GS_TLS_CA_FILE=/nonexistent ./tls https://github.com
+# Address URLs: a certificate naming the address is accepted; one that doesn't is refused.
+expect ok ./tls https://1.1.1.1
+gh_addr=$(python3 -c 'import socket; print(socket.gethostbyname("github.com"))')
+expect refused ./tls "https://$gh_addr"
+cat "$OUT/tls-detail.txt"
+exit $fail
+TLS
 cat > "$work/package-smoke.sh" <<'PACKAGE'
 # Install and remove a minimal cli-tool package from a local index and confirm
 # the managed environment is left without the package's files.
@@ -194,10 +234,23 @@ step run gnustep run --json
 cd "$WORK"
 step probe sh "$WORK/probe.sh"
 step package_smoke sh "$WORK/package-smoke.sh"
+step tls sh "$WORK/tls.sh"
 STEPS
 chown -R "$USER_NAME" "$work"
 chmod a+rwx "$OUT"
 su - "$USER_NAME" -c "OUT='$OUT' REPO='$REPO' WORK='$work' BOOTSTRAP_URL='$BOOTSTRAP_URL' sh '$work/steps.sh'"
+
+# With no system CA bundle: recorded, not judged. libs-base then falls back to the
+# CA file it ships (GSTLS/ca-certificates.crt), so either outcome is possible and
+# the point is to know which. The container is disposable; the bundle is restored.
+bundle=/etc/ssl/certs/ca-certificates.crt
+if [ -f "$bundle" ]; then
+  mv "$bundle" "$bundle.qualify-hidden"
+  no_ca_rc=0
+  su - "$USER_NAME" -c "set +u; . \$HOME/.local/share/gnustep-cli/System/Library/Makefiles/GNUstep.sh; cd '$work' && LD_LIBRARY_PATH=\$HOME/.local/share/gnustep-cli/lib:\$LD_LIBRARY_PATH ./tls https://github.com" > "$OUT/tls-no-ca.out" 2>&1 || no_ca_rc=$?
+  printf 'tls_no_ca %s\n' "$no_ca_rc" >> "$OUT/steps.txt"
+  mv "$bundle.qualify-hidden" "$bundle"
+fi
 
 PYTHONPATH="$REPO/src" python3 - "$OUT" "$TARGET" "$VERSION" "$ICU_MAJOR" "$soname_rc" "$toolchain" "$cli" <<'PY'
 import hashlib, json, os, platform, subprocess, sys
@@ -226,6 +279,7 @@ results = {
     "doctor": "passed" if steps.get("doctor") == "0" and doctor.get("status") in ("ok", "warning") else "failed",
     "new_build_run": "passed" if all(steps.get(s) == "0" for s in ("new", "build", "run")) and "Hello from CLI tool" in run.get("stdout", "") else "failed",
     "foundation_probe": "passed" if steps.get("probe") == "0" and "SUM=42" in probe else "failed",
+    "tls_verification": "passed" if steps.get("tls") == "0" else "failed",
     "package_install_remove": "passed" if steps.get("package_smoke") == "0" and last_json(read("package-install.json")).get("ok") and last_json(read("package-remove.json")).get("ok") else "failed",
 }
 probe_icu = [line.strip() for line in probe.splitlines() if "libicu" in line or "libc.so.6" in line]
@@ -263,6 +317,8 @@ report = {
         "run_stdout": run.get("stdout", "").strip(),
         "probe_runtime_resolution": probe_icu,
         "package_smoke": read("package_smoke.out").strip().splitlines(),
+        "tls": read("tls-detail.txt").strip().splitlines(),
+        "tls_without_system_ca_bundle": read("tls-no-ca.out").strip().splitlines(),
     },
 }
 json.dump(report, open(os.path.join(out, "container-qualification.json"), "w"), indent=2)

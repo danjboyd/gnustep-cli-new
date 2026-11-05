@@ -221,6 +221,31 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn('grep -q "No tests found"', runner)
         self.assertIn("tests? (PASSED|executed)", runner)
 
+    def test_source_built_toolchains_carry_the_upstream_libs_base_tls_backport(self):
+        # Each lock declares the series; the recipe must verify and apply exactly those
+        # files, in order, after checking out the pinned revision.
+        import hashlib
+        expected_commits = ["586eba532", "09b7efcb3", "0b5205854", "193da175c", "02f2958f1", "f28c9996a", "a29f803ff", "d80ae7406"]
+        locks = [path for path in sorted((ROOT / "toolchains").glob("*/source-lock.json"))
+                 if any(c["name"] == "libs-base" and c.get("source_type") == "git" for c in json.loads(path.read_text())["components"])]
+        self.assertGreaterEqual(len(locks), 7)
+        for lock_path in locks:
+            target = lock_path.parent.name
+            libs_base = next(c for c in json.loads(lock_path.read_text())["components"] if c["name"] == "libs-base")
+            patches = libs_base["patches"]
+            self.assertEqual([patch["source"]["commit"][:9] for patch in patches], expected_commits, target)
+            recipe = (lock_path.parent / "build-toolchain.sh").read_text()
+            checkout = recipe.index(f'checkout --detach "{libs_base["revision"]}"')
+            position = checkout
+            for patch in patches:
+                patch_file = ROOT / patch["path"]
+                self.assertEqual(hashlib.sha256(patch_file.read_bytes()).hexdigest(), patch["sha256"], target)
+                self.assertEqual(patch["applies_to_revision"], libs_base["revision"], target)
+                self.assertNotIn("ChangeLog", patch_file.read_text(), target)
+                entry = f'"{patch_file.name}:{patch["sha256"]}"'
+                self.assertGreater(recipe.index(entry), position, target)
+                position = recipe.index(entry)
+
     def test_package_app_artifact_workflow_builds_from_explicit_toolchain(self):
         workflow = ROOT / ".github" / "workflows" / "package-app-artifact.yml"
         self.assertTrue(workflow.exists())

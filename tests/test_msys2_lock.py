@@ -111,6 +111,30 @@ class Msys2LockTests(unittest.TestCase):
             locked = lock_input_manifest(self.manifest(), resolve)
         self.assertEqual(len(locked["locked_packages"]), 2)
 
+    def test_package_overrides_survive_a_relock_and_stop_when_msys2_moves(self):
+        override = {
+            "name": "mingw-w64-clang-x86_64-curl", "version": "8.23.0-1.1", "repo": "gnustep-cli",
+            "filename": "curl-override.pkg.tar.zst", "url": "https://example.invalid/curl-override.pkg.tar.zst",
+            "sha256": "a" * 64, "size": 1, "replaces": {"version": "8.23.0-1", "sha256": "b" * 64},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            resolve = self.make_resolve_dir(Path(tmp), "make 4.4.1-2\nmingw-w64-clang-x86_64-curl 8.23.0-1\n")
+            manifest = self.manifest()
+            manifest["package_overrides"] = [override]
+            locked = lock_input_manifest(manifest, resolve)
+            entry = next(e for e in locked["locked_packages"] if e["name"] == override["name"])
+            self.assertEqual((entry["url"], entry["version"]), (override["url"], "8.23.0-1.1"))
+            override["replaces"]["version"] = "8.22.0-1"
+            with self.assertRaises(ValueError):
+                lock_input_manifest(manifest, resolve)
+
+    def test_checked_in_windows_lock_takes_the_project_built_gnustep_base(self):
+        manifest = json.loads((ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "input-manifest.json").read_text())
+        entry = next(e for e in manifest["locked_packages"] if e["name"] == "mingw-w64-clang-x86_64-gnustep-base")
+        override = manifest["package_overrides"][0]
+        self.assertEqual(entry["sha256"], override["sha256"])
+        self.assertTrue(entry["url"].startswith("https://github.com/danjboyd/gnustep-cli-new/releases/download/msys2-inputs-"))
+
     def test_checked_in_windows_manifest_requests_curl(self):
         manifest = json.loads((ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "input-manifest.json").read_text())
         self.assertIn("mingw-w64-clang-x86_64-curl", [package["name"] for package in manifest["packages"]])

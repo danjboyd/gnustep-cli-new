@@ -146,6 +146,25 @@ def lock_input_manifest(manifest: dict[str, Any], resolve_dir: Path, sync_dir: P
                 raise ValueError(f"requested package {package['name']} was not installed by the resolve run")
             package["version"] = entry["version"]
             package["sha256"] = entry["sha256"]
+    # Project-built replacements (package_overrides) survive a re-lock: they replace
+    # the repository entry only while the repository still resolves the version they
+    # were built to replace, so an MSYS2 update is noticed rather than masked.
+    for override in result.get("package_overrides", []):
+        current = by_name.get(override["name"])
+        if current is None:
+            raise ValueError(f"package override {override['name']} is not installed by the resolve run")
+        if current["version"] != override["replaces"]["version"]:
+            raise ValueError(
+                f"package override {override['name']} replaces {override['replaces']['version']}, "
+                f"but the resolve run has {current['version']}; rebuild or drop the override"
+            )
+        replacement = {key: override[key] for key in ("name", "version", "repo", "filename", "url", "sha256", "size")}
+        locked = [replacement if entry["name"] == override["name"] else entry for entry in locked]
+        for section in ("host_packages", "packages"):
+            for package in result.get(section, []):
+                if package["name"] == override["name"]:
+                    package["version"] = override["version"]
+                    package["sha256"] = override["sha256"]
     result["locked_packages"] = locked
     if sync_dir is not None:
         sync_dir.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,65 @@
+name: Windows gnustep-base Package
+
+# Builds the patched MSYS2 gnustep-base package inside the locked toolchain root, so it
+# links against the locked libraries. The result becomes a locked toolchain input.
+
+on:
+  workflow_dispatch:
+  # Builds from the branch that changes the recipe; dispatch needs the file on master.
+  push:
+    branches: [libs-base-tls-backport]
+    paths:
+      - toolchains/windows-amd64-msys2-clang64/gnustep-base-package/**
+      - toolchains/patches/libs-base/**
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Assemble the locked MSYS2 root
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & powershell -NoProfile -ExecutionPolicy Bypass -File toolchains\windows-amd64-msys2-clang64\assemble-toolchain.ps1 -Prefix "$env:RUNNER_TEMP\toolchain" -CacheDir "$env:RUNNER_TEMP\cache" -MsysRoot "$env:RUNNER_TEMP\msys-root"
+          if ($LASTEXITCODE -ne 0) { throw "assemble failed: $LASTEXITCODE" }
+      - name: Build the package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $package = "$env:GITHUB_WORKSPACE\toolchains\windows-amd64-msys2-clang64\gnustep-base-package"
+          Copy-Item "$env:GITHUB_WORKSPACE\toolchains\patches\libs-base\000[1-6]*.patch", "$env:GITHUB_WORKSPACE\toolchains\patches\libs-base\0008*.patch" $package
+          $bash = "$env:RUNNER_TEMP\msys-root\usr\bin\bash.exe"
+          $env:MSYSTEM = 'CLANG64'
+          $env:CHERE_INVOKING = '1'
+          Push-Location $package
+          $unix = (& $bash -lc "cygpath -u '$package'").Trim()
+          & $bash -lc "pacman -Q > /tmp/before.txt; pacman -Sy --noconfirm && pacman -S --noconfirm --needed base-devel patchutils rsync mingw-w64-clang-x86_64-autotools; pacman -Q > /tmp/after.txt; echo '--- packages changed by the build tools:'; comm -3 /tmp/before.txt /tmp/after.txt | grep -E 'clang-x86_64' || true"
+          if ($LASTEXITCODE -ne 0) { throw "tools failed: $LASTEXITCODE" }
+          # The toolchain build patches its own copies of libdispatch's generic_win_base.h
+          # (assemble-toolchain.ps1); this build root needs the same fix, or Foundation.h
+          # does not compile.
+          & $bash -lc "sed -i -e 's|^typedef int mode_t;|/* mode_t is provided by MinGW sys/types.h in this managed toolchain. */|' -e 's|^typedef void pthread_attr_t;|#if !defined(__MINGW32__) /* winpthreads defines pthread_attr_t */\ntypedef void pthread_attr_t;\n#endif|' /clang64/include/os/generic_win_base.h && grep -n 'mode_t\|pthread_attr_t' /clang64/include/os/generic_win_base.h"
+          & $bash -lc "cd '$unix' && MINGW_ARCH=clang64 makepkg-mingw --noconfirm --skippgpcheck --nodeps -f"
+          if ($LASTEXITCODE -ne 0) { throw "makepkg failed: $LASTEXITCODE" }
+          $pkg = Get-ChildItem $package -Filter 'mingw-w64-clang-x86_64-gnustep-base-*.pkg.tar.zst' | Select-Object -First 1
+          if (-not $pkg) { throw 'no package produced' }
+          Get-FileHash -Algorithm SHA256 $pkg.FullName | Format-List
+          & $bash -lc "mkdir -p /tmp/p && tar -xf '$unix/$($pkg.Name)' -C /tmp/p && find /tmp/p -name '*.dll' -exec objdump -p {} + | grep 'DLL Name' | sort -u; strings /tmp/p/clang64/bin/*base*.dll | grep -c GSTLSVerifyFailedNotification"
+          exit 0
+      - name: Upload the package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-gnustep-base-package
+          path: |
+            toolchains/windows-amd64-msys2-clang64/gnustep-base-package/*.pkg.tar.zst
+            toolchains/windows-amd64-msys2-clang64/gnustep-base-package/*.log

@@ -1,99 +1,204 @@
 {
-    "schema_version": 1,
-    "target": {
-        "id": "linux-arm64-clang",
-        "os": "linux",
-        "arch": "arm64",
-        "compiler_family": "clang",
-        "toolchain_flavor": "clang"
+  "schema_version": 1,
+  "target": {
+    "id": "linux-arm64-clang",
+    "os": "linux",
+    "arch": "arm64",
+    "compiler_family": "clang",
+    "toolchain_flavor": "clang"
+  },
+  "strategy": "source-build",
+  "runtime": {
+    "objc_runtime": "libobjc2",
+    "objc_abi": "modern"
+  },
+  "build_environment": {
+    "base_image": "debian:13",
+    "distribution": "debian",
+    "distribution_release": "trixie",
+    "dockerfile": "Dockerfile",
+    "glibc_floor": "2.41",
+    "icu_major": "76",
+    "deprecated_bases": [
+      "debian:12"
+    ],
+    "notes": "GNUstep libs-base/libs-corebase link against the build base ICU SONAMEs (libicu*.so.76 on trixie). Debian 12 bookworm (ICU 72) is deprecated; artifacts built on it do not load on Debian 13. Build on an aarch64 host."
+  },
+  "components": [
+    {
+      "name": "libobjc2",
+      "source_type": "git",
+      "url": "https://github.com/gnustep/libobjc2.git",
+      "revision": "b67709ad7851973fde127022d8ac6a710c82b1d5",
+      "revision_type": "commit",
+      "archive_sha256": null,
+      "configure_args": [],
+      "patches": []
     },
-    "strategy": "source-build",
-    "runtime": {
-        "objc_runtime": "libobjc2",
-        "objc_abi": "modern"
+    {
+      "name": "libdispatch",
+      "source_type": "git",
+      "url": "https://github.com/swiftlang/swift-corelibs-libdispatch.git",
+      "revision": "4ce40128f607a6eb7b58077a06b7464c1518a30d",
+      "revision_type": "commit",
+      "archive_sha256": null,
+      "configure_args": [],
+      "patches": []
     },
-    "build_environment": {
-        "base_image": "debian:13",
-        "distribution": "debian",
-        "distribution_release": "trixie",
-        "dockerfile": "Dockerfile",
-        "glibc_floor": "2.41",
-        "icu_major": "76",
-        "deprecated_bases": [
-            "debian:12"
-        ],
-        "notes": "GNUstep libs-base/libs-corebase link against the build base ICU SONAMEs (libicu*.so.76 on trixie). Debian 12 bookworm (ICU 72) is deprecated; artifacts built on it do not load on Debian 13. Build on an aarch64 host."
+    {
+      "name": "tools-make",
+      "source_type": "git",
+      "url": "https://github.com/gnustep/tools-make.git",
+      "revision": "50cf9619e672fb2ff6825f239b5a172c5dc55630",
+      "revision_type": "commit",
+      "archive_sha256": null,
+      "configure_args": [],
+      "patches": []
     },
-    "components": [
+    {
+      "name": "libs-base",
+      "source_type": "git",
+      "url": "https://github.com/gnustep/libs-base.git",
+      "revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+      "revision_type": "commit",
+      "archive_sha256": null,
+      "configure_args": [],
+      "patches": [
         {
-            "name": "libobjc2",
-            "source_type": "git",
-            "url": "https://github.com/gnustep/libobjc2.git",
-            "revision": "b67709ad7851973fde127022d8ac6a710c82b1d5",
-            "revision_type": "commit",
-            "archive_sha256": null,
-            "configure_args": [],
-            "patches": []
+          "id": "strict-host-verification",
+          "path": "toolchains/patches/libs-base/0001-Turn-on-strict-host-verification-by-default.patch",
+          "sha256": "f1a8a5a5ce5f288c5325e5ab0c636e76054002eec2ce76f00b3862d787c73c0f",
+          "strip": 1,
+          "source": {
+            "repository": "https://github.com/gnustep/libs-base.git",
+            "commit": "586eba532afc63cc41757fb1374dd39b6e43174d"
+          },
+          "applies_to_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+          "rationale": "Turn on strict host certificate verification by default.",
+          "upstream_status": "backported from upstream libs-base master, ChangeLog hunks removed"
         },
         {
-            "name": "libdispatch",
-            "source_type": "git",
-            "url": "https://github.com/swiftlang/swift-corelibs-libdispatch.git",
-            "revision": "4ce40128f607a6eb7b58077a06b7464c1518a30d",
-            "revision_type": "commit",
-            "archive_sha256": null,
-            "configure_args": [],
-            "patches": []
+          "id": "tls-tests-and-error-message",
+          "path": "toolchains/patches/libs-base/0002-Fix-error-message-and-disable-server-validation-fo.patch",
+          "sha256": "81f9478edf50d8ecbbac6566bdeb2bd2968414663e587c4ca4de2fdcfc3fd659",
+          "strip": 1,
+          "source": {
+            "repository": "https://github.com/gnustep/libs-base.git",
+            "commit": "09b7efcb312df2ac601f641c41dff0868c822bbb"
+          },
+          "applies_to_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+          "rationale": "Error message and test follow-up to strict verification.",
+          "upstream_status": "backported from upstream libs-base master, ChangeLog hunks removed"
         },
         {
-            "name": "tools-make",
-            "source_type": "git",
-            "url": "https://github.com/gnustep/tools-make.git",
-            "revision": "50cf9619e672fb2ff6825f239b5a172c5dc55630",
-            "revision_type": "commit",
-            "archive_sha256": null,
-            "configure_args": [],
-            "patches": []
+          "id": "tls-improvements",
+          "path": "toolchains/patches/libs-base/0003-More-TLS-improvements.patch",
+          "sha256": "fa8861096cfb476130e0af8d773be2953c20df92454bd8d2be9b9167e217dc82",
+          "strip": 1,
+          "source": {
+            "repository": "https://github.com/gnustep/libs-base.git",
+            "commit": "0b5205854485f4c5389afd12688d63cbbfe07efd"
+          },
+          "applies_to_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+          "rationale": "Follow-up TLS handling improvements.",
+          "upstream_status": "backported from upstream libs-base master, ChangeLog hunks removed"
         },
         {
-            "name": "libs-base",
-            "source_type": "git",
-            "url": "https://github.com/gnustep/libs-base.git",
-            "revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
-            "revision_type": "commit",
-            "archive_sha256": null,
-            "configure_args": [],
-            "patches": []
+          "id": "tls-handling",
+          "path": "toolchains/patches/libs-base/0004-Improve-TLS-handling.patch",
+          "sha256": "e0e5241a6e137fd54e370b3a698627ab42d52df829b9d989c4ef41246076a92e",
+          "strip": 1,
+          "source": {
+            "repository": "https://github.com/gnustep/libs-base.git",
+            "commit": "193da175c14fd60f5051c2dfd1a381945745e955"
+          },
+          "applies_to_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+          "rationale": "TLS handling in NSURLProtocol, NSFileHandle and streams, including win32.",
+          "upstream_status": "backported from upstream libs-base master, ChangeLog hunks removed"
         },
         {
-            "name": "libs-corebase",
-            "source_type": "git",
-            "url": "https://github.com/gnustep/libs-corebase.git",
-            "revision": "e5983493d5ddf9c5b7e562f166855d9517a3f179",
-            "revision_type": "commit",
-            "archive_sha256": null,
-            "configure_args": [],
-            "patches": []
+          "id": "tls-verify-failure-notification",
+          "path": "toolchains/patches/libs-base/0005-Add-notification-for-verify-failure.patch",
+          "sha256": "67790903ed79fc544eee1319d346c5b942cb7e3b0721fe97cbf2f4bfd8fca9dd",
+          "strip": 1,
+          "source": {
+            "repository": "https://github.com/gnustep/libs-base.git",
+            "commit": "02f2958f177b9b215bc683d4a7f40d8aa943988c"
+          },
+          "applies_to_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+          "rationale": "Adds the verify-failure notification that the next patch needs.",
+          "upstream_status": "backported from upstream libs-base master, ChangeLog hunks removed"
         },
         {
-            "name": "libs-gui",
-            "source_type": "git",
-            "url": "https://github.com/gnustep/libs-gui.git",
-            "revision": "7892137bdedd007eba8425f766e41481ddb4fda6",
-            "revision_type": "commit",
-            "archive_sha256": null,
-            "configure_args": [],
-            "patches": []
+          "id": "tls-notification-posting",
+          "path": "toolchains/patches/libs-base/0006-tweak-tls-notification-posting.patch",
+          "sha256": "4904926e1a5b24a83ab647aa1fe43e8c82e7107dde04401e1ba0e6a160d3167b",
+          "strip": 1,
+          "source": {
+            "repository": "https://github.com/gnustep/libs-base.git",
+            "commit": "f28c9996a1b20ba210222e7a2d0114319c9f2678"
+          },
+          "applies_to_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+          "rationale": "TLS notification posting follow-up.",
+          "upstream_status": "backported from upstream libs-base master, ChangeLog hunks removed"
         },
         {
-            "name": "libs-back",
-            "source_type": "git",
-            "url": "https://github.com/gnustep/libs-back.git",
-            "revision": "bf3b3ced525f08415a20d109f05be1f91492414c",
-            "revision_type": "commit",
-            "archive_sha256": null,
-            "configure_args": [],
-            "patches": []
+          "id": "nsurl-improvement",
+          "path": "toolchains/patches/libs-base/0007-Security-improvement.patch",
+          "sha256": "e2aaf06465b1622fb1312faa4e49aed37823061cd140d4083f9084f68aa9c5e8",
+          "strip": 1,
+          "source": {
+            "repository": "https://github.com/gnustep/libs-base.git",
+            "commit": "a29f803ff8f4725af5aa1524708faf570fd49789"
+          },
+          "applies_to_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+          "rationale": "Upstream's NSURL follow-up from the same series.",
+          "upstream_status": "backported from upstream libs-base master, ChangeLog hunks removed"
+        },
+        {
+          "id": "tls-address-host-verification",
+          "path": "toolchains/patches/libs-base/0008-Fix-for-TLS-host-verification-when-we-have-a-host-ad.patch",
+          "sha256": "93ccc028d223452db6bd99f4066a3644e7364270b13039c35308491c7de1c9dc",
+          "strip": 1,
+          "source": {
+            "repository": "https://github.com/gnustep/libs-base.git",
+            "commit": "d80ae7406024507016b0f51b0c1ae0f8501cdf85"
+          },
+          "applies_to_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+          "rationale": "Host verification for URLs that name an address rather than a host name.",
+          "upstream_status": "backported from upstream libs-base master, ChangeLog hunks removed"
         }
-    ]
+      ]
+    },
+    {
+      "name": "libs-corebase",
+      "source_type": "git",
+      "url": "https://github.com/gnustep/libs-corebase.git",
+      "revision": "e5983493d5ddf9c5b7e562f166855d9517a3f179",
+      "revision_type": "commit",
+      "archive_sha256": null,
+      "configure_args": [],
+      "patches": []
+    },
+    {
+      "name": "libs-gui",
+      "source_type": "git",
+      "url": "https://github.com/gnustep/libs-gui.git",
+      "revision": "7892137bdedd007eba8425f766e41481ddb4fda6",
+      "revision_type": "commit",
+      "archive_sha256": null,
+      "configure_args": [],
+      "patches": []
+    },
+    {
+      "name": "libs-back",
+      "source_type": "git",
+      "url": "https://github.com/gnustep/libs-back.git",
+      "revision": "bf3b3ced525f08415a20d109f05be1f91492414c",
+      "revision_type": "commit",
+      "archive_sha256": null,
+      "configure_args": [],
+      "patches": []
+    }
+  ]
 }
