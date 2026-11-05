@@ -1,5 +1,10 @@
 # v0.1.4 release evidence
 
+Published 2026-11-05 by Release run 42084994869, with Release Evidence run 42084692045.
+After publication, Published Package Install Check run 42085743417 passed: index signature
+and manifest digest, then a fresh bootstrap, `gnustep install arlen`, smoke and remove on
+debian:13 and windows-latest.
+
 Release under test: stage-release run 41900014828 (channel `stable`, version
 `0.1.4`, 10 artifacts, source `101cfd0`). v0.1.4 rebuilds every CLI and reuses the
 v0.1.3 toolchains byte for byte. It also publishes a signed stable package index
@@ -102,7 +107,7 @@ the ones qualified.
   v0.1.3 behaves the same. Workaround: `gnustep install io.github.danjboyd.arlen`.
 - Windows `.cmd` shims drop `^` in unquoted arguments and expand `%VAR%`.
 - `gnustep update` on an installed release reads that release's own manifest, so it
-  doesn't appear able to find newer releases. To be confirmed on a v0.1.3 install after
-  publication. Existing installs run the new bootstrap to move to 0.1.4.
+  doesn't find newer releases. Confirmed after publication: a v0.1.3 install reports
+  "Everything is already current". Existing installs run the new bootstrap to move to 0.1.4.
 - `release.yml`'s new advertise and filtered-index steps have only been rehearsed
   locally; this release is their first real run.
