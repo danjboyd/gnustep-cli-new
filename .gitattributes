@@ -1,2 +1,3 @@
 *.patch text eol=lf
 toolchains/patches/** -text
+toolchains/windows-amd64-msys2-clang64/gnustep-base-package/** -text
