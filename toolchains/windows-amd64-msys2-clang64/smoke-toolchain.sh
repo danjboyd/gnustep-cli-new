@@ -8,6 +8,8 @@
 # - python's pyexpat loading its libexpat (xml.etree)
 # - curl with TLS and asynchronous DNS
 # - MSYS perl, which v0.1.1 dropped (Arlen's test helpers use it)
+# - strict TLS host verification in gnustep-base (good site loads, bad ones refused);
+#   set GNUSTEP_SMOKE_TLS_EXE to keep the test program for a run outside this bash
 set -euo pipefail
 
 root=${1:?usage: smoke-toolchain.sh <toolchain-root>}
@@ -70,3 +72,29 @@ done
 echo "ok: curl with SSL and AsynchDNS ($(curl -V | head -n 1))"
 
 perl -e 'use strict; use warnings; alarm 5; print "ok: perl $^V\n"'
+
+cat > tls.m <<'EOF'
+#import <Foundation/Foundation.h>
+int main(int argc, char **argv)
+{
+  @autoreleasepool {
+    NSURLRequest *r = [NSURLRequest requestWithURL: [NSURL URLWithString: [NSString stringWithUTF8String: argv[1]]]
+                                       cachePolicy: NSURLRequestReloadIgnoringCacheData
+                                   timeoutInterval: 30];
+    NSURLResponse *response = nil;
+    NSError *error = nil;
+    NSData *d = [NSURLConnection sendSynchronousRequest: r returningResponse: &response error: &error];
+    printf("%s %s\n", argv[1], (d != nil && error == nil) ? "fetched" : "refused");
+    return (d != nil && error == nil) ? 0 : 1;
+  }
+}
+EOF
+# shellcheck disable=SC2086
+clang $objc_flags tls.m -o tls.exe $base_libs
+./tls.exe https://github.com
+for host in expired wrong.host self-signed untrusted-root; do
+  if ./tls.exe "https://$host.badssl.com" 2>/dev/null; then echo "TLS accepted a bad certificate: $host" >&2; exit 1; fi
+done
+GS_TLS_VERIFY_S=NO ./tls.exe https://self-signed.badssl.com 2>/dev/null
+echo "ok: TLS host verification (github.com loads; expired, wrong-host, self-signed, untrusted-root refused; GS_TLS_VERIFY_S=NO overrides)"
+if [ -n "${GNUSTEP_SMOKE_TLS_EXE:-}" ]; then cp tls.exe "$(cygpath -u "$GNUSTEP_SMOKE_TLS_EXE")"; fi
