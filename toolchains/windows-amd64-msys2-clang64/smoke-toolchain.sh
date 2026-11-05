@@ -99,11 +99,13 @@ int main(int argc, char **argv)
 EOF
 # shellcheck disable=SC2086
 clang $objc_flags tls.m -o tls.exe $base_libs
-# Diagnostics for NSURLConnection on Windows: it reaches NSHTTPCookieStorage, which
-# needs the gdnc daemon. Show plain HTTP and gdnc's own start-up, then the HTTPS cases.
-./tls.exe http://example.com || echo "plain HTTP also failed (not TLS-specific)" >&2
-timeout 10 gdnc --no-fork > gdnc.log 2>&1 || echo "gdnc exited with $?" >&2
-head -20 gdnc.log >&2 || true
+# NSURLConnection reaches NSHTTPCookieStorage, which needs the gdnc daemon. Its
+# automatic start fails here (a separate, pre-existing Windows issue: plain http://
+# fails the same way), so start it explicitly; this check is about TLS.
+gdnc --no-fork > gdnc.log 2>&1 &
+gdnc_pid=$!
+trap 'kill "$gdnc_pid" 2>/dev/null || true; rm -rf "$work"' EXIT
+sleep 3
 if ! ./tls.exe https://github.com; then
   echo "TLS failed for https://github.com; rerunning with GS_TLS_DEBUG=1" >&2
   GS_TLS_DEBUG=1 ./tls.exe https://github.com 2>&1 | tail -40 >&2 || true

@@ -96,6 +96,9 @@ jobs:
           $exe = Join-Path $env:RUNNER_TEMP 'tls.exe'
           if (-not (Test-Path $exe)) { throw 'the smoke step did not leave tls.exe' }
           $env:PATH = (Join-Path $env:TOOLCHAIN_ROOT 'clang64\bin') + ';' + $env:PATH
+          # See smoke-toolchain.sh: gdnc's automatic start fails, so start it here.
+          $gdnc = Start-Process -FilePath (Join-Path $env:TOOLCHAIN_ROOT 'clang64\bin\gdnc.exe') -ArgumentList '--no-fork' -PassThru -WindowStyle Hidden
+          Start-Sleep -Seconds 3
           $results = @()
           foreach ($case in @(@('https://github.com', 0), @('https://expired.badssl.com', 1), @('https://self-signed.badssl.com', 1))) {
             $global:LASTEXITCODE = 0
@@ -104,6 +107,7 @@ jobs:
             if (($LASTEXITCODE -eq 0) -ne ($case[1] -eq 0)) { $results; throw "unexpected TLS result for $($case[0])" }
           }
           $results
+          Stop-Process -Id $gdnc.Id -Force -ErrorAction SilentlyContinue
 
       - name: Build full CLI from current source
         shell: pwsh
