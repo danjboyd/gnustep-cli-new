@@ -8,6 +8,10 @@
 # - python's pyexpat loading its libexpat (xml.etree)
 # - curl with TLS and asynchronous DNS
 # - MSYS perl, which v0.1.1 dropped (Arlen's test helpers use it)
+# - NSLog, which a clang 23 miscompile of GSPrivateFormat broke in our gnustep-base build
+# - strict TLS host verification through NSURLConnection, with gdnc started by the
+#   library itself: a trusted site loads, bad certificates are refused, and
+#   GS_TLS_VERIFY_S=NO still overrides it
 set -euo pipefail
 
 root=${1:?usage: smoke-toolchain.sh <toolchain-root>}
@@ -70,3 +74,56 @@ done
 echo "ok: curl with SSL and AsynchDNS ($(curl -V | head -n 1))"
 
 perl -e 'use strict; use warnings; alarm 5; print "ok: perl $^V\n"'
+
+cat > nslog.m <<'EOF'
+#import <Foundation/Foundation.h>
+int main(void)
+{
+  @autoreleasepool {
+    NSLog(@"%s %@ %d", "nslog", @"smoke", 42);
+  }
+  return 0;
+}
+EOF
+# shellcheck disable=SC2086
+clang $objc_flags nslog.m -o nslog.exe $base_libs
+./nslog.exe 2>&1 | grep -q 'nslog smoke 42'
+echo "ok: NSLog formatting"
+
+cat > tls.m <<'EOF'
+#import <Foundation/Foundation.h>
+int main(int argc, char **argv)
+{
+  @autoreleasepool {
+    NSURLRequest *r = [NSURLRequest requestWithURL: [NSURL URLWithString: [NSString stringWithUTF8String: argv[1]]]
+                                       cachePolicy: NSURLRequestReloadIgnoringCacheData
+                                   timeoutInterval: 30];
+    NSURLResponse *response = nil;
+    NSError *error = nil;
+    NSData *d = nil;
+    @try {
+      d = [NSURLConnection sendSynchronousRequest: r returningResponse: &response error: &error];
+    }
+    @catch (NSException *e) {
+      printf("%s exception %s: %s\n", argv[1], [[e name] UTF8String], [[e reason] UTF8String]);
+      return 3;
+    }
+    printf("%s %s\n", argv[1], (d != nil && error == nil) ? "fetched" : "refused");
+    return (d != nil && error == nil) ? 0 : 1;
+  }
+}
+EOF
+# shellcheck disable=SC2086
+clang $objc_flags tls.m -o tls.exe $base_libs
+# Nothing starts gdnc here: the library must start it itself.
+./tls.exe https://github.com
+for host in expired wrong.host self-signed untrusted-root; do
+  set +e
+  ./tls.exe "https://$host.badssl.com"
+  rc=$?
+  set -e
+  if [ "$rc" -ne 1 ]; then echo "expected a refusal (exit 1) for $host, got $rc" >&2; exit 1; fi
+done
+GS_TLS_VERIFY_S=NO ./tls.exe https://self-signed.badssl.com
+if [ -n "${GNUSTEP_SMOKE_TLS_EXE:-}" ]; then cp tls.exe "$(cygpath -u "$GNUSTEP_SMOKE_TLS_EXE")"; fi
+echo "ok: TLS host verification (github.com loads; expired, wrong-host, self-signed, untrusted-root refused; GS_TLS_VERIFY_S=NO overrides)"

@@ -82,16 +82,25 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $bash = Join-Path $env:TOOLCHAIN_ROOT 'usr\bin\bash.exe'
           $env:CHERE_INVOKING = '1'
+          $env:GNUSTEP_SMOKE_TLS_EXE = (Join-Path $env:RUNNER_TEMP 'tls.exe')
           & $bash -lc "bash `"`$(cygpath -u '$env:GITHUB_WORKSPACE')/toolchains/windows-amd64-msys2-clang64/smoke-toolchain.sh`" `"`$(cygpath -u '$env:TOOLCHAIN_ROOT')`""
           if ($LASTEXITCODE -ne 0) { throw 'Toolchain smoke checks failed.' }
 
-      - name: Diagnose NSURLConnection (informational)
-        continue-on-error: true
+      - name: Check TLS outside the toolchain's bash
+        if: ${{ inputs.toolchain_source != 'existing-zip' }}
         shell: pwsh
         run: |
-          $bash = Join-Path $env:TOOLCHAIN_ROOT 'usr\bin\bash.exe'
-          $env:CHERE_INVOKING = '1'
-          & $bash -lc "bash `"`$(cygpath -u '$env:GITHUB_WORKSPACE')/toolchains/windows-amd64-msys2-clang64/diagnose-nsurl.sh`" `"`$(cygpath -u '$env:TOOLCHAIN_ROOT')`""
+          # Apps run from cmd or PowerShell with clang64\bin on PATH, not from MSYS2's
+          # bash; gnutls and gdnc must work from there too. Nothing starts gdnc by hand.
+          $ErrorActionPreference = 'Continue'
+          $exe = Join-Path $env:RUNNER_TEMP 'tls.exe'
+          if (-not (Test-Path $exe)) { throw 'the smoke step did not leave tls.exe' }
+          $env:PATH = (Join-Path $env:TOOLCHAIN_ROOT 'clang64\bin') + ';' + $env:PATH
+          foreach ($case in @(@('https://github.com', 0), @('https://expired.badssl.com', 1), @('https://self-signed.badssl.com', 1))) {
+            $global:LASTEXITCODE = 0
+            & $exe $case[0]
+            if ($LASTEXITCODE -ne $case[1]) { throw "expected exit $($case[1]) for $($case[0]), got $LASTEXITCODE" }
+          }
 
       - name: Build full CLI from current source
         shell: pwsh
