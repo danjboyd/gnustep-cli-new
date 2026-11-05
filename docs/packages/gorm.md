@@ -12,13 +12,20 @@ The package manager must reject Gorm for `server` and `ci` profiles unless those
 
 ## Install
 
+No stable release publishes Gorm: v0.1.0 through v0.1.3 advertise no package index,
+and v0.1.4's index contains only Arlen. So
+`gnustep install gorm` doesn't work against a stable install. It works only with
+an index you pass explicitly:
+
 ```sh
-gnustep install gorm --profile desktop
+gnustep install gorm --profile desktop --index <path-or-url>
 ```
 
 Canonical package ID: `org.gnustep.gorm`
 
 ## Validation Status
+
+"Published" below means the package artifact was uploaded for that target, not that a stable release's package index offers it.
 
 | Target | Status | Evidence |
 | --- | --- | --- |

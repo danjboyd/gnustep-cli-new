@@ -31,7 +31,7 @@ This document records the production signing policy for release metadata and pac
 Before production security claims, CI or the signing service must run these drills against release metadata and package-index metadata:
 
 - wrong trust root: verification must fail when a different public key is pinned
-- expired metadata: verification must fail when `expires_at` is in the past
+- expired metadata: verification must fail when `expires_at` is present and in the past. Release manifests and the package index carry no `expires_at`: release assets are immutable, and installs pin them, so an expiry date would stop old pinned releases installing. An expiry belongs on a future signed channel pointer, not on these files
 - rollback/freeze: verification must fail when stale metadata is presented after a fresher trusted version has been accepted by the release process
 - revoked artifact or package: verification must fail when the selected artifact/package appears in the signed revocation list
 - tampered provenance: verification must fail when manifest/index content no longer matches provenance digests

@@ -331,7 +331,6 @@ def release_manifest_from_matrix(version: str, base_url: str) -> dict[str, Any]:
         "channel": "stable",
         "generated_at": generated_at,
         "metadata_version": 1,
-        "expires_at": "TBD",
         "trust": {
             "root_version": 1,
             "signature_policy": "single-role-v1",
@@ -2934,7 +2933,6 @@ def refresh_local_release_metadata(release_dir: str | Path, *, private_key_path:
             artifact["integrity"] = {"sha256": digest}
             artifact["size"] = path.stat().st_size
     manifest.setdefault("metadata_version", 1)
-    manifest.setdefault("expires_at", (datetime.now(UTC).replace(microsecond=0) + timedelta(days=30)).isoformat().replace("+00:00", "Z"))
     manifest.setdefault("trust", {"root_version": 1, "signature_policy": "single-role-v1", "signatures": [], "revoked_artifacts": []})
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     provenance_path = write_release_provenance(root)
@@ -4109,7 +4107,6 @@ def stage_release_assets(
         "channel": channel,
         "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "metadata_version": 1,
-        "expires_at": "TBD",
         "trust": {
             "root_version": 1,
             "signature_policy": "single-role-v1",

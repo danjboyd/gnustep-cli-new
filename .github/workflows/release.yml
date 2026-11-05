@@ -182,7 +182,9 @@ jobs:
           test -f /tmp/package-index-trust/package-index-provenance.json
           test -f /tmp/package-index-trust/package-index.json.sig
           test -f /tmp/package-index-trust/package-index-provenance.json.sig
-          python3 scripts/internal/package_repo.py --json packages --output /tmp/package-index-generated.json >/dev/null
+          # Regenerate with the signed index's own timestamp, so only real differences show.
+          stamp=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["generated_at"])' /tmp/package-index-trust/package-index.json)
+          python3 scripts/internal/package_repo.py --json --generated-at "$stamp" packages --output /tmp/package-index-generated.json >/dev/null
           if ! cmp -s /tmp/package-index-generated.json /tmp/package-index-trust/package-index.json; then
             # A release index may be signed for a subset of packages with only their
             # published artifacts (package-index workflow: packages + published_only).
@@ -191,7 +193,7 @@ jobs:
             for id in $(python3 -c 'import json,sys; print(" ".join(p["id"] for p in json.load(open(sys.argv[1]))["packages"]))' /tmp/package-index-trust/package-index.json); do
               select+=(--package "$id")
             done
-            python3 scripts/internal/package_repo.py --json "${select[@]}" --published-only packages --output /tmp/package-index-generated.json >/dev/null
+            python3 scripts/internal/package_repo.py --json "${select[@]}" --generated-at "$stamp" --published-only packages --output /tmp/package-index-generated.json >/dev/null
             diff -u /tmp/package-index-generated.json /tmp/package-index-trust/package-index.json
           fi
           printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_TRUST_ROOT" > /tmp/gnustep-cli-package-index-trust-root.pem
@@ -217,7 +219,7 @@ jobs:
           python3 scripts/internal/package_repo.py --json packages --output /tmp/package-index.json >/dev/null
           diff -u packages/package-index.json /tmp/package-index.json
           mkdir -p /tmp/package-index-trust
-          cp /tmp/package-index.json /tmp/package-index-trust/package-index.json
+          python3 scripts/internal/package_repo.py --json --generated-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" packages --output /tmp/package-index-trust/package-index.json >/dev/null
           umask 077
           printf '%s\n' "$GNUSTEP_CLI_PACKAGE_INDEX_SIGNING_PRIVATE_KEY" > /tmp/gnustep-cli-package-index-signing-private.pem
           args=(--json --sign-private-key /tmp/gnustep-cli-package-index-signing-private.pem)

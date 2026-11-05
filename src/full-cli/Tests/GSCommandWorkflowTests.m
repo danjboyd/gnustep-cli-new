@@ -23,6 +23,9 @@
 - (NSDictionary *)buildUpdatePlanForScope:(NSString *)scope manifest:(NSString *)manifestPath installRoot:(NSString *)installRoot exitCode:(int *)exitCode;
 - (NSDictionary *)installedLifecycleStateForInstallRoot:(NSString *)installRoot;
 - (NSDictionary *)executeInstallForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
+- (NSString *)latestStableManifestReference;
+- (NSString *)updateManifestForInstallRoot:(NSString *)installRoot warning:(NSString **)warning;
+- (NSString *)manifestReferenceToRecord:(NSString *)manifestReference version:(NSString *)version;
 - (NSDictionary *)executeRemoveForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSString *)resolvedExecutablePathForCommand:(NSString *)command;
 - (NSDictionary *)currentEnvironmentForInterface:(NSString *)interface;
@@ -41,8 +44,10 @@
 @interface StubbedGSCommandRunner : GSCommandRunner
 {
   NSDictionary *_stubDoctorPayload;
+  NSString *_stubLatestManifest;
 }
 - (void)setStubDoctorPayload:(NSDictionary *)payload;
+- (void)setStubLatestManifest:(NSString *)reference;
 @end
 
 @implementation StubbedGSCommandRunner
@@ -50,7 +55,19 @@
 - (void)dealloc
 {
   [_stubDoctorPayload release];
+  [_stubLatestManifest release];
   [super dealloc];
+}
+
+- (void)setStubLatestManifest:(NSString *)reference
+{
+  [_stubLatestManifest release];
+  _stubLatestManifest = [reference copy];
+}
+
+- (NSString *)latestStableManifestReference
+{
+  return _stubLatestManifest ? _stubLatestManifest : [super latestStableManifestReference];
 }
 
 - (void)setStubDoctorPayload:(NSDictionary *)payload
@@ -730,6 +747,108 @@
   XCTAssertTrue([[plan objectForKey: @"update_available"] boolValue]);
   XCTAssertEqualObjects([plan objectForKey: @"layer_update_kind"], @"toolchain_required");
   XCTAssertEqualObjects([payload objectForKey: @"summary"], @"A compatible update is available.");
+}
+
+- (NSString *)managedRootInDirectory:(NSString *)tempRoot recordingManifest:(NSString *)manifest version:(NSString *)version channel:(NSString *)channel
+{
+  NSString *managedRoot = [tempRoot stringByAppendingPathComponent: @"managed"];
+  NSString *statePath = [[managedRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+
+  [self ensureDirectory: [statePath stringByDeletingLastPathComponent]];
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               version, @"cli_version",
+                                               channel, @"channel",
+                                               @"healthy", @"status",
+                                               manifest, @"manifest_path",
+                                               nil]
+                       toPath: statePath];
+  return managedRoot;
+}
+
+- (NSString *)latestFixtureManifestInDirectory:(NSString *)directory
+{
+  [self ensureDirectory: directory];
+  return [self releaseManifestPathInDirectory: directory
+                                    cliSHA256: @"unused-cli"
+                              toolchainSHA256: @"unused-toolchain"
+                                       cliURL: @"file:///unused-cli"
+                                 toolchainURL: @"file:///unused-toolchain"];
+}
+
+- (void)testUpdateFindsANewerStableReleaseThanTheOneTheInstallRecorded
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-discovery-newer"];
+  NSString *latest = [self latestFixtureManifestInDirectory: [tempRoot stringByAppendingPathComponent: @"latest"]];
+  NSString *recorded = @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.0.9/release-manifest.json";
+  NSString *managedRoot = [self managedRootInDirectory: tempRoot recordingManifest: recorded version: @"0.0.9" channel: @"stable"];
+  NSDictionary *payload = nil;
+  NSDictionary *plan = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  [runner setStubLatestManifest: latest];
+  XCTAssertEqualObjects([runner updateManifestForInstallRoot: managedRoot warning: NULL], latest);
+
+  payload = [runner buildUpdatePlanForScope: @"user" manifest: nil installRoot: managedRoot exitCode: &exitCode];
+  plan = [payload objectForKey: @"update_plan"];
+  XCTAssertEqualObjects([plan objectForKey: @"latest_compatible_version"], @"0.1.0-test");
+  XCTAssertTrue([[plan objectForKey: @"update_available"] boolValue]);
+}
+
+- (void)testUpdateKeepsTheRecordedManifestWhenLatestIsNotNewer
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-discovery-same"];
+  NSString *recorded = @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.2.0/release-manifest.json";
+  NSString *managedRoot = [self managedRootInDirectory: tempRoot recordingManifest: recorded version: @"0.2.0" channel: @"stable"];
+  NSString *warning = nil;
+
+  [runner setStubLatestManifest: [self latestFixtureManifestInDirectory: [tempRoot stringByAppendingPathComponent: @"latest"]]];
+  XCTAssertEqualObjects([runner updateManifestForInstallRoot: managedRoot warning: &warning], recorded);
+  XCTAssertNil(warning);
+}
+
+- (void)testUpdateWarnsAndKeepsTheRecordedManifestWhenLatestCannotBeRead
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-discovery-missing"];
+  NSString *recorded = @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.0.9/release-manifest.json";
+  NSString *managedRoot = [self managedRootInDirectory: tempRoot recordingManifest: recorded version: @"0.0.9" channel: @"stable"];
+  NSString *warning = nil;
+
+  [runner setStubLatestManifest: [tempRoot stringByAppendingPathComponent: @"no-such-manifest.json"]];
+  XCTAssertEqualObjects([runner updateManifestForInstallRoot: managedRoot warning: &warning], recorded);
+  XCTAssertNotNil(warning);
+}
+
+- (void)testUpdateDiscoveryLeavesDogfoodAndLocalManifestsAlone
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-discovery-scoped"];
+  NSString *latest = [self latestFixtureManifestInDirectory: [tempRoot stringByAppendingPathComponent: @"latest"]];
+  NSString *dogfood = [self managedRootInDirectory: [tempRoot stringByAppendingPathComponent: @"dogfood"]
+                                 recordingManifest: @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.0.9/release-manifest.json"
+                                           version: @"0.0.9"
+                                           channel: @"dogfood"];
+  NSString *local = [self managedRootInDirectory: [tempRoot stringByAppendingPathComponent: @"local"]
+                               recordingManifest: @"/some/local/release-manifest.json"
+                                         version: @"0.0.9"
+                                         channel: @"stable"];
+
+  [runner setStubLatestManifest: latest];
+  XCTAssertNotEqualObjects([runner updateManifestForInstallRoot: dogfood warning: NULL], latest);
+  XCTAssertEqualObjects([runner updateManifestForInstallRoot: local warning: NULL], @"/some/local/release-manifest.json");
+}
+
+- (void)testInstallRecordsItsOwnReleaseManifestRatherThanTheMovingLatestURL
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+
+  XCTAssertEqualObjects([runner manifestReferenceToRecord: [runner latestStableManifestReference] version: @"0.1.5"],
+                        @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.5/release-manifest.json");
+  XCTAssertEqualObjects([runner manifestReferenceToRecord: @"/local/manifest.json" version: @"0.1.5"], @"/local/manifest.json");
 }
 
 - (void)testUpdateCliCheckSummaryNamesCliOnlyUpdate
@@ -2039,6 +2158,67 @@
   XCTAssertEqual(exitCode, 0, @"%@", [payload objectForKey: @"summary"]);
   XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
   XCTAssertEqualObjects([[[payload objectForKey: @"packages"] lastObject] objectForKey: @"id"], @"io.github.danjboyd.arlen");
+}
+
+- (NSDictionary *)installSpecifier:(NSString *)specifier
+                       fromDirectory:(NSString *)directory
+                                root:(NSString *)managedRoot
+                              runner:(GSCommandRunner *)runner
+                            exitCode:(int *)exitCode
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *previous = [manager currentDirectoryPath];
+  NSDictionary *payload = nil;
+
+  [manager changeCurrentDirectoryPath: directory];
+  payload = [runner executeInstallForContext:
+                      [GSCommandContext contextWithArguments: [NSArray arrayWithObjects: @"install", @"--root", managedRoot, specifier, nil]]
+                                    exitCode: exitCode];
+  [manager changeCurrentDirectoryPath: previous];
+  return payload;
+}
+
+- (void)testInstallUsesTheIndexWhenTheCurrentDirectoryHasAnEntryNamedLikeThePackage
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"install-name-shadowed"];
+  NSString *managedRoot = nil;
+  NSString *workDir = [tempRoot stringByAppendingPathComponent: @"work"];
+  NSDictionary *payload = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  managedRoot = [self managedRootAdvertisingIndexInDirectory: tempRoot runner: runner digestMode: @"match"];
+  [self ensureDirectory: [workDir stringByAppendingPathComponent: @"io.github.danjboyd.arlen"]];
+
+  payload = [self installSpecifier: @"io.github.danjboyd.arlen" fromDirectory: workDir root: managedRoot runner: runner exitCode: &exitCode];
+
+  // The fixture has no artifacts, so reaching the index ends in an artifact-selection
+  // failure. What must not happen is treating the folder as a package manifest.
+  XCTAssertFalse([[payload objectForKey: @"summary"] isEqualToString: @"Package manifest not found."], @"%@", [payload objectForKey: @"summary"]);
+}
+
+- (void)testInstallTreatsPathLikeSpecifiersAsManifestsEvenWithAnIndexAdvertised
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"install-path-specifier"];
+  NSString *managedRoot = nil;
+  NSString *workDir = [tempRoot stringByAppendingPathComponent: @"work"];
+  NSArray *specifiers = [NSArray arrayWithObjects: @"./missing", @"sub/missing", @"missing.json", @"sub\\missing", nil];
+  NSUInteger i = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  managedRoot = [self managedRootAdvertisingIndexInDirectory: tempRoot runner: runner digestMode: @"match"];
+  [self ensureDirectory: workDir];
+
+  for (i = 0; i < [specifiers count]; i++)
+    {
+      int exitCode = 0;
+      NSDictionary *payload = [self installSpecifier: [specifiers objectAtIndex: i] fromDirectory: workDir root: managedRoot runner: runner exitCode: &exitCode];
+
+      XCTAssertEqual(exitCode, 1);
+      XCTAssertEqualObjects([payload objectForKey: @"summary"], @"Package manifest not found.", @"%@", [specifiers objectAtIndex: i]);
+    }
 }
 
 - (void)testAdvertisedPackageIndexIsRejectedWhenItsBytesDifferFromTheManifest
