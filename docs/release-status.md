@@ -3,6 +3,12 @@
 Detailed release, validation, and known-gap notes for maintainers. The
 user-facing overview is in the [README](../README.md).
 
+## v0.1.4
+
+Published 2026-11-05 (Release run 42084994869, `101cfd0`). CLIs rebuilt; toolchains
+byte-identical to v0.1.3. Adds a signed package index containing only Arlen 0.3.2.
+Evidence: `docs/validation/release-0.1.4-evidence/`.
+
 ## Release Asset Policy
 
 Published release assets are immutable (see "Immutable Release Assets" in
