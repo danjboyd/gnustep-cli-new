@@ -13,7 +13,7 @@ The package manager must reject Gorm for `server` and `ci` profiles unless those
 ## Install
 
 No stable release publishes Gorm: v0.1.0 through v0.1.3 advertise no package index,
-and the index planned for v0.1.4 contains only Arlen. So
+and v0.1.4's index contains only Arlen. So
 `gnustep install gorm` doesn't work against a stable install. It works only with
 an index you pass explicitly:
 
