@@ -2041,6 +2041,67 @@
   XCTAssertEqualObjects([[[payload objectForKey: @"packages"] lastObject] objectForKey: @"id"], @"io.github.danjboyd.arlen");
 }
 
+- (NSDictionary *)installSpecifier:(NSString *)specifier
+                       fromDirectory:(NSString *)directory
+                                root:(NSString *)managedRoot
+                              runner:(GSCommandRunner *)runner
+                            exitCode:(int *)exitCode
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *previous = [manager currentDirectoryPath];
+  NSDictionary *payload = nil;
+
+  [manager changeCurrentDirectoryPath: directory];
+  payload = [runner executeInstallForContext:
+                      [GSCommandContext contextWithArguments: [NSArray arrayWithObjects: @"install", @"--root", managedRoot, specifier, nil]]
+                                    exitCode: exitCode];
+  [manager changeCurrentDirectoryPath: previous];
+  return payload;
+}
+
+- (void)testInstallUsesTheIndexWhenTheCurrentDirectoryHasAnEntryNamedLikeThePackage
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"install-name-shadowed"];
+  NSString *managedRoot = nil;
+  NSString *workDir = [tempRoot stringByAppendingPathComponent: @"work"];
+  NSDictionary *payload = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  managedRoot = [self managedRootAdvertisingIndexInDirectory: tempRoot runner: runner digestMode: @"match"];
+  [self ensureDirectory: [workDir stringByAppendingPathComponent: @"io.github.danjboyd.arlen"]];
+
+  payload = [self installSpecifier: @"io.github.danjboyd.arlen" fromDirectory: workDir root: managedRoot runner: runner exitCode: &exitCode];
+
+  // The fixture has no artifacts, so reaching the index ends in an artifact-selection
+  // failure. What must not happen is treating the folder as a package manifest.
+  XCTAssertFalse([[payload objectForKey: @"summary"] isEqualToString: @"Package manifest not found."], @"%@", [payload objectForKey: @"summary"]);
+}
+
+- (void)testInstallTreatsPathLikeSpecifiersAsManifestsEvenWithAnIndexAdvertised
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"install-path-specifier"];
+  NSString *managedRoot = nil;
+  NSString *workDir = [tempRoot stringByAppendingPathComponent: @"work"];
+  NSArray *specifiers = [NSArray arrayWithObjects: @"./missing", @"sub/missing", @"missing.json", @"sub\\missing", nil];
+  NSUInteger i = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  managedRoot = [self managedRootAdvertisingIndexInDirectory: tempRoot runner: runner digestMode: @"match"];
+  [self ensureDirectory: workDir];
+
+  for (i = 0; i < [specifiers count]; i++)
+    {
+      int exitCode = 0;
+      NSDictionary *payload = [self installSpecifier: [specifiers objectAtIndex: i] fromDirectory: workDir root: managedRoot runner: runner exitCode: &exitCode];
+
+      XCTAssertEqual(exitCode, 1);
+      XCTAssertEqualObjects([payload objectForKey: @"summary"], @"Package manifest not found.", @"%@", [specifiers objectAtIndex: i]);
+    }
+}
+
 - (void)testAdvertisedPackageIndexIsRejectedWhenItsBytesDifferFromTheManifest
 {
   StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];

@@ -3,7 +3,6 @@
   "channel": "stable",
   "generated_at": "TBD",
   "metadata_version": 1,
-  "expires_at": "TBD",
   "trust": {
     "root_version": 1,
     "signature_policy": "single-role-v1",

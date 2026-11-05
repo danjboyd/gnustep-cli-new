@@ -3459,7 +3459,7 @@ class BuildInfraTests(unittest.TestCase):
             refreshed = json.loads((root / "release-manifest.json").read_text())
             self.assertNotEqual(refreshed["releases"][0]["artifacts"][0]["sha256"], "0" * 64)
             self.assertEqual(refreshed["metadata_version"], 1)
-            self.assertIn("expires_at", refreshed)
+            self.assertNotIn("expires_at", refreshed)
             self.assertTrue((root / "release-provenance.json").exists())
             self.assertIn(artifact.name, (root / "SHA256SUMS").read_text())
 
