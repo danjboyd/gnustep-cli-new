@@ -20,7 +20,9 @@ root=${root%/}
 export PATH="$root/clang64/bin:$root/usr/bin:$PATH"
 export GNUSTEP_MAKEFILES="$root/clang64/share/GNUstep/Makefiles"
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+# The TLS checks make gnustep-base start gdnc, which keeps the work directory busy on
+# Windows; stop it before cleaning up, and don't fail the smoke over the leftover.
+trap 'cd /; taskkill //F //IM gdnc.exe >/dev/null 2>&1; rm -rf "$work" 2>/dev/null || true' EXIT
 cd "$work"
 
 objc_flags=$(gnustep-config --objc-flags)
