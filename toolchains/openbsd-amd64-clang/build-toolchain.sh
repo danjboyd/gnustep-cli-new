@@ -7,6 +7,7 @@ BUILD_ROOT="/var/tmp/gnustep-cli-openbsd/build"
 HOST_OS="openbsd"
 JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)"
 
+RECIPE_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
 mkdir -p "$PREFIX" "$SOURCES_DIR" "$BUILD_ROOT"
 
 if [ ! -d "$SOURCES_DIR/libobjc2/.git" ]; then
@@ -31,7 +32,31 @@ if [ ! -d "$SOURCES_DIR/libs-base/.git" ]; then
   git clone "https://github.com/gnustep/libs-base.git" "$SOURCES_DIR/libs-base"
 fi
 git -C "$SOURCES_DIR/libs-base" fetch --tags origin
+git -C "$SOURCES_DIR/libs-base" reset -q --hard
 git -C "$SOURCES_DIR/libs-base" checkout --detach "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac"
+# Carried upstream TLS backport (source-lock.json libs-base patches), applied in order.
+for libs_base_patch in \
+  "0001-Turn-on-strict-host-verification-by-default.patch:f1a8a5a5ce5f288c5325e5ab0c636e76054002eec2ce76f00b3862d787c73c0f" \
+  "0002-Fix-error-message-and-disable-server-validation-fo.patch:81f9478edf50d8ecbbac6566bdeb2bd2968414663e587c4ca4de2fdcfc3fd659" \
+  "0003-More-TLS-improvements.patch:fa8861096cfb476130e0af8d773be2953c20df92454bd8d2be9b9167e217dc82" \
+  "0004-Improve-TLS-handling.patch:e0e5241a6e137fd54e370b3a698627ab42d52df829b9d989c4ef41246076a92e" \
+  "0005-Add-notification-for-verify-failure.patch:67790903ed79fc544eee1319d346c5b942cb7e3b0721fe97cbf2f4bfd8fca9dd" \
+  "0006-tweak-tls-notification-posting.patch:4904926e1a5b24a83ab647aa1fe43e8c82e7107dde04401e1ba0e6a160d3167b" \
+  "0007-Security-improvement.patch:e2aaf06465b1622fb1312faa4e49aed37823061cd140d4083f9084f68aa9c5e8"; do
+  libs_base_patch_name=${libs_base_patch%%:*}
+  libs_base_patch_expected=${libs_base_patch##*:}
+  libs_base_patch_file="$RECIPE_DIR/../patches/libs-base/$libs_base_patch_name"
+  if command -v sha256sum >/dev/null 2>&1; then
+    libs_base_patch_sha=$(sha256sum "$libs_base_patch_file" | awk '{print $1}')
+  else
+    libs_base_patch_sha=$(sha256 -q "$libs_base_patch_file")
+  fi
+  if [ "$libs_base_patch_sha" != "$libs_base_patch_expected" ]; then
+    echo "libs-base patch digest mismatch: $libs_base_patch_name $libs_base_patch_sha" >&2
+    exit 1
+  fi
+  git -C "$SOURCES_DIR/libs-base" apply -p1 "$libs_base_patch_file"
+done
 
 if [ ! -d "$SOURCES_DIR/libs-corebase/.git" ]; then
   git clone "https://github.com/gnustep/libs-corebase.git" "$SOURCES_DIR/libs-corebase"
