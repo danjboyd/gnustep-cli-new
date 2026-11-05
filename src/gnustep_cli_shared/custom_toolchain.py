@@ -269,7 +269,9 @@ def build_environment(prefix: Path, base_env: dict[str, str] | None = None) -> d
         "LD_LIBRARY_PATH": ":".join([str(prefix / "lib"), str(prefix / "lib64")]),
         "PKG_CONFIG_PATH": ":".join([str(prefix / "lib" / "pkgconfig"), str(prefix / "lib64" / "pkgconfig")]),
         "CPPFLAGS": f"-I{prefix / 'include'}",
-        "CFLAGS": f"-I{prefix / 'include'}",
+        # GNUstep Make takes its default compile flags (OPTFLAG) from CFLAGS at configure
+        # time, so the optimisation level has to be here (see the official recipes).
+        "CFLAGS": f"-g -O2 -I{prefix / 'include'}",
         "CXXFLAGS": f"-I{prefix / 'include'}",
         "OBJCFLAGS": f"-I{prefix / 'include'}",
         "OBJCXXFLAGS": f"-I{prefix / 'include'}",
