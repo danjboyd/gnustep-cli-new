@@ -61,7 +61,8 @@ jobs:
             & $bash -lc "cd '$unix' && pacman -U --noconfirm --overwrite '*' mingw-w64-clang-x86_64-gnustep-base-*.pkg.tar.zst"
             if ($LASTEXITCODE -ne 0) { throw "install failed: $LASTEXITCODE" }
           }
-          & $bash -lc "pacman -Q mingw-w64-clang-x86_64-gnustep-base; strings /clang64/bin/gnustep-base-1_31.dll | grep -c GSTLSVerifyFailedNotification"
+          & $bash -lc "pacman -Q mingw-w64-clang-x86_64-gnustep-base clang; echo tls-strings=`$(strings /clang64/bin/gnustep-base-1_31.dll | grep -c GSTLSVerifyFailedNotification)"
+          exit 0
       - name: Diagnose NSURLConnection
         shell: pwsh
         run: |

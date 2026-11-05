@@ -53,6 +53,19 @@ int main(void)
   return 0;
 }
 EOF
+cat > nslog.m <<'EOF'
+#import <Foundation/Foundation.h>
+int main(void)
+{
+  @autoreleasepool {
+    NSLog(@"plain");
+    NSLog(@"%s", "c string");
+    NSLog(@"%@ %d", @"object", 42);
+    printf("nslog ok\n");
+  }
+  return 0;
+}
+EOF
 flags=$(gnustep-config --objc-flags); libs=$(gnustep-config --base-libs)
 # shellcheck disable=SC2086
 clang $flags fetch.m -o fetch.exe $libs || { echo "compile failed"; exit 0; }
@@ -61,6 +74,10 @@ clang $flags defaults.m -o defaults.exe $libs || { echo "compile failed"; exit 0
 echo "== gnustep-base: $(ls "$root"/clang64/bin/gnustep-base*.dll 2>/dev/null | xargs -n1 basename | tr '\n' ' ')"
 echo "== pacman: $(pacman -Q mingw-w64-clang-x86_64-gnustep-base 2>/dev/null)"
 run() { echo "-- $*"; timeout 60 "$@"; echo "   exit $?"; }
+# shellcheck disable=SC2086
+clang $flags nslog.m -o nslog.exe $libs || echo "nslog compile failed"
+echo "== 0. NSLog alone"
+run ./nslog.exe
 echo "== A. no gdnc running (library auto-starts it)"
 run ./defaults.exe
 run ./fetch.exe http://example.com
