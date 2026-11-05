@@ -5,6 +5,12 @@ name: Windows gnustep-base Package
 
 on:
   workflow_dispatch:
+  # Builds from the branch that changes the recipe; dispatch needs the file on master.
+  push:
+    branches: [libs-base-tls-backport]
+    paths:
+      - toolchains/windows-amd64-msys2-clang64/gnustep-base-package/**
+      - toolchains/patches/libs-base/**
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -30,7 +36,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           $package = "$env:GITHUB_WORKSPACE\toolchains\windows-amd64-msys2-clang64\gnustep-base-package"
-          Copy-Item "$env:GITHUB_WORKSPACE\toolchains\patches\libs-base\000[1-6]*.patch" $package
+          Copy-Item "$env:GITHUB_WORKSPACE\toolchains\patches\libs-base\000[1-6]*.patch", "$env:GITHUB_WORKSPACE\toolchains\patches\libs-base\0008*.patch" $package
           $bash = "$env:RUNNER_TEMP\msys-root\usr\bin\bash.exe"
           $env:MSYSTEM = 'CLANG64'
           $env:CHERE_INVOKING = '1'

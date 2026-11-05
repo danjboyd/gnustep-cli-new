@@ -225,7 +225,7 @@ class RepositoryContractsTests(unittest.TestCase):
         # Each lock declares the series; the recipe must verify and apply exactly those
         # files, in order, after checking out the pinned revision.
         import hashlib
-        expected_commits = ["586eba532", "09b7efcb3", "0b5205854", "193da175c", "02f2958f1", "f28c9996a", "a29f803ff"]
+        expected_commits = ["586eba532", "09b7efcb3", "0b5205854", "193da175c", "02f2958f1", "f28c9996a", "a29f803ff", "d80ae7406"]
         locks = [path for path in sorted((ROOT / "toolchains").glob("*/source-lock.json"))
                  if any(c["name"] == "libs-base" and c.get("source_type") == "git" for c in json.loads(path.read_text())["components"])]
         self.assertGreaterEqual(len(locks), 7)

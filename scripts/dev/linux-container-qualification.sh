@@ -140,6 +140,10 @@ expect ok ./tls https://github.com
 for host in expired wrong.host self-signed untrusted-root; do expect refused ./tls "https://$host.badssl.com"; done
 expect ok env GS_TLS_VERIFY_S=NO ./tls https://self-signed.badssl.com
 expect refused env GS_TLS_CA_FILE=/nonexistent ./tls https://github.com
+# Address URLs: a certificate naming the address is accepted; one that doesn't is refused.
+expect ok ./tls https://1.1.1.1
+gh_addr=$(python3 -c 'import socket; print(socket.gethostbyname("github.com"))')
+expect refused ./tls "https://$gh_addr"
 cat "$OUT/tls-detail.txt"
 exit $fail
 TLS

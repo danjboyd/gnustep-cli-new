@@ -8,7 +8,7 @@ _realname=gnustep-base
 pkgbase=mingw-w64-${_realname}
 pkgname=("${MINGW_PACKAGE_PREFIX}-${_realname}")
 pkgver=1.31.1
-pkgrel=10.2
+pkgrel=10.3
 pkgdesc="GNUstep Base library (mingw-w64)"
 arch=('any')
 mingw_arch=('mingw64' 'ucrt64' 'clang64' 'clangarm64')
@@ -43,7 +43,8 @@ source=("${msys2_repository_url}/releases/download/base-${pkgver//./_}/${_realna
         "0004-Improve-TLS-handling.patch"
         "0005-Add-notification-for-verify-failure.patch"
         "0006-tweak-tls-notification-posting.patch"
-        "0007-Security-improvement-without-test-hunk.patch")
+        "0007-Security-improvement-without-test-hunk.patch"
+        "0008-Fix-for-TLS-host-verification-when-we-have-a-host-ad.patch")
 sha256sums=('e7546f1c978a7c75b676953a360194a61e921cb45a4804497b4f346a460545cd'
             '0cb96d42d72cb7219cd4f0473791dc89cfadce4b7cba171f191c3cb434237e20'
             'f1a8a5a5ce5f288c5325e5ab0c636e76054002eec2ce76f00b3862d787c73c0f'
@@ -52,7 +53,8 @@ sha256sums=('e7546f1c978a7c75b676953a360194a61e921cb45a4804497b4f346a460545cd'
             'e0e5241a6e137fd54e370b3a698627ab42d52df829b9d989c4ef41246076a92e'
             '67790903ed79fc544eee1319d346c5b942cb7e3b0721fe97cbf2f4bfd8fca9dd'
             '4904926e1a5b24a83ab647aa1fe43e8c82e7107dde04401e1ba0e6a160d3167b'
-            '035a5b6a9008d5be1acf762a53c026771fdce589f90af933deeaf17a2945873e')
+            '035a5b6a9008d5be1acf762a53c026771fdce589f90af933deeaf17a2945873e'
+            '93ccc028d223452db6bd99f4066a3644e7364270b13039c35308491c7de1c9dc')
 
 prepare() {
   cd "${_realname}-${pkgver}"
@@ -60,7 +62,7 @@ prepare() {
   patch -p1 -i "${srcdir}/bace6f54fd5fb882cb3adc79c87cc82d5c6d9c70.patch"
 
   local tls_patch
-  for tls_patch in 0001-Turn-on-strict-host-verification-by-default.patch 0002-Fix-error-message-and-disable-server-validation-fo.patch 0003-More-TLS-improvements.patch 0004-Improve-TLS-handling.patch 0005-Add-notification-for-verify-failure.patch 0006-tweak-tls-notification-posting.patch 0007-Security-improvement-without-test-hunk.patch; do
+  for tls_patch in 0001-Turn-on-strict-host-verification-by-default.patch 0002-Fix-error-message-and-disable-server-validation-fo.patch 0003-More-TLS-improvements.patch 0004-Improve-TLS-handling.patch 0005-Add-notification-for-verify-failure.patch 0006-tweak-tls-notification-posting.patch 0007-Security-improvement-without-test-hunk.patch 0008-Fix-for-TLS-host-verification-when-we-have-a-host-ad.patch; do
     patch -p1 -i "${srcdir}/${tls_patch}"
   done
 

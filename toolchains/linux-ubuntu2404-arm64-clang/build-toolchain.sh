@@ -42,7 +42,8 @@ for libs_base_patch in \
   "0004-Improve-TLS-handling.patch:e0e5241a6e137fd54e370b3a698627ab42d52df829b9d989c4ef41246076a92e" \
   "0005-Add-notification-for-verify-failure.patch:67790903ed79fc544eee1319d346c5b942cb7e3b0721fe97cbf2f4bfd8fca9dd" \
   "0006-tweak-tls-notification-posting.patch:4904926e1a5b24a83ab647aa1fe43e8c82e7107dde04401e1ba0e6a160d3167b" \
-  "0007-Security-improvement.patch:e2aaf06465b1622fb1312faa4e49aed37823061cd140d4083f9084f68aa9c5e8"; do
+  "0007-Security-improvement.patch:e2aaf06465b1622fb1312faa4e49aed37823061cd140d4083f9084f68aa9c5e8" \
+  "0008-Fix-for-TLS-host-verification-when-we-have-a-host-ad.patch:93ccc028d223452db6bd99f4066a3644e7364270b13039c35308491c7de1c9dc"; do
   libs_base_patch_name=${libs_base_patch%%:*}
   libs_base_patch_expected=${libs_base_patch##*:}
   libs_base_patch_file="$RECIPE_DIR/../patches/libs-base/$libs_base_patch_name"

@@ -127,5 +127,13 @@ for host in expired wrong.host self-signed untrusted-root; do
   if [ "$rc" -ne 1 ]; then echo "expected a refusal (exit 1) for $host, got $rc" >&2; exit 1; fi
 done
 GS_TLS_VERIFY_S=NO ./tls.exe https://self-signed.badssl.com
+# Address URLs: a certificate naming the address is accepted; one that doesn't is refused.
+./tls.exe https://1.1.1.1
+gh_addr=$(python -c 'import socket; print(socket.gethostbyname("github.com"))')
+set +e
+./tls.exe "https://$gh_addr"
+rc=$?
+set -e
+if [ "$rc" -ne 1 ]; then echo "expected a refusal (exit 1) for https://$gh_addr, got $rc" >&2; exit 1; fi
 if [ -n "${GNUSTEP_SMOKE_TLS_EXE:-}" ]; then cp tls.exe "$(cygpath -u "$GNUSTEP_SMOKE_TLS_EXE")"; fi
-echo "ok: TLS host verification (github.com loads; expired, wrong-host, self-signed, untrusted-root refused; GS_TLS_VERIFY_S=NO overrides)"
+echo "ok: TLS host verification (github.com loads; expired, wrong-host, self-signed, untrusted-root refused; GS_TLS_VERIFY_S=NO overrides; address URLs checked against the certificate)"

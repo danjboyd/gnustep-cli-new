@@ -154,6 +154,19 @@
           "applies_to_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
           "rationale": "Upstream's NSURL follow-up from the same series.",
           "upstream_status": "backported from upstream libs-base master, ChangeLog hunks removed"
+        },
+        {
+          "id": "tls-address-host-verification",
+          "path": "toolchains/patches/libs-base/0008-Fix-for-TLS-host-verification-when-we-have-a-host-ad.patch",
+          "sha256": "93ccc028d223452db6bd99f4066a3644e7364270b13039c35308491c7de1c9dc",
+          "strip": 1,
+          "source": {
+            "repository": "https://github.com/gnustep/libs-base.git",
+            "commit": "d80ae7406024507016b0f51b0c1ae0f8501cdf85"
+          },
+          "applies_to_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac",
+          "rationale": "Host verification for URLs that name an address rather than a host name.",
+          "upstream_status": "backported from upstream libs-base master, ChangeLog hunks removed"
         }
       ]
     },
