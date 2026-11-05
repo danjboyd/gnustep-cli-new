@@ -1,0 +1,50 @@
+name: Publish MSYS2 Inputs (b)
+
+# One-shot: publishes the patched MSYS2 gnustep-base package built by run
+# 42104042087 (branch libs-base-tls-backport, 88e5a81) as an immutable pre-release
+# asset, so the Windows toolchain lock can pin it by URL and sha256 (Dan, 2026-11-05).
+# 1.31.1-10.2 adds upstream libs-base 7c81d0c83's clang 23 workaround flag; the
+# 10.1 package on msys2-inputs-2026-11-05 crashes in NSLog and is not used.
+# It refuses if the tag already exists or the package's digest differs.
+
+on:
+  push:
+    branches: [publish-msys2-inputs-2026-11-05b]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  TAG: msys2-inputs-2026-11-05b
+  SOURCE_RUN: "42104042087"
+  SOURCE_SHA: 88e5a817b419e34697ed562e0a75c303c8536bcf
+  PACKAGE: mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.2-any.pkg.tar.zst
+  PACKAGE_SHA256: 75be2707d7522926f9c6af7f799ceceb849b0bd1491ae054f2cbdf645d0b7317
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the package as a pre-release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$TAG already exists; nothing is replaced." >&2
+            exit 1
+          fi
+          d="$RUNNER_TEMP/in"
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name windows-gnustep-base-package --dir "$d"
+          echo "$PACKAGE_SHA256  $d/$PACKAGE" | sha256sum -c -
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          Pinned build input for the Windows MSYS2 clang64 toolchain, not a gnustep-cli release.
+
+          \`$PACKAGE\` (sha256 \`$PACKAGE_SHA256\`): MSYS2's gnustep-base 1.31.1-10 recipe rebuilt with seven upstream libs-base TLS commits and the clang 23 workaround flag from libs-base 7c81d0c83, from \`toolchains/windows-amd64-msys2-clang64/gnustep-base-package\` at $SOURCE_SHA, by workflow run $SOURCE_RUN.
+          NOTES
+          gh release create "$TAG" "$d/$PACKAGE" --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" --prerelease --latest=false \
+            --title "MSYS2 inputs 2026-11-05b" --notes-file "$RUNNER_TEMP/notes.md"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease,assets --jq '.isPrerelease, (.assets[]|.name+" "+.digest)'
