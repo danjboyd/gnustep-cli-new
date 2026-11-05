@@ -83,15 +83,27 @@ int main(int argc, char **argv)
                                    timeoutInterval: 30];
     NSURLResponse *response = nil;
     NSError *error = nil;
-    NSData *d = [NSURLConnection sendSynchronousRequest: r returningResponse: &response error: &error];
-    printf("%s %s\n", argv[1], (d != nil && error == nil) ? "fetched" : "refused");
+    NSData *d = nil;
+    @try {
+      d = [NSURLConnection sendSynchronousRequest: r returningResponse: &response error: &error];
+    }
+    @catch (NSException *e) {
+      printf("%s exception %s: %s\n", argv[1], [[e name] UTF8String], [[e reason] UTF8String]);
+      return 3;
+    }
+    printf("%s %s%s%s\n", argv[1], (d != nil && error == nil) ? "fetched" : "refused",
+           error ? " - " : "", error ? [[error localizedDescription] UTF8String] : "");
     return (d != nil && error == nil) ? 0 : 1;
   }
 }
 EOF
 # shellcheck disable=SC2086
 clang $objc_flags tls.m -o tls.exe $base_libs
-./tls.exe https://github.com
+if ! ./tls.exe https://github.com; then
+  echo "TLS failed for https://github.com; rerunning with GS_TLS_DEBUG=1" >&2
+  GS_TLS_DEBUG=1 ./tls.exe https://github.com 2>&1 | tail -40 >&2 || true
+  exit 1
+fi
 for host in expired wrong.host self-signed untrusted-root; do
   if ./tls.exe "https://$host.badssl.com" 2>/dev/null; then echo "TLS accepted a bad certificate: $host" >&2; exit 1; fi
 done
