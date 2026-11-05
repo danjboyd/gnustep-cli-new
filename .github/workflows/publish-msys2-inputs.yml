@@ -1,0 +1,48 @@
+name: Publish MSYS2 Inputs
+
+# One-shot: publishes the patched MSYS2 gnustep-base package built by run
+# 42087192927 (branch libs-base-tls-backport, 919f46b) as an immutable pre-release
+# asset, so the Windows toolchain lock can pin it by URL and sha256 (Dan, 2026-11-05).
+# It refuses if the tag already exists or the package's digest differs.
+
+on:
+  push:
+    branches: [publish-msys2-inputs-2026-11-05]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  TAG: msys2-inputs-2026-11-05
+  SOURCE_RUN: "42087192927"
+  SOURCE_SHA: 919f46ba2cbc92f49c74d7bffdf5865e21e89031
+  PACKAGE: mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.1-any.pkg.tar.zst
+  PACKAGE_SHA256: 51dd620660a5dfa7d73831fd02ec2ae7360fa59aa7c69d7b16d0896066d4495d
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the package as a pre-release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$TAG already exists; nothing is replaced." >&2
+            exit 1
+          fi
+          d="$RUNNER_TEMP/in"
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name windows-gnustep-base-package --dir "$d"
+          echo "$PACKAGE_SHA256  $d/$PACKAGE" | sha256sum -c -
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          Pinned build input for the Windows MSYS2 clang64 toolchain, not a gnustep-cli release.
+
+          \`$PACKAGE\` (sha256 \`$PACKAGE_SHA256\`): MSYS2's gnustep-base 1.31.1-10 recipe rebuilt with seven upstream libs-base TLS commits, from \`toolchains/windows-amd64-msys2-clang64/gnustep-base-package\` at $SOURCE_SHA, by workflow run $SOURCE_RUN.
+          NOTES
+          gh release create "$TAG" "$d/$PACKAGE" --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" --prerelease --latest=false \
+            --title "MSYS2 inputs 2026-11-05" --notes-file "$RUNNER_TEMP/notes.md"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease,assets --jq '.isPrerelease, (.assets[]|.name+" "+.digest)'
