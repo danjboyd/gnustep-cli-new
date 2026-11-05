@@ -1,0 +1,13 @@
+elevated: True
+cli: 0.1.4 sha256 531ec40278be711077b60251436d63f876f5c8f0afa6229b290d1bb1a7d22d20
+arlen zip sha256 fd39fb7d41f2ea330e8fa0c7083143a3c1eaa6783bedfcc8fab8558fe7e8dfb1
+tampered list exit=1 refused=True
+install exit=0
+install ok=True selected=arlen-windows-amd64-msys2-clang64-headless version=0.3.2 summary=Package installed.
+arlen.cmd exists=True symlink=False
+arlen.cmd --help exit 2
+boomhauer.cmd exists=True symlink=False
+boomhauer.cmd --help exit 0
+remove exit=0
+leftovers: pkg=False arlen.cmd=False boomhauer.cmd=False
+done
