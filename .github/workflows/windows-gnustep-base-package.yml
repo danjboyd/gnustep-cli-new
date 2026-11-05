@@ -40,6 +40,10 @@ jobs:
           $unix = (& $bash -lc "cygpath -u '$package'").Trim()
           & $bash -lc "pacman -Q > /tmp/before.txt; pacman -Sy --noconfirm && pacman -S --noconfirm --needed base-devel patchutils rsync mingw-w64-clang-x86_64-autotools; pacman -Q > /tmp/after.txt; echo '--- packages changed by the build tools:'; comm -3 /tmp/before.txt /tmp/after.txt | grep -E 'clang-x86_64' || true"
           if ($LASTEXITCODE -ne 0) { throw "tools failed: $LASTEXITCODE" }
+          # The toolchain build patches its own copies of libdispatch's generic_win_base.h
+          # (assemble-toolchain.ps1); this build root needs the same fix, or Foundation.h
+          # does not compile.
+          & $bash -lc "sed -i -e 's|^typedef int mode_t;|/* mode_t is provided by MinGW sys/types.h in this managed toolchain. */|' -e 's|^typedef void pthread_attr_t;|#if !defined(__MINGW32__) /* winpthreads defines pthread_attr_t */\ntypedef void pthread_attr_t;\n#endif|' /clang64/include/os/generic_win_base.h && grep -n 'mode_t\|pthread_attr_t' /clang64/include/os/generic_win_base.h"
           & $bash -lc "cd '$unix' && MINGW_ARCH=clang64 makepkg-mingw --noconfirm --skippgpcheck --nodeps -f"
           if ($LASTEXITCODE -ne 0) { throw "makepkg failed: $LASTEXITCODE" }
           $pkg = Get-ChildItem $package -Filter 'mingw-w64-clang-x86_64-gnustep-base-*.pkg.tar.zst' | Select-Object -First 1
