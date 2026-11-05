@@ -1,0 +1,95 @@
+# Based on msys2/MINGW-packages mingw-w64-gnustep-base at a083e03b7393 (1.31.1-10,
+# maintainer Frederik Carlier). Changed: pkgrel, the seven upstream TLS commits below,
+# and the BLOCK_SCOPE header fix assemble-toolchain.ps1 otherwise applies after install.
+
+_realname=gnustep-base
+pkgbase=mingw-w64-${_realname}
+pkgname=("${MINGW_PACKAGE_PREFIX}-${_realname}")
+pkgver=1.31.1
+pkgrel=10.1
+pkgdesc="GNUstep Base library (mingw-w64)"
+arch=('any')
+mingw_arch=('mingw64' 'ucrt64' 'clang64' 'clangarm64')
+url='https://gnustep.github.org/'
+msys2_repository_url='https://github.com/gnustep/libs-base'
+msys2_references=(
+  "cpe: cpe:/a:gnustep:base"
+)
+license=('spdx:LGPL-2.1-or-later')
+depends=("${MINGW_PACKAGE_PREFIX}-cc-libs"
+         "${MINGW_PACKAGE_PREFIX}-gnutls"
+         "${MINGW_PACKAGE_PREFIX}-icu"
+         "${MINGW_PACKAGE_PREFIX}-libffi"
+         "${MINGW_PACKAGE_PREFIX}-libiconv"
+         "${MINGW_PACKAGE_PREFIX}-libobjc2"
+         "${MINGW_PACKAGE_PREFIX}-libxml2"
+         "${MINGW_PACKAGE_PREFIX}-libxslt"
+         "${MINGW_PACKAGE_PREFIX}-zlib"
+)
+makedepends=("${MINGW_PACKAGE_PREFIX}-autotools"
+             "${MINGW_PACKAGE_PREFIX}-clang"
+             "${MINGW_PACKAGE_PREFIX}-lld"
+             "${MINGW_PACKAGE_PREFIX}-gnustep-make"
+             "${MINGW_PACKAGE_PREFIX}-curl"
+             patchutils
+             rsync)
+source=("${msys2_repository_url}/releases/download/base-${pkgver//./_}/${_realname}-${pkgver}.tar.gz"
+        "https://github.com/gnustep/libs-base/commit/bace6f54fd5fb882cb3adc79c87cc82d5c6d9c70.patch"
+        "0001-Turn-on-strict-host-verification-by-default.patch"
+        "0002-Fix-error-message-and-disable-server-validation-fo.patch"
+        "0003-More-TLS-improvements.patch"
+        "0004-Improve-TLS-handling.patch"
+        "0005-Add-notification-for-verify-failure.patch"
+        "0006-tweak-tls-notification-posting.patch"
+        "0007-Security-improvement-without-test-hunk.patch")
+sha256sums=('e7546f1c978a7c75b676953a360194a61e921cb45a4804497b4f346a460545cd'
+            '2f285c1b7f360537f4f73c063f7836febee2750a78494881ad9182d4d5ee6891'
+            'f1a8a5a5ce5f288c5325e5ab0c636e76054002eec2ce76f00b3862d787c73c0f'
+            '81f9478edf50d8ecbbac6566bdeb2bd2968414663e587c4ca4de2fdcfc3fd659'
+            'fa8861096cfb476130e0af8d773be2953c20df92454bd8d2be9b9167e217dc82'
+            'e0e5241a6e137fd54e370b3a698627ab42d52df829b9d989c4ef41246076a92e'
+            '67790903ed79fc544eee1319d346c5b942cb7e3b0721fe97cbf2f4bfd8fca9dd'
+            '4904926e1a5b24a83ab647aa1fe43e8c82e7107dde04401e1ba0e6a160d3167b'
+            '035a5b6a9008d5be1acf762a53c026771fdce589f90af933deeaf17a2945873e')
+
+prepare() {
+  cd "${_realname}-${pkgver}"
+
+  patch -p1 -i "${srcdir}/bace6f54fd5fb882cb3adc79c87cc82d5c6d9c70.patch"
+
+  local tls_patch
+  for tls_patch in 0001-Turn-on-strict-host-verification-by-default.patch 0002-Fix-error-message-and-disable-server-validation-fo.patch 0003-More-TLS-improvements.patch 0004-Improve-TLS-handling.patch 0005-Add-notification-for-verify-failure.patch 0006-tweak-tls-notification-posting.patch 0007-Security-improvement-without-test-hunk.patch; do
+    patch -p1 -i "${srcdir}/${tls_patch}"
+  done
+
+  # clang 23 rejects __block on an instance variable (gnustep/libs-base#809).
+  sed -i 's/BLOCK_SCOPE GSScheduledBlock _block;/GSScheduledBlock _block;/' Headers/Foundation/NSBackgroundActivityScheduler.h
+}
+
+build() {
+  rsync --recursive --times --links "${srcdir}/${_realname}-${pkgver}"/* "${srcdir}/build-${MSYSTEM}"
+  cd "${srcdir}/build-${MSYSTEM}"
+
+  export OBJCFLAGS="-Wno-incompatible-pointer-types"
+
+  CC="$MINGW_PREFIX/bin/clang" \
+  CXX="$MINGW_PREFIX/bin/clang++" \
+  ./configure \
+    --prefix="${MINGW_PREFIX}"
+
+  CC="$MINGW_PREFIX/bin/clang" \
+  CXX="$MINGW_PREFIX/bin/clang++" \
+  make
+}
+
+check() {
+  cd "${srcdir}/build-${MSYSTEM}"
+}
+
+package() {
+  cd "${srcdir}/build-${MSYSTEM}"
+
+  make install DESTDIR="${pkgdir}"
+
+  install -Dm644 "${srcdir}/${_realname}-${pkgver}/COPYING" "${pkgdir}${MINGW_PREFIX}/share/licenses/${_realname}/COPYING"
+}

@@ -1,0 +1,58 @@
+name: Windows gnustep-base Package
+
+# Builds the patched MSYS2 gnustep-base package inside the locked toolchain root, so it
+# links against the locked libraries. The result becomes a locked toolchain input.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [libs-base-tls-backport]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Assemble the locked MSYS2 root
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          "MSYS_ROOT=$env:RUNNER_TEMP\\msys-root" | Out-File -FilePath $env:GITHUB_ENV -Append
+          & powershell -NoProfile -ExecutionPolicy Bypass -File toolchains\windows-amd64-msys2-clang64\assemble-toolchain.ps1 -Prefix "$env:RUNNER_TEMP\toolchain" -CacheDir "$env:RUNNER_TEMP\cache" -MsysRoot "$env:RUNNER_TEMP\msys-root"
+          if ($LASTEXITCODE -ne 0) { throw "assemble failed: $LASTEXITCODE" }
+      - name: Build the package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $package = "$env:GITHUB_WORKSPACE\toolchains\windows-amd64-msys2-clang64\gnustep-base-package"
+          Copy-Item "$env:GITHUB_WORKSPACE\toolchains\patches\libs-base\000[1-6]*.patch" $package
+          $bash = "$env:RUNNER_TEMP\msys-root\usr\bin\bash.exe"
+          $env:MSYSTEM = 'CLANG64'
+          $env:CHERE_INVOKING = '1'
+          Push-Location $package
+          $unix = (& $bash -lc "cygpath -u '$package'").Trim()
+          & $bash -lc "pacman -Q > /tmp/before.txt; pacman -Sy --noconfirm && pacman -S --noconfirm --needed base-devel patchutils rsync mingw-w64-clang-x86_64-autotools; pacman -Q > /tmp/after.txt; echo '--- packages changed by the build tools:'; comm -3 /tmp/before.txt /tmp/after.txt | grep -E 'clang-x86_64' || true"
+          if ($LASTEXITCODE -ne 0) { throw "tools failed: $LASTEXITCODE" }
+          & $bash -lc "cd '$unix' && MINGW_ARCH=clang64 makepkg-mingw --noconfirm --skippgpcheck --nodeps -f"
+          if ($LASTEXITCODE -ne 0) { throw "makepkg failed: $LASTEXITCODE" }
+          $pkg = Get-ChildItem $package -Filter 'mingw-w64-clang-x86_64-gnustep-base-*.pkg.tar.zst' | Select-Object -First 1
+          if (-not $pkg) { throw 'no package produced' }
+          Get-FileHash -Algorithm SHA256 $pkg.FullName | Format-List
+          & $bash -lc "mkdir -p /tmp/p && tar -xf '$unix/$($pkg.Name)' -C /tmp/p && find /tmp/p -name '*.dll' -exec objdump -p {} \\; | grep 'DLL Name' | sort -u; strings /tmp/p/clang64/bin/*base*.dll | grep -c GSTLSVerifyFailedNotification"
+          exit 0
+      - name: Upload the package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-gnustep-base-package
+          path: |
+            toolchains/windows-amd64-msys2-clang64/gnustep-base-package/*.pkg.tar.zst
+            toolchains/windows-amd64-msys2-clang64/gnustep-base-package/*.log
