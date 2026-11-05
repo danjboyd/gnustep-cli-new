@@ -81,4 +81,26 @@ run ./fetch.exe https://expired.badssl.com
 run env GS_TLS_VERIFY_S=NO ./fetch.exe https://self-signed.badssl.com
 kill "$pid" 2>/dev/null
 head -10 gdnc-nofork.log
+if [ -n "${DIAG_GDB:-}" ] && command -v gdb >/dev/null; then
+  echo "== D. backtraces under gdb"
+  cat > gdb.cmds <<'GDB'
+set pagination off
+set confirm off
+handle SIGSEGV stop print
+run
+bt 30
+info sharedlibrary gnustep
+quit
+GDB
+  timeout 120 gdb -q -batch -x gdb.cmds --args gdnc --auto 2>&1 | tail -45
+  gdnc --no-fork > /dev/null 2>&1 &
+  pid=$!
+  sleep 5
+  timeout 120 gdb -q -batch -x gdb.cmds --args ./fetch.exe https://github.com 2>&1 | tail -45
+  timeout 60 ./fetch.exe https://expired.badssl.com; echo "   expired exit $?"
+  kill "$pid" 2>/dev/null
+  echo "-- gdnc --no-fork under gdb, then a client request"
+  (sleep 8; timeout 60 ./fetch.exe http://example.com; timeout 60 ./fetch.exe https://github.com) &
+  timeout 120 gdb -q -batch -x gdb.cmds --args gdnc --no-fork 2>&1 | tail -45
+fi
 exit 0
