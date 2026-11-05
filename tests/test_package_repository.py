@@ -82,6 +82,9 @@ class PackageRepositoryTests(unittest.TestCase):
         stamp = "2026-11-04T20:00:00Z"
         self.assertEqual(generate_package_index(ROOT / "packages", generated_at=stamp)["generated_at"], stamp)
 
+    def test_index_carries_no_expiry_placeholder(self):
+        self.assertNotIn("expires_at", generate_package_index(ROOT / "packages"))
+
     def test_cli_regenerates_byte_identically_with_the_signed_indexs_timestamp(self):
         # release.yml compares the signed index with one regenerated using its stamp.
         script = ROOT / "scripts" / "internal" / "package_repo.py"

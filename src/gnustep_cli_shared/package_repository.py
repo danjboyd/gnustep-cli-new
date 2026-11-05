@@ -80,7 +80,6 @@ def generate_package_index(
         "channel": channel,
         "generated_at": generated_at,
         "metadata_version": 1,
-        "expires_at": "TBD",
         "trust": {
             "root_version": 1,
             "signature_policy": "single-role-v1",
