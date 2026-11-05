@@ -25,7 +25,6 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          "MSYS_ROOT=$env:RUNNER_TEMP\\msys-root" | Out-File -FilePath $env:GITHUB_ENV -Append
           & powershell -NoProfile -ExecutionPolicy Bypass -File toolchains\windows-amd64-msys2-clang64\assemble-toolchain.ps1 -Prefix "$env:RUNNER_TEMP\toolchain" -CacheDir "$env:RUNNER_TEMP\cache" -MsysRoot "$env:RUNNER_TEMP\msys-root"
           if ($LASTEXITCODE -ne 0) { throw "assemble failed: $LASTEXITCODE" }
       - name: Build the package
@@ -46,7 +45,7 @@ jobs:
           $pkg = Get-ChildItem $package -Filter 'mingw-w64-clang-x86_64-gnustep-base-*.pkg.tar.zst' | Select-Object -First 1
           if (-not $pkg) { throw 'no package produced' }
           Get-FileHash -Algorithm SHA256 $pkg.FullName | Format-List
-          & $bash -lc "mkdir -p /tmp/p && tar -xf '$unix/$($pkg.Name)' -C /tmp/p && find /tmp/p -name '*.dll' -exec objdump -p {} \\; | grep 'DLL Name' | sort -u; strings /tmp/p/clang64/bin/*base*.dll | grep -c GSTLSVerifyFailedNotification"
+          & $bash -lc "mkdir -p /tmp/p && tar -xf '$unix/$($pkg.Name)' -C /tmp/p && find /tmp/p -name '*.dll' -exec objdump -p {} + | grep 'DLL Name' | sort -u; strings /tmp/p/clang64/bin/*base*.dll | grep -c GSTLSVerifyFailedNotification"
           exit 0
       - name: Upload the package
         if: always()
