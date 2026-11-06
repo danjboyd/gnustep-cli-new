@@ -212,7 +212,7 @@ class CustomToolchainBuildTests(unittest.TestCase):
         self.assertNotIn("GNUSTEP_MAKEFILES", env)
         self.assertNotIn("GNUstep", env["PATH"].replace("/opt/custom", ""))
         self.assertEqual(env["LD_LIBRARY_PATH"], "/opt/custom/lib:/opt/custom/lib64")
-        self.assertEqual(env["CFLAGS"], "-I/opt/custom/include")
+        self.assertEqual(env["CFLAGS"], "-g -O2 -I/opt/custom/include")
         self.assertTrue(env["PATH"].startswith("/opt/custom/System/Tools:/opt/custom/bin:"))
 
     def test_configure_args_are_appended_after_base_flags(self):
