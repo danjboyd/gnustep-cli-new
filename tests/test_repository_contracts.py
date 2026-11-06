@@ -344,6 +344,35 @@ class RepositoryContractsTests(unittest.TestCase):
         for check in ("gnustep-config --objc-flags", "#include <pthread.h>", "import pyexpat", "AsynchDNS"):
             self.assertIn(check, smoke)
 
+    def test_windows_gnustep_base_also_trusts_a_current_bundle(self):
+        # Windows adds many roots to its store only on demand, so gnustep-base also loads
+        # its bundled authorities there; the package replaces the source tree's 2016 file
+        # with the locked Mozilla set, and the smoke proves both sources work, offline.
+        import hashlib
+        import re
+        package = ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "gnustep-base-package"
+        pkgbuild = (package / "PKGBUILD").read_text()
+        patch_name = "0009-On-Windows-also-trust-the-bundled-authorities.patch"
+        patch = (package / patch_name).read_bytes()
+        self.assertIn(f"'{hashlib.sha256(patch).hexdigest()}'", pkgbuild)
+        self.assertIn(f"0008-Fix-for-TLS-host-verification-when-we-have-a-host-ad.patch {patch_name}; do", pkgbuild)
+        added = [line[1:] for line in patch.decode().splitlines() if line.startswith("+") and not line.startswith("+++")]
+        self.assertEqual(added[0], "#if defined(_WIN32)")
+        self.assertEqual(added[-1], "#endif")
+        self.assertIn('"${MINGW_PACKAGE_PREFIX}-ca-certificates"', pkgbuild)
+        self.assertIn('cp "${bundle}" Resources/GSTLS/ca-certificates.crt', pkgbuild)
+        self.assertIn("ca-certificates.source", pkgbuild)
+        self.assertRegex(pkgbuild, re.compile(r"^pkgrel=10\.4$", re.M))
+        smoke = (ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "smoke-toolchain.sh").read_text()
+        for check in ("expect_tls 1 https://127.0.0.1:18443/", "expect_tls 0 https://127.0.0.1:18443/",
+                      "certutil -addstore Root", "expect_tls 0 https://127.0.0.1:18444/",
+                      "could not restore $bundle", "if age > 365:"):
+            self.assertIn(check, smoke)
+        # The bundle must be restored before anything later in the smoke can fail.
+        self.assertLess(smoke.index('cp "$bundle_backup" "$bundle"\nbundle_backup='), smoke.index("GNUSTEP_SMOKE_STORE_ROOT:-"))
+        workflow = (ROOT / ".github" / "workflows" / "windows-current-source-artifacts.yml").read_text()
+        self.assertIn("$env:GNUSTEP_SMOKE_STORE_ROOT = '1'", workflow)
+
     def test_openbsd_package_artifact_script_builds_packages_and_gorm_evidence(self):
         script = ROOT / "scripts" / "dev" / "openbsd-package-artifacts.sh"
         self.assertTrue(script.exists())

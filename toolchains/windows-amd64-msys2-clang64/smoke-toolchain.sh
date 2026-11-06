@@ -12,6 +12,11 @@
 # - strict TLS host verification through NSURLConnection, with gdnc started by the
 #   library itself: a trusted site loads, bad certificates are refused, and
 #   GS_TLS_VERIFY_S=NO still overrides it
+# - trust on a store missing the root, offline: Windows adds many roots to its store
+#   only on demand, so gnustep-base also loads its bundled authorities. A local server
+#   whose root is only in the bundle must load; with GNUSTEP_SMOKE_STORE_ROOT=1 (CI, as
+#   an administrator) one whose root is only in the machine store must load too
+# - the bundled authorities' age: refused when more than 365 days old
 set -euo pipefail
 
 root=${1:?usage: smoke-toolchain.sh <toolchain-root>}
@@ -22,7 +27,15 @@ export GNUSTEP_MAKEFILES="$root/clang64/share/GNUstep/Makefiles"
 work=$(mktemp -d)
 # The TLS checks make gnustep-base start gdnc, which keeps the work directory busy on
 # Windows; stop it before cleaning up, and don't fail the smoke over the leftover.
-trap 'cd /; taskkill //F //IM gdnc.exe >/dev/null 2>&1; rm -rf "$work" 2>/dev/null || true' EXIT
+cleanup() {
+  cd /
+  if [ -n "${server_pids:-}" ]; then kill $server_pids 2>/dev/null || true; fi
+  if [ -n "${bundle_backup:-}" ] && [ -f "$bundle_backup" ]; then cp "$bundle_backup" "$bundle"; fi
+  if [ -n "${store_root_added:-}" ]; then certutil -delstore Root "gnustep-cli smoke store root" >/dev/null 2>&1 || true; fi
+  taskkill //F //IM gdnc.exe >/dev/null 2>&1
+  rm -rf "$work" 2>/dev/null || true
+}
+trap cleanup EXIT
 cd "$work"
 
 objc_flags=$(gnustep-config --objc-flags)
@@ -137,3 +150,87 @@ set -e
 if [ "$rc" -ne 1 ]; then echo "expected a refusal (exit 1) for https://$gh_addr, got $rc" >&2; exit 1; fi
 if [ -n "${GNUSTEP_SMOKE_TLS_EXE:-}" ]; then cp tls.exe "$(cygpath -u "$GNUSTEP_SMOKE_TLS_EXE")"; fi
 echo "ok: TLS host verification (github.com loads; expired, wrong-host, self-signed, untrusted-root refused; GS_TLS_VERIFY_S=NO overrides; address URLs checked against the certificate)"
+
+# Trust on a store missing the root, offline. Each server's root is made here, so it is
+# in no Windows store unless this test adds it.
+bundle=$(find "$root/clang64/lib/GNUstep/Libraries/gnustep-base" -path '*/GSTLS/ca-certificates.crt' | head -n 1)
+if [ -z "$bundle" ]; then echo "gnustep-base has no GSTLS/ca-certificates.crt" >&2; exit 1; fi
+make_server_cert() { # name, root common name
+  MSYS2_ARG_CONV_EXCL='*' openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+    -keyout "$1-root.key" -out "$1-root.crt" -days 2 -subj "/CN=$2" \
+    -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign 2>/dev/null
+  MSYS2_ARG_CONV_EXCL='*' openssl req -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+    -keyout "$1.key" -out "$1.csr" -subj "/CN=127.0.0.1" 2>/dev/null
+  printf 'subjectAltName=IP:127.0.0.1\nbasicConstraints=CA:FALSE\nextendedKeyUsage=serverAuth\n' > "$1.ext"
+  openssl x509 -req -in "$1.csr" -CA "$1-root.crt" -CAkey "$1-root.key" -CAcreateserial \
+    -out "$1.crt" -days 2 -extfile "$1.ext" 2>/dev/null
+}
+cat > serve.py <<'PY'
+import http.server, ssl, sys
+httpd = http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), http.server.SimpleHTTPRequestHandler)
+ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+ctx.load_cert_chain(sys.argv[2], sys.argv[3])
+httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
+httpd.serve_forever()
+PY
+start_server() { # port, name
+  python serve.py "$1" "$2.crt" "$2.key" >/dev/null 2>&1 &
+  server_pids="${server_pids:-} $!"
+  python -c 'import socket, sys, time
+for _ in range(100):
+    try:
+        socket.create_connection(("127.0.0.1", int(sys.argv[1])), 1).close(); sys.exit(0)
+    except OSError:
+        time.sleep(0.1)
+sys.exit("server on port %s did not start" % sys.argv[1])' "$1"
+}
+expect_tls() { # expected exit, url
+  set +e
+  ./tls.exe "$2"
+  rc=$?
+  set -e
+  if [ "$rc" -ne "$1" ]; then echo "expected exit $1 for $2, got $rc" >&2; exit 1; fi
+}
+make_server_cert bundled "gnustep-cli smoke bundle root"
+start_server 18443 bundled
+expect_tls 1 https://127.0.0.1:18443/
+# Add the root to the bundled authorities for one request, then restore them exactly:
+# this toolchain is packaged after the smoke.
+bundle_sha=$(sha256sum "$bundle" | cut -d' ' -f1)
+bundle_backup="$work/ca-certificates.crt.orig"
+cp "$bundle" "$bundle_backup"
+cat bundled-root.crt >> "$bundle"
+expect_tls 0 https://127.0.0.1:18443/
+cp "$bundle_backup" "$bundle"
+bundle_backup=
+if [ "$(sha256sum "$bundle" | cut -d' ' -f1)" != "$bundle_sha" ]; then
+  echo "could not restore $bundle" >&2; exit 1
+fi
+if [ "${GNUSTEP_SMOKE_STORE_ROOT:-}" = 1 ]; then
+  # A root only in the machine store, as an enterprise root would be, must still load.
+  make_server_cert store "gnustep-cli smoke store root"
+  start_server 18444 store
+  expect_tls 1 https://127.0.0.1:18444/
+  certutil -addstore Root "$(cygpath -w "$work/store-root.crt")" >/dev/null
+  store_root_added=1
+  expect_tls 0 https://127.0.0.1:18444/
+  certutil -delstore Root "gnustep-cli smoke store root" >/dev/null
+  store_root_added=
+  store_note="; a root only in the machine store loads"
+fi
+echo "ok: trust on a store missing the root (a root only in the bundled authorities loads${store_note:-})"
+
+# The bundled authorities' age, from the ca-certificates package they were taken from.
+source_file="$(dirname "$bundle")/ca-certificates.source"
+if [ ! -f "$source_file" ]; then echo "no $source_file: the bundled authorities' origin is unknown" >&2; exit 1; fi
+python - "$source_file" <<'PY'
+import datetime, re, sys
+text = open(sys.argv[1]).read().strip()
+m = re.search(r"ca-certificates (\d{8})", text)
+if not m:
+    sys.exit(f"cannot read a date from {text!r}")
+age = (datetime.date.today() - datetime.datetime.strptime(m.group(1), "%Y%m%d").date()).days
+if age > 365:
+    sys.exit(f"the bundled authorities are {age} days old ({text}); re-lock ca-certificates and rebuild gnustep-base")
+print(f"ok: bundled authorities from {text}, {age} days old")
+PY

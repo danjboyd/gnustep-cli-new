@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   # Builds from the branch that changes the recipe; dispatch needs the file on master.
   push:
-    branches: [libs-base-tls-backport]
+    branches: [windows-tls-ca-bundle]
     paths:
       - toolchains/windows-amd64-msys2-clang64/gnustep-base-package/**
       - toolchains/patches/libs-base/**
