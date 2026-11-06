@@ -83,6 +83,8 @@ jobs:
           $bash = Join-Path $env:TOOLCHAIN_ROOT 'usr\bin\bash.exe'
           $env:CHERE_INVOKING = '1'
           $env:GNUSTEP_SMOKE_TLS_EXE = (Join-Path $env:RUNNER_TEMP 'tls.exe')
+          # The runner is an administrator: also prove a root only in the machine store loads.
+          $env:GNUSTEP_SMOKE_STORE_ROOT = '1'
           & $bash -lc "bash `"`$(cygpath -u '$env:GITHUB_WORKSPACE')/toolchains/windows-amd64-msys2-clang64/smoke-toolchain.sh`" `"`$(cygpath -u '$env:TOOLCHAIN_ROOT')`""
           if ($LASTEXITCODE -ne 0) { throw 'Toolchain smoke checks failed.' }
 
