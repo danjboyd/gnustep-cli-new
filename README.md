@@ -118,16 +118,18 @@ them:
 - **broken**: GNUstep is present but doesn't compile, link, or run.
   `doctor --full` runs real compile/link/run probes to show why.
 
-## Supported platforms (v0.1.0)
+## Supported platforms
 
 | Platform | Status |
 | --- | --- |
 | Debian 13 `amd64`, `arm64` | Managed toolchain via the `sh` bootstrap |
 | Ubuntu 26.04 LTS `amd64` | Managed toolchain via the `sh` bootstrap |
+| Ubuntu 24.04 LTS `amd64` | Managed toolchain via the `sh` bootstrap (since v0.1.2) |
+| Ubuntu 24.04 LTS `arm64` | Managed toolchain via the `sh` bootstrap (from v0.1.6) |
 | OpenBSD `amd64` | Uses OpenBSD's native GNUstep packages |
 | Windows `amd64` (MSYS2 `clang64`) | CLI and toolchain artifacts are published; the PowerShell installer is in preview |
 | Fedora, Arch | `doctor` detection; native GCC toolchains are interoperability-only |
-| Debian 12, Ubuntu 24.04, macOS | Not supported in v0.1.0 |
+| Debian 12, macOS | Not supported |
 
 The managed toolchain is built from pinned upstream sources: tools-make,
 libobjc2, libdispatch, libs-base, libs-corebase, libs-gui, and libs-back. Pins,
