@@ -131,9 +131,24 @@ root. Evidence:
   for this target. Evidence:
   `docs/validation/linux-ubuntu2604-amd64-stable-publish-20261013/`. No
   official package has a 26.04 artifact yet. arm64 is not planned for now.
+- `ubuntu2404-arm64-managed-clang`
+  status: `container_qualified_unreleased`
+  notes: target `linux-ubuntu2404-arm64-clang`, added on November 3, 2026
+  (927b73b): built from source in `ubuntu:24.04` on an arm64 GitHub runner,
+  with the bootstrap selecting it for `arm64:ubuntu-24.04` and an ICU 74 gate.
+  November 6, 2026: built at c6c0926 (with the libs-base TLS backport) by Linux
+  Managed Artifacts run 42292309924 under a dev label, and qualified in a clean
+  Ubuntu 24.04.5 arm64 container (glibc 2.39, ICU 74): setup, doctor,
+  new/build/run, the Foundation probe, package install/remove, and the TLS
+  cases all passed, and no non-ICU-74 or system libraries are bundled. Evidence:
+  `docs/validation/linux-ubuntu2404-arm64-dev-20261106/`. Not in any release
+  yet; planned for v0.1.6. Evidence tier: container, not a VM or physical host.
 - `ubuntu2404-amd64-managed-clang`
-  status: `dogfood_ready_partial`
-  notes: Ubuntu 24.04/amd64 now has distro-scoped managed CLI and toolchain
+  status: `published_stable_container_qualified`
+  notes: on stable since v0.1.2 (October 20, 2026), with an `ubuntu-24.04` /
+  ICU 74 manifest gate, and qualified for each release since in a clean
+  `ubuntu:24.04` container (see `docs/validation/release-0.1.*-evidence/`).
+  Earlier history: Ubuntu 24.04/amd64 had distro-scoped managed CLI and toolchain
   artifacts built in a base Ubuntu Docker environment and published to the
   `v0.1.0-dev` prerelease. April 20, 2026 evidence covers setup from the local
   release manifest, runtime dependency closure, full `doctor --json`, and
