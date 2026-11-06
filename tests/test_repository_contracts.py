@@ -355,14 +355,14 @@ class RepositoryContractsTests(unittest.TestCase):
         patch_name = "0009-On-Windows-also-trust-the-bundled-authorities.patch"
         patch = (package / patch_name).read_bytes()
         self.assertIn(f"'{hashlib.sha256(patch).hexdigest()}'", pkgbuild)
-        self.assertIn(f"0008-Fix-for-TLS-host-verification-when-we-have-a-host-ad.patch {patch_name}; do", pkgbuild)
+        self.assertIn(f"0008-Fix-for-TLS-host-verification-when-we-have-a-host-ad.patch {patch_name}", pkgbuild)
         added = [line[1:] for line in patch.decode().splitlines() if line.startswith("+") and not line.startswith("+++")]
         self.assertEqual(added[0], "#if defined(_WIN32)")
         self.assertEqual(added[-1], "#endif")
         self.assertIn('"${MINGW_PACKAGE_PREFIX}-ca-certificates"', pkgbuild)
         self.assertIn('cp "${bundle}" Resources/GSTLS/ca-certificates.crt', pkgbuild)
         self.assertIn("ca-certificates.source", pkgbuild)
-        self.assertRegex(pkgbuild, re.compile(r"^pkgrel=10\.4$", re.M))
+        self.assertRegex(pkgbuild, re.compile(r"^pkgrel=10\.5$", re.M))
         smoke = (ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "smoke-toolchain.sh").read_text()
         for check in ("expect_tls 1 https://127.0.0.1:18443/", "expect_tls 0 https://127.0.0.1:18443/",
                       "certutil -addstore Root", "expect_tls 0 https://127.0.0.1:18444/",
@@ -372,6 +372,26 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertLess(smoke.index('cp "$bundle_backup" "$bundle"\nbundle_backup='), smoke.index("GNUSTEP_SMOKE_STORE_ROOT:-"))
         workflow = (ROOT / ".github" / "workflows" / "windows-current-source-artifacts.yml").read_text()
         self.assertIn("$env:GNUSTEP_SMOKE_STORE_ROOT = '1'", workflow)
+
+    def test_windows_gnustep_base_limits_the_clang23_workaround_to_gsformat(self):
+        # Upstream 7c81d0c83 turns LLVM's DFA jump threading off for GSFormat.m only
+        # (llvm/llvm-project#231864); the package must not turn it off everywhere, and
+        # its build must prove where the flag landed.
+        import hashlib
+        package = ROOT / "toolchains" / "windows-amd64-msys2-clang64" / "gnustep-base-package"
+        pkgbuild = (package / "PKGBUILD").read_text()
+        name = "0010-Fix-compilation-with-clang-23-without-ci-hunk.patch"
+        patch = (package / name).read_bytes()
+        self.assertIn(f"'{hashlib.sha256(patch).hexdigest()}'", pkgbuild)
+        self.assertIn(f"0009-On-Windows-also-trust-the-bundled-authorities.patch {name}; do", pkgbuild)
+        text = patch.decode()
+        self.assertIn("GSFormat.m_FILE_FLAGS += $(GSFORMAT_CFLAGS)", text)
+        self.assertNotIn(".github/workflows", text)
+        objcflags = [line for line in pkgbuild.splitlines() if line.strip().startswith("export OBJCFLAGS=")]
+        self.assertEqual(len(objcflags), 1)
+        self.assertNotIn("dfa-jump-thread", objcflags[0])
+        self.assertIn("make messages=yes > make-commands.log", pkgbuild)
+        self.assertIn("compile-commands.log | grep -v ' GSFormat\\.m -c '", pkgbuild)
 
     def test_openbsd_package_artifact_script_builds_packages_and_gorm_evidence(self):
         script = ROOT / "scripts" / "dev" / "openbsd-package-artifacts.sh"
