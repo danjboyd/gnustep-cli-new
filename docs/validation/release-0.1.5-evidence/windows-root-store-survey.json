@@ -1,0 +1,281 @@
+{
+  "schema": "gnustep-cli/windows-root-store-survey/v1",
+  "release_under_test": "stage-release run 42270705980 (v0.1.5, pre-publication)",
+  "host": "OCI windows-2022 lease lease-20261106184237-xz5by6, fresh machine, Windows PowerShell 5.1",
+  "toolchain_zip_sha256": "8d9ecb29befd606e6a6e911298c47153e8e9d745cb8f718c963fa6cbd40852e0",
+  "method": "Toolchain zip expanded (no install, no network beyond the sites). tls.exe from smoke-toolchain.sh built with the toolchain. 'store-only' moves gnustep-base's bundled GSTLS/ca-certificates.crt aside, as before the fix; 'union' is the shipped toolchain. Store counts read with the PowerShell Cert: drive, which installs nothing. Only after the gnustep-base runs was Windows' own client (Invoke-WebRequest -Method Head, -MaximumRedirection 0) used.",
+  "store_before": {
+    "LocalMachine_Root": 18,
+    "LocalMachine_AuthRoot": 5,
+    "CurrentUser_Root": 18
+  },
+  "roots_before": {
+    "SSL.com Root Certification Authority ECC": false,
+    "GlobalSign Root CA": false,
+    "USERTrust ECC Certification Authority": false,
+    "DigiCert Global Root G2": true,
+    "ISRG Root X1": false,
+    "ISRG Root X2": false,
+    "Starfield Services Root Certificate Authority - G2": false,
+    "SSL.com TLS RSA Root CA 2022": false,
+    "USERTrust RSA Certification Authority": false,
+    "Go Daddy Root Certificate Authority - G2": false,
+    "GlobalSign Root CA - R3": false,
+    "IdenTrust Commercial Root CA 1": false,
+    "Hellenic Academic and Research Institutions RootCA 2015": false,
+    "Certum Trusted Network CA": false,
+    "Actalis Authentication Root CA": false,
+    "SwissSign Gold CA - G2": false
+  },
+  "gnustep_store_only_before": {
+    "https://1.1.1.1": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://www.google.com": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://github.com": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://www.microsoft.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://letsencrypt.org": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://valid-isrgrootx2.letsencrypt.org": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://www.amazon.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.ssl.com": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://www.sectigo.com": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://www.godaddy.com": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://www.globalsign.com": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://www.identrust.com": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://www.buypass.no": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://www.certum.pl": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://www.actalis.it": {
+      "exit": 1,
+      "result": "refused"
+    },
+    "https://www.swisssign.com": {
+      "exit": 1,
+      "result": "refused"
+    }
+  },
+  "gnustep_with_fix": {
+    "https://1.1.1.1": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.google.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://github.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.microsoft.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://letsencrypt.org": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://valid-isrgrootx2.letsencrypt.org": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.amazon.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.ssl.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.sectigo.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.godaddy.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.globalsign.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.identrust.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.buypass.no": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.certum.pl": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.actalis.it": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.swisssign.com": {
+      "exit": 0,
+      "result": "fetched"
+    }
+  },
+  "bundle_proof": {
+    "bundle": "/clang64/lib/GNUstep/Libraries/gnustep-base/Versions/1.31/Resources/GSTLS/ca-certificates.crt",
+    "local_site_without_root": "refused",
+    "local_site_with_root_only_in_bundle": "fetched",
+    "bundle_restored_sha256": "f345ac0d7dbd1a584dd80ff96eb2919e8dac68e962db2e7111401b434e888493 (matches package 1.31.1-10.4); the script's own cmp-based restore check could not run (no cmp) and printed NO"
+  },
+  "store_after_gnustep": {
+    "LocalMachine_Root": 18,
+    "LocalMachine_AuthRoot": 5,
+    "CurrentUser_Root": 18
+  },
+  "windows_client": {
+    "https://1.1.1.1": "error Operation is not valid due to the current state of the object.",
+    "https://www.google.com": "status 200",
+    "https://github.com": "status 200",
+    "https://www.microsoft.com": "status 200",
+    "https://letsencrypt.org": "status 200",
+    "https://valid-isrgrootx2.letsencrypt.org": "status 200",
+    "https://www.amazon.com": "status 405",
+    "https://www.ssl.com": "status 200",
+    "https://www.sectigo.com": "status 200",
+    "https://www.godaddy.com": "status 403",
+    "https://www.globalsign.com": "error Operation is not valid due to the current state of the object.",
+    "https://www.identrust.com": "status 200",
+    "https://www.buypass.no": "status 200",
+    "https://www.certum.pl": "error Operation is not valid due to the current state of the object.",
+    "https://www.actalis.it": "error Operation is not valid due to the current state of the object.",
+    "https://www.swisssign.com": "status 403"
+  },
+  "windows_client_note": "'Operation is not valid due to the current state of the object' is Windows PowerShell 5.1 refusing a redirect with -MaximumRedirection 0, after the TLS handshake",
+  "store_after_windows_client": {
+    "LocalMachine_Root": 33,
+    "LocalMachine_AuthRoot": 20,
+    "CurrentUser_Root": 33
+  },
+  "roots_after_windows_client": {
+    "SSL.com Root Certification Authority ECC": true,
+    "GlobalSign Root CA": true,
+    "USERTrust ECC Certification Authority": true,
+    "DigiCert Global Root G2": true,
+    "ISRG Root X1": true,
+    "ISRG Root X2": true,
+    "Starfield Services Root Certificate Authority - G2": true,
+    "SSL.com TLS RSA Root CA 2022": true,
+    "USERTrust RSA Certification Authority": true,
+    "Go Daddy Root Certificate Authority - G2": true,
+    "GlobalSign Root CA - R3": false,
+    "IdenTrust Commercial Root CA 1": true,
+    "Hellenic Academic and Research Institutions RootCA 2015": true,
+    "Certum Trusted Network CA": true,
+    "Actalis Authentication Root CA": true,
+    "SwissSign Gold CA - G2": true
+  },
+  "gnustep_store_only_after_windows_client": {
+    "https://1.1.1.1": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.google.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://github.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.microsoft.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://letsencrypt.org": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://valid-isrgrootx2.letsencrypt.org": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.amazon.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.ssl.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.sectigo.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.godaddy.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.globalsign.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.identrust.com": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.buypass.no": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.certum.pl": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.actalis.it": {
+      "exit": 0,
+      "result": "fetched"
+    },
+    "https://www.swisssign.com": {
+      "exit": 0,
+      "result": "fetched"
+    }
+  }
+}

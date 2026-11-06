@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "suite_id": "tier1-core",
+  "target_id": "linux-amd64-clang",
+  "runner_id": "github-actions-linux-container-qualification",
+  "release_under_test": {
+    "source": "stage-release run 42270705980 (v0.1.5, pre-publication; Linux artifacts identical to run 42122520629)"
+  },
+  "overall_ok": true,
+  "summary": "Linux 0.1.5 container qualification passed on linux-amd64-clang, linux-arm64-clang, linux-ubuntu2604-amd64-clang, linux-ubuntu2404-amd64-clang: bootstrap setup, version/help, doctor, new/build/run, TLS host verification.",
+  "scenario_reports": [
+    {
+      "scenario_id": "bootstrap-install-usable-cli",
+      "ok": true,
+      "status": "passed",
+      "summary": "bootstrap setup, --version, --help and doctor passed on all four Linux targets."
+    },
+    {
+      "scenario_id": "new-cli-project-build-run",
+      "ok": true,
+      "status": "passed",
+      "summary": "new/build/run passed on all four Linux targets."
+    },
+    {
+      "scenario_id": "tls-host-verification",
+      "ok": true,
+      "status": "passed",
+      "summary": "trusted site loads; expired, wrong-host, self-signed, untrusted-root and non-matching address certificates refused; GS_TLS_VERIFY_S=NO overrides, on all four Linux targets."
+    }
+  ],
+  "evidence": {
+    "derived_from": [
+      {
+        "path": "linux-amd64-clang-container-qualification.json",
+        "sha256": "cbe24c050f17e31b89e2def241af980261c6df7272f464b15250ea89ac94aa39",
+        "target_id": "linux-amd64-clang",
+        "os_version": "debian-13",
+        "artifacts": {
+          "gnustep-toolchain-linux-amd64-clang-0.1.5.tar.gz": "f672fabab78e53fb87354be20a665d58a0a6bd6f026670bf9c6a9404ce09356f",
+          "gnustep-cli-linux-amd64-clang-0.1.5.tar.gz": "34037e8898d189ad44caed69134122526a266cc8c83bc8d1514d33ab9fcd6756"
+        }
+      },
+      {
+        "path": "linux-arm64-clang-container-qualification.json",
+        "sha256": "43e3c14e59b004773d85b601db3f6787019a7071200b860c0aa65fbff4dea260",
+        "target_id": "linux-arm64-clang",
+        "os_version": "debian-13",
+        "artifacts": {
+          "gnustep-toolchain-linux-arm64-clang-0.1.5.tar.gz": "edb4465d88535965b8ad62f64c34e0f5c12dd83d9ac0da634bd7f5bff47d8ae8",
+          "gnustep-cli-linux-arm64-clang-0.1.5.tar.gz": "0e41dc4052b8bf822d38c32f6f8ed0a1c6d8930a0e4d58f9d10c68637ee8f929"
+        }
+      },
+      {
+        "path": "linux-ubuntu2604-amd64-clang-container-qualification.json",
+        "sha256": "af68b1ce0e3988ae518cb850469269a6e8a4fff8cdf1dd3938095dddb3552410",
+        "target_id": "linux-ubuntu2604-amd64-clang",
+        "os_version": "ubuntu-26.04",
+        "artifacts": {
+          "gnustep-toolchain-linux-ubuntu2604-amd64-clang-0.1.5.tar.gz": "8f54d84f842a156b7dc545a6ec640b6258e89f1c01477c3114aeeabb50588fd4",
+          "gnustep-cli-linux-ubuntu2604-amd64-clang-0.1.5.tar.gz": "a046413b5371f11c0121149e663de57ed8d2a2d20a49209944a87ad68ba2ed00"
+        }
+      },
+      {
+        "path": "linux-ubuntu2404-amd64-clang-container-qualification.json",
+        "sha256": "eebdfe9ffb0ac04a7c1a84a9729ea6612ee6952a30c3a7c3c370940779fbf6e8",
+        "target_id": "linux-ubuntu2404-amd64-clang",
+        "os_version": "ubuntu-24.04",
+        "artifacts": {
+          "gnustep-toolchain-linux-ubuntu2404-amd64-clang-0.1.5.tar.gz": "dbdafa71ebd6ab8f17d14e2d589007915f34c10bd38a6997449d6bdf21cb215a",
+          "gnustep-cli-linux-ubuntu2404-amd64-clang-0.1.5.tar.gz": "9a1179d23c829f7b137f0ffd0457da46081112f0d2c34a381e4d412b7cb40fbe"
+        }
+      }
+    ]
+  }
+}

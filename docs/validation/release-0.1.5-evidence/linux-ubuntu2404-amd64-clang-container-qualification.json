@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "kind": "linux-container-qualification",
+  "mode": "pre-publication",
+  "bootstrap_url": null,
+  "target_id": "linux-ubuntu2404-amd64-clang",
+  "version": "0.1.5",
+  "ok": true,
+  "evidence_tier": "github-actions-container",
+  "evidence_tier_note": "Clean container of the target distro release on a GitHub-hosted runner: real distro userland and package archive, but the runner's kernel, not a VM or physical host.",
+  "host": {
+    "distribution": "Ubuntu 24.04.5 LTS",
+    "os_version": "ubuntu-24.04",
+    "kernel": "7.0.0-1017-azure",
+    "glibc": "2.39",
+    "expected_icu_major": 74,
+    "container": true
+  },
+  "artifacts": {
+    "gnustep-toolchain-linux-ubuntu2404-amd64-clang-0.1.5.tar.gz": "dbdafa71ebd6ab8f17d14e2d589007915f34c10bd38a6997449d6bdf21cb215a",
+    "gnustep-cli-linux-ubuntu2404-amd64-clang-0.1.5.tar.gz": "9a1179d23c829f7b137f0ffd0457da46081112f0d2c34a381e4d412b7cb40fbe"
+  },
+  "results": {
+    "soname_check": "passed",
+    "bootstrap_setup": "passed",
+    "cli_version": "passed",
+    "cli_help": "passed",
+    "doctor": "passed",
+    "new_build_run": "passed",
+    "foundation_probe": "passed",
+    "tls_verification": "passed",
+    "package_install_remove": "passed"
+  },
+  "step_exit_codes": {
+    "setup": "0",
+    "version": "0",
+    "help": "0",
+    "doctor": "0",
+    "doctor_default": "0",
+    "new": "0",
+    "build": "0",
+    "run": "0",
+    "probe": "0",
+    "package_smoke": "0",
+    "tls": "0",
+    "tls_no_ca": "1"
+  },
+  "evidence": {
+    "soname_check": [
+      "== gnustep-toolchain-linux-ubuntu2404-amd64-clang-0.1.5.tar.gz",
+      "ok: no bundled libc/libm/loader/libstdc++/libgcc_s/non-ICU-74 libraries",
+      "icu_needed: libicudata.so.74 libicui18n.so.74 libicuuc.so.74",
+      "max_glibc_symbol: GLIBC_2.38",
+      "== gnustep-cli-linux-ubuntu2404-amd64-clang-0.1.5.tar.gz",
+      "ok: no bundled libc/libm/loader/libstdc++/libgcc_s/non-ICU-74 libraries",
+      "icu_needed: ",
+      "max_glibc_symbol: GLIBC_2.34"
+    ],
+    "cli_version_stdout": "0.1.5",
+    "setup_selected_artifacts": [
+      "cli-linux-ubuntu2404-amd64-clang",
+      "toolchain-linux-ubuntu2404-amd64-clang"
+    ],
+    "doctor_status": "ok",
+    "doctor_environment_classification": "toolchain_compatible",
+    "doctor_default_manifest_status": "ok",
+    "doctor_default_manifest_classification": "toolchain_compatible",
+    "run_stdout": "Hello from CLI tool",
+    "probe_runtime_resolution": [
+      "libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f648f962000)",
+      "libicui18n.so.74 => /lib/x86_64-linux-gnu/libicui18n.so.74 (0x00007f648f059000)",
+      "libicuuc.so.74 => /lib/x86_64-linux-gnu/libicuuc.so.74 (0x00007f648ee4c000)",
+      "libicudata.so.74 => /lib/x86_64-linux-gnu/libicudata.so.74 (0x00007f648d0ec000)"
+    ],
+    "package_smoke": [
+      "installed_path=packages/org.gnustep.qualify-demo/bin/gnustep-qualify-demo"
+    ],
+    "tls": [
+      "https://github.com fetched",
+      "https://expired.badssl.com refused",
+      "https://wrong.host.badssl.com refused",
+      "https://self-signed.badssl.com refused",
+      "https://untrusted-root.badssl.com refused",
+      "https://self-signed.badssl.com fetched",
+      "https://github.com refused",
+      "https://1.1.1.1 fetched",
+      "https://140.82.114.4 refused"
+    ],
+    "tls_without_system_ca_bundle": [
+      "2026-11-05 22:29:58.092 tls[11471:11471] You have requested that a TLS/SSL connection be to a remote system with a verified certificate, but have provided no trusted certificate authorities.",
+      "2026-11-05 22:29:58.093 tls[11471:11471] If you did not use the GSTLSCAFile option to specify a file containing certificate authorities for a session, and did not specify a default file using the GSTLSCAFile user default or the GS_TLS_CA_FILE environment variable, then the system will have attempted to use the GSTLS/ca-certificates.crt file in the gnustep-base resource bundle.  Unfortunately, it has not been possible to read any trusted certificate authorities from these locations.",
+      "https://github.com refused"
+    ]
+  }
+}
