@@ -25,6 +25,8 @@
 - (NSDictionary *)executeInstallForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSString *)latestStableManifestReference;
 - (NSString *)updateManifestForInstallRoot:(NSString *)installRoot warning:(NSString **)warning;
+- (NSString *)applyManifestForInstallRoot:(NSString *)installRoot explicitManifest:(NSString *)explicitManifest;
+- (NSString *)unappliedUpdateMessageForPlannedVersion:(NSString *)plannedVersion installedVersion:(NSString *)installedVersion;
 - (NSString *)manifestReferenceToRecord:(NSString *)manifestReference version:(NSString *)version;
 - (NSDictionary *)executeRemoveForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSString *)resolvedExecutablePathForCommand:(NSString *)command;
@@ -886,6 +888,43 @@
   XCTAssertTrue([[plan objectForKey: @"discovery_warning"] isKindOfClass: [NSString class]]);
   XCTAssertTrue([[payload objectForKey: @"summary"] hasPrefix: @"Could not check the latest stable release, so a newer version may exist"]);
   XCTAssertTrue([[payload objectForKey: @"summary"] rangeOfString: @"already current"].location == NSNotFound);
+}
+
+- (void)testUpdateAppliesTheDiscoveredNewerReleaseNotTheRecordedOne
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-apply-discovered"];
+  NSString *latest = [self latestFixtureManifestInDirectory: [tempRoot stringByAppendingPathComponent: @"latest"]];
+  NSString *recorded = @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.0.9/release-manifest.json";
+  NSString *managedRoot = [self managedRootInDirectory: tempRoot recordingManifest: recorded version: @"0.0.9" channel: @"stable"];
+
+  [runner setStubLatestManifest: latest];
+  /* v0.1.5/v0.1.6 applied the recorded manifest here, reinstalling 0.0.9. */
+  XCTAssertEqualObjects([runner applyManifestForInstallRoot: managedRoot explicitManifest: nil], latest);
+  XCTAssertNotEqualObjects([runner applyManifestForInstallRoot: managedRoot explicitManifest: nil], recorded);
+  XCTAssertEqualObjects([runner applyManifestForInstallRoot: managedRoot explicitManifest: latest], latest);
+}
+
+- (void)testUpdateAppliesTheRecordedReleaseWhenNothingNewerIsFound
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-apply-current"];
+  NSString *recorded = @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.2.0/release-manifest.json";
+  NSString *managedRoot = [self managedRootInDirectory: tempRoot recordingManifest: recorded version: @"0.2.0" channel: @"stable"];
+
+  [runner setStubLatestManifest: [self latestFixtureManifestInDirectory: [tempRoot stringByAppendingPathComponent: @"latest"]]];
+  XCTAssertEqualObjects([runner applyManifestForInstallRoot: managedRoot explicitManifest: nil], recorded);
+}
+
+- (void)testUpdateApplyReportsAnUpdateThatDidNotInstall
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+
+  XCTAssertNil([runner unappliedUpdateMessageForPlannedVersion: @"0.1.6" installedVersion: @"0.1.6"]);
+  XCTAssertNil([runner unappliedUpdateMessageForPlannedVersion: nil installedVersion: @"0.1.5"]);
+  XCTAssertEqualObjects([runner unappliedUpdateMessageForPlannedVersion: @"0.1.6" installedVersion: @"0.1.5"],
+                        @"The update to 0.1.6 was not installed; the install is still at 0.1.5.");
+  XCTAssertNotNil([runner unappliedUpdateMessageForPlannedVersion: @"0.1.6" installedVersion: nil]);
 }
 
 - (void)testUpdateDiscoveryLeavesDogfoodAndLocalManifestsAlone
