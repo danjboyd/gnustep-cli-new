@@ -25,6 +25,7 @@
 - (NSDictionary *)executeRunForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSComparisonResult)compareVersionString:(NSString *)left toVersionString:(NSString *)right;
 - (NSDate *)bundledAuthoritiesDateFromSource:(NSString *)sourceText;
+- (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath;
 - (NSDictionary *)bundledAuthoritiesCheckWithMakefiles:(NSString *)gnustepMakefiles
                                              interface:(NSString *)interface
                                                  today:(NSDate *)today
@@ -71,6 +72,21 @@ static void GSTestRemoveToolchain(NSString *makefiles)
   NSString *root = [[[[makefiles stringByDeletingLastPathComponent] stringByDeletingLastPathComponent]
                        stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
   [[NSFileManager defaultManager] removeItemAtPath: root error: NULL];
+}
+
+
+static NSString *GSTestManagedRoot(NSString *base, NSString *name, NSString *status)
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *root = [base stringByAppendingPathComponent: name];
+  NSString *stateDir = [root stringByAppendingPathComponent: @"state"];
+
+  [manager createDirectoryAtPath: stateDir withIntermediateDirectories: YES attributes: nil error: NULL];
+  [manager createDirectoryAtPath: [root stringByAppendingPathComponent: @"System/Library/Makefiles"]
+     withIntermediateDirectories: YES attributes: nil error: NULL];
+  [[NSString stringWithFormat: @"{\"schema_version\": 1, \"status\": \"%@\"}", status]
+    writeToFile: [stateDir stringByAppendingPathComponent: @"cli-state.json"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  return root;
 }
 
 @implementation GSCommandRunnerTests
@@ -783,6 +799,49 @@ static void GSTestRemoveToolchain(NSString *makefiles)
   XCTAssertEqualObjects([bootstrap objectForKey: @"execution_tier"], @"full_only");
   XCTAssertEqualObjects([none objectForKey: @"status"], @"not_run");
   XCTAssertEqualObjects([[none objectForKey: @"details"] objectForKey: @"found"], [NSNumber numberWithBool: NO]);
+}
+
+- (void)testManagedRootInUseNeedsHealthyStateAndWholeComponentContainment
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *base = [[NSTemporaryDirectory() stringByAppendingPathComponent: [[NSUUID UUID] UUIDString]] stringByResolvingSymlinksInPath];
+  NSString *root = nil;
+  NSString *state = nil;
+  NSString *sibling = nil;
+  NSString *repair = nil;
+
+  [manager createDirectoryAtPath: base withIntermediateDirectories: YES attributes: nil error: NULL];
+  base = [base stringByResolvingSymlinksInPath];
+  root = GSTestManagedRoot(base, @"managed", @"healthy");
+  state = [root stringByAppendingPathComponent: @"state/cli-state.json"];
+
+  XCTAssertEqualObjects([runner managedRootInUseForToolchainMakefiles: [root stringByAppendingPathComponent: @"System/Library/Makefiles"] statePath: state], root);
+
+  sibling = [base stringByAppendingPathComponent: @"managed-other/System/Library/Makefiles"];
+  [manager createDirectoryAtPath: sibling withIntermediateDirectories: YES attributes: nil error: NULL];
+  XCTAssertNil([runner managedRootInUseForToolchainMakefiles: sibling statePath: state]);
+  XCTAssertNil([runner managedRootInUseForToolchainMakefiles: @"/usr/share/GNUstep/Makefiles" statePath: state]);
+  XCTAssertNil([runner managedRootInUseForToolchainMakefiles: root statePath: state]);
+  XCTAssertNil([runner managedRootInUseForToolchainMakefiles: nil statePath: state]);
+
+#if !defined(_WIN32) && !defined(__MINGW32__) && !defined(__MINGW64__)
+  [manager createSymbolicLinkAtPath: [base stringByAppendingPathComponent: @"link-in"]
+                withDestinationPath: [root stringByAppendingPathComponent: @"System"] error: NULL];
+  XCTAssertEqualObjects([runner managedRootInUseForToolchainMakefiles: [base stringByAppendingPathComponent: @"link-in/Library/Makefiles"] statePath: state], root);
+  [manager createSymbolicLinkAtPath: [root stringByAppendingPathComponent: @"System/Library/LinkedMakefiles"]
+                withDestinationPath: [base stringByAppendingPathComponent: @"managed-other/System/Library/Makefiles"] error: NULL];
+  XCTAssertNil([runner managedRootInUseForToolchainMakefiles: [root stringByAppendingPathComponent: @"System/Library/LinkedMakefiles"] statePath: state]);
+#endif
+
+  repair = GSTestManagedRoot(base, @"repair", @"needs_repair");
+  XCTAssertNil([runner managedRootInUseForToolchainMakefiles: [repair stringByAppendingPathComponent: @"System/Library/Makefiles"]
+                                                   statePath: [repair stringByAppendingPathComponent: @"state/cli-state.json"]]);
+  [@"{not json" writeToFile: state atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  XCTAssertNil([runner managedRootInUseForToolchainMakefiles: [root stringByAppendingPathComponent: @"System/Library/Makefiles"] statePath: state]);
+  XCTAssertNil([runner managedRootInUseForToolchainMakefiles: [root stringByAppendingPathComponent: @"System/Library/Makefiles"]
+                                                   statePath: [base stringByAppendingPathComponent: @"absent.json"]]);
+  [manager removeItemAtPath: base error: NULL];
 }
 
 @end
