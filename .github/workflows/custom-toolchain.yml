@@ -77,6 +77,7 @@ jobs:
             sh -c '
               set -eu
               grep -q "gnustep-cli: runtime library path" "$PREFIX/System/Library/Makefiles/GNUstep.sh"
+              grep -q "gnustep-cli: runtime library path" "$PREFIX/System/Library/Makefiles/GNUstep.csh"
               # No manual LD_LIBRARY_PATH: GNUstep.sh must put $PREFIX/lib on it.
               set +u; . "$PREFIX/System/Library/Makefiles/GNUstep.sh"; set -u
               cd /tmp
