@@ -67,8 +67,8 @@
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-base",
-      "version": "1.31.1-10.4",
-      "sha256": "25385b215b35a2005690f539318c67b7d5c463db059d48e01755391f2bf2c377",
+      "version": "1.31.1-10.5",
+      "sha256": "79d8a14bfbf51ad719b9e0d7f35c80f75b200d1225f9a6051148fd4747022de5",
       "source_channel": "gnustep-cli-msys2-inputs"
     },
     {
@@ -912,12 +912,12 @@
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-base",
-      "version": "1.31.1-10.4",
+      "version": "1.31.1-10.5",
       "repo": "gnustep-cli",
-      "filename": "mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.4-any.pkg.tar.zst",
-      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/msys2-inputs-2026-11-06/mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.4-any.pkg.tar.zst",
-      "sha256": "25385b215b35a2005690f539318c67b7d5c463db059d48e01755391f2bf2c377",
-      "size": 2664820
+      "filename": "mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.5-any.pkg.tar.zst",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/msys2-inputs-2026-11-09/mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.5-any.pkg.tar.zst",
+      "sha256": "79d8a14bfbf51ad719b9e0d7f35c80f75b200d1225f9a6051148fd4747022de5",
+      "size": 2664521
     },
     {
       "name": "mingw-w64-clang-x86_64-gnustep-gui",
@@ -1695,21 +1695,21 @@
   "package_overrides": [
     {
       "name": "mingw-w64-clang-x86_64-gnustep-base",
-      "version": "1.31.1-10.4",
+      "version": "1.31.1-10.5",
       "repo": "gnustep-cli",
-      "filename": "mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.4-any.pkg.tar.zst",
-      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/msys2-inputs-2026-11-06/mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.4-any.pkg.tar.zst",
-      "sha256": "25385b215b35a2005690f539318c67b7d5c463db059d48e01755391f2bf2c377",
-      "size": 2664820,
+      "filename": "mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.5-any.pkg.tar.zst",
+      "url": "https://github.com/danjboyd/gnustep-cli-new/releases/download/msys2-inputs-2026-11-09/mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.5-any.pkg.tar.zst",
+      "sha256": "79d8a14bfbf51ad719b9e0d7f35c80f75b200d1225f9a6051148fd4747022de5",
+      "size": 2664521,
       "replaces": {
         "version": "1.31.1-10",
         "sha256": "b97c4f0ca49bd4f768d1281762a7a52995f2e9d9b761d63654f090423d25c540"
       },
       "provenance": {
         "recipe": "toolchains/windows-amd64-msys2-clang64/gnustep-base-package",
-        "source_commit": "31328fcce94dad183ddc74e5b311964d7e677c7e",
-        "build_run": 42257083471,
-        "reason": "MSYS2 gnustep-base 1.31.1-10 plus eight upstream libs-base TLS commits (586eba532 and follow-ups, d80ae7406), built with libs-base 7c81d0c83's clang 23 workaround flag; on Windows it also trusts its bundled authorities, the Mozilla set from ca-certificates 20260816-1"
+        "source_commit": "97a44aff714d7df2a168cb859467927de7d91d77",
+        "build_run": 42292233649,
+        "reason": "MSYS2 gnustep-base 1.31.1-10 plus eight upstream libs-base TLS commits (586eba532 and follow-ups, d80ae7406), with libs-base 7c81d0c83's clang 23 workaround on GSFormat.m only; on Windows it also trusts its bundled authorities, the Mozilla set from ca-certificates 20260816-1"
       }
     }
   ]
