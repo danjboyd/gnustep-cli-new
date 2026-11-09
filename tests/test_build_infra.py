@@ -209,8 +209,8 @@ class BuildInfraTests(unittest.TestCase):
         self.assertEqual(distribution_by_id["toolchain-linux-ubuntu2404-arm64-clang"], ["ubuntu"])
         self.assertEqual(version_by_id["toolchain-linux-ubuntu2404-arm64-clang"], ["ubuntu-24.04"])
         self.assertEqual(runtime_by_id["toolchain-linux-ubuntu2404-arm64-clang"], {"icu_major": 74, "glibc_min": "2.39"})
-        self.assertFalse(published_by_id["cli-linux-ubuntu2404-arm64-clang"])
-        self.assertFalse(published_by_id["toolchain-linux-ubuntu2404-arm64-clang"])
+        self.assertTrue(published_by_id["cli-linux-ubuntu2404-arm64-clang"])
+        self.assertTrue(published_by_id["toolchain-linux-ubuntu2404-arm64-clang"])
         self.assertTrue(all(artifact["portability_policy"] == "distribution-scoped" for artifact in linux_artifacts))
 
     def test_source_lock_template_for_linux(self):
