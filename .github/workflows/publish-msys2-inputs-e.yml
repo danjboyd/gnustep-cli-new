@@ -1,0 +1,55 @@
+name: Publish MSYS2 Inputs (2026-11-09)
+
+# One-shot: publishes the patched MSYS2 gnustep-base package built by run
+# 42292233649 (branch windows-gsformat-per-file-flag, 97a44af) as an immutable
+# pre-release asset, so the Windows toolchain lock can pin it by URL and sha256.
+# 1.31.1-10.5 differs from 10.4 only in how the clang 23 workaround is applied:
+# upstream libs-base 7c81d0c83 (as patch 0010) puts it on GSFormat.m alone,
+# instead of on every file.
+# It refuses if the tag already exists or the package's digest differs.
+
+on:
+  push:
+    branches: [publish-msys2-inputs-2026-11-09]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  TAG: msys2-inputs-2026-11-09
+  SOURCE_RUN: "42292233649"
+  SOURCE_SHA: 97a44aff714d7df2a168cb859467927de7d91d77
+  PACKAGE: mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.5-any.pkg.tar.zst
+  PACKAGE_SHA256: 79d8a14bfbf51ad719b9e0d7f35c80f75b200d1225f9a6051148fd4747022de5
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the package as a pre-release asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "$TAG already exists; nothing is replaced." >&2
+            exit 1
+          fi
+          d="$RUNNER_TEMP/in"
+          mkdir -p "$d"
+          id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN/artifacts" \
+            --jq '.artifacts[] | select(.name == "windows-gnustep-base-package") | .id')
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > "$RUNNER_TEMP/a.zip"
+          unzip -q -j "$RUNNER_TEMP/a.zip" "$PACKAGE" -d "$d"
+          echo "$PACKAGE_SHA256  $d/$PACKAGE" | sha256sum -c -
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          Pinned build input for the Windows MSYS2 clang64 toolchain, not a gnustep-cli release.
+
+          \`$PACKAGE\` (sha256 \`$PACKAGE_SHA256\`): MSYS2's gnustep-base 1.31.1-10 recipe rebuilt with eight upstream libs-base TLS commits, the clang 23 workaround from libs-base 7c81d0c83 applied to GSFormat.m only, a Windows-only patch that also trusts the bundled authorities, and the Mozilla CA set from ca-certificates 20260816-1 as those authorities, from \`toolchains/windows-amd64-msys2-clang64/gnustep-base-package\` at $SOURCE_SHA, by workflow run $SOURCE_RUN.
+          NOTES
+          gh release create "$TAG" "$d/$PACKAGE" --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" --prerelease --latest=false \
+            --title "MSYS2 inputs 2026-11-09" --notes-file "$RUNNER_TEMP/notes.md"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease,assets --jq '.isPrerelease, (.assets[]|.name+" "+.digest)'
