@@ -344,6 +344,16 @@ class RepositoryContractsTests(unittest.TestCase):
         for check in ("gnustep-config --objc-flags", "#include <pthread.h>", "import pyexpat", "AsynchDNS"):
             self.assertIn(check, smoke)
 
+    def test_update_check_does_not_claim_freshness_it_cannot_prove(self):
+        # Release information has no signed freshness yet, so "no update found" must
+        # not read as "verified current", and an unreadable latest release must say so.
+        content = (ROOT / "src" / "full-cli" / "GSCommandRunner.m").read_text()
+        self.assertNotIn("Everything is already current", content)
+        self.assertNotIn("The managed install is already current", content)
+        self.assertIn("No newer stable release was found.", content)
+        self.assertIn("No updates were found.", content)
+        self.assertIn("Could not check the latest stable release, so a newer version may exist", content)
+
     def test_windows_gnustep_base_also_trusts_a_current_bundle(self):
         # Windows adds many roots to its store only on demand, so gnustep-base also loads
         # its bundled authorities there; the package replaces the source tree's 2016 file

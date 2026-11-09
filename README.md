@@ -92,7 +92,7 @@ Check for updates:
 
 ```console
 $ gnustep update --check
-update: Everything is already current.
+update: No updates were found.
 ```
 
 The package commands are `list`, `search`, `install` and `remove`. From v0.1.4,
