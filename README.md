@@ -20,11 +20,15 @@ format.
 
 ## Install
 
-On Debian 13 (trixie) `amd64`/`arm64` or Ubuntu 26.04 LTS `amd64`:
+On Debian 13 (trixie) `amd64`/`arm64`, Ubuntu 24.04 LTS `amd64` or Ubuntu 26.04 LTS `amd64`:
 
 ```sh
-curl -fsSL https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/gnustep-bootstrap.sh | sh -s -- setup --user
+curl -fsSL https://github.com/danjboyd/gnustep-cli-new/releases/latest/download/gnustep-bootstrap.sh | sh -s -- setup --user
 ```
+
+This fetches the bootstrap of the newest stable release. To install a specific
+release instead, use `releases/download/v<version>/gnustep-bootstrap.sh`; each
+release's bootstrap installs that release.
 
 The bootstrap script is a small POSIX `sh` program that needs only `curl` or
 `wget`. It downloads the signed release manifest, checks it against a pinned
@@ -96,8 +100,9 @@ stable releases advertise a signed package index, which currently contains only
 Arlen. On v0.1.0 through v0.1.3 they only work with an index you pass explicitly:
 `gnustep list --index <path-or-url>`.
 
-To move an existing install to a newer stable release, run that release's bootstrap:
-`gnustep update` doesn't yet find newer stable releases.
+From v0.1.5, `gnustep update` finds and installs newer stable releases. An
+install from v0.1.4 or earlier doesn't find them: run the bootstrap above once to
+move it to the newest release.
 
 ## Already have GNUstep?
 

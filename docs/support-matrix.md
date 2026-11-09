@@ -17,7 +17,7 @@ On October 13, 2026 the stable `amd64` CLI and toolchain were replaced with
 Debian 13 builds and the release metadata was re-signed. The previous `amd64`
 toolchain (sha256 `cad89e63…`) was a mislabeled Debian 12 bookworm build: it
 bundled glibc 2.36 and ICU 72 and crashed on Debian 13. The stable install
-command is the release-asset bootstrap
+command at the time was the release-asset bootstrap
 `https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.0/gnustep-bootstrap.sh`,
 which selects the `v0.1.0` manifest and verifies it with the production trust
 root. Evidence:
