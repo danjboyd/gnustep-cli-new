@@ -153,6 +153,12 @@ static NSString *GSCLIVersionString(void)
 - (BOOL)isDeferredProbe:(NSDictionary *)probe;
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface;
+- (NSString *)gstlsDirectoryForMakefiles:(NSString *)gnustepMakefiles;
+- (NSDate *)bundledAuthoritiesDateFromSource:(NSString *)sourceText;
+- (NSDictionary *)bundledAuthoritiesCheckWithMakefiles:(NSString *)gnustepMakefiles
+                                             interface:(NSString *)interface
+                                                 today:(NSDate *)today
+                                               windows:(BOOL)windows;
 - (NSDictionary *)nativeToolchainAssessmentForEnvironment:(NSDictionary *)environment compatibility:(NSDictionary *)compatibility;
 - (NSDictionary *)runtimeLibrariesForOS:(NSString *)osName;
 - (NSString *)capturedOutputForExecutable:(NSString *)name arguments:(NSArray *)arguments;
@@ -3692,6 +3698,223 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
           [reason isEqualToString: @"doctor_quick_mode"]);
 }
 
+static const NSInteger GSBundledAuthoritiesMaxAgeDays = 365;
+
+- (NSString *)gstlsDirectoryForMakefiles:(NSString *)gnustepMakefiles
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSMutableArray *versionRoots = [NSMutableArray array];
+  NSString *msysPrefix = nil;
+  NSString *managedRoot = nil;
+  NSUInteger i = 0;
+
+  if (gnustepMakefiles == nil || (id)gnustepMakefiles == (id)[NSNull null] || [gnustepMakefiles length] == 0)
+    {
+      return nil;
+    }
+  /* MSYS2: <prefix>/share/GNUstep/Makefiles; managed Linux: <root>/System/Library/Makefiles.
+     Look in <prefix>/lib/GNUstep and in <prefix>/<domain>/Library for both candidate prefixes. */
+  managedRoot = [[gnustepMakefiles stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
+  msysPrefix = [managedRoot stringByDeletingLastPathComponent];
+  {
+    NSArray *prefixes = [NSArray arrayWithObjects: msysPrefix, managedRoot, nil];
+    NSUInteger p = 0;
+    for (p = 0; p < [prefixes count]; p++)
+      {
+        NSString *prefix = [prefixes objectAtIndex: p];
+        NSArray *domains = [[manager contentsOfDirectoryAtPath: prefix error: NULL]
+                             sortedArrayUsingSelector: @selector(compare:)];
+        [versionRoots addObject: [prefix stringByAppendingPathComponent: @"lib/GNUstep/Libraries/gnustep-base/Versions"]];
+        for (i = 0; i < [domains count]; i++)
+          {
+            [versionRoots addObject: [[prefix stringByAppendingPathComponent: [domains objectAtIndex: i]]
+                                       stringByAppendingPathComponent: @"Library/Libraries/gnustep-base/Versions"]];
+          }
+      }
+  }
+  for (i = 0; i < [versionRoots count]; i++)
+    {
+      NSString *versionRoot = [versionRoots objectAtIndex: i];
+      NSArray *versions = [[manager contentsOfDirectoryAtPath: versionRoot error: NULL]
+                            sortedArrayUsingSelector: @selector(compare:)];
+      NSUInteger j = 0;
+      for (j = 0; j < [versions count]; j++)
+        {
+          NSString *gstls = [[[versionRoot stringByAppendingPathComponent: [versions objectAtIndex: j]]
+                               stringByAppendingPathComponent: @"Resources"]
+                               stringByAppendingPathComponent: @"GSTLS"];
+          if ([manager fileExistsAtPath: [gstls stringByAppendingPathComponent: @"ca-certificates.crt"]])
+            {
+              return gstls;
+            }
+        }
+    }
+  return nil;
+}
+
+- (NSDate *)bundledAuthoritiesDateFromSource:(NSString *)sourceText
+{
+  NSRange name = [sourceText rangeOfString: @"ca-certificates"];
+  NSCharacterSet *space = [NSCharacterSet whitespaceAndNewlineCharacterSet];
+  NSCharacterSet *digits = [NSCharacterSet decimalDigitCharacterSet];
+  NSUInteger position = 0;
+  NSUInteger length = [sourceText length];
+  NSString *stamp = nil;
+  NSDateComponents *components = nil;
+  NSCalendar *calendar = nil;
+  NSDate *date = nil;
+  NSInteger year = 0;
+  NSInteger month = 0;
+  NSInteger day = 0;
+
+  if (name.location == NSNotFound)
+    {
+      return nil;
+    }
+  position = NSMaxRange(name);
+  if (position >= length || ![space characterIsMember: [sourceText characterAtIndex: position]])
+    {
+      return nil;
+    }
+  while (position < length && [space characterIsMember: [sourceText characterAtIndex: position]])
+    {
+      position++;
+    }
+  if (position + 8 > length)
+    {
+      return nil;
+    }
+  stamp = [sourceText substringWithRange: NSMakeRange(position, 8)];
+  if ([[stamp stringByTrimmingCharactersInSet: digits] length] != 0)
+    {
+      return nil;
+    }
+  year = [[stamp substringWithRange: NSMakeRange(0, 4)] integerValue];
+  month = [[stamp substringWithRange: NSMakeRange(4, 2)] integerValue];
+  day = [[stamp substringWithRange: NSMakeRange(6, 2)] integerValue];
+  if (month < 1 || month > 12 || day < 1 || day > 31)
+    {
+      return nil;
+    }
+  calendar = [[[NSCalendar alloc] initWithCalendarIdentifier: NSGregorianCalendar] autorelease];
+  [calendar setTimeZone: [NSTimeZone timeZoneForSecondsFromGMT: 0]];
+  components = [[[NSDateComponents alloc] init] autorelease];
+  [components setYear: year];
+  [components setMonth: month];
+  [components setDay: day];
+  date = [calendar dateFromComponents: components];
+  if (date == nil)
+    {
+      return nil;
+    }
+  /* Reject dates the calendar rolled over, such as 31 February. */
+  components = [calendar components: (NSYearCalendarUnit | NSMonthCalendarUnit | NSDayCalendarUnit) fromDate: date];
+  if ([components year] != year || [components month] != month || [components day] != day)
+    {
+      return nil;
+    }
+  return date;
+}
+
+- (NSDictionary *)bundledAuthoritiesCheckWithMakefiles:(NSString *)gnustepMakefiles
+                                             interface:(NSString *)interface
+                                                 today:(NSDate *)today
+                                               windows:(BOOL)windows
+{
+  NSString *checkID = @"tls.bundled-authorities";
+  NSString *title = @"Check the age of gnustep-base's bundled certificate authorities";
+  NSString *gstls = nil;
+  NSString *sourcePath = nil;
+  NSString *sourceText = nil;
+  NSDate *issued = nil;
+  NSMutableDictionary *details = nil;
+  NSInteger age = 0;
+
+  if ([interface isEqualToString: @"bootstrap"])
+    {
+      return [self checkWithID: checkID
+                         title: title
+                        status: @"not_run"
+                      severity: @"warning"
+                       message: @"This check is available in the full CLI only."
+                     interface: @"full"
+                executionTier: @"full_only"
+                       details: [NSDictionary dictionaryWithObject: [NSNumber numberWithBool: YES]
+                                                            forKey: @"unavailable_in_bootstrap"]];
+    }
+  gstls = [self gstlsDirectoryForMakefiles: gnustepMakefiles];
+  if (gstls == nil)
+    {
+      return [self checkWithID: checkID
+                         title: title
+                        status: @"not_run"
+                      severity: @"warning"
+                       message: @"No gnustep-base bundled certificate authorities were found."
+                     interface: @"full"
+                executionTier: @"full_only"
+                       details: [NSDictionary dictionaryWithObject: [NSNumber numberWithBool: NO] forKey: @"found"]];
+    }
+  details = [NSMutableDictionary dictionaryWithObjectsAndKeys:
+                                   [NSNumber numberWithBool: YES], @"found",
+                                   [gstls stringByAppendingPathComponent: @"ca-certificates.crt"], @"bundle_path",
+                                   [NSNumber numberWithInteger: GSBundledAuthoritiesMaxAgeDays], @"max_age_days",
+                                   nil];
+  sourcePath = [gstls stringByAppendingPathComponent: @"ca-certificates.source"];
+  if (![[NSFileManager defaultManager] fileExistsAtPath: sourcePath])
+    {
+      return [self checkWithID: checkID
+                         title: title
+                        status: windows ? @"warning" : @"not_run"
+                      severity: @"warning"
+                       message: windows ?
+                         @"This toolchain's bundled certificate authorities have no recorded source; toolchains before v0.1.5 ship a 2016 set. Update the toolchain." :
+                         @"The bundled certificate authorities are only a fallback for system trust on this platform."
+                     interface: @"full"
+                executionTier: @"full_only"
+                       details: details];
+    }
+  sourceText = [NSString stringWithContentsOfFile: sourcePath encoding: NSUTF8StringEncoding error: NULL];
+  sourceText = [sourceText stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if (sourceText != nil)
+    {
+      [details setObject: sourceText forKey: @"source"];
+    }
+  issued = sourceText != nil ? [self bundledAuthoritiesDateFromSource: sourceText] : nil;
+  if (issued == nil)
+    {
+      return [self checkWithID: checkID
+                         title: title
+                        status: @"warning"
+                      severity: @"warning"
+                       message: @"The bundled certificate authorities' source record has no recognisable date."
+                     interface: @"full"
+                executionTier: @"full_only"
+                       details: details];
+    }
+  age = (NSInteger)([(today != nil ? today : [NSDate date]) timeIntervalSinceDate: issued] / 86400.0);
+  [details setObject: [NSNumber numberWithInteger: age] forKey: @"age_days"];
+  if (age > GSBundledAuthoritiesMaxAgeDays)
+    {
+      return [self checkWithID: checkID
+                         title: title
+                        status: @"warning"
+                      severity: @"warning"
+                       message: [NSString stringWithFormat: @"The bundled certificate authorities are %ld days old (over %ld). Update the toolchain.",
+                                          (long)age, (long)GSBundledAuthoritiesMaxAgeDays]
+                     interface: @"full"
+                executionTier: @"full_only"
+                       details: details];
+    }
+  return [self checkWithID: checkID
+                     title: title
+                    status: @"ok"
+                  severity: @"warning"
+                   message: [NSString stringWithFormat: @"The bundled certificate authorities are %ld days old.", (long)age]
+                 interface: @"full"
+            executionTier: @"full_only"
+                   details: details];
+}
+
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface
 {
   NSFileManager *manager = [NSFileManager defaultManager];
@@ -4150,6 +4373,7 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
   NSDictionary *compatibility = nil;
   NSDictionary *nativeToolchain = nil;
   NSDictionary *managedState = nil;
+  NSDictionary *bundledAuthorities = nil;
   NSString *classification = nil;
   NSString *status = @"ok";
   NSMutableArray *checks = [NSMutableArray array];
@@ -4430,6 +4654,18 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
 
   [self appendInstallTrace: @"doctor.checks.managed-integrity.start"];
   [checks addObject: [self managedInstallIntegrityCheckForEnvironment: environment interface: interface]];
+  {
+    BOOL windowsHost = NO;
+    id makefiles = [toolchain objectForKey: @"gnustep_makefiles"];
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+    windowsHost = YES;
+#endif
+    bundledAuthorities = [self bundledAuthoritiesCheckWithMakefiles: (makefiles == [NSNull null] ? nil : makefiles)
+                                                          interface: interface
+                                                              today: nil
+                                                            windows: windowsHost];
+    [checks addObject: bundledAuthorities];
+  }
   [self appendInstallTrace: @"doctor.checks.compatibility.start"];
 
   [checks addObject: [self checkWithID: @"toolchain.compatibility"
@@ -4496,6 +4732,12 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
       [actions addObject: [self actionWithKind: @"use_existing_toolchain"
                                        message: @"You can continue with the detected toolchain or install a managed one explicitly."
                                       priority: 1]];
+    }
+  if ([[bundledAuthorities objectForKey: @"status"] isEqualToString: @"warning"])
+    {
+      [actions addObject: [self actionWithKind: @"update_toolchain"
+                                       message: @"Update the managed toolchain to refresh gnustep-base's bundled certificate authorities."
+                                      priority: 2]];
     }
 
   [self appendInstallTrace: @"doctor.summary.start"];
