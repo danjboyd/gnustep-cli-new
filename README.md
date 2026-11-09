@@ -20,7 +20,8 @@ format.
 
 ## Install
 
-On Debian 13 (trixie) `amd64`/`arm64`, Ubuntu 24.04 LTS `amd64` or Ubuntu 26.04 LTS `amd64`:
+On Debian 13 (trixie) `amd64`/`arm64`, Ubuntu 24.04 LTS `amd64`/`arm64` (arm64 from v0.1.6)
+or Ubuntu 26.04 LTS `amd64`:
 
 ```sh
 curl -fsSL https://github.com/danjboyd/gnustep-cli-new/releases/latest/download/gnustep-bootstrap.sh | sh -s -- setup --user
