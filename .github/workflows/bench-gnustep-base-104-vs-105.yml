@@ -1,0 +1,86 @@
+name: Bench gnustep-base 10.4 vs 10.5 (one-shot)
+
+# One-shot timing for draft #47: the same Foundation benchmark against gnustep-base
+# 1.31.1-10.4 (clang 23 workaround on every file) and 10.5 (on GSFormat.m only),
+# on one runner, swapping only gnustep-base-1_31.dll, in alternating rounds.
+
+on:
+  push:
+    branches: [bench-gnustep-base-104-vs-105]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PKG104_URL: https://github.com/danjboyd/gnustep-cli-new/releases/download/msys2-inputs-2026-11-06/mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.4-any.pkg.tar.zst
+  PKG104_SHA256: 25385b215b35a2005690f539318c67b7d5c463db059d48e01755391f2bf2c377
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble the 10.5 toolchain
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = "$env:RUNNER_TEMP\gnustep-toolchain"
+          & powershell -NoProfile -ExecutionPolicy Bypass -File toolchains\windows-amd64-msys2-clang64\assemble-toolchain.ps1 -Prefix $root -CacheDir "$env:RUNNER_TEMP\msys2-cache"
+          $bash = Get-ChildItem -Path $root -Filter bash.exe -Recurse | Where-Object { $_.FullName -like '*\usr\bin\bash.exe' } | Select-Object -First 1
+          $tc = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $bash.FullName))
+          "TOOLCHAIN_ROOT=$tc" | Out-File -FilePath $env:GITHUB_ENV -Append
+      - name: Build the benchmark and fetch the 10.4 DLL
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bash = Join-Path $env:TOOLCHAIN_ROOT 'usr\bin\bash.exe'
+          $env:CHERE_INVOKING = '1'
+          $tc = $env:TOOLCHAIN_ROOT -replace '\\','/'
+          $ws = $env:GITHUB_WORKSPACE -replace '\\','/'
+          $out = $env:RUNNER_TEMP -replace '\\','/'
+          & $bash -lc "export PATH=`$(cygpath -u '$tc')/clang64/bin:`$PATH; set -e; cd `$(cygpath -u '$out'); clang `$(gnustep-config --objc-flags) -O2 `$(cygpath -u '$ws')/scripts/bench/base-bench.m -o bench.exe `$(gnustep-config --base-libs); pacman -Q mingw-w64-clang-x86_64-gnustep-base || true"
+          if ($LASTEXITCODE -ne 0) { throw 'benchmark build failed' }
+          $pkg = "$env:RUNNER_TEMP\base104.pkg.tar.zst"
+          Invoke-WebRequest -UseBasicParsing -Uri $env:PKG104_URL -OutFile $pkg
+          if ((Get-FileHash -Algorithm SHA256 $pkg).Hash.ToLowerInvariant() -ne $env:PKG104_SHA256) { throw '10.4 package sha256 mismatch' }
+          & $bash -lc "set -e; cd `$(cygpath -u '$out'); mkdir -p p104; tar --zstd -xf base104.pkg.tar.zst -C p104 clang64/bin/gnustep-base-1_31.dll"
+          if ($LASTEXITCODE -ne 0) { throw '10.4 DLL extraction failed' }
+          $dll = Join-Path $env:TOOLCHAIN_ROOT 'clang64\bin\gnustep-base-1_31.dll'
+          Copy-Item $dll "$env:RUNNER_TEMP\base105.dll"
+          Copy-Item "$env:RUNNER_TEMP\p104\clang64\bin\gnustep-base-1_31.dll" "$env:RUNNER_TEMP\base104.dll"
+          foreach ($v in '104','105') { "$v $((Get-FileHash -Algorithm SHA256 "$env:RUNNER_TEMP\base$v.dll").Hash.ToLowerInvariant())" }
+      - name: Run alternating rounds
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:PATH = (Join-Path $env:TOOLCHAIN_ROOT 'clang64\bin') + ';' + $env:PATH
+          $dll = Join-Path $env:TOOLCHAIN_ROOT 'clang64\bin\gnustep-base-1_31.dll'
+          $exe = "$env:RUNNER_TEMP\bench.exe"
+          $results = @{}
+          & $exe | Out-Null   # warm-up
+          foreach ($round in 1..7) {
+            foreach ($v in @('104','105') | Sort-Object { if ($round % 2) { $_ } else { -[int]$_ } }) {
+              Copy-Item "$env:RUNNER_TEMP\base$v.dll" $dll -Force
+              foreach ($line in (& $exe)) {
+                $name, $ms = $line -split ' '
+                $key = "$name|$v"
+                if (-not $results.ContainsKey($key)) { $results[$key] = @() }
+                $results[$key] += [double]$ms
+              }
+              if ($LASTEXITCODE -ne 0) { throw "bench failed with $v" }
+            }
+          }
+          Copy-Item "$env:RUNNER_TEMP\base105.dll" $dll -Force
+          "benchmark                10.4-median  10.5-median  change"
+          $names = $results.Keys | ForEach-Object { ($_ -split '\|')[0] } | Sort-Object -Unique
+          $t4 = 0; $t5 = 0
+          foreach ($n in $names) {
+            $m = @{}
+            foreach ($v in '104','105') { $s = $results["$n|$v"] | Sort-Object; $m[$v] = $s[[int][math]::Floor($s.Count / 2)] }
+            $t4 += $m['104']; $t5 += $m['105']
+            '{0,-24} {1,11:N1} {2,12:N1} {3,7:P1}' -f $n, $m['104'], $m['105'], (($m['105'] - $m['104']) / $m['104'])
+          }
+          '{0,-24} {1,11:N1} {2,12:N1} {3,7:P1}' -f 'TOTAL', $t4, $t5, (($t5 - $t4) / $t4)
+          foreach ($k in ($results.Keys | Sort-Object)) { "raw $k " + ($results[$k] -join ' ') }
