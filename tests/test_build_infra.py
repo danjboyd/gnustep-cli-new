@@ -762,6 +762,46 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("prebuilt-cli/bin/gnustep", names)
             self.assertNotIn("prebuilt-cli.tar.gz", "\n".join(names))
 
+    def test_stage_release_stages_every_published_linux_target_including_ubuntu2404_arm64(self):
+        # Stage Release drops targets that aren't published; v0.1.6 staging at 34c5af0
+        # silently lost ubuntu2404-arm64 that way. Every Linux input must be staged.
+        targets = [
+            "linux-amd64-clang",
+            "linux-arm64-clang",
+            "linux-ubuntu2404-amd64-clang",
+            "linux-ubuntu2404-arm64-clang",
+            "linux-ubuntu2604-amd64-clang",
+        ]
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            cli_inputs = {}
+            toolchain_inputs = {}
+            for target in targets:
+                for kind, inputs in (("cli", cli_inputs), ("toolchain", toolchain_inputs)):
+                    root = temp / f"{kind}-{target}"
+                    (root / "bin").mkdir(parents=True)
+                    (root / "bin" / "marker").write_text(f"{kind} {target}")
+                    archive_path = temp / f"gnustep-{kind}-{target}-0.1.6.tar.gz"
+                    with tarfile.open(archive_path, "w:gz") as archive:
+                        archive.add(root, arcname=f"{kind}-{target}")
+                    inputs[target] = archive_path
+            payload = stage_release_assets(
+                "0.1.6",
+                temp / "dist",
+                "https://github.com/danjboyd/gnustep-cli-new/releases/download",
+                cli_inputs=cli_inputs,
+                toolchain_inputs=toolchain_inputs,
+            )
+        staged = {artifact["id"]: artifact for artifact in payload["artifacts"]}
+        expected = {f"{kind}-{target}" for kind in ("cli", "toolchain") for target in targets}
+        self.assertEqual(set(staged), expected)
+        arm64 = staged["toolchain-linux-ubuntu2404-arm64-clang"]
+        self.assertEqual(arm64["arch"], "arm64")
+        self.assertEqual(arm64["supported_os_versions"], ["ubuntu-24.04"])
+        self.assertEqual(arm64["runtime_requirements"], {"icu_major": 74, "glibc_min": "2.39"})
+        self.assertTrue(arm64["published"])
+        self.assertTrue(staged["cli-linux-ubuntu2404-arm64-clang"]["published"])
+
     def test_stage_release_assets_records_toolchain_metadata_from_archive_inputs(self):
         with tempfile.TemporaryDirectory() as tempdir:
             temp = Path(tempdir)
