@@ -44,6 +44,8 @@ static NSString *GSCLIVersionString(void)
 - (NSString *)resolvedManifestPathForInstallRoot:(NSString *)installRoot preferredManifest:(NSString *)manifestPath;
 - (NSString *)latestStableManifestReference;
 - (NSString *)updateManifestForInstallRoot:(NSString *)installRoot warning:(NSString **)warning;
+- (NSString *)applyManifestForInstallRoot:(NSString *)installRoot explicitManifest:(NSString *)explicitManifest;
+- (NSString *)unappliedUpdateMessageForPlannedVersion:(NSString *)plannedVersion installedVersion:(NSString *)installedVersion;
 - (NSString *)manifestReferenceToRecord:(NSString *)manifestReference version:(NSString *)version;
 - (NSString *)defaultManagedRoot;
 - (BOOL)arguments:(NSArray *)arguments containOption:(NSString *)option;
@@ -7719,8 +7721,11 @@ static const NSInteger GSBundledAuthoritiesMaxAgeDays = 365;
         {
           NSMutableArray *setupArguments = [NSMutableArray arrayWithObjects: @"setup", @"--upgrade", nil];
           NSDictionary *setupPayload = nil;
-          NSString *resolvedManifest = [self resolvedManifestPathForInstallRoot: installRoot ? installRoot : [self defaultManagedRoot]
-                                                              preferredManifest: manifestPath];
+          NSString *resolvedManifest = [self applyManifestForInstallRoot: installRoot explicitManifest: manifestPath];
+          int planExit = 0;
+          NSDictionary *plan = [[self buildUpdatePlanForScope: @"user" manifest: resolvedManifest installRoot: installRoot exitCode: &planExit] objectForKey: @"update_plan"];
+          NSString *plannedVersion = [[plan objectForKey: @"update_available"] boolValue] ? [plan objectForKey: @"latest_compatible_version"] : nil;
+          NSString *unapplied = nil;
           if (installRoot != nil)
             {
               [setupArguments addObjectsFromArray: [NSArray arrayWithObjects: @"--root", installRoot, nil]];
@@ -7730,6 +7735,23 @@ static const NSInteger GSBundledAuthoritiesMaxAgeDays = 365;
               [setupArguments addObjectsFromArray: [NSArray arrayWithObjects: @"--manifest", resolvedManifest, nil]];
             }
           setupPayload = [self executeSetupForContext: [GSCommandContext contextWithArguments: setupArguments] exitCode: exitCode];
+          if (*exitCode == 0)
+            {
+              unapplied = [self unappliedUpdateMessageForPlannedVersion: plannedVersion
+                                                       installedVersion: [[self installedLifecycleStateForInstallRoot: installRoot ? installRoot : [self defaultManagedRoot]] objectForKey: @"cli_version"]];
+            }
+          if (unapplied != nil)
+            {
+              NSMutableDictionary *failed = [[[self updatePayloadFromSetupPayload: setupPayload
+                                                                             scope: @"cli"
+                                                                              mode: @"apply"
+                                                                         operation: @"update_cli"
+                                                                           summary: unapplied] mutableCopy] autorelease];
+              *exitCode = 1;
+              [failed setObject: [NSNumber numberWithBool: NO] forKey: @"ok"];
+              [failed setObject: @"error" forKey: @"status"];
+              return failed;
+            }
           return [self updatePayloadFromSetupPayload: setupPayload
                                                scope: @"cli"
                                                 mode: @"apply"
@@ -7801,15 +7823,6 @@ static const NSInteger GSBundledAuthoritiesMaxAgeDays = 365;
               {
                 [cliArguments addObjectsFromArray: [NSArray arrayWithObjects: @"--manifest", manifestPath, nil]];
               }
-            else
-              {
-                NSString *resolvedManifest = [self resolvedManifestPathForInstallRoot: installRoot ? installRoot : [self defaultManagedRoot]
-                                                                    preferredManifest: nil];
-                if (resolvedManifest != nil)
-                  {
-                    [cliArguments addObjectsFromArray: [NSArray arrayWithObjects: @"--manifest", resolvedManifest, nil]];
-                  }
-              }
             cliApply = [self executeUpdateForContext: [GSCommandContext contextWithArguments: cliArguments] exitCode: &applyExit];
             if (applyExit != 0)
               {
@@ -7838,6 +7851,36 @@ static const NSInteger GSBundledAuthoritiesMaxAgeDays = 365;
                               nil];
       }
   }
+}
+
+// The manifest an update applies: an explicit --manifest wins; otherwise the same
+// discovery the check uses (a newer stable release if one verifies, else the
+// recorded manifest). Applying the recorded manifest after the check found a
+// newer release reinstalled the current release and reported success.
+- (NSString *)applyManifestForInstallRoot:(NSString *)installRoot explicitManifest:(NSString *)explicitManifest
+{
+  NSString *root = installRoot ? installRoot : [self defaultManagedRoot];
+  if (explicitManifest != nil)
+    {
+      return [self resolvedManifestPathForInstallRoot: root preferredManifest: explicitManifest];
+    }
+  return [self updateManifestForInstallRoot: root warning: NULL];
+}
+
+// nil when the planned version is installed (or nothing was planned).
+- (NSString *)unappliedUpdateMessageForPlannedVersion:(NSString *)plannedVersion installedVersion:(NSString *)installedVersion
+{
+  if (plannedVersion == nil || (id)plannedVersion == (id)[NSNull null] || [plannedVersion length] == 0)
+    {
+      return nil;
+    }
+  if (installedVersion != nil && (id)installedVersion != (id)[NSNull null] && [installedVersion isEqualToString: plannedVersion])
+    {
+      return nil;
+    }
+  return [NSString stringWithFormat: @"The update to %@ was not installed; the install is still at %@.",
+                   plannedVersion,
+                   (installedVersion != nil && (id)installedVersion != (id)[NSNull null]) ? installedVersion : @"an unknown version"];
 }
 
 - (NSDictionary *)executeBuildForContext:(GSCommandContext *)context exitCode:(int *)exitCode
