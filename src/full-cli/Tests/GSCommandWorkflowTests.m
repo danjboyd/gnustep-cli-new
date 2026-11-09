@@ -823,6 +823,71 @@
   XCTAssertNotNil(warning);
 }
 
+- (NSString *)managedRootInDirectory:(NSString *)tempRoot recordingReleaseFixtureForVersion:(NSString *)version
+{
+  /* A local fixture under a releases/download/v<version>/ path, so update discovery
+     treats it as a recorded stable release manifest without touching the network. */
+  NSString *recorded = [self latestFixtureManifestInDirectory:
+                               [[tempRoot stringByAppendingPathComponent: @"releases/download"]
+                                          stringByAppendingPathComponent: [@"v" stringByAppendingString: version]]];
+  NSString *managedRoot = [tempRoot stringByAppendingPathComponent: @"managed"];
+  NSString *statePath = [[managedRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+
+  [self ensureDirectory: [statePath stringByDeletingLastPathComponent]];
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               version, @"cli_version",
+                                               version, @"toolchain_version",
+                                               @"stable", @"channel",
+                                               @"healthy", @"status",
+                                               recorded, @"manifest_path",
+                                               nil]
+                       toPath: statePath];
+  return managedRoot;
+}
+
+- (void)testUpdateCheckSaysNoNewerReleaseWhenLatestWasReadAndIsNotNewer
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-check-wording-current"];
+  NSString *managedRoot = [self managedRootInDirectory: tempRoot recordingReleaseFixtureForVersion: @"0.1.0-test"];
+  NSDictionary *payload = nil;
+  NSDictionary *plan = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubManagedDoctorPayload]];
+  [runner setStubLatestManifest: [self latestFixtureManifestInDirectory: [tempRoot stringByAppendingPathComponent: @"latest"]]];
+  payload = [runner buildUpdatePlanForScope: @"user" manifest: nil installRoot: managedRoot exitCode: &exitCode];
+  plan = [payload objectForKey: @"update_plan"];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertFalse([[plan objectForKey: @"update_available"] boolValue]);
+  XCTAssertEqualObjects([plan objectForKey: @"discovery_warning"], [NSNull null]);
+  XCTAssertEqualObjects([payload objectForKey: @"summary"], @"No newer stable release was found.");
+  XCTAssertTrue([[payload objectForKey: @"summary"] rangeOfString: @"current"].location == NSNotFound);
+}
+
+- (void)testUpdateCheckSaysANewerReleaseMayExistWhenLatestCannotBeRead
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-check-wording-unreadable"];
+  NSString *managedRoot = [self managedRootInDirectory: tempRoot recordingReleaseFixtureForVersion: @"0.1.0-test"];
+  NSDictionary *payload = nil;
+  NSDictionary *plan = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubManagedDoctorPayload]];
+  [runner setStubLatestManifest: [tempRoot stringByAppendingPathComponent: @"no-such-manifest.json"]];
+  payload = [runner buildUpdatePlanForScope: @"user" manifest: nil installRoot: managedRoot exitCode: &exitCode];
+  plan = [payload objectForKey: @"update_plan"];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertFalse([[plan objectForKey: @"update_available"] boolValue]);
+  XCTAssertTrue([[plan objectForKey: @"discovery_warning"] isKindOfClass: [NSString class]]);
+  XCTAssertTrue([[payload objectForKey: @"summary"] hasPrefix: @"Could not check the latest stable release, so a newer version may exist"]);
+  XCTAssertTrue([[payload objectForKey: @"summary"] rangeOfString: @"already current"].location == NSNotFound);
+}
+
 - (void)testUpdateDiscoveryLeavesDogfoodAndLocalManifestsAlone
 {
   StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
