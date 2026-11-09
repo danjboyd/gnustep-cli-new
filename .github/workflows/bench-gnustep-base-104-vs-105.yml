@@ -40,7 +40,7 @@ jobs:
           $tc = $env:TOOLCHAIN_ROOT -replace '\\','/'
           $ws = $env:GITHUB_WORKSPACE -replace '\\','/'
           $out = $env:RUNNER_TEMP -replace '\\','/'
-          & $bash -lc "export PATH=`$(cygpath -u '$tc')/clang64/bin:`$PATH; set -e; cd `$(cygpath -u '$out'); clang `$(gnustep-config --objc-flags) -O2 `$(cygpath -u '$ws')/scripts/bench/base-bench.m -o bench.exe `$(gnustep-config --base-libs); pacman -Q mingw-w64-clang-x86_64-gnustep-base || true"
+          & $bash -lc "export PATH=/clang64/bin:/usr/bin:`$PATH GNUSTEP_MAKEFILES=/clang64/share/GNUstep/Makefiles; set -e; which clang gnustep-config; cd `$(cygpath -u '$out'); clang `$(gnustep-config --objc-flags) -O2 `$(cygpath -u '$ws')/scripts/bench/base-bench.m -o bench.exe `$(gnustep-config --base-libs); pacman -Q mingw-w64-clang-x86_64-gnustep-base || true"
           if ($LASTEXITCODE -ne 0) { throw 'benchmark build failed' }
           $pkg = "$env:RUNNER_TEMP\base104.pkg.tar.zst"
           Invoke-WebRequest -UseBasicParsing -Uri $env:PKG104_URL -OutFile $pkg
