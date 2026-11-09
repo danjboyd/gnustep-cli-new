@@ -24,10 +24,54 @@
 - (NSArray *)toolRunInvocationForProject:(NSDictionary *)project;
 - (NSDictionary *)executeRunForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSComparisonResult)compareVersionString:(NSString *)left toVersionString:(NSString *)right;
+- (NSDate *)bundledAuthoritiesDateFromSource:(NSString *)sourceText;
+- (NSDictionary *)bundledAuthoritiesCheckWithMakefiles:(NSString *)gnustepMakefiles
+                                             interface:(NSString *)interface
+                                                 today:(NSDate *)today
+                                               windows:(BOOL)windows;
 @end
 
 @interface GSCommandRunnerTests : XCTestCase
 @end
+
+static NSString *GSTestMSYS2ToolchainWithSource(NSString *source)
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *root = [NSTemporaryDirectory() stringByAppendingPathComponent: [[NSUUID UUID] UUIDString]];
+  NSString *gstls = [root stringByAppendingPathComponent: @"clang64/lib/GNUstep/Libraries/gnustep-base/Versions/1.31/Resources/GSTLS"];
+  NSString *makefiles = [root stringByAppendingPathComponent: @"clang64/share/GNUstep/Makefiles"];
+
+  [manager createDirectoryAtPath: gstls withIntermediateDirectories: YES attributes: nil error: NULL];
+  [manager createDirectoryAtPath: makefiles withIntermediateDirectories: YES attributes: nil error: NULL];
+  [@"-----BEGIN CERTIFICATE-----\n" writeToFile: [gstls stringByAppendingPathComponent: @"ca-certificates.crt"]
+                                      atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  if (source != nil)
+    {
+      [source writeToFile: [gstls stringByAppendingPathComponent: @"ca-certificates.source"]
+               atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+    }
+  return makefiles;
+}
+
+static NSDate *GSTestUTCDate(NSInteger year, NSInteger month, NSInteger day)
+{
+  NSCalendar *calendar = [[[NSCalendar alloc] initWithCalendarIdentifier: NSGregorianCalendar] autorelease];
+  NSDateComponents *components = [[[NSDateComponents alloc] init] autorelease];
+
+  [calendar setTimeZone: [NSTimeZone timeZoneForSecondsFromGMT: 0]];
+  [components setYear: year];
+  [components setMonth: month];
+  [components setDay: day];
+  [components setHour: 12];
+  return [calendar dateFromComponents: components];
+}
+
+static void GSTestRemoveToolchain(NSString *makefiles)
+{
+  NSString *root = [[[[makefiles stringByDeletingLastPathComponent] stringByDeletingLastPathComponent]
+                       stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
+  [[NSFileManager defaultManager] removeItemAtPath: root error: NULL];
+}
 
 @implementation GSCommandRunnerTests
 
@@ -678,6 +722,67 @@
 
   XCTAssertNil(selectionError);
   XCTAssertEqualObjects([selected objectForKey: @"id"], @"pkg-linux-gcc");
+}
+
+
+- (void)testBundledAuthoritiesDateIsReadFromTheRecordedPackageVersion
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+
+  XCTAssertEqualObjects([runner bundledAuthoritiesDateFromSource: @"mingw-w64-clang-x86_64-ca-certificates 20260816-1"],
+                        [GSTestUTCDate(2026, 8, 16) dateByAddingTimeInterval: -12 * 3600]);
+  XCTAssertNil([runner bundledAuthoritiesDateFromSource: @"mingw-w64-clang-x86_64-ca-certificates unknown"]);
+  XCTAssertNil([runner bundledAuthoritiesDateFromSource: @"mingw-w64-clang-x86_64-ca-certificates 20260231-1"]);
+  XCTAssertNil([runner bundledAuthoritiesDateFromSource: @"something else"]);
+}
+
+- (void)testBundledAuthoritiesCheckGradesTheRecordedAge
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDate *today = GSTestUTCDate(2026, 11, 9);
+  NSString *makefiles = GSTestMSYS2ToolchainWithSource(@"mingw-w64-clang-x86_64-ca-certificates 20260816-1\n");
+  NSDictionary *check = [runner bundledAuthoritiesCheckWithMakefiles: makefiles interface: @"full" today: today windows: YES];
+
+  XCTAssertEqualObjects([check objectForKey: @"id"], @"tls.bundled-authorities");
+  XCTAssertEqualObjects([check objectForKey: @"status"], @"ok");
+  XCTAssertEqualObjects([[check objectForKey: @"details"] objectForKey: @"age_days"], [NSNumber numberWithInteger: 85]);
+  GSTestRemoveToolchain(makefiles);
+
+  makefiles = GSTestMSYS2ToolchainWithSource(@"mingw-w64-clang-x86_64-ca-certificates 20251108-1\n");
+  check = [runner bundledAuthoritiesCheckWithMakefiles: makefiles interface: @"full" today: today windows: YES];
+  XCTAssertEqualObjects([check objectForKey: @"status"], @"warning");
+  XCTAssertEqualObjects([[check objectForKey: @"details"] objectForKey: @"age_days"], [NSNumber numberWithInteger: 366]);
+  GSTestRemoveToolchain(makefiles);
+
+  makefiles = GSTestMSYS2ToolchainWithSource(@"mingw-w64-clang-x86_64-ca-certificates 20251109-1\n");
+  check = [runner bundledAuthoritiesCheckWithMakefiles: makefiles interface: @"full" today: today windows: YES];
+  XCTAssertEqualObjects([check objectForKey: @"status"], @"ok");
+  GSTestRemoveToolchain(makefiles);
+}
+
+- (void)testBundledAuthoritiesWithoutASourceRecordWarnOnlyOnWindows
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *makefiles = GSTestMSYS2ToolchainWithSource(nil);
+  NSDictionary *windows = [runner bundledAuthoritiesCheckWithMakefiles: makefiles interface: @"full" today: nil windows: YES];
+  NSDictionary *other = [runner bundledAuthoritiesCheckWithMakefiles: makefiles interface: @"full" today: nil windows: NO];
+
+  XCTAssertEqualObjects([windows objectForKey: @"status"], @"warning");
+  XCTAssertEqualObjects([other objectForKey: @"status"], @"not_run");
+  XCTAssertEqualObjects([[other objectForKey: @"details"] objectForKey: @"found"], [NSNumber numberWithBool: YES]);
+  GSTestRemoveToolchain(makefiles);
+}
+
+- (void)testBundledAuthoritiesCheckIsFullOnlyAndToleratesNoToolchain
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *bootstrap = [runner bundledAuthoritiesCheckWithMakefiles: nil interface: @"bootstrap" today: nil windows: YES];
+  NSDictionary *none = [runner bundledAuthoritiesCheckWithMakefiles: nil interface: @"full" today: nil windows: YES];
+
+  XCTAssertEqualObjects([bootstrap objectForKey: @"status"], @"not_run");
+  XCTAssertEqualObjects([bootstrap objectForKey: @"execution_tier"], @"full_only");
+  XCTAssertEqualObjects([none objectForKey: @"status"], @"not_run");
+  XCTAssertEqualObjects([[none objectForKey: @"details"] objectForKey: @"found"], [NSNumber numberWithBool: NO]);
 }
 
 @end

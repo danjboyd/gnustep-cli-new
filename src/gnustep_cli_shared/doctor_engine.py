@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -475,6 +476,98 @@ def _managed_install_integrity_check(environment: dict[str, Any], *, interface: 
     )
 
 
+BUNDLED_AUTHORITIES_MAX_AGE_DAYS = 365
+_GSTLS_GLOBS = (
+    "lib/GNUstep/Libraries/gnustep-base/Versions/*/Resources/GSTLS",
+    "*/Library/Libraries/gnustep-base/Versions/*/Resources/GSTLS",
+)
+
+
+def _find_gstls_directory(gnustep_makefiles: str | None) -> Path | None:
+    """The gnustep-base GSTLS resource directory of the toolchain whose Makefiles are given."""
+    if not gnustep_makefiles:
+        return None
+    makefiles = Path(gnustep_makefiles)
+    # MSYS2: <prefix>/share/GNUstep/Makefiles; managed Linux: <root>/System/Library/Makefiles.
+    for prefix in (makefiles.parent.parent.parent, makefiles.parent.parent):
+        for pattern in _GSTLS_GLOBS:
+            for candidate in sorted(prefix.glob(pattern)):
+                if (candidate / "ca-certificates.crt").is_file():
+                    return candidate
+    return None
+
+
+def _bundled_authorities_date(source_text: str) -> date | None:
+    """The date in a recorded ca-certificates version such as '... ca-certificates 20260816-1'."""
+    match = re.search(r"ca-certificates\s+(\d{4})(\d{2})(\d{2})", source_text)
+    if match is None:
+        return None
+    try:
+        return date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    except ValueError:
+        return None
+
+
+def _bundled_authorities_check(
+    environment: dict[str, Any],
+    *,
+    interface: str,
+    today: date | None = None,
+    windows: bool | None = None,
+) -> CheckResult:
+    check_id = "tls.bundled-authorities"
+    title = "Check the age of gnustep-base's bundled certificate authorities"
+    if interface == "bootstrap":
+        return _full_only_check(check_id, title, "warning")
+    if windows is None:
+        windows = environment.get("os") == "windows"
+    today = today or date.today()
+    gstls = _find_gstls_directory(environment["toolchain"].get("gnustep_makefiles"))
+
+    def result(status: str, message: str, details: dict[str, Any]) -> CheckResult:
+        return CheckResult(
+            id=check_id,
+            title=title,
+            status=status,
+            severity="warning",
+            message=message,
+            interface="full",
+            execution_tier="full_only",
+            details=details,
+        )
+
+    if gstls is None:
+        return result("not_run", "No gnustep-base bundled certificate authorities were found.", {"found": False})
+    source_path = gstls / "ca-certificates.source"
+    details: dict[str, Any] = {"found": True, "bundle_path": str(gstls / "ca-certificates.crt"), "max_age_days": BUNDLED_AUTHORITIES_MAX_AGE_DAYS}
+    if not source_path.is_file():
+        if not windows:
+            return result("not_run", "The bundled certificate authorities are only a fallback for system trust on this platform.", details)
+        return result(
+            "warning",
+            "This toolchain's bundled certificate authorities have no recorded source; toolchains before v0.1.5 ship a 2016 set. Update the toolchain.",
+            details,
+        )
+    try:
+        source_text = source_path.read_text(errors="replace").strip()
+    except OSError as exc:
+        return result("warning", f"The bundled certificate authorities' source record is unreadable: {exc}", details)
+    details["source"] = source_text
+    issued = _bundled_authorities_date(source_text)
+    if issued is None:
+        return result("warning", "The bundled certificate authorities' source record has no recognisable date.", details)
+    age = (today - issued).days
+    details["issued"] = issued.isoformat()
+    details["age_days"] = age
+    if age > BUNDLED_AUTHORITIES_MAX_AGE_DAYS:
+        return result(
+            "warning",
+            f"The bundled certificate authorities are {age} days old (over {BUNDLED_AUTHORITIES_MAX_AGE_DAYS}). Update the toolchain.",
+            details,
+        )
+    return result("ok", f"The bundled certificate authorities are {age} days old.", details)
+
+
 def _assess_native_toolchain(environment: dict[str, Any], compatibility: dict[str, Any]) -> dict[str, Any]:
     toolchain = environment["toolchain"]
     distribution_id = environment.get("distribution_id")
@@ -673,6 +766,8 @@ def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = 
     else:
         checks.append(_full_only_check("toolchain.probe", "Compile/link/run probe", "error"))
     checks.append(_managed_install_integrity_check(environment, interface=interface, managed_root=managed_root))
+    bundled_authorities = _bundled_authorities_check(environment, interface=interface)
+    checks.append(bundled_authorities)
     if artifact is not None:
         checks.append(
             CheckResult(
@@ -720,6 +815,9 @@ def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = 
         actions.append(Action(kind="repair_or_replace_toolchain", priority=1, message="Repair the detected toolchain or install a managed one."))
     else:
         actions.append(Action(kind="use_existing_toolchain", priority=1, message="You can continue with the detected toolchain or install a managed one explicitly."))
+
+    if bundled_authorities.status == "warning":
+        actions.append(Action(kind="update_toolchain", priority=2, message="Update the managed toolchain to refresh gnustep-base's bundled certificate authorities."))
 
     summary_map = {
         "no_toolchain": "No preexisting GNUstep toolchain was detected.",
