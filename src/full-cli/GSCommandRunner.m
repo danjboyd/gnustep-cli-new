@@ -153,6 +153,7 @@ static NSString *GSCLIVersionString(void)
 - (BOOL)isDeferredProbe:(NSDictionary *)probe;
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface;
+- (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath;
 - (NSString *)gstlsDirectoryForMakefiles:(NSString *)gnustepMakefiles;
 - (NSDate *)bundledAuthoritiesDateFromSource:(NSString *)sourceText;
 - (NSDictionary *)bundledAuthoritiesCheckWithMakefiles:(NSString *)gnustepMakefiles
@@ -3915,6 +3916,72 @@ static const NSInteger GSBundledAuthoritiesMaxAgeDays = 365;
                    details: details];
 }
 
+static NSArray *GSCanonicalPathComponents(NSString *path)
+{
+  NSString *normalized = [path stringByReplacingOccurrencesOfString: @"\\" withString: @"/"];
+  NSMutableArray *components = [NSMutableArray array];
+  NSArray *raw = nil;
+  NSUInteger i = 0;
+
+  normalized = [[normalized stringByResolvingSymlinksInPath] stringByStandardizingPath];
+  raw = [normalized componentsSeparatedByString: @"/"];
+  for (i = 0; i < [raw count]; i++)
+    {
+      NSString *component = [raw objectAtIndex: i];
+      if ([component length] == 0 || [component isEqualToString: @"."])
+        {
+          continue;
+        }
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+      component = [component lowercaseString];
+#endif
+      [components addObject: component];
+    }
+  return components;
+}
+
+/* The managed root whose toolchain doctor detected, or nil. It needs readable,
+   healthy managed state, and the toolchain's makefiles must lie inside that root by
+   whole path components (after resolving symlinks), so a sibling such as
+   <root>-other, or an unrelated native toolchain, is never called managed. */
+- (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath
+{
+  NSData *data = nil;
+  id state = nil;
+  NSString *root = nil;
+  NSArray *rootComponents = nil;
+  NSArray *makefileComponents = nil;
+  NSUInteger i = 0;
+
+  if (gnustepMakefiles == nil || (id)gnustepMakefiles == (id)[NSNull null] || [gnustepMakefiles length] == 0 ||
+      statePath == nil || (id)statePath == (id)[NSNull null] || [statePath length] == 0)
+    {
+      return nil;
+    }
+  data = [NSData dataWithContentsOfFile: statePath];
+  state = data ? [NSJSONSerialization JSONObjectWithData: data options: 0 error: NULL] : nil;
+  if ([state isKindOfClass: [NSDictionary class]] == NO ||
+      [[state objectForKey: @"status"] isEqual: @"healthy"] == NO)
+    {
+      return nil;
+    }
+  root = [[statePath stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
+  rootComponents = GSCanonicalPathComponents(root);
+  makefileComponents = GSCanonicalPathComponents(gnustepMakefiles);
+  if ([rootComponents count] == 0 || [makefileComponents count] <= [rootComponents count])
+    {
+      return nil;
+    }
+  for (i = 0; i < [rootComponents count]; i++)
+    {
+      if ([[rootComponents objectAtIndex: i] isEqualToString: [makefileComponents objectAtIndex: i]] == NO)
+        {
+          return nil;
+        }
+    }
+  return root;
+}
+
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface
 {
   NSFileManager *manager = [NSFileManager defaultManager];
@@ -4374,6 +4441,8 @@ static const NSInteger GSBundledAuthoritiesMaxAgeDays = 365;
   NSDictionary *nativeToolchain = nil;
   NSDictionary *managedState = nil;
   NSDictionary *bundledAuthorities = nil;
+  NSDictionary *managedIntegrity = nil;
+  NSString *managedRootInUse = nil;
   NSString *classification = nil;
   NSString *status = @"ok";
   NSMutableArray *checks = [NSMutableArray array];
@@ -4585,6 +4654,20 @@ static const NSInteger GSBundledAuthoritiesMaxAgeDays = 365;
                              interface: ([interface isEqualToString: @"bootstrap"] ? @"bootstrap" : @"both")
                         executionTier: @"bootstrap_optional"
                                details: nil]];
+  managedIntegrity = [self managedInstallIntegrityCheckForEnvironment: environment interface: interface];
+  if ([[managedIntegrity objectForKey: @"status"] isEqualToString: @"ok"] &&
+      [[nativeToolchain objectForKey: @"assessment"] isEqualToString: @"supported"])
+    {
+      id makefiles = [toolchain objectForKey: @"gnustep_makefiles"];
+      managedRootInUse = [self managedRootInUseForToolchainMakefiles: (makefiles == [NSNull null] ? nil : makefiles)
+                                                           statePath: [[managedIntegrity objectForKey: @"details"] objectForKey: @"state_path"]];
+    }
+  if (managedRootInUse != nil)
+    {
+      NSMutableDictionary *managedAssessment = [[nativeToolchain mutableCopy] autorelease];
+      [managedAssessment setObject: [NSString stringWithFormat: @"The detected toolchain is the managed install at %@.", managedRootInUse] forKey: @"message"];
+      nativeToolchain = managedAssessment;
+    }
   [checks addObject: [self checkWithID: @"native-toolchain.assess"
                                  title: @"Assess native packaged toolchain path"
                                 status: ([[nativeToolchain objectForKey: @"assessment"] isEqualToString: @"preferred"] ||
@@ -4602,6 +4685,7 @@ static const NSInteger GSBundledAuthoritiesMaxAgeDays = 365;
                                                         [nativeToolchain objectForKey: @"assessment"], @"assessment",
                                                         [nativeToolchain objectForKey: @"preference"], @"preference",
                                                         [nativeToolchain objectForKey: @"reasons"], @"reasons",
+                                                        (managedRootInUse ? (id)managedRootInUse : (id)[NSNull null]), @"managed_root",
                                                         nil]]];
 
   [checks addObject: [self checkWithID: @"toolchain.features"
@@ -4653,7 +4737,7 @@ static const NSInteger GSBundledAuthoritiesMaxAgeDays = 365;
     }
 
   [self appendInstallTrace: @"doctor.checks.managed-integrity.start"];
-  [checks addObject: [self managedInstallIntegrityCheckForEnvironment: environment interface: interface]];
+  [checks addObject: managedIntegrity];
   {
     BOOL windowsHost = NO;
     id makefiles = [toolchain objectForKey: @"gnustep_makefiles"];
@@ -4696,9 +4780,18 @@ static const NSInteger GSBundledAuthoritiesMaxAgeDays = 365;
     }
   else if ([[nativeToolchain objectForKey: @"assessment"] isEqualToString: @"supported"])
     {
-      [actions addObject: [self actionWithKind: @"use_existing_toolchain"
-                                       message: @"Use the detected native GNUstep toolchain or choose a managed install explicitly."
-                                      priority: 1]];
+      if (managedRootInUse != nil)
+        {
+          [actions addObject: [self actionWithKind: @"use_managed_toolchain"
+                                           message: [NSString stringWithFormat: @"The managed toolchain at %@ is ready; run `gnustep update --check` to look for updates.", managedRootInUse]
+                                          priority: 1]];
+        }
+      else
+        {
+          [actions addObject: [self actionWithKind: @"use_existing_toolchain"
+                                           message: @"Use the detected native GNUstep toolchain or choose a managed install explicitly."
+                                          priority: 1]];
+        }
     }
   else if ([[nativeToolchain objectForKey: @"assessment"] isEqualToString: @"interoperability_only"])
     {

@@ -635,7 +635,40 @@ def _assess_native_toolchain(environment: dict[str, Any], compatibility: dict[st
     }
 
 
-def _native_toolchain_check(native_toolchain: dict[str, Any], *, interface: str) -> CheckResult:
+def _canonical_path_components(path: str) -> list[str]:
+    normalized = os.path.realpath(path.replace("\\", "/"))
+    parts = [part for part in Path(normalized).parts if part not in ("", ".", "/")]
+    if os.name == "nt":
+        parts = [part.lower() for part in parts]
+    return parts
+
+
+def _managed_root_in_use(gnustep_makefiles: str | None, state_path: str | None) -> str | None:
+    """The managed root whose toolchain doctor detected, or None.
+
+    Needs readable, healthy managed state, and the makefiles must lie inside that
+    root by whole path components after resolving symlinks, so a sibling such as
+    <root>-other or an unrelated native toolchain is never called managed.
+    """
+    if not gnustep_makefiles or not state_path:
+        return None
+    try:
+        state = json.loads(Path(state_path).read_text())
+    except Exception:
+        return None
+    if not isinstance(state, dict) or state.get("status") != "healthy":
+        return None
+    root = str(Path(state_path).parent.parent)
+    root_parts = _canonical_path_components(root)
+    makefile_parts = _canonical_path_components(gnustep_makefiles)
+    if not root_parts or len(makefile_parts) <= len(root_parts):
+        return None
+    if makefile_parts[: len(root_parts)] != root_parts:
+        return None
+    return root
+
+
+def _native_toolchain_check(native_toolchain: dict[str, Any], *, interface: str, managed_root_in_use: str | None = None) -> CheckResult:
     assessment = native_toolchain["assessment"]
     status_map = {
         "preferred": "ok",
@@ -650,10 +683,19 @@ def _native_toolchain_check(native_toolchain: dict[str, Any], *, interface: str)
         title="Assess native packaged toolchain path",
         status=status_map[assessment],
         severity="warning" if assessment in {"preferred", "supported", "interoperability_only", "unavailable"} else "error",
-        message=native_toolchain["message"],
+        message=(
+            f"The detected toolchain is the managed install at {managed_root_in_use}."
+            if managed_root_in_use
+            else native_toolchain["message"]
+        ),
         interface="bootstrap" if interface == "bootstrap" else "both",
         execution_tier="bootstrap_optional",
-        details={"assessment": assessment, "preference": native_toolchain["preference"], "reasons": native_toolchain["reasons"]},
+        details={
+            "assessment": assessment,
+            "preference": native_toolchain["preference"],
+            "reasons": native_toolchain["reasons"],
+            "managed_root": managed_root_in_use,
+        },
     )
 
 
@@ -694,6 +736,13 @@ def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = 
     elif classification == "no_toolchain":
         status = "warning"
 
+    managed_integrity = _managed_install_integrity_check(environment, interface=interface, managed_root=managed_root)
+    managed_root_in_use = None
+    if managed_integrity.status == "ok" and native_toolchain["assessment"] == "supported":
+        managed_root_in_use = _managed_root_in_use(
+            environment["toolchain"].get("gnustep_makefiles"), managed_integrity.details.get("state_path")
+        )
+
     checks = [
         CheckResult(
             id="host.identity",
@@ -731,7 +780,7 @@ def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = 
             interface="bootstrap" if interface == "bootstrap" else "both",
             execution_tier="bootstrap_optional",
         ),
-        _native_toolchain_check(native_toolchain, interface=interface),
+        _native_toolchain_check(native_toolchain, interface=interface, managed_root_in_use=managed_root_in_use),
         CheckResult(
             id="toolchain.features",
             title="Detect Objective-C feature flags",
@@ -765,7 +814,7 @@ def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = 
         )
     else:
         checks.append(_full_only_check("toolchain.probe", "Compile/link/run probe", "error"))
-    checks.append(_managed_install_integrity_check(environment, interface=interface, managed_root=managed_root))
+    checks.append(managed_integrity)
     bundled_authorities = _bundled_authorities_check(environment, interface=interface)
     checks.append(bundled_authorities)
     if artifact is not None:
@@ -803,7 +852,10 @@ def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = 
     if native_toolchain["assessment"] == "preferred":
         actions.append(Action(kind="use_existing_toolchain", priority=1, message="Use the packaged native GNUstep toolchain; it is the preferred path on this host."))
     elif native_toolchain["assessment"] == "supported":
-        actions.append(Action(kind="use_existing_toolchain", priority=1, message="Use the detected native GNUstep toolchain or choose a managed install explicitly."))
+        if managed_root_in_use:
+            actions.append(Action(kind="use_managed_toolchain", priority=1, message=f"The managed toolchain at {managed_root_in_use} is ready; run `gnustep update --check` to look for updates."))
+        else:
+            actions.append(Action(kind="use_existing_toolchain", priority=1, message="Use the detected native GNUstep toolchain or choose a managed install explicitly."))
     elif native_toolchain["assessment"] == "interoperability_only":
         actions.append(Action(kind="use_existing_toolchain", priority=2, message="The detected native GNUstep toolchain is suitable for interoperability validation, but the managed toolchain remains the preferred path."))
         actions.append(Action(kind="install_managed_toolchain", priority=1, message="Install the supported managed GNUstep toolchain for the preferred runtime model."))
