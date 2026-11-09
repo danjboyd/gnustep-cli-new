@@ -101,9 +101,19 @@ stable releases advertise a signed package index, which currently contains only
 Arlen. On v0.1.0 through v0.1.3 they only work with an index you pass explicitly:
 `gnustep list --index <path-or-url>`.
 
-From v0.1.5, `gnustep update` finds and installs newer stable releases. An
-install from v0.1.4 or earlier doesn't find them: run the bootstrap above once to
-move it to the newest release.
+From v0.1.5, `gnustep update --check` finds newer stable releases. An install from
+v0.1.4 or earlier doesn't find them: run the bootstrap above once to move it to the
+newest release.
+
+Known issue in v0.1.5 and v0.1.6: `gnustep update --yes` without `--manifest`
+reinstalls the current release and still reports success. To move to the newest
+release, name its manifest, for example:
+
+```sh
+gnustep update --yes --manifest https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.6/release-manifest.json
+```
+
+or run the bootstrap above again.
 
 ## Already have GNUstep?
 
