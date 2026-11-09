@@ -2,7 +2,8 @@
 # maintainer Frederik Carlier). Changed: pkgrel, a vendored copy of its bace6f54 patch
 # (GitHub's generated patch text changes over time), the seven upstream TLS commits below,
 # the BLOCK_SCOPE header fix assemble-toolchain.ps1 otherwise applies after install,
-# upstream 7c81d0c83's clang 23 workaround flag, and our 0009: on Windows gnustep-base
+# upstream 7c81d0c83 itself (its clang 23 workaround, on GSFormat.m only; without its CI
+# hunk), and our 0009: on Windows gnustep-base
 # also trusts its bundled authorities, which this package replaces with the current
 # Mozilla set from the locked ca-certificates package (the source tree's file is 2016's).
 
@@ -10,7 +11,7 @@ _realname=gnustep-base
 pkgbase=mingw-w64-${_realname}
 pkgname=("${MINGW_PACKAGE_PREFIX}-${_realname}")
 pkgver=1.31.1
-pkgrel=10.4
+pkgrel=10.5
 pkgdesc="GNUstep Base library (mingw-w64)"
 arch=('any')
 mingw_arch=('mingw64' 'ucrt64' 'clang64' 'clangarm64')
@@ -48,7 +49,8 @@ source=("${msys2_repository_url}/releases/download/base-${pkgver//./_}/${_realna
         "0006-tweak-tls-notification-posting.patch"
         "0007-Security-improvement-without-test-hunk.patch"
         "0008-Fix-for-TLS-host-verification-when-we-have-a-host-ad.patch"
-        "0009-On-Windows-also-trust-the-bundled-authorities.patch")
+        "0009-On-Windows-also-trust-the-bundled-authorities.patch"
+        "0010-Fix-compilation-with-clang-23-without-ci-hunk.patch")
 sha256sums=('e7546f1c978a7c75b676953a360194a61e921cb45a4804497b4f346a460545cd'
             '0cb96d42d72cb7219cd4f0473791dc89cfadce4b7cba171f191c3cb434237e20'
             'f1a8a5a5ce5f288c5325e5ab0c636e76054002eec2ce76f00b3862d787c73c0f'
@@ -59,7 +61,8 @@ sha256sums=('e7546f1c978a7c75b676953a360194a61e921cb45a4804497b4f346a460545cd'
             '4904926e1a5b24a83ab647aa1fe43e8c82e7107dde04401e1ba0e6a160d3167b'
             '035a5b6a9008d5be1acf762a53c026771fdce589f90af933deeaf17a2945873e'
             '93ccc028d223452db6bd99f4066a3644e7364270b13039c35308491c7de1c9dc'
-            '50621027b973baad37f63529ccdf592af78b4cc375c51ada93617b22c08f45d8')
+            '50621027b973baad37f63529ccdf592af78b4cc375c51ada93617b22c08f45d8'
+            '40bc266685b4f53abd709773e1c270947c5778c8ce3b5711cbcca57740b84603')
 
 prepare() {
   cd "${_realname}-${pkgver}"
@@ -67,7 +70,7 @@ prepare() {
   patch -p1 -i "${srcdir}/bace6f54fd5fb882cb3adc79c87cc82d5c6d9c70.patch"
 
   local tls_patch
-  for tls_patch in 0001-Turn-on-strict-host-verification-by-default.patch 0002-Fix-error-message-and-disable-server-validation-fo.patch 0003-More-TLS-improvements.patch 0004-Improve-TLS-handling.patch 0005-Add-notification-for-verify-failure.patch 0006-tweak-tls-notification-posting.patch 0007-Security-improvement-without-test-hunk.patch 0008-Fix-for-TLS-host-verification-when-we-have-a-host-ad.patch 0009-On-Windows-also-trust-the-bundled-authorities.patch; do
+  for tls_patch in 0001-Turn-on-strict-host-verification-by-default.patch 0002-Fix-error-message-and-disable-server-validation-fo.patch 0003-More-TLS-improvements.patch 0004-Improve-TLS-handling.patch 0005-Add-notification-for-verify-failure.patch 0006-tweak-tls-notification-posting.patch 0007-Security-improvement-without-test-hunk.patch 0008-Fix-for-TLS-host-verification-when-we-have-a-host-ad.patch 0009-On-Windows-also-trust-the-bundled-authorities.patch 0010-Fix-compilation-with-clang-23-without-ci-hunk.patch; do
     patch -p1 -i "${srcdir}/${tls_patch}"
   done
 
@@ -91,9 +94,10 @@ build() {
   rsync --recursive --times --links "${srcdir}/${_realname}-${pkgver}"/* "${srcdir}/build-${MSYSTEM}"
   cd "${srcdir}/build-${MSYSTEM}"
 
-  # clang 23 miscompiles GSPrivateFormat (llvm/llvm-project#231864): every NSLog
-  # crashes. Same workaround as upstream libs-base 7c81d0c83, as a flag.
-  export OBJCFLAGS="-Wno-incompatible-pointer-types -mllvm -enable-dfa-jump-thread=false"
+  # clang 23 miscompiles GSPrivateFormat (llvm/llvm-project#231864), which made every
+  # NSLog crash. Patch 0010 (upstream 7c81d0c83) has configure turn that pass off for
+  # GSFormat.m only. The build below checks that from the compile commands.
+  export OBJCFLAGS="-Wno-incompatible-pointer-types"
 
   CC="$MINGW_PREFIX/bin/clang" \
   CXX="$MINGW_PREFIX/bin/clang++" \
@@ -102,7 +106,22 @@ build() {
 
   CC="$MINGW_PREFIX/bin/clang" \
   CXX="$MINGW_PREFIX/bin/clang++" \
-  make
+  make messages=yes > make-commands.log 2>&1 || { tail -n 60 make-commands.log; return 1; }
+
+  # The clang 23 workaround must reach GSFormat.m, and only GSFormat.m. Make echoes
+  # each compile command with its line continuations, so join them first.
+  sed -e ':a' -e '/\\$/N; s/\\\n//; ta' make-commands.log > compile-commands.log
+  local flag='-enable-dfa-jump-thread=false'
+  if ! grep -E 'clang[^ ]* GSFormat\.m -c ' compile-commands.log | grep -q -- "${flag}"; then
+    echo "GSFormat.m was compiled without ${flag}" >&2
+    return 1
+  fi
+  local others
+  others=$(grep -E 'clang[^ ]* [^ ]+\.mm? -c ' compile-commands.log | grep -v ' GSFormat\.m -c ' | grep -c -- "${flag}" || true)
+  if [ "${others}" != 0 ]; then
+    echo "${others} other files were compiled with ${flag}" >&2
+    return 1
+  fi
 }
 
 check() {

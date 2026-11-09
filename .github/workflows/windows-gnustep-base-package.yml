@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   # Builds from the branch that changes the recipe; dispatch needs the file on master.
   push:
-    branches: [windows-tls-ca-bundle]
+    branches: [windows-gsformat-per-file-flag]
     paths:
       - toolchains/windows-amd64-msys2-clang64/gnustep-base-package/**
       - toolchains/patches/libs-base/**
