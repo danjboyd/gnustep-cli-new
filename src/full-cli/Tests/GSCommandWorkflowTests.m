@@ -1406,6 +1406,7 @@
   NSDictionary *state = nil;
   NSString *activeBefore = nil;
   NSArray *snapshotsBefore = nil;
+  BOOL stagingBefore = NO;
   NSUInteger i = 0;
   int exitCode = 0;
 
@@ -1437,6 +1438,7 @@
   XCTAssertEqual(exitCode, 0, @"%@", [payload objectForKey: @"summary"]);
   activeBefore = [[runner installedLifecycleStateForInstallRoot: installRoot] objectForKey: @"active_release_path"];
   XCTAssertNotNil(activeBefore);
+  stagingBefore = [manager fileExistsAtPath: [installRoot stringByAppendingPathComponent: @".staging"]];
   snapshotsBefore = [[manager contentsOfDirectoryAtPath: tempRoot error: NULL] filteredArrayUsingPredicate:
                       [NSPredicate predicateWithFormat: @"SELF BEGINSWITH '.managed-root.setup-backup'"]];
 
@@ -1461,7 +1463,8 @@
       XCTAssertEqualObjects([state objectForKey: @"status"], @"healthy", @"step %@", step);
       XCTAssertEqualObjects([state objectForKey: @"active_release_path"], activeBefore, @"step %@", step);
       XCTAssertTrue([manager fileExistsAtPath: [installRoot stringByAppendingPathComponent: @"current"]], @"step %@", step);
-      XCTAssertFalse([manager fileExistsAtPath: [installRoot stringByAppendingPathComponent: @".staging"]], @"step %@", step);
+      // Rollback restores the snapshot exactly, so the root matches its pre-upgrade self.
+      XCTAssertEqual([manager fileExistsAtPath: [installRoot stringByAppendingPathComponent: @".staging"]], stagingBefore, @"step %@", step);
       launch = [runner runCommand: [NSArray arrayWithObjects: [installRoot stringByAppendingPathComponent: @"bin/gnustep"], nil] currentDirectory: nil];
       XCTAssertTrue([[launch objectForKey: @"launched"] boolValue], @"step %@", step);
       XCTAssertEqual([[launch objectForKey: @"exit_status"] intValue], 0, @"step %@", step);
