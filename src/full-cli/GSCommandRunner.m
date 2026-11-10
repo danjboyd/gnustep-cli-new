@@ -156,6 +156,7 @@ static NSString *GSCLIVersionString(void)
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface;
 - (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath;
+- (NSString *)versionedInstallRootForReleaseRoot:(NSString *)releaseRoot;
 - (NSString *)gstlsDirectoryForMakefiles:(NSString *)gnustepMakefiles;
 - (NSDate *)bundledAuthoritiesDateFromSource:(NSString *)sourceText;
 - (NSDictionary *)bundledAuthoritiesCheckWithMakefiles:(NSString *)gnustepMakefiles
@@ -4033,6 +4034,27 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                 }
             }
         }
+      // Installs keep each release under <root>/releases/<version> (reached through
+      // <root>/current) and the lifecycle state at <root>/state, so a binary that
+      // resolves into a release directory must look two levels further up.
+      {
+        NSArray *releaseRoots = [NSArray arrayWithObjects:
+                                           installRoot ? installRoot : @"",
+                                           [[[binaryDir stringByDeletingLastPathComponent] stringByDeletingLastPathComponent] stringByDeletingLastPathComponent],
+                                           nil];
+        NSUInteger r = 0;
+        for (r = 0; r < [releaseRoots count]; r++)
+          {
+            NSString *versionedRoot = [self versionedInstallRootForReleaseRoot: [releaseRoots objectAtIndex: r]];
+            if (versionedRoot != nil)
+              {
+                NSString *versionedStatePath = [[versionedRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+                [candidateStatePaths removeObject: versionedStatePath];
+                [candidateStatePaths insertObject: versionedStatePath atIndex: 0];
+                break;
+              }
+          }
+      }
     }
 #if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
   {
@@ -4083,6 +4105,23 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                                             [NSNumber numberWithBool: NO], @"managed_install_detected",
                                             candidateStatePaths, @"candidate_state_paths",
                                             nil]];
+}
+
+// <root> for <root>/releases/<version>, else nil.
+- (NSString *)versionedInstallRootForReleaseRoot:(NSString *)releaseRoot
+{
+  NSString *releasesDir = nil;
+
+  if ([releaseRoot length] == 0 || [[releaseRoot lastPathComponent] length] == 0)
+    {
+      return nil;
+    }
+  releasesDir = [releaseRoot stringByDeletingLastPathComponent];
+  if (![[releasesDir lastPathComponent] isEqualToString: @"releases"])
+    {
+      return nil;
+    }
+  return [releasesDir stringByDeletingLastPathComponent];
 }
 
 - (NSDictionary *)nativeToolchainAssessmentForEnvironment:(NSDictionary *)environment compatibility:(NSDictionary *)compatibility
