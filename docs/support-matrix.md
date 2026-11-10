@@ -132,7 +132,7 @@ root. Evidence:
   `docs/validation/linux-ubuntu2604-amd64-stable-publish-20261013/`. No
   official package has a 26.04 artifact yet. arm64 is not planned for now.
 - `ubuntu2404-arm64-managed-clang`
-  status: `container_qualified_unreleased`
+  status: `published_stable_container_qualified`
   notes: target `linux-ubuntu2404-arm64-clang`, added on November 3, 2026
   (927b73b): built from source in `ubuntu:24.04` on an arm64 GitHub runner,
   with the bootstrap selecting it for `arm64:ubuntu-24.04` and an ICU 74 gate.
@@ -141,8 +141,10 @@ root. Evidence:
   Ubuntu 24.04.5 arm64 container (glibc 2.39, ICU 74): setup, doctor,
   new/build/run, the Foundation probe, package install/remove, and the TLS
   cases all passed, and no non-ICU-74 or system libraries are bundled. Evidence:
-  `docs/validation/linux-ubuntu2404-arm64-dev-20261106/`. Not in any release
-  yet; planned for v0.1.6. Evidence tier: container, not a VM or physical host.
+  `docs/validation/linux-ubuntu2404-arm64-dev-20261106/`. On stable since
+  v0.1.6 (November 9, 2026); release evidence:
+  `docs/validation/release-0.1.6-evidence/`. Evidence tier: container, not a VM
+  or physical host.
 - `ubuntu2404-amd64-managed-clang`
   status: `published_stable_container_qualified`
   notes: on stable since v0.1.2 (October 20, 2026), with an `ubuntu-24.04` /

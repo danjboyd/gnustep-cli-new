@@ -105,15 +105,16 @@ From v0.1.5, `gnustep update --check` finds newer stable releases. An install fr
 v0.1.4 or earlier doesn't find them: run the bootstrap above once to move it to the
 newest release.
 
-Known issue in v0.1.5 and v0.1.6: `gnustep update --yes` without `--manifest`
-reinstalls the current release and still reports success. To move to the newest
-release, name its manifest, for example:
+From v0.1.7, `gnustep update --yes` installs the newer release that the check
+found, and fails if it couldn't. v0.1.5 and v0.1.6 instead reinstall the current
+release and still report success, so move an install on either of those once by
+naming the new release's manifest:
 
 ```sh
-gnustep update --yes --manifest https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.6/release-manifest.json
+gnustep update --yes --manifest https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.7/release-manifest.json
 ```
 
-or run the bootstrap above again.
+or run the bootstrap above again. Later updates work without `--manifest`.
 
 ## Already have GNUstep?
 
