@@ -586,6 +586,30 @@ def _load_reusable_artifact(path: str | Path, *, expected_kind: str, expected_ta
     return reusable_artifact_reference(payload, expected_kind=expected_kind, expected_target_id=expected_target_id)
 
 
+def _carry_repository_lock_patches(target_id: str, sources: list[dict[str, Any]], repo_root: Path | None = None) -> None:
+    """Copy each component's patches from the committed toolchain lock.
+
+    The build scripts apply the patches listed in toolchains/<target>/source-lock.json,
+    so the lock shipped inside the toolchain must list them too. Patches are only
+    carried for a component whose committed revision matches the pinned one.
+    """
+    root = repo_root or Path(__file__).resolve().parents[2]
+    lock_path = root / "toolchains" / target_id / "source-lock.json"
+    try:
+        committed = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    by_name = {
+        component.get("name"): component
+        for component in committed.get("components", [])
+        if isinstance(component, dict)
+    }
+    for source in sources:
+        component = by_name.get(source["name"])
+        if component and component.get("revision") == source["revision"] and isinstance(component.get("patches"), list):
+            source["patches"] = [dict(patch) for patch in component["patches"]]
+
+
 def source_lock_template(target_id: str) -> dict[str, Any]:
     target = target_by_id(target_id)
     if target["strategy"] != "source-build":
@@ -606,6 +630,7 @@ def source_lock_template(target_id: str) -> dict[str, Any]:
                 "patches": [],
             }
         )
+    _carry_repository_lock_patches(target_id, sources)
     return {
         "schema_version": 1,
         "target": {
