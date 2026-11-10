@@ -25,6 +25,12 @@ static NSString *GSCLIVersionString(void)
   return @GNUSTEP_CLI_VERSION;
 }
 
+/* A toolchain archive is hundreds of megabytes; the default 15 s command timeout
+   cut its extraction short on Windows and failed the upgrade part-way. */
+static const NSTimeInterval GSArchiveExtractionTimeout = 1800.0;
+/* First launch of a freshly extracted CLI can be slow (antivirus scanning). */
+static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
+
 @interface GSCommandRunner ()
 
 - (BOOL)isKnownCommand:(NSString *)command;
@@ -212,6 +218,8 @@ static NSString *GSCLIVersionString(void)
                                 exitCode:(int *)exitCode;
 - (BOOL)installManagedLauncherForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
 - (BOOL)relocateManagedToolchainForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
+- (BOOL)restoreSetupBackup:(NSString *)backupPath toInstallRoot:(NSString *)installRoot;
+- (BOOL)injectedSetupFailureAtStep:(NSString *)step error:(NSString **)errorMessage;
 - (BOOL)smokeVersionedReleaseAtPath:(NSString *)releaseRoot
                         managedRoot:(NSString *)managedRoot
                               error:(NSString **)errorMessage;
@@ -443,6 +451,12 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
 
 @implementation GSCommandRunner
 
+- (void)dealloc
+{
+  [_lastRollbackFailure release];
+  [super dealloc];
+}
+
 - (NSArray *)knownCommands
 {
   return [NSArray arrayWithObjects:
@@ -613,6 +627,12 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
   [payload setObject: command forKey: @"command"];
   [payload setObject: [NSNumber numberWithBool: ok] forKey: @"ok"];
   [payload setObject: status forKey: @"status"];
+  if (!ok && [command isEqualToString: @"setup"] && _lastRollbackFailure != nil)
+    {
+      /* A failed setup whose rollback also failed must say where the old install is. */
+      summary = [NSString stringWithFormat: @"%@ %@", summary ? summary : @"", _lastRollbackFailure];
+      [payload setObject: _lastRollbackFailure forKey: @"rollback_failure"];
+    }
   [payload setObject: summary forKey: @"summary"];
   if (data != nil)
     {
@@ -1480,6 +1500,19 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
           if ([[NSDate date] compare: deadline] != NSOrderedAscending)
             {
               timedOut = YES;
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+              /* terminate only ends the direct child; its children (an extractor started
+                 by powershell, for example) would keep files open under the install
+                 root and stop a rollback from restoring it. */
+              {
+                NSTask *killer = [[[NSTask alloc] init] autorelease];
+                [killer setLaunchPath: @"C:/Windows/System32/taskkill.exe"];
+                [killer setArguments: [NSArray arrayWithObjects: @"/PID", [NSString stringWithFormat: @"%d", [task processIdentifier]], @"/T", @"/F", nil]];
+                [killer setStandardOutput: [NSFileHandle fileHandleWithNullDevice]];
+                [killer setStandardError: [NSFileHandle fileHandleWithNullDevice]];
+                @try { [killer launch]; [killer waitUntilExit]; } @catch (NSException *exception) { }
+              }
+#endif
               [task terminate];
               break;
             }
@@ -2307,22 +2340,29 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
       NSUInteger extractorIndex = 0;
       for (extractorIndex = 0; extractorIndex < [windowsExtractors count]; extractorIndex++)
         {
-          result = [self runCommand: [windowsExtractors objectAtIndex: extractorIndex] currentDirectory: nil];
+          NSArray *extractor = [windowsExtractors objectAtIndex: extractorIndex];
+          [self appendInstallTrace: [NSString stringWithFormat: @"extract.attempt tool=%@ archive=%@", [[extractor objectAtIndex: 0] lastPathComponent], [archivePath lastPathComponent]]];
+          result = [self runCommand: extractor currentDirectory: nil timeout: GSArchiveExtractionTimeout];
+          [self appendInstallTrace: [NSString stringWithFormat: @"extract.result tool=%@ launched=%@ exit=%@ timed_out=%@", [[extractor objectAtIndex: 0] lastPathComponent], [result objectForKey: @"launched"], [result objectForKey: @"exit_status"], [result objectForKey: @"timed_out"]]];
           if ([[result objectForKey: @"launched"] boolValue] &&
               [[result objectForKey: @"exit_status"] intValue] == 0)
             {
               break;
             }
+          [manager removeItemAtPath: destination error: NULL];
+          [manager createDirectoryAtPath: destination withIntermediateDirectories: YES attributes: nil error: NULL];
         }
 #else
       result = [self runCommand: [NSArray arrayWithObjects: @"unzip", @"-q", archivePath, @"-d", destination, nil]
-               currentDirectory: nil];
+               currentDirectory: nil
+                        timeout: GSArchiveExtractionTimeout];
 #endif
     }
   else
     {
       result = [self runCommand: [NSArray arrayWithObjects: @"tar", @"-xzf", archivePath, @"-C", destination, nil]
-               currentDirectory: nil];
+               currentDirectory: nil
+                        timeout: GSArchiveExtractionTimeout];
     }
 
   if ([[result objectForKey: @"launched"] boolValue] == NO ||
@@ -5060,8 +5100,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
 
   if (!success && backupPath != nil && [manager fileExistsAtPath: backupPath])
     {
-      [manager removeItemAtPath: expandedInstallRoot error: NULL];
-      [manager moveItemAtPath: backupPath toPath: expandedInstallRoot error: NULL];
+      [self restoreSetupBackup: backupPath toInstallRoot: expandedInstallRoot];
     }
   else if (success && backupPath != nil && preserveBackup == NO)
     {
@@ -5069,6 +5108,76 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
     }
 
   [manager removeItemAtPath: transactionRoot error: NULL];
+}
+
+// Put the pre-setup snapshot back after a failed setup or upgrade. Every step is
+// checked: on Windows a file still held open under the new root used to make the
+// delete fail silently, so the move back failed too and the install was left with
+// only the half-written new tree. Remnants that can't be deleted are moved aside;
+// if the snapshot can't be moved back it is copied back. Returns NO, and records
+// lastRollbackFailure, only when the old install could not be put back.
+// Test hook: GNUSTEP_CLI_TEST_FAIL_SETUP_STEP=<step> makes setup fail at that step
+// (download, checksum, extract, copy, relocate, launcher, activate) so tests can
+// check that a failure anywhere after the snapshot leaves the old install intact.
+- (BOOL)injectedSetupFailureAtStep:(NSString *)step error:(NSString **)errorMessage
+{
+  const char *requested = getenv("GNUSTEP_CLI_TEST_FAIL_SETUP_STEP");
+  if (requested == NULL || strcmp(requested, [step UTF8String]) != 0)
+    {
+      return NO;
+    }
+  if (errorMessage != NULL)
+    {
+      *errorMessage = [NSString stringWithFormat: @"Injected test failure at setup step %@.", step];
+    }
+  [self appendInstallTrace: [NSString stringWithFormat: @"setup.injected-failure step=%@", step]];
+  return YES;
+}
+
+- (BOOL)restoreSetupBackup:(NSString *)backupPath toInstallRoot:(NSString *)installRoot
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *copyError = nil;
+  NSString *statePath = [[installRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+
+  [self appendInstallTrace: [NSString stringWithFormat: @"rollback.start root=%@ backup=%@", installRoot, backupPath]];
+  if ([manager fileExistsAtPath: installRoot] && [manager removeItemAtPath: installRoot error: NULL] == NO)
+    {
+      NSString *aside = [NSString stringWithFormat: @"%@.failed-%@", installRoot, [[NSProcessInfo processInfo] globallyUniqueString]];
+      [self appendInstallTrace: @"rollback.remove-root.failed"];
+      if ([manager moveItemAtPath: installRoot toPath: aside error: NULL])
+        {
+          [self appendInstallTrace: [NSString stringWithFormat: @"rollback.root-moved-aside path=%@", aside]];
+        }
+    }
+  if ([manager fileExistsAtPath: installRoot] == NO
+      && [manager moveItemAtPath: backupPath toPath: installRoot error: NULL])
+    {
+      [self appendInstallTrace: @"rollback.restored method=move"];
+    }
+  else
+    {
+      [self appendInstallTrace: @"rollback.move-back.failed; copying the snapshot back"];
+      [manager createDirectoryAtPath: installRoot withIntermediateDirectories: YES attributes: nil error: NULL];
+      if ([self copyTreeContentsFrom: backupPath to: installRoot error: &copyError])
+        {
+          [self appendInstallTrace: @"rollback.restored method=copy"];
+          [manager removeItemAtPath: backupPath error: NULL];
+        }
+      else
+        {
+          [self appendInstallTrace: [NSString stringWithFormat: @"rollback.copy-back.failed error=%@", copyError]];
+        }
+    }
+  if ([manager fileExistsAtPath: statePath] == NO)
+    {
+      [_lastRollbackFailure release];
+      _lastRollbackFailure = [[NSString alloc] initWithFormat: @"The previous installation could not be restored automatically; it is preserved at %@. Move it back to %@ to recover.", [manager fileExistsAtPath: backupPath] ? backupPath : @"(missing)", installRoot];
+      [self appendInstallTrace: @"rollback.incomplete"];
+      return NO;
+    }
+  [self appendInstallTrace: @"rollback.complete"];
+  return YES;
 }
 
 - (NSDictionary *)installedLifecycleStateForInstallRoot:(NSString *)installRoot
@@ -6237,11 +6346,11 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                                       script,
                                       nil]
              currentDirectory: nil
-                      timeout: 15.0
+                      timeout: GSCandidateSmokeTimeout
         additionalPathEntries: nil];
   }
 #else
-  result = [self runCommand: [NSArray arrayWithObjects: launcher, @"--version", nil] currentDirectory: nil];
+  result = [self runCommand: [NSArray arrayWithObjects: launcher, @"--version", nil] currentDirectory: nil timeout: GSCandidateSmokeTimeout];
 #endif
   if ([[result objectForKey: @"exit_status"] intValue] != 0)
     {
@@ -7230,7 +7339,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
             [manager removeItemAtPath: downloadPath error: NULL];
             [manager copyItemAtPath: localCandidate toPath: downloadPath error: NULL];
           }
-        else if ([self downloadURLString: [artifact objectForKey: @"url"] toPath: downloadPath error: &errorMessage] == NO)
+        else if ([self injectedSetupFailureAtStep: @"download" error: &errorMessage] || [self downloadURLString: [artifact objectForKey: @"url"] toPath: downloadPath error: &errorMessage] == NO)
           {
             [manager removeItemAtPath: staging error: NULL];
             if (transactionStarted)
@@ -7243,7 +7352,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
 
         sourcePath = downloadPath;
         checksum = [self sha256ForFile: sourcePath];
-        if (checksum == nil || [checksum isEqualToString: [artifact objectForKey: @"sha256"]] == NO)
+        if ([self injectedSetupFailureAtStep: @"checksum" error: NULL] || checksum == nil || [checksum isEqualToString: [artifact objectForKey: @"sha256"]] == NO)
           {
             [manager removeItemAtPath: staging error: NULL];
             if (transactionStarted)
@@ -7255,7 +7364,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
           }
 
         [manager removeItemAtPath: extractPath error: NULL];
-        if ([self extractArchive: sourcePath toDirectory: extractPath error: &errorMessage] == NO)
+        if ([self injectedSetupFailureAtStep: @"extract" error: &errorMessage] || [self extractArchive: sourcePath toDirectory: extractPath error: &errorMessage] == NO)
           {
             [manager removeItemAtPath: staging error: NULL];
             if (transactionStarted)
@@ -7329,7 +7438,8 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
 	            skipRelativePaths = [NSArray arrayWithObject: @"bin/gnustep.exe"];
 	            [self appendInstallTrace: @"windows.install.toolchain.skip-cli-launcher"];
 	          }
-	        if ([self copyTreeContentsFrom: sourceRoot
+	        if ([self injectedSetupFailureAtStep: @"copy" error: &copyError] ||
+	            [self copyTreeContentsFrom: sourceRoot
 	                                   to: installPath
 	                 skippingRelativePaths: skipRelativePaths
 	                                 error: &copyError] == NO)
@@ -7352,7 +7462,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
       {
         [self appendInstallTrace: @"windows.upgrade.skip-toolchain-relocate"];
       }
-    else if ([self relocateManagedToolchainForInstallRoot: installPath error: &errorMessage] == NO)
+    else if ([self injectedSetupFailureAtStep: @"relocate" error: &errorMessage] || [self relocateManagedToolchainForInstallRoot: installPath error: &errorMessage] == NO)
       {
         [manager removeItemAtPath: staging error: NULL];
         if (transactionStarted)
@@ -7363,7 +7473,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
         return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: errorMessage data: nil];
       }
 
-    if ([self installManagedLauncherForInstallRoot: installPath error: &errorMessage] == NO)
+    if ([self injectedSetupFailureAtStep: @"launcher" error: &errorMessage] || [self installManagedLauncherForInstallRoot: installPath error: &errorMessage] == NO)
       {
         [manager removeItemAtPath: staging error: NULL];
         if (transactionStarted)
@@ -7403,6 +7513,10 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
         activeReleasePath = [self materializeVersionedReleaseForInstallRoot: installPath
                                                                     version: [release objectForKey: @"version"]
                                                                       error: &errorMessage];
+      }
+    if ([self injectedSetupFailureAtStep: @"activate" error: &errorMessage])
+      {
+        activeReleasePath = nil;
       }
     if (activeReleasePath == nil)
       {
@@ -7858,6 +7972,20 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
           NSDictionary *plan = [[self buildUpdatePlanForScope: @"user" manifest: resolvedManifest installRoot: installRoot exitCode: &planExit] objectForKey: @"update_plan"];
           NSString *plannedVersion = [[plan objectForKey: @"update_available"] boolValue] ? [plan objectForKey: @"latest_compatible_version"] : nil;
           NSString *unapplied = nil;
+          if (plannedVersion == nil && manifestPath == nil && planExit == 0)
+            {
+              /* Nothing newer was found. Re-running setup here reinstalled the current
+                 release in full (a toolchain transaction on Windows), so a plain
+                 `update cli --yes` on an up-to-date install could fail part-way.
+                 `--manifest` still forces a reinstall; `setup --repair` repairs. */
+              NSMutableDictionary *current = [[[self payloadWithCommand: @"update" ok: YES status: @"ok" summary: @"No updates were found." data: nil] mutableCopy] autorelease];
+              [current setObject: @"cli" forKey: @"scope"];
+              [current setObject: @"apply" forKey: @"mode"];
+              [current setObject: @"update_cli" forKey: @"operation"];
+              [current setObject: plan ? plan : [NSDictionary dictionary] forKey: @"plan"];
+              *exitCode = 0;
+              return current;
+            }
           if (installRoot != nil)
             {
               [setupArguments addObjectsFromArray: [NSArray arrayWithObjects: @"--root", installRoot, nil]];
