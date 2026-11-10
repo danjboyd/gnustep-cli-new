@@ -26,14 +26,6 @@ static NSString *GSCLIVersionString(void)
 }
 
 @interface GSCommandRunner ()
-{
-  // Release manifests and their signatures fetched by URL in this invocation.
-  // Discovery, planning and setup each read the same URL; reusing the first
-  // fetch means the bytes whose signature was checked are the bytes planned and
-  // applied, even if the remote "latest" moves mid-run. Every reader still
-  // verifies and validates; only the download is shared.
-  NSMutableDictionary *_releaseMetadataSnapshots;
-}
 - (NSData *)releaseMetadataDataForURL:(NSString *)urlString error:(NSString **)errorMessage;
 - (void)setReleaseMetadataSnapshot:(NSData *)data forURL:(NSString *)urlString;
 
