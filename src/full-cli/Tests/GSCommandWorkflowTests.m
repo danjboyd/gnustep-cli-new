@@ -8,6 +8,7 @@
 #import "../GSCommandRunner.h"
 
 @interface GSCommandRunner (WorkflowTesting)
+- (BOOL)restoreSetupBackup:(NSString *)backupPath toInstallRoot:(NSString *)installRoot;
 - (NSString *)resolvedArtifactPathFromURLString:(NSString *)urlString;
 - (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath;
 - (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath quick:(BOOL)quick;
@@ -1382,6 +1383,119 @@
   XCTAssertEqualObjects([state objectForKey: @"active_release"], @"0.1.0-test");
   XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: [state objectForKey: @"active_release_path"]]);
   XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: [state objectForKey: @"previous_release_path"]]);
+}
+
+// A failure at any step after setup snapshots the install must put the old install
+// back intact (state, current release, a launcher that runs). On Windows a step that
+// timed out left only the half-written new tree and no gnustep.
+- (void)testFailedUpgradeAtEachStepLeavesThePreviousInstallWorking
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"setup-upgrade-fault-injection"];
+  NSString *payloadRoot = [tempRoot stringByAppendingPathComponent: @"payloads"];
+  NSString *cliDir = [payloadRoot stringByAppendingPathComponent: @"cli"];
+  NSString *toolchainDir = [payloadRoot stringByAppendingPathComponent: @"toolchain"];
+  NSString *installRoot = [tempRoot stringByAppendingPathComponent: @"managed-root"];
+  NSString *cliArchive = [payloadRoot stringByAppendingPathComponent: @"cli.tar.gz"];
+  NSString *toolchainArchive = [payloadRoot stringByAppendingPathComponent: @"toolchain.tar.gz"];
+  NSString *statePath = [[installRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSArray *steps = [NSArray arrayWithObjects: @"checksum", @"extract", @"copy", @"relocate", @"launcher", @"activate", nil];
+  NSString *manifestPath = nil;
+  NSDictionary *payload = nil;
+  NSDictionary *state = nil;
+  NSString *activeBefore = nil;
+  NSUInteger i = 0;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  [self ensureDirectory: [cliDir stringByAppendingPathComponent: @"bin"]];
+  [self ensureDirectory: [toolchainDir stringByAppendingPathComponent: @"System/Tools"]];
+  [self ensureDirectory: [statePath stringByDeletingLastPathComponent]];
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               @"0.0.9", @"cli_version",
+                                               @"healthy", @"status",
+                                               nil]
+                       toPath: statePath];
+  [@"#!/bin/sh\nexit 0\n" writeToFile: [cliDir stringByAppendingPathComponent: @"bin/gnustep"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  chmod([[cliDir stringByAppendingPathComponent: @"bin/gnustep"] fileSystemRepresentation], 0755);
+  [@"toolchain" writeToFile: [toolchainDir stringByAppendingPathComponent: @"System/Tools/make"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [self archiveDirectory: cliDir toTarball: cliArchive withRunner: runner];
+  [self archiveDirectory: toolchainDir toTarball: toolchainArchive withRunner: runner];
+  manifestPath = [self releaseManifestPathInDirectory: [tempRoot stringByAppendingPathComponent: @"manifest"]
+                                           cliSHA256: [runner sha256ForFile: cliArchive]
+                                     toolchainSHA256: [runner sha256ForFile: toolchainArchive]
+                                              cliURL: cliArchive
+                                        toolchainURL: toolchainArchive];
+
+  // A real, versioned install to protect.
+  payload = [runner executeSetupForContext: [GSCommandContext contextWithArguments:
+                                               [NSArray arrayWithObjects: @"setup", @"--upgrade", @"--root", installRoot, @"--manifest", manifestPath, nil]]
+                                  exitCode: &exitCode];
+  XCTAssertEqual(exitCode, 0, @"%@", [payload objectForKey: @"summary"]);
+  activeBefore = [[runner installedLifecycleStateForInstallRoot: installRoot] objectForKey: @"active_release_path"];
+  XCTAssertNotNil(activeBefore);
+
+  for (i = 0; i < [steps count]; i++)
+    {
+      NSString *step = [steps objectAtIndex: i];
+      NSArray *siblings = nil;
+      NSDictionary *launch = nil;
+
+      setenv("GNUSTEP_CLI_TEST_FAIL_SETUP_STEP", [step UTF8String], 1);
+      exitCode = 0;
+      payload = [runner executeSetupForContext: [GSCommandContext contextWithArguments:
+                                                   [NSArray arrayWithObjects: @"setup", @"--upgrade", @"--root", installRoot, @"--manifest", manifestPath, nil]]
+                                      exitCode: &exitCode];
+      unsetenv("GNUSTEP_CLI_TEST_FAIL_SETUP_STEP");
+
+      XCTAssertNotEqual(exitCode, 0, @"step %@ did not fail", step);
+      XCTAssertFalse([[payload objectForKey: @"ok"] boolValue], @"step %@", step);
+      XCTAssertNil([payload objectForKey: @"rollback_failure"], @"step %@: %@", step, [payload objectForKey: @"rollback_failure"]);
+      state = [runner installedLifecycleStateForInstallRoot: installRoot];
+      XCTAssertEqualObjects([state objectForKey: @"cli_version"], @"0.1.0-test", @"step %@", step);
+      XCTAssertEqualObjects([state objectForKey: @"status"], @"healthy", @"step %@", step);
+      XCTAssertEqualObjects([state objectForKey: @"active_release_path"], activeBefore, @"step %@", step);
+      XCTAssertTrue([manager fileExistsAtPath: [installRoot stringByAppendingPathComponent: @"current"]], @"step %@", step);
+      XCTAssertFalse([manager fileExistsAtPath: [installRoot stringByAppendingPathComponent: @".staging"]], @"step %@", step);
+      launch = [runner runCommand: [NSArray arrayWithObjects: [installRoot stringByAppendingPathComponent: @"bin/gnustep"], nil] currentDirectory: nil];
+      XCTAssertTrue([[launch objectForKey: @"launched"] boolValue], @"step %@", step);
+      XCTAssertEqual([[launch objectForKey: @"exit_status"] intValue], 0, @"step %@", step);
+      siblings = [[manager contentsOfDirectoryAtPath: tempRoot error: NULL] filteredArrayUsingPredicate:
+                   [NSPredicate predicateWithFormat: @"SELF BEGINSWITH '.managed-root.setup-backup'"]];
+      XCTAssertEqual([siblings count], (NSUInteger)0, @"step %@ left a snapshot behind: %@", step, siblings);
+    }
+}
+
+// When part of the new tree can't be deleted, rollback moves it aside and still puts
+// the snapshot back, instead of silently leaving the half-written tree in place.
+- (void)testRollbackRestoresTheSnapshotWhenTheNewTreeCannotBeDeleted
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"rollback-locked-remnant"];
+  NSString *installRoot = [tempRoot stringByAppendingPathComponent: @"managed-root"];
+  NSString *backup = [tempRoot stringByAppendingPathComponent: @".managed-root.setup-backup-test"];
+  NSString *locked = [installRoot stringByAppendingPathComponent: @".staging/extracts"];
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSArray *aside = nil;
+
+  [self ensureDirectory: [backup stringByAppendingPathComponent: @"state"]];
+  [@"{\"schema_version\": 1, \"cli_version\": \"0.1.6\", \"status\": \"healthy\"}" writeToFile: [backup stringByAppendingPathComponent: @"state/cli-state.json"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [self ensureDirectory: locked];
+  [@"partial" writeToFile: [locked stringByAppendingPathComponent: @"held.dll"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  chmod([locked fileSystemRepresentation], 0555);   // its file can't be removed
+
+  XCTAssertTrue([runner restoreSetupBackup: backup toInstallRoot: installRoot]);
+  XCTAssertTrue([manager fileExistsAtPath: [installRoot stringByAppendingPathComponent: @"state/cli-state.json"]]);
+  XCTAssertFalse([manager fileExistsAtPath: [installRoot stringByAppendingPathComponent: @".staging"]]);
+  aside = [[manager contentsOfDirectoryAtPath: tempRoot error: NULL] filteredArrayUsingPredicate:
+             [NSPredicate predicateWithFormat: @"SELF BEGINSWITH 'managed-root.failed-'"]];
+  XCTAssertEqual([aside count], (NSUInteger)1);
+  if ([aside count] == 1)
+    {
+      chmod([[[tempRoot stringByAppendingPathComponent: [aside objectAtIndex: 0]] stringByAppendingPathComponent: @".staging/extracts"] fileSystemRepresentation], 0755);
+    }
 }
 
 - (void)testSetupVersionedActivationRejectsFailedSmokeValidation
