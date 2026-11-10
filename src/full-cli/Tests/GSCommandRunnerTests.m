@@ -26,6 +26,7 @@
 - (NSComparisonResult)compareVersionString:(NSString *)left toVersionString:(NSString *)right;
 - (NSDate *)bundledAuthoritiesDateFromSource:(NSString *)sourceText;
 - (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath;
+- (NSDictionary *)managedInstallIntegrityCheckForStatePath:(NSString *)statePath candidateStatePaths:(NSArray *)candidateStatePaths;
 - (NSDictionary *)bundledAuthoritiesCheckWithMakefiles:(NSString *)gnustepMakefiles
                                              interface:(NSString *)interface
                                                  today:(NSDate *)today
@@ -841,6 +842,44 @@ static NSString *GSTestManagedRoot(NSString *base, NSString *name, NSString *sta
   XCTAssertNil([runner managedRootInUseForToolchainMakefiles: [root stringByAppendingPathComponent: @"System/Library/Makefiles"] statePath: state]);
   XCTAssertNil([runner managedRootInUseForToolchainMakefiles: [root stringByAppendingPathComponent: @"System/Library/Makefiles"]
                                                    statePath: [base stringByAppendingPathComponent: @"absent.json"]]);
+  [manager removeItemAtPath: base error: NULL];
+}
+
+
+- (void)testManagedInstallIntegrityReadsStateStatusAndLeftovers
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *base = [NSTemporaryDirectory() stringByAppendingPathComponent: [[NSUUID UUID] UUIDString]];
+  NSString *root = nil;
+  NSString *state = nil;
+  NSDictionary *check = nil;
+
+  [manager createDirectoryAtPath: base withIntermediateDirectories: YES attributes: nil error: NULL];
+  root = GSTestManagedRoot(base, @"healthy", @"healthy");
+  state = [root stringByAppendingPathComponent: @"state/cli-state.json"];
+  check = [runner managedInstallIntegrityCheckForStatePath: state candidateStatePaths: nil];
+  XCTAssertEqualObjects([check objectForKey: @"status"], @"ok");
+  XCTAssertEqualObjects([[check objectForKey: @"details"] objectForKey: @"state_status"], @"healthy");
+
+  [manager createDirectoryAtPath: [root stringByAppendingPathComponent: @".staging"] withIntermediateDirectories: YES attributes: nil error: NULL];
+  check = [runner managedInstallIntegrityCheckForStatePath: state candidateStatePaths: nil];
+  XCTAssertEqualObjects([check objectForKey: @"status"], @"warning");
+  XCTAssertEqualObjects([check objectForKey: @"message"], @"Managed install state requires repair validation.");
+  XCTAssertEqual([[[check objectForKey: @"details"] objectForKey: @"stale_paths"] count], (NSUInteger)1);
+
+  root = GSTestManagedRoot(base, @"repairing", @"needs_repair");
+  check = [runner managedInstallIntegrityCheckForStatePath: [root stringByAppendingPathComponent: @"state/cli-state.json"] candidateStatePaths: nil];
+  XCTAssertEqualObjects([check objectForKey: @"status"], @"warning");
+  XCTAssertEqualObjects([[check objectForKey: @"details"] objectForKey: @"state_status"], @"needs_repair");
+
+  root = GSTestManagedRoot(base, @"corrupt", @"healthy");
+  state = [root stringByAppendingPathComponent: @"state/cli-state.json"];
+  [@"{not json" writeToFile: state atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  check = [runner managedInstallIntegrityCheckForStatePath: state candidateStatePaths: nil];
+  XCTAssertEqualObjects([check objectForKey: @"status"], @"error");
+  XCTAssertTrue([[check objectForKey: @"message"] hasPrefix: @"Managed install state is unreadable"]);
+
   [manager removeItemAtPath: base error: NULL];
 }
 

@@ -155,6 +155,7 @@ static NSString *GSCLIVersionString(void)
 - (BOOL)isDeferredProbe:(NSDictionary *)probe;
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface;
+- (NSDictionary *)managedInstallIntegrityCheckForStatePath:(NSString *)statePath candidateStatePaths:(NSArray *)candidateStatePaths;
 - (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath;
 - (NSString *)gstlsDirectoryForMakefiles:(NSString *)gnustepMakefiles;
 - (NSDate *)bundledAuthoritiesDateFromSource:(NSString *)sourceText;
@@ -4059,17 +4060,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
       NSString *statePath = [candidateStatePaths objectAtIndex: i];
       if ([manager fileExistsAtPath: statePath])
         {
-          return [self checkWithID: @"managed.install.integrity"
-                             title: @"Inspect managed install integrity"
-                            status: @"ok"
-                          severity: @"warning"
-                           message: [NSString stringWithFormat: @"Managed install state was found at %@.", statePath]
-                         interface: @"full"
-                    executionTier: @"full_only"
-                           details: [NSDictionary dictionaryWithObjectsAndKeys:
-                                                    statePath, @"state_path",
-                                                    candidateStatePaths, @"candidate_state_paths",
-                                                    nil]];
+          return [self managedInstallIntegrityCheckForStatePath: statePath candidateStatePaths: candidateStatePaths];
         }
     }
   return [self checkWithID: @"managed.install.integrity"
@@ -4082,6 +4073,89 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                    details: [NSDictionary dictionaryWithObjectsAndKeys:
                                             [NSNumber numberWithBool: NO], @"managed_install_detected",
                                             candidateStatePaths, @"candidate_state_paths",
+                                            nil]];
+}
+
+// Same outcomes as the Python doctor: unreadable state is an error; a lifecycle
+// status mid-operation, or leftover staging/transaction paths, needs repair
+// validation; anything else is ok. Finding the file alone used to report ok.
+- (NSDictionary *)managedInstallIntegrityCheckForStatePath:(NSString *)statePath candidateStatePaths:(NSArray *)candidateStatePaths
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *root = [[statePath stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
+  NSData *data = [NSData dataWithContentsOfFile: statePath];
+  id state = nil;
+  NSString *stateStatus = nil;
+  NSMutableArray *stalePaths = [NSMutableArray array];
+  NSArray *candidates = candidateStatePaths ? candidateStatePaths : [NSArray arrayWithObject: statePath];
+  NSArray *leftovers = [NSArray arrayWithObjects:
+                                  [root stringByAppendingPathComponent: @".staging"],
+                                  [root stringByAppendingPathComponent: @".transactions"],
+                                  [[root stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"setup-transaction.json"],
+                                  nil];
+  NSUInteger i = 0;
+
+  if (data != nil)
+    {
+      NS_DURING
+        state = [NSJSONSerialization JSONObjectWithData: data options: 0 error: NULL];
+      NS_HANDLER
+        state = nil;
+      NS_ENDHANDLER
+    }
+  if (![state isKindOfClass: [NSDictionary class]])
+    {
+      return [self checkWithID: @"managed.install.integrity"
+                         title: @"Inspect managed install integrity"
+                        status: @"error"
+                      severity: @"warning"
+                       message: [NSString stringWithFormat: @"Managed install state is unreadable: %@", statePath]
+                     interface: @"full"
+                executionTier: @"full_only"
+                       details: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                statePath, @"state_path",
+                                                candidates, @"candidate_state_paths",
+                                                nil]];
+    }
+  if ([[state objectForKey: @"status"] isKindOfClass: [NSString class]])
+    {
+      stateStatus = [state objectForKey: @"status"];
+    }
+  for (i = 0; i < [leftovers count]; i++)
+    {
+      if ([manager fileExistsAtPath: [leftovers objectAtIndex: i]])
+        {
+          [stalePaths addObject: [leftovers objectAtIndex: i]];
+        }
+    }
+  if ([[NSArray arrayWithObjects: @"installing", @"upgrading", @"repairing", @"needs_repair", nil] containsObject: (stateStatus ? stateStatus : @"")]
+      || [stalePaths count] > 0)
+    {
+      return [self checkWithID: @"managed.install.integrity"
+                         title: @"Inspect managed install integrity"
+                        status: @"warning"
+                      severity: @"warning"
+                       message: @"Managed install state requires repair validation."
+                     interface: @"full"
+                executionTier: @"full_only"
+                       details: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                statePath, @"state_path",
+                                                (stateStatus ? (id)stateStatus : (id)[NSNull null]), @"state_status",
+                                                stalePaths, @"stale_paths",
+                                                candidates, @"candidate_state_paths",
+                                                nil]];
+    }
+  return [self checkWithID: @"managed.install.integrity"
+                     title: @"Inspect managed install integrity"
+                    status: @"ok"
+                  severity: @"warning"
+                   message: [NSString stringWithFormat: @"Managed install state was found at %@.", statePath]
+                 interface: @"full"
+            executionTier: @"full_only"
+                   details: [NSDictionary dictionaryWithObjectsAndKeys:
+                                            statePath, @"state_path",
+                                            (stateStatus ? (id)stateStatus : (id)[NSNull null]), @"state_status",
+                                            candidates, @"candidate_state_paths",
                                             nil]];
 }
 
