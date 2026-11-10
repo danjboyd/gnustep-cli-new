@@ -1405,6 +1405,7 @@
   NSDictionary *payload = nil;
   NSDictionary *state = nil;
   NSString *activeBefore = nil;
+  NSArray *snapshotsBefore = nil;
   NSUInteger i = 0;
   int exitCode = 0;
 
@@ -1436,6 +1437,8 @@
   XCTAssertEqual(exitCode, 0, @"%@", [payload objectForKey: @"summary"]);
   activeBefore = [[runner installedLifecycleStateForInstallRoot: installRoot] objectForKey: @"active_release_path"];
   XCTAssertNotNil(activeBefore);
+  snapshotsBefore = [[manager contentsOfDirectoryAtPath: tempRoot error: NULL] filteredArrayUsingPredicate:
+                      [NSPredicate predicateWithFormat: @"SELF BEGINSWITH '.managed-root.setup-backup'"]];
 
   for (i = 0; i < [steps count]; i++)
     {
@@ -1464,7 +1467,9 @@
       XCTAssertEqual([[launch objectForKey: @"exit_status"] intValue], 0, @"step %@", step);
       siblings = [[manager contentsOfDirectoryAtPath: tempRoot error: NULL] filteredArrayUsingPredicate:
                    [NSPredicate predicateWithFormat: @"SELF BEGINSWITH '.managed-root.setup-backup'"]];
-      XCTAssertEqual([siblings count], (NSUInteger)0, @"step %@ left a snapshot behind: %@", step, siblings);
+      // The earlier successful upgrade keeps its own snapshot; a failed one must not
+      // add (or consume) any.
+      XCTAssertEqualObjects([NSSet setWithArray: siblings], [NSSet setWithArray: snapshotsBefore], @"step %@ changed the snapshots: %@", step, siblings);
     }
 }
 
