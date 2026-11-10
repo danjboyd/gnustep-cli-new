@@ -4067,7 +4067,9 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                      title: @"Inspect managed install integrity"
                     status: @"not_run"
                   severity: @"warning"
-                   message: @"No managed install state was detected on this host."
+                   message: ([[[environment objectForKey: @"toolchain"] objectForKey: @"present"] boolValue]
+                             ? @"No managed install state was detected on this host."
+                             : @"Managed install integrity checks were skipped because no GNUstep toolchain is present.")
                  interface: @"full"
             executionTier: @"full_only"
                    details: [NSDictionary dictionaryWithObjectsAndKeys:
