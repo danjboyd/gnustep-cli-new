@@ -8,6 +8,8 @@
   // applied, even if the remote "latest" moves mid-run. Every reader still
   // verifies and validates; only the download is shared.
   NSMutableDictionary *_releaseMetadataSnapshots;
+  // Set when a failed setup could not put the previous installation back.
+  NSString *_lastRollbackFailure;
 }
 
 - (int)runWithArguments:(NSArray *)arguments;

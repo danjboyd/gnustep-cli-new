@@ -115,6 +115,10 @@ gnustep update --yes --manifest https://github.com/danjboyd/gnustep-cli-new/rele
 
 or run the bootstrap above again.
 
+On Windows, `gnustep update` in v0.1.5 and v0.1.6 doesn't complete a CLI update, with or
+without `--manifest`: in testing it stopped with "Candidate release failed post-upgrade
+smoke validation" and left the install unchanged. Run the bootstrap above again instead.
+
 ## Already have GNUstep?
 
 You don't have to use the managed toolchain. `gnustep doctor` detects existing
