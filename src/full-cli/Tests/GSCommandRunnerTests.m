@@ -26,6 +26,7 @@
 - (NSComparisonResult)compareVersionString:(NSString *)left toVersionString:(NSString *)right;
 - (NSDate *)bundledAuthoritiesDateFromSource:(NSString *)sourceText;
 - (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath;
+- (NSString *)versionedInstallRootForReleaseRoot:(NSString *)releaseRoot;
 - (NSDictionary *)managedInstallIntegrityCheckForStatePath:(NSString *)statePath candidateStatePaths:(NSArray *)candidateStatePaths;
 - (NSDictionary *)bundledAuthoritiesCheckWithMakefiles:(NSString *)gnustepMakefiles
                                              interface:(NSString *)interface
@@ -845,6 +846,20 @@ static NSString *GSTestManagedRoot(NSString *base, NSString *name, NSString *sta
   [manager removeItemAtPath: base error: NULL];
 }
 
+
+// Real installs run <root>/current -> <root>/releases/<version>; the state lives at
+// <root>/state, so doctor must map a release directory back to its install root.
+- (void)testVersionedInstallRootMapsReleaseDirectoryToInstallRoot
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+
+  XCTAssertEqualObjects([runner versionedInstallRootForReleaseRoot: @"/home/u/.local/share/gnustep-cli/releases/0.1.7"],
+                        @"/home/u/.local/share/gnustep-cli");
+  XCTAssertNil([runner versionedInstallRootForReleaseRoot: @"/home/u/.local/share/gnustep-cli"]);
+  XCTAssertNil([runner versionedInstallRootForReleaseRoot: @"/opt/other/0.1.7"]);
+  XCTAssertNil([runner versionedInstallRootForReleaseRoot: @""]);
+  XCTAssertNil([runner versionedInstallRootForReleaseRoot: nil]);
+}
 
 - (void)testManagedInstallIntegrityReadsStateStatusAndLeftovers
 {
