@@ -2304,6 +2304,32 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
   return nil;
 }
 
+- (NSString *)extractorFailureDescription:(NSDictionary *)result tool:(NSString *)tool
+{
+  NSString *detail = nil;
+  NSString *stderrText = [[result objectForKey: @"stderr"] description];
+  NSArray *lines = [[stderrText stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]]
+                     componentsSeparatedByCharactersInSet: [NSCharacterSet newlineCharacterSet]];
+
+  if ([[result objectForKey: @"launched"] boolValue] == NO)
+    {
+      detail = @"not launched";
+    }
+  else if ([[result objectForKey: @"timed_out"] boolValue])
+    {
+      detail = @"timed out";
+    }
+  else
+    {
+      detail = [NSString stringWithFormat: @"exit %@", [result objectForKey: @"exit_status"]];
+    }
+  if ([lines count] > 0 && [[lines objectAtIndex: 0] length] > 0)
+    {
+      detail = [NSString stringWithFormat: @"%@ (%@)", detail, [lines objectAtIndex: 0]];
+    }
+  return [NSString stringWithFormat: @"%@ %@", tool, detail];
+}
+
 - (BOOL)extractArchive:(NSString *)archivePath toDirectory:(NSString *)destination error:(NSString **)errorMessage
 {
   NSDictionary *result = nil;
@@ -2338,6 +2364,7 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
         [NSArray arrayWithObjects: @"unzip", @"-q", archivePath, @"-d", destination, nil],
         nil];
       NSUInteger extractorIndex = 0;
+      NSMutableArray *extractorFailures = [NSMutableArray array];
       for (extractorIndex = 0; extractorIndex < [windowsExtractors count]; extractorIndex++)
         {
           NSArray *extractor = [windowsExtractors objectAtIndex: extractorIndex];
@@ -2349,8 +2376,19 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
             {
               break;
             }
+          [extractorFailures addObject: [self extractorFailureDescription: result tool: [[extractor objectAtIndex: 0] lastPathComponent]]];
           [manager removeItemAtPath: destination error: NULL];
           [manager createDirectoryAtPath: destination withIntermediateDirectories: YES attributes: nil error: NULL];
+        }
+      if (extractorIndex == [windowsExtractors count])
+        {
+          if (errorMessage != NULL)
+            {
+              *errorMessage = [NSString stringWithFormat: @"No extractor could unpack %@: %@",
+                                        [archivePath lastPathComponent],
+                                        [extractorFailures componentsJoinedByString: @"; "]];
+            }
+          return NO;
         }
 #else
       result = [self runCommand: [NSArray arrayWithObjects: @"unzip", @"-q", archivePath, @"-d", destination, nil]
