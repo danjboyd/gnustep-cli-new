@@ -1,0 +1,65 @@
+staged 0.1.7 bootstrap exit 0; root C:\gnustep-smoke\gate4-staged-017; version 0.1.7
+A bootstrap 0.1.6 exit 0; version 0.1.6
+A-update-explicit-manifest exit 1 (C:\gnustep-smoke\gate4-a-016\bin\gnustep.exe update --yes --root C:\gnustep-smoke\gate4-a-016 --manifest C:\gnustep-smoke\release-new\release-manifest.gate4-a.json)
+A: 0.1.6 -> 0.1.6 ok=False
+B bootstrap 0.1.5 exit 0; version 0.1.5
+B0-old-cli-update-yes exit 1 (C:\gnustep-smoke\gate4-b0-015\bin\gnustep.exe update --yes --root C:\gnustep-smoke\gate4-b0-015)
+B0: 0.1.5 -> 0.1.5 exit 1 reproduces_bug=False
+B-new-cli-update-check exit 0 (C:\gnustep-smoke\gate4-staged-017\bin\gnustep.exe update --check --root C:\gnustep-smoke\gate4-b-015)
+B-new-cli-update-yes exit 1 (C:\gnustep-smoke\gate4-staged-017\bin\gnustep.exe update --yes --root C:\gnustep-smoke\gate4-b-015)
+B: 0.1.5 -> 0.1.5 exit 1 ok=False meaningful=False
+B root: bin
+B root: clang64
+B root: clangarm64
+B root: current
+B root: dev
+B root: etc
+B root: home
+B root: include
+B root: installerResources
+B root: lib
+B root: mingw32
+B root: mingw64
+B root: releases
+B root: share
+B root: state
+B root: tmp
+B root: ucrt64
+B root: usr
+B root: var
+B root: autorebase.bat
+B root: clang64.exe
+B root: clang64.ico
+B root: clang64.ini
+B root: clangarm64.exe
+B root: clangarm64.ico
+B root: clangarm64.ini
+B root: components.xml
+B root: GNUstep.bat
+B root: GNUstep.ps1
+B root: InstallationLog.txt
+B root: installer.dat
+B root: mingw32.exe
+B root: mingw32.ico
+B root: mingw32.ini
+B root: mingw64.exe
+B root: mingw64.ico
+B root: mingw64.ini
+B root: msys2.exe
+B root: msys2.ico
+B root: msys2.ini
+B root: msys2_shell.cmd
+B root: network.xml
+B root: ucrt64.exe
+B root: ucrt64.ico
+B root: ucrt64.ini
+B root: uninstall.dat
+B root: uninstall.exe
+B root: uninstall.ini
+N-update-cli-noop exit 0 (C:\gnustep-smoke\gate4-staged-017\bin\gnustep.exe update cli --yes --root C:\gnustep-smoke\gate4-b-015)
+N: exit 0 version 0.1.6 current unchanged=True snapshots 0->1 ok=False
+C-doctor exit 0 (C:\gnustep-smoke\gate4-staged-017\bin\gnustep.exe doctor --json)
+C: managed_root=C:\gnustep-smoke/gate4-staged-017 action=use_managed_toolchain ok=True
+B-bare bootstrap 0.1.5 exit 1; version 
+B-bare: 0.1.5 ->  exit 1
+done
