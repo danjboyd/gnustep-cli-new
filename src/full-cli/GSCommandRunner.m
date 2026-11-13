@@ -32,6 +32,8 @@ static const NSTimeInterval GSArchiveExtractionTimeout = 1800.0;
 static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
 
 @interface GSCommandRunner ()
+- (NSData *)releaseMetadataDataForURL:(NSString *)urlString error:(NSString **)errorMessage;
+- (void)setReleaseMetadataSnapshot:(NSData *)data forURL:(NSString *)urlString;
 
 - (BOOL)isKnownCommand:(NSString *)command;
 - (NSString *)commandSummary:(NSString *)command;
@@ -454,8 +456,49 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
 
 - (void)dealloc
 {
+  [_releaseMetadataSnapshots release];
   [_lastRollbackFailure release];
   [super dealloc];
+}
+
+- (BOOL)isReleaseMetadataURL:(NSString *)urlString
+{
+  NSString *name = [[[urlString componentsSeparatedByString: @"?"] objectAtIndex: 0] lastPathComponent];
+  return ([urlString hasPrefix: @"http://"] || [urlString hasPrefix: @"https://"])
+    && ([name isEqualToString: @"release-manifest.json"] || [name isEqualToString: @"release-manifest.json.sig"]);
+}
+
+- (void)setReleaseMetadataSnapshot:(NSData *)data forURL:(NSString *)urlString
+{
+  if (data == nil || urlString == nil)
+    {
+      return;
+    }
+  if (_releaseMetadataSnapshots == nil)
+    {
+      _releaseMetadataSnapshots = [[NSMutableDictionary alloc] init];
+    }
+  [_releaseMetadataSnapshots setObject: data forKey: urlString];
+}
+
+// Release manifest URLs are fetched once per invocation; other URLs always download.
+// Failed downloads are not remembered, so a later reader may retry.
+- (NSData *)releaseMetadataDataForURL:(NSString *)urlString error:(NSString **)errorMessage
+{
+  NSData *data = nil;
+
+  if (![self isReleaseMetadataURL: urlString])
+    {
+      return [self downloadURLData: urlString error: errorMessage];
+    }
+  data = [_releaseMetadataSnapshots objectForKey: urlString];
+  if (data != nil)
+    {
+      return data;
+    }
+  data = [self downloadURLData: urlString error: errorMessage];
+  [self setReleaseMetadataSnapshot: data forURL: urlString];
+  return data;
 }
 
 - (NSArray *)knownCommands
@@ -852,7 +895,7 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
 
   if ([path hasPrefix: @"http://"] || [path hasPrefix: @"https://"])
     {
-      data = [self downloadURLData: path error: errorMessage];
+      data = [self releaseMetadataDataForURL: path error: errorMessage];
     }
   else
     {
@@ -2961,8 +3004,8 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
 
   if (isURL)
     {
-      manifestData = [self downloadURLData: reference error: NULL];
-      signatureData = [self downloadURLData: [reference stringByAppendingString: @".sig"] error: NULL];
+      manifestData = [self releaseMetadataDataForURL: reference error: NULL];
+      signatureData = [self releaseMetadataDataForURL: [reference stringByAppendingString: @".sig"] error: NULL];
     }
   else
     {

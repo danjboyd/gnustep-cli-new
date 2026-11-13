@@ -8,6 +8,10 @@
 #import "../GSCommandRunner.h"
 
 @interface GSCommandRunner (WorkflowTesting)
+- (void)setReleaseMetadataSnapshot:(NSData *)data forURL:(NSString *)urlString;
+- (NSData *)releaseMetadataDataForURL:(NSString *)urlString error:(NSString **)errorMessage;
+- (BOOL)verifyReleaseManifestSignatureForReference:(NSString *)reference error:(NSString **)errorMessage;
+- (NSDictionary *)readJSONFile:(NSString *)path error:(NSString **)errorMessage;
 - (BOOL)restoreSetupBackup:(NSString *)backupPath toInstallRoot:(NSString *)installRoot;
 - (NSString *)resolvedArtifactPathFromURLString:(NSString *)urlString;
 - (NSDictionary *)buildDoctorPayloadWithInterface:(NSString *)interface manifestPath:(NSString *)manifestPath;
@@ -3802,6 +3806,47 @@
   setenv("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED", "1", 1);
   payload = [self runSetupForManifest: manifestPath];
   XCTAssertFalse([self trustFailedInPayload: payload]);
+}
+
+
+// A release manifest URL is fetched once per invocation: signature checks and later
+// reads use the same bytes, and verification still runs on them.
+- (void)testReleaseManifestURLReadsShareOneVerifiedSnapshot
+{
+  NSString *trustRoot = nil;
+  NSString *manifestPath = nil;
+  NSString *url = @"https://snapshot.invalid/releases/download/v9.9.9/release-manifest.json";
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  GSCommandRunner *tamperedRunner = [[[GSCommandRunner alloc] init] autorelease];
+  NSMutableData *tampered = nil;
+  NSString *error = nil;
+
+  unsetenv("GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED");
+  manifestPath = [self preparedManifestSigned: YES tamper: NO trustRoot: &trustRoot];
+  if (manifestPath == nil) { return; }  // openssl unavailable
+  setenv("RELEASE_TRUST_ROOT", [trustRoot fileSystemRepresentation], 1);
+
+  // The host doesn't resolve, so these only succeed from the snapshot.
+  [runner setReleaseMetadataSnapshot: [NSData dataWithContentsOfFile: manifestPath] forURL: url];
+  [runner setReleaseMetadataSnapshot: [NSData dataWithContentsOfFile: [manifestPath stringByAppendingString: @".sig"]]
+                              forURL: [url stringByAppendingString: @".sig"]];
+  XCTAssertTrue([runner verifyReleaseManifestSignatureForReference: url error: &error]);
+  XCTAssertNotNil([runner readJSONFile: url error: NULL]);
+  XCTAssertEqualObjects([runner releaseMetadataDataForURL: url error: NULL], [NSData dataWithContentsOfFile: manifestPath]);
+
+  // A snapshot is not trusted on its own: altered bytes still fail verification.
+  tampered = [[[NSData dataWithContentsOfFile: manifestPath] mutableCopy] autorelease];
+  [tampered appendData: [@" " dataUsingEncoding: NSUTF8StringEncoding]];
+  [tamperedRunner setReleaseMetadataSnapshot: tampered forURL: url];
+  [tamperedRunner setReleaseMetadataSnapshot: [NSData dataWithContentsOfFile: [manifestPath stringByAppendingString: @".sig"]]
+                                      forURL: [url stringByAppendingString: @".sig"]];
+  XCTAssertFalse([tamperedRunner verifyReleaseManifestSignatureForReference: url error: NULL]);
+
+  // Snapshots are per runner (per invocation), and only for release manifest URLs.
+  XCTAssertNil([[[[GSCommandRunner alloc] init] autorelease] releaseMetadataDataForURL: url error: NULL]);
+  [runner setReleaseMetadataSnapshot: [NSData data] forURL: @"https://snapshot.invalid/other.json"];
+  XCTAssertNil([runner releaseMetadataDataForURL: @"https://snapshot.invalid/other.json" error: NULL]);
+  unsetenv("RELEASE_TRUST_ROOT");
 }
 
 @end
