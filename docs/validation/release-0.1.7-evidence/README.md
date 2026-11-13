@@ -16,6 +16,17 @@ This replaces two earlier stagings that were never published: `4d5504b` (run 428
 > lease (below); one gate failed on the test host's full disk and rolled back cleanly, and the same
 > upgrade then completed. This PR stays a draft and unmerged until the release is published.
 
+## Publication
+
+- Release Evidence run 43518684372 (these five files at `d96adee`).
+- First Release run 43518745235 (2026-11-13 22:26Z) published the full committed package index:
+  Package Index run 42912655746 had been dispatched without `packages=io.github.danjboyd.arlen`
+  and `published_only=true`. v0.1.6 was made Latest again, the v0.1.7 release and tag were
+  deleted on Dan's go, and Release run 43522218499 republished v0.1.7 from the same staged files
+  with Package Index run 43519836439 (Arlen only; identical to v0.1.6's apart from
+  `generated_at`, sha256 `8d78e66a…`). Tag `v0.1.7` = `4acbb27`. The CLI and toolchain files are
+  the staged ones every check above tested.
+
 ## Artifacts and their sources
 
 | Artifact | sha256 | Source |
