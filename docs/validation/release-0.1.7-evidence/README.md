@@ -12,9 +12,9 @@ This replaces two earlier stagings that were never published: `4d5504b` (run 428
 (run 42862187210; a Windows lease showed `update --yes` could leave an install without
 `gnustep`, fixed by #64).
 
-> **Status: incomplete.** The Windows Arlen check passed on the rerun lease (below). The
-> Windows update gates (a real `update --yes` with the 0.1.7 CLI, after #64) have not run yet.
-> This PR stays a draft and unmerged until those results are added and the release is published.
+> **Status: complete.** Every planned check has run. The Windows update gates ran on a third
+> lease (below); one gate failed on the test host's full disk and rolled back cleanly, and the same
+> upgrade then completed. This PR stays a draft and unmerged until the release is published.
 
 ## Artifacts and their sources
 
@@ -60,6 +60,7 @@ Package Index run 42912655746 lists the same Arlen 0.3.2 artifacts, digests and 
 | `windows-full-tier1-core-report.json`, `windows-full-release-evidence.json` | The lease run below. Stored as compact UTF-8 JSON; the UTF-8-BOM originals hash to `c014aafa…` and `183e133e…`. |
 | `windows-toolchain-smoke-check.txt` | The toolchain smoke (gdnc and HTTPS) on the same lease. |
 | `windows-arlen-check.txt` | The rerun lease below. Converted to plain UTF-8; the original (a UTF-8-BOM line followed by UTF-16LE lines, from PowerShell 5.1 `Tee-Object -Append`) hashes to `670372ed…`. |
+| `windows-update-gates.json`, `windows-update-gates.txt` | The update-gate lease below. Converted to UTF-8 (compact JSON); the originals hash to `bec3ffa1…` and `30c2efd0…`. |
 | `openbsd-full-tier1-core-report.json` | **Carried forward** byte-identical, as in v0.1.2–v0.1.6. v0.1.7 ships no OpenBSD artifacts. |
 | `update-all-production-like.json` | **Carried forward** byte-identical, as in v0.1.4–v0.1.6. |
 
@@ -95,6 +96,42 @@ Package Index run 42912655746 lists the same Arlen 0.3.2 artifacts, digests and 
 - **Update gates: not run.** The driver's completion check for the Arlen step never matched
   (it read the last line of the mixed-encoding file, a stray NUL byte), so it waited until its
   own deadline and the update gates did not fit before the lease had to be destroyed.
+
+## Windows update-gate lease
+
+- Host: OCI Windows Server 2022 lease `lease-20261113202757-uc5yrx` via otvm-gate (owner
+  windows-agent), a fresh machine, created 2026-11-13 20:28Z. Operator on the office network.
+  Destroyed 22:19Z; the instance is TERMINATED in OCI.
+- Inputs checked on the host: CLI `6671b208…`, toolchain `849c7ca9…`, bootstrap `867308a2…`.
+- The staged 0.1.7 install came from the stamped 0.1.7 bootstrap and the staged manifest, signed
+  with a throwaway key: exit 0, version 0.1.7. Gates ran in the smoke environment (the root's
+  `usr\bin`, `bin` and `clang64\bin` on PATH, plus the unzip shim).
+- **N, the 0.1.7 CLI upgrading Windows:** `update cli --yes` with the staged 0.1.7 CLI, no
+  `--manifest` and no trust override, on a 0.1.5 install, against production Latest (v0.1.6):
+  exit 0, "CLI and toolchain update completed", the install moved to 0.1.6. The trace shows
+  the CLI staged and smoke-checked, the toolchain extracted (tar.exe, then the unzip fallback)
+  and the release activated. This is the upgrade that on 11-10 timed out after 15 s and left
+  the root without `gnustep` (#64). The gate script labels it a no-op check and marks it
+  `ok=false` only because it expected B to have upgraded first, so it expected "No updates".
+- **B, failed upgrade rolled back:** the same upgrade with plain `update --yes`, run first on the
+  same root, failed with "Failed to copy bin/libclang.dll" in the toolchain copy. The rollback
+  restored the install by move (`rollback.restored method=move`); afterwards the root holds
+  `bin`, `state`, `current` and the toolchain, at 0.1.5. On 11-10 the same route left only
+  `.staging` and `releases/0.1.6`.
+  - Likely cause: the test host's disk. The run holds five managed installs plus setup backups on
+    one volume, and the next bootstrap in the same run (B-bare) failed with "No space left on
+    device". B's own bootstrap log was overwritten by B-bare's, so ENOSPC during B itself is
+    inferred, not shown.
+  - The copy routine (`copyTreeContentsFrom:`) removes and copies each file once, without a retry
+    or a detailed error. A follow-up after v0.1.7 can make that error say why the copy failed.
+- **A and B0 (old CLIs):** 0.1.6 with an explicit `--manifest` to staged 0.1.7, and 0.1.5 with plain
+  `update --yes`. Both stop at "Candidate release failed post-upgrade smoke validation" and leave
+  the install unchanged, as on 11-10. This is the release notes' "Upgrading from v0.1.5 or v0.1.6
+  on Windows" case: run the 0.1.7 bootstrap.
+- **C, doctor:** the staged 0.1.7 install is reported as managed at its root
+  (`use_managed_toolchain`).
+- **B-bare** (diagnostic, bare environment): its 0.1.5 bootstrap ran out of disk space; not meaningful.
+- Not covered: 0.1.7 to a newer release by default discovery (none exists before v0.1.8).
 
 ## Other checks before publication
 
