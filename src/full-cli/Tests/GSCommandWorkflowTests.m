@@ -1510,6 +1510,89 @@
     }
 }
 
+// End to end through executeUpdateForContext with no --manifest: the install records
+// an older stable release, discovery finds a newer one, and update cli --yes must
+// install it (v0.1.5/v0.1.6 reinstalled the recorded release and reported success).
+- (NSString *)updateFixtureInDirectory:(NSString *)tempRoot runner:(StubbedGSCommandRunner *)runner installRoot:(NSString *)installRoot recordedVersion:(NSString *)recordedVersion
+{
+  NSString *payloadRoot = [tempRoot stringByAppendingPathComponent: @"payloads"];
+  NSString *cliDir = [payloadRoot stringByAppendingPathComponent: @"cli"];
+  NSString *toolchainDir = [payloadRoot stringByAppendingPathComponent: @"toolchain"];
+  NSString *cliArchive = [payloadRoot stringByAppendingPathComponent: @"cli.tar.gz"];
+  NSString *toolchainArchive = [payloadRoot stringByAppendingPathComponent: @"toolchain.tar.gz"];
+  NSString *statePath = [[installRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+  NSString *recorded = [NSString stringWithFormat: @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v%@/release-manifest.json", recordedVersion];
+
+  [self ensureDirectory: [cliDir stringByAppendingPathComponent: @"bin"]];
+  [self ensureDirectory: [toolchainDir stringByAppendingPathComponent: @"System/Tools"]];
+  [self ensureDirectory: [statePath stringByDeletingLastPathComponent]];
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               recordedVersion, @"cli_version",
+                                               @"stable", @"channel",
+                                               @"healthy", @"status",
+                                               recorded, @"manifest_path",
+                                               nil]
+                       toPath: statePath];
+  [@"#!/bin/sh\nexit 0\n" writeToFile: [cliDir stringByAppendingPathComponent: @"bin/gnustep"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [@"toolchain" writeToFile: [toolchainDir stringByAppendingPathComponent: @"System/Tools/make"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [self archiveDirectory: cliDir toTarball: cliArchive withRunner: runner];
+  [self archiveDirectory: toolchainDir toTarball: toolchainArchive withRunner: runner];
+  return [self releaseManifestPathInDirectory: [tempRoot stringByAppendingPathComponent: @"latest"]
+                                    cliSHA256: [runner sha256ForFile: cliArchive]
+                              toolchainSHA256: [runner sha256ForFile: toolchainArchive]
+                                       cliURL: cliArchive
+                                 toolchainURL: toolchainArchive];
+}
+
+- (void)testUpdateCliYesWithoutManifestInstallsTheDiscoveredNewerRelease
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-cli-e2e-discovered"];
+  NSString *installRoot = [tempRoot stringByAppendingPathComponent: @"managed-root"];
+  NSString *latest = nil;
+  NSDictionary *payload = nil;
+  NSDictionary *state = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  latest = [self updateFixtureInDirectory: tempRoot runner: runner installRoot: installRoot recordedVersion: @"0.0.9"];
+  [runner setStubLatestManifest: latest];
+
+  payload = [runner executeUpdateForContext: [GSCommandContext contextWithArguments:
+                                                [NSArray arrayWithObjects: @"update", @"cli", @"--yes", @"--root", installRoot, nil]]
+                                   exitCode: &exitCode];
+  state = [runner installedLifecycleStateForInstallRoot: installRoot];
+
+  XCTAssertEqual(exitCode, 0, @"%@", [payload objectForKey: @"summary"]);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertEqualObjects([payload objectForKey: @"operation"], @"update_cli");
+  XCTAssertEqualObjects([state objectForKey: @"cli_version"], @"0.1.0-test");
+  XCTAssertEqualObjects([state objectForKey: @"active_release"], @"0.1.0-test");
+  XCTAssertTrue([[payload objectForKey: @"summary"] rangeOfString: @"was not installed"].location == NSNotFound);
+}
+
+// Nothing newer: update cli --yes reapplies the recorded release and must not claim
+// an update or report one as not installed.
+- (void)testUpdateCliYesWithoutManifestKeepsTheInstallWhenNothingIsNewer
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSString *tempRoot = [self temporaryPathComponent: @"update-cli-e2e-current"];
+  NSString *installRoot = [tempRoot stringByAppendingPathComponent: @"managed-root"];
+  NSDictionary *payload = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  [runner setStubLatestManifest: [self updateFixtureInDirectory: tempRoot runner: runner installRoot: installRoot recordedVersion: @"0.2.0"]];
+
+  /* Discovery doesn't pick the older latest; the recorded manifest is a remote URL the
+     test can't reach, so only the planning step is exercised here. */
+  XCTAssertEqualObjects([runner applyManifestForInstallRoot: installRoot explicitManifest: nil],
+                        @"https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.2.0/release-manifest.json");
+  payload = [runner buildUpdatePlanForScope: @"user" manifest: nil installRoot: installRoot exitCode: &exitCode];
+  XCTAssertFalse([[[payload objectForKey: @"update_plan"] objectForKey: @"update_available"] boolValue]);
+}
+
 - (void)testSetupVersionedActivationRejectsFailedSmokeValidation
 {
   GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
