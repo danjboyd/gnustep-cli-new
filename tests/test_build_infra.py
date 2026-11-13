@@ -225,6 +225,26 @@ class BuildInfraTests(unittest.TestCase):
         )
 
 
+    def test_source_lock_template_records_the_patches_the_build_applies(self):
+        # The shipped lock used to say "patches": [] although the build applies the
+        # committed lock's libs-base patches; consumers couldn't prove them from it.
+        repo_root = Path(__file__).resolve().parents[1]
+        for target_id in ("linux-amd64-clang", "linux-arm64-clang", "linux-ubuntu2404-amd64-clang",
+                          "linux-ubuntu2404-arm64-clang", "linux-ubuntu2604-amd64-clang"):
+            with self.subTest(target_id=target_id):
+                committed = json.loads((repo_root / "toolchains" / target_id / "source-lock.json").read_text())
+                committed_base = next(c for c in committed["components"] if c["name"] == "libs-base")
+                shipped = source_lock_template(target_id)
+                shipped_base = next(c for c in shipped["components"] if c["name"] == "libs-base")
+                self.assertEqual(shipped_base["revision"], committed_base["revision"])
+                self.assertEqual(len(shipped_base["patches"]), 8)
+                self.assertEqual(
+                    [(p["path"], p["sha256"]) for p in shipped_base["patches"]],
+                    [(p["path"], p["sha256"]) for p in committed_base["patches"]],
+                )
+                self.assertTrue(validate_source_lock(shipped, target_id=target_id)["ok"])
+
+
     def test_arm64_managed_targets_have_source_locks_and_publish_only_validated_targets(self):
         for target_id in ("linux-arm64-clang", "openbsd-arm64-clang"):
             with self.subTest(target_id=target_id):
