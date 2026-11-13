@@ -1,0 +1,29 @@
+elevated: True
+gdnc before (should be 0): 0
+root: C:\gnustep-smoke\install-full-1794350475
+script: /c/gnustep-smoke/smoke-toolchain.sh root: /
+smoke-toolchain exit 0
+ok: Foundation hello-world (blocks) with gnustep-config flags
+ok: <pthread.h> together with Foundation
+ok: python pyexpat / xml.etree
+ok: curl with SSL and AsynchDNS (curl 8.23.0 (Windows) libcurl/8.23.0 OpenSSL/3.6.5 zlib/1.3.2 brotli/1.2.0 zstd/1.5.7 libidn2/2.3.8 libpsl/0.21.5 libssh2/1.11.1 nghttp2/1.70.0 ngtcp2/1.25.0 nghttp3/1.18.0 WinLDAP)
+ok: perl v5.42.3
+ok: NSLog formatting
+https://github.com fetched
+https://expired.badssl.com refused
+https://wrong.host.badssl.com refused
+https://self-signed.badssl.com refused
+https://untrusted-root.badssl.com refused
+https://self-signed.badssl.com fetched
+https://1.1.1.1 fetched
+https://140.82.112.3 refused
+ok: TLS host verification (github.com loads; expired, wrong-host, self-signed, untrusted-root refused; GS_TLS_VERIFY_S=NO overrides; address URLs checked against the certificate)
+https://127.0.0.1:18443/ refused
+https://127.0.0.1:18443/ fetched
+ok: trust on a store missing the root (a root only in the bundled authorities loads)
+ok: bundled authorities from mingw-w64-clang-x86_64-ca-certificates 20260816-1, 86 days old
+gdnc after (started by the library): 0
+outside bash: https://github.com exit 0
+outside bash: https://expired.badssl.com exit 1
+outside bash: https://1.1.1.1 exit 0
+done
