@@ -310,7 +310,7 @@ def main() -> int:
     tools_xctest_artifact.add_argument("--source-revision")
     tools_xctest_artifact.add_argument("--installed-root")
     tools_xctest_artifact.add_argument("--target", default="linux-amd64-clang")
-    tools_xctest_artifact.add_argument("--version", default="0.1.1")
+    tools_xctest_artifact.add_argument("--version", default="0.8.0")
     tools_xctest_artifact.add_argument("--rebuild", action="store_true")
     tools_xctest_artifact.add_argument("--manifest", default=str(ROOT / "packages" / "org.gnustep.tools-xctest" / "package.json"))
 
