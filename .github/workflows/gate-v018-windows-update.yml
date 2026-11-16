@@ -354,7 +354,9 @@ jobs:
           $g = 'C:\gnustep-smoke'
           $user = 'gssmoke'
           $pw = [Convert]::ToBase64String((1..24 | ForEach-Object { [byte](Get-Random -Maximum 256) })) + 'aA1!'
-          net user $user $pw /add | Out-Null
+          # New-LocalUser: `net user /add` stops to confirm passwords longer than 14 characters.
+          New-LocalUser -Name $user -Password (ConvertTo-SecureString $pw -AsPlainText -Force) -PasswordNeverExpires -AccountNeverExpires | Out-Null
+          Write-Output "standard user: $((Get-LocalUser $user).Name), admin=$([bool](Get-LocalGroupMember Administrators | Where-Object { $_.Name -like "*\$user" }))"
           icacls $g /grant "${user}:(OI)(CI)F" /T /Q | Out-Null
           function Run-AsUser($name, $command, $hours, $exitFile) {
             Remove-Item -Force $exitFile -ErrorAction SilentlyContinue
@@ -449,7 +451,9 @@ jobs:
           Copy-Item .github/gate/smoke/smoke-toolchain.sh, .github/gate/smoke/post-checks.ps1 "$g\"
           $user = 'gssmoke'
           $pw = [Convert]::ToBase64String((1..24 | ForEach-Object { [byte](Get-Random -Maximum 256) })) + 'aA1!'
-          net user $user $pw /add | Out-Null
+          # New-LocalUser: `net user /add` stops to confirm passwords longer than 14 characters.
+          New-LocalUser -Name $user -Password (ConvertTo-SecureString $pw -AsPlainText -Force) -PasswordNeverExpires -AccountNeverExpires | Out-Null
+          Write-Output "standard user: $((Get-LocalUser $user).Name), admin=$([bool](Get-LocalGroupMember Administrators | Where-Object { $_.Name -like "*\$user" }))"
           icacls $g /grant "${user}:(OI)(CI)F" /T /Q | Out-Null
           function Run-AsUser($name, $command, $hours, $exitFile) {
             Remove-Item -Force $exitFile -ErrorAction SilentlyContinue
