@@ -21,7 +21,11 @@ class PackageToolingTests(unittest.TestCase):
     def test_repo_tools_xctest_version_matches_pinned_upstream_tag(self):
         manifest = json.loads((ROOT / "packages" / "org.gnustep.tools-xctest" / "package.json").read_text())
         # 2aac3e5 is gnustep/tools-xctest tag v0.1.1; update both together when re-pinning.
-        upstream_tags = {"2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3": "0.1.1"}
+        # 69a6469 is danjboyd/tools-xctest tag v0.8.0 (fork-pin exception, AIManager ask #3024).
+        upstream_tags = {
+            "2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3": "0.1.1",
+            "69a646939903e8be072de7b9085d4a423910904a": "0.8.0",
+        }
         self.assertEqual(manifest["version"], upstream_tags[manifest["source"]["revision"]])
         build_infra = (ROOT / "scripts" / "internal" / "build_infra.py").read_text()
         self.assertIn(f'tools_xctest_artifact.add_argument("--version", default="{manifest["version"]}")', build_infra)

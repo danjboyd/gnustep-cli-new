@@ -5587,6 +5587,8 @@ def package_artifact_build_plan(packages_dir: str | Path) -> dict[str, Any]:
                 artifact_blockers.append("missing_artifact_url")
             if artifact_publishable and (not artifact_sha or str(artifact_sha).endswith("tbd") or "placeholder" in str(artifact_sha).lower() or "published-artifact-checksum-tbd" == str(artifact_sha)):
                 artifact_blockers.append("missing_published_artifact_digest")
+            if artifact_publishable and "pending_rebuild" in str(artifact.get("status", "")):
+                artifact_blockers.append("artifact_pending_rebuild")
             for evidence_field, blocker_code in (
                 ("build_evidence", "missing_build_evidence"),
                 ("validation_evidence", "missing_validation_evidence"),
@@ -5781,7 +5783,12 @@ def tools_xctest_release_gate(packages_dir: str | Path, *, evidence_dir: str | P
     patches = manifest.get("patches", []) or []
     patch_by_id = {patch.get("id"): patch for patch in patches if isinstance(patch, dict)}
     declared_patch = patch_by_id.get(required_patch_id)
-    if declared_patch is None:
+    # A source that implements the filters itself (danjboyd/tools-xctest v0.8.0 and later)
+    # needs no downstream patch; the package build checks `xctest --help` for both filters.
+    provided_natively = required_patch_id in ((manifest.get("source", {}) or {}).get("provides_natively", []) or [])
+    if declared_patch is None and provided_natively:
+        pass
+    elif declared_patch is None:
         blockers.append(
             {
                 "code": "required_patch_not_declared",
@@ -5970,6 +5977,7 @@ def tools_xctest_release_gate(packages_dir: str | Path, *, evidence_dir: str | P
         "phase": "24.E-G",
         "source": manifest.get("source", {}),
         "required_patch": required_patch_id,
+        "required_patch_provided_natively": provided_natively,
         "dogfood_checks": dogfood_checks,
         "targets": targets,
         "blockers": blockers,

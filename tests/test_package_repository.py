@@ -49,9 +49,10 @@ class PackageRepositoryTests(unittest.TestCase):
         package = next(package for package in payload["packages"] if package["id"] == "org.gnustep.tools-xctest")
         self.assertEqual(package["build"]["backend"], "gnustep-cli")
         artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-linux-amd64-clang")
-        self.assertEqual(artifact["source"]["tracking_strategy"], "commit-with-submitted-downstream-patch")
-        self.assertEqual(artifact["patches"][0]["id"], "add-apple-style-xctest-cli-filters")
-        self.assertEqual(artifact["patches"][0]["upstream_status"], "submitted")
+        self.assertEqual(artifact["source"]["tracking_strategy"], "tagged-fork-release")
+        self.assertEqual(artifact["source"]["tag"], "v0.8.0")
+        self.assertEqual(artifact["source"]["revision"], "69a646939903e8be072de7b9085d4a423910904a")
+        self.assertEqual(artifact["patches"], [])
 
     def test_package_index_records_runtime_component_profiles(self):
         payload = generate_package_index(ROOT / "packages")
