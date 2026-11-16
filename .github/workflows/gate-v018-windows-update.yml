@@ -1,0 +1,73 @@
+name: Gate v0.1.8 Windows update checks (temporary; never merged)
+
+# Dan's ask #7778 answer "fix": the Windows update checks run on fresh GitHub runners
+# instead of a leased VM. A (+A0, C2, C) and B+N run on separate runners, so neither
+# runs short of disk. Runs only on pushes to this temporary branch.
+
+on:
+  push:
+    branches: [gate-v018-windows-update]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  gates:
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: [A, BN]
+    name: update gates ${{ matrix.gate }}
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk
+        shell: pwsh
+        run: Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
+
+      - name: Staged release (stage-release run) and the stamped bootstrap
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Get-Content .github/gate/config.env | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
+          New-Item -ItemType Directory -Force C:\gnustep-smoke\release-new, C:\gnustep-smoke\bootstrap | Out-Null
+          gh run download $STAGE_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-staged-release -D C:\gnustep-smoke\release-new
+          if ($LASTEXITCODE -ne 0) { throw 'stage artifact download failed' }
+          Push-Location C:\gnustep-smoke\release-new
+          $bad = Get-Content SHA256SUMS | Where-Object { $_ } | ForEach-Object {
+            $h, $f = $_ -split '\s+\*?', 2
+            if ((Get-FileHash -Algorithm SHA256 $f).Hash.ToLower() -ne $h) { $f }
+          }
+          Pop-Location
+          if ($bad) { throw "SHA256SUMS mismatch: $bad" }
+          Get-ChildItem C:\gnustep-smoke\release-new | Format-Table Name, Length
+
+      - name: Stamp the bootstrap from the git blob (no line-ending conversion) and check its digest
+        shell: bash
+        run: |
+          . <(tr -d "\r" < .github/gate/config.env)
+          git show HEAD:scripts/bootstrap/gnustep-bootstrap.ps1 | sed "6s/.*/\$Script:CliVersion = \"$VERSION\"/" > /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1
+          h=$(sha256sum /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1 | cut -d' ' -f1)
+          echo "stamped bootstrap sha256 $h"
+          test "$h" = "$PS1_SHA256"
+
+      - name: Update gates (Windows PowerShell 5.1, as users run it)
+        shell: powershell
+        run: |
+          Copy-Item .github/gate/update-gates8.ps1 C:\gnustep-smoke\update-gates8.ps1
+          & powershell -NoProfile -ExecutionPolicy Bypass -File C:\gnustep-smoke\update-gates8.ps1 -Gates ${{ matrix.gate }}
+          $code = $LASTEXITCODE
+          Get-Content C:\gnustep-smoke\update-gates6\update-gates.txt
+          Get-Content C:\gnustep-smoke\update-gates6\exit.txt -ErrorAction SilentlyContinue
+          if ($code -ne 0) { throw "update gates ${{ matrix.gate }} failed ($code)" }
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-gates-${{ matrix.gate }}
+          path: C:\gnustep-smoke\update-gates6
