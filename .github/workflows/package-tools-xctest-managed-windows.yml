@@ -1,0 +1,145 @@
+name: Package tools-xctest (managed Windows)
+
+# Builds the org.gnustep.tools-xctest package artifact for Windows MSYS2 clang64 from
+# the checked-out ref's package manifest (pinned source plus declared patches), inside
+# the gnustep-cli managed toolchain installed by the checksum-pinned bootstrap from a
+# signed release manifest. Mirrors package-tools-xctest-managed-linux.yml.
+
+on:
+  # TEMPORARY for PR #71: a new workflow can't be dispatched before it is on master,
+  # so it also runs on pushes to this branch. Remove the push trigger before merge.
+  push:
+    branches: [tools-xctest-v0.8.0]
+    paths: [.github/workflows/package-tools-xctest-managed-windows.yml, packages/org.gnustep.tools-xctest/**]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package artifact version (must match the manifest's version)
+        required: true
+      toolchain_release_tag:
+        description: Release whose bootstrap and manifest install the managed toolchain
+        required: true
+        default: v0.1.7
+      bootstrap_sha256:
+        description: Expected sha256 of that release's gnustep-bootstrap.ps1
+        required: true
+        default: 867308a2c1c3febd9a7800564eb131a899db67c2ccc9c5d03d4b921c4b387420
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  package-tools-xctest-managed-windows:
+    runs-on: windows-latest
+    env:
+      TARGET: windows-amd64-msys2-clang64
+      MANAGED_ROOT: C:\gs
+      OUT: ${{ github.workspace }}\..\tools-xctest-package
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Enforce manifest version
+        shell: pwsh
+        run: |
+          $manifest = Get-Content packages/org.gnustep.tools-xctest/package.json -Raw | ConvertFrom-Json
+          if ($manifest.version -ne '${{ inputs.version || '0.8.0' }}') { throw "version input ${{ inputs.version || '0.8.0' }} does not match manifest version $($manifest.version)" }
+
+      - name: Download pinned bootstrap and signed release manifest
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          New-Item -ItemType Directory -Force "$env:OUT\inputs" | Out-Null
+          gh release download "${{ inputs.toolchain_release_tag || 'v0.1.7' }}" --repo "$env:GITHUB_REPOSITORY" --dir "$env:OUT\inputs" `
+            --pattern gnustep-bootstrap.ps1 --pattern release-manifest.json --pattern release-manifest.json.sig
+          $hash = (Get-FileHash -Algorithm SHA256 "$env:OUT\inputs\gnustep-bootstrap.ps1").Hash.ToLower()
+          if ($hash -ne '${{ inputs.bootstrap_sha256 || '867308a2c1c3febd9a7800564eb131a899db67c2ccc9c5d03d4b921c4b387420' }}') { throw "bootstrap sha256 $hash does not match the pinned digest" }
+
+      - name: Install the managed toolchain
+        shell: pwsh
+        run: |
+          $env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE = '1'
+          & powershell -NoProfile -ExecutionPolicy Bypass -File "$env:OUT\inputs\gnustep-bootstrap.ps1" `
+            --json setup --root $env:MANAGED_ROOT --manifest "$env:OUT\inputs\release-manifest.json" *> "$env:OUT\setup-report.json"
+          $code = $LASTEXITCODE
+          Get-Content "$env:OUT\setup-report.json" -Tail 20
+          if ($code -ne 0) { throw "managed toolchain setup failed ($code)" }
+
+      - name: Build, test and package in the managed MSYS2 clang64 environment
+        shell: pwsh
+        run: |
+          $script = @'
+          set -eu
+          managed_root=$(cygpath -u "$MANAGED_ROOT")
+          out=$(cygpath -u "$OUT")
+          src=$(cygpath -u "$GITHUB_WORKSPACE")
+          export GNUSTEP_MAKEFILES_DIR="$managed_root/clang64/share/GNUstep/Makefiles"
+          # The packaging command passes these as ADDITIONAL_OBJCFLAGS; point them at
+          # the managed libobjc2 headers.
+          export GCC_OBJC_HEADERS="$managed_root/clang64/include"
+          # MSYS2's libdispatch headers need mode_t declared (tools-xctest v0.8.0 CI does the same).
+          export ADDITIONAL_CPPFLAGS=-DHAVE_MODE_T
+          cd "$src"
+          python3 scripts/internal/build_infra.py --json package-tools-xctest-artifact \
+            --output-dir "$out/package" \
+            --target "$TARGET" \
+            --version "$PACKAGE_VERSION" \
+            --rebuild > "$out/package-tools-xctest-artifact.json" || true
+          cat "$out/package-tools-xctest-artifact.json" | head -c 4000
+          python3 -c 'import json,sys; raise SystemExit(0 if json.load(open(sys.argv[1]))["ok"] else 1)' "$out/package-tools-xctest-artifact.json"
+
+          # Upstream's own regression and CLI suite on the tree just built. Hosted and
+          # ui-thread tests are Linux-only in v0.8.0.
+          (
+            export HOME="$out/package/install-home"
+            set +u
+            . "$GNUSTEP_MAKEFILES_DIR/GNUstep.sh"
+            set -u
+            cd "$out/package/work/tools-xctest-src"
+            sh Tests/run.sh
+          ) > "$out/upstream-tests.log" 2>&1 || { tail -60 "$out/upstream-tests.log"; exit 1; }
+          tail -5 "$out/upstream-tests.log"
+          '@
+          $env:PACKAGE_VERSION = '${{ inputs.version || '0.8.0' }}'
+          $env:MSYSTEM = 'CLANG64'
+          $env:CHERE_INVOKING = '1'
+          $env:PATH = "$env:MANAGED_ROOT\clang64\bin;$env:MANAGED_ROOT\usr\bin;$env:PATH"
+          Set-Content -Path "$env:OUT\build.sh" -Value $script -Encoding ascii
+          & "$env:MANAGED_ROOT\usr\bin\bash.exe" -c "bash `"$(& "$env:MANAGED_ROOT\usr\bin\cygpath.exe" -u "$env:OUT\build.sh")`""
+          if ($LASTEXITCODE -ne 0) { throw "build/test/package failed ($LASTEXITCODE)" }
+
+      - name: Smoke the packaged artifact
+        shell: pwsh
+        run: |
+          # The launcher finds the managed root two levels above the package root.
+          $pkg = "$env:MANAGED_ROOT\packages\tools-xctest"
+          Expand-Archive -Force (Get-ChildItem "$env:OUT\package\tools-xctest-$env:TARGET-*.zip").FullName $pkg
+          $root = Get-ChildItem $pkg -Recurse -Filter xctest.cmd | Select-Object -First 1
+          & cmd.exe /c "`"$($root.FullName)`" --help" > "$env:OUT\artifact-help.txt" 2>&1
+          Get-Content "$env:OUT\artifact-help.txt" -TotalCount 30
+          $help = Get-Content "$env:OUT\artifact-help.txt" -Raw
+          if ($help -notmatch '-only-testing:' -or $help -notmatch '-skip-testing:') { throw 'xctest --help does not list the Apple-style filters' }
+
+      - name: Write checksums
+        if: always()
+        shell: pwsh
+        run: |
+          Get-ChildItem "$env:OUT\package" -File -Filter 'tools-xctest-*' -ErrorAction SilentlyContinue |
+            ForEach-Object { "$((Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower())  package/$($_.Name)" } |
+            Set-Content "$env:OUT\SHA256SUMS" -Encoding ascii
+
+      - name: Upload tools-xctest package artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-package-tools-xctest-managed-windows-amd64-msys2-clang64-${{ inputs.version || '0.8.0' }}
+          path: |
+            ${{ github.workspace }}\..\tools-xctest-package\package\tools-xctest-*
+            ${{ github.workspace }}\..\tools-xctest-package\*.json
+            ${{ github.workspace }}\..\tools-xctest-package\*.log
+            ${{ github.workspace }}\..\tools-xctest-package\*.txt
+            ${{ github.workspace }}\..\tools-xctest-package\SHA256SUMS
