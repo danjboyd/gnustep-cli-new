@@ -877,7 +877,13 @@ static NSString *GSTestManagedRoot(NSString *base, NSString *name, NSString *sta
   XCTAssertEqualObjects([check objectForKey: @"status"], @"ok");
   XCTAssertEqualObjects([[check objectForKey: @"details"] objectForKey: @"state_status"], @"healthy");
 
+  // Every upgrade leaves an empty .staging behind: that is a healthy install.
   [manager createDirectoryAtPath: [root stringByAppendingPathComponent: @".staging"] withIntermediateDirectories: YES attributes: nil error: NULL];
+  check = [runner managedInstallIntegrityCheckForStatePath: state candidateStatePaths: nil];
+  XCTAssertEqualObjects([check objectForKey: @"status"], @"ok");
+  XCTAssertEqual([[[check objectForKey: @"details"] objectForKey: @"stale_paths"] count], (NSUInteger)0);
+
+  [manager createDirectoryAtPath: [root stringByAppendingPathComponent: @".staging/payload"] withIntermediateDirectories: YES attributes: nil error: NULL];
   check = [runner managedInstallIntegrityCheckForStatePath: state candidateStatePaths: nil];
   XCTAssertEqualObjects([check objectForKey: @"status"], @"warning");
   XCTAssertEqualObjects([check objectForKey: @"message"], @"Managed install state requires repair validation.");
