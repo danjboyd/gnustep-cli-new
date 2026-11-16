@@ -64,7 +64,8 @@ else {
   Remove-Item Env:GNUSTEP_CLI_INSTALL_TRACE -ErrorAction SilentlyContinue
   $env:PATH = $basePath
   $verAfter = State-Version $root
-  $current = "$((Get-Item "$root\current" -ErrorAction SilentlyContinue).Target)"
+  # On Windows the active release is named in current\release.txt (a folder, not a symlink).
+  $current = "$((Get-Content "$root\current\release.txt" -ErrorAction SilentlyContinue | Select-Object -First 1))".Trim()
   $trace = Get-Content (Join-Path $out 'S-self-update.trace.log') -ErrorAction SilentlyContinue
   $smokeOk = [bool]($trace | Select-String -SimpleMatch 'windows.upgrade.cli.stage.smoke.ok')
   $smokeFailed = [bool]($trace | Select-String -SimpleMatch 'windows.upgrade.cli.stage.smoke.failed')
@@ -79,7 +80,7 @@ else {
     $integrity = (@($doc.checks) | Where-Object { $_.id -eq 'managed.install.integrity' } | Select-Object -First 1).status
     $mroot = (@($doc.checks) | Where-Object { $_.id -eq 'native-toolchain.assess' } | Select-Object -First 1).details.managed_root
   } catch { Say "doctor parse error: $($_.Exception.Message)" }
-  $passed = ($sCode -eq 0 -and $verAfter -eq '0.1.9' -and $current -match 'releases\\0\.1\.9' -and $smokeOk -and $verCode -eq 0 -and $integrity -eq 'ok' -and $mroot -and (($mroot -replace '/', '\').TrimEnd('\') -ieq $root))
+  $passed = ($sCode -eq 0 -and $verAfter -eq '0.1.9' -and $current -eq '0.1.9' -and (Test-Path "$root\releases\0.1.9\bin\gnustep.exe") -and $smokeOk -and $verCode -eq 0 -and $integrity -eq 'ok' -and $mroot -and (($mroot -replace '/', '\').TrimEnd('\') -ieq $root))
   $results.S = [ordered]@{ exit = $sCode; version_after = $verAfter; current = $current; smoke_ok = $smokeOk; smoke_failed = $smokeFailed; launcher_version_exit = $verCode; launcher_version = $verOut; doctor_exit = $docCode; integrity = $integrity; managed_root = $mroot; passed = $passed }
   Say "S: exit $sCode 0.1.8 -> $verAfter current=$current smoke_ok=$smokeOk smoke_failed=$smokeFailed launcher=$verCode/$verOut integrity=$integrity managed_root=$mroot passed=$passed"
   $results.S.ok = $(if ($Expect -eq 'pass') { $passed } else { (-not $passed) -and $smokeFailed -and $verAfter -eq '0.1.8' })
