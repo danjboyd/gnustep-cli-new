@@ -19,6 +19,7 @@ jobs:
       matrix:
         gate: [A, BN]
     name: update gates ${{ matrix.gate }}
+    if: ${{ !contains(github.event.head_commit.message, '[diag-only]') }}
     runs-on: windows-latest
     timeout-minutes: 150
     steps:
@@ -71,3 +72,49 @@ jobs:
         with:
           name: update-gates-${{ matrix.gate }}
           path: C:\gnustep-smoke\update-gates6
+
+  diag:
+    name: diag CLI-only candidate on a v0.1.7 root
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: v0.1.7 install, then each candidate exe alone in releases\<v>\bin, run as the updater does
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Get-Content .github/gate/config.env | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
+          $env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE = '1'
+          $w = 'C:\diag'; New-Item -ItemType Directory -Force $w | Out-Null
+          gh run download $STAGE_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-staged-release -D "$w\stage" 2>&1 | Out-Null
+          gh release download v0.1.7 --repo $env:GITHUB_REPOSITORY -p 'gnustep-cli-windows-amd64-msys2-clang64-0.1.7.zip' -p gnustep-bootstrap.ps1 -D $w
+          Expand-Archive "$w\gnustep-cli-windows-amd64-msys2-clang64-0.1.7.zip" "$w\c17"
+          Expand-Archive "$w\stage\gnustep-cli-windows-amd64-msys2-clang64-$VERSION.zip" "$w\c18"
+          $root = 'C:\diag\root017'
+          & powershell -NoProfile -ExecutionPolicy Bypass -File "$w\gnustep-bootstrap.ps1" setup --root $root *> "$w\bootstrap.txt"
+          "bootstrap exit $LASTEXITCODE"; Get-Content "$w\bootstrap.txt" -Tail 3
+          "root: $((Get-ChildItem $root -Force | Select-Object -ExpandProperty Name) -join ' ')"
+          "current -> $((Get-Item "$root\current" -ErrorAction SilentlyContinue).Target)"
+          foreach ($c in @(@{n='cand17'; src="$w\c17"}, @{n='cand18'; src="$w\c18"})) {
+            $rel = Join-Path $root "releases\$($c.n)"
+            New-Item -ItemType Directory -Force $rel | Out-Null
+            Copy-Item -Recurse -Force "$($c.src)\*" $rel
+            $exe = Get-ChildItem $rel -Recurse -Filter gnustep.exe | Select-Object -First 1
+            "== $($c.n): $($exe.FullName)"
+            $env:GNUSTEP_CLI_MANAGED_ROOT = $root; $env:GNUSTEP_CLI_NO_DELEGATE = '1'
+            $saved = $env:PATH
+            $env:PATH = "$root\clang64\bin;$root\bin;$root\usr\bin;" + $saved
+            $p = Start-Process -FilePath $exe.FullName -ArgumentList '--version' -NoNewWindow -Wait -PassThru -RedirectStandardOutput "$w\$($c.n).out" -RedirectStandardError "$w\$($c.n).err"
+            "direct: exit $($p.ExitCode) (0x$('{0:X8}' -f $p.ExitCode)) out=[$((Get-Content "$w\$($c.n).out" -Raw))] err=[$((Get-Content "$w\$($c.n).err" -Raw))]"
+            $env:PATH = $saved
+            $script = "`$env:GNUSTEP_CLI_MANAGED_ROOT='$root'; `$env:GNUSTEP_CLI_NO_DELEGATE='1'; `$env:PATH='$root/clang64/bin;$root/bin;$root/usr/bin;' + `$env:PATH; & '$($exe.FullName)' --version; `"native=`$LASTEXITCODE`""
+            $o = & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $script 2>&1 | Out-String
+            "updater form: exit $LASTEXITCODE out=[$o]"
+            Remove-Item Env:GNUSTEP_CLI_MANAGED_ROOT, Env:GNUSTEP_CLI_NO_DELEGATE
+            "--- same exe, no managed-root env, root clang64\bin on PATH:"
+            $env:PATH = "$root\clang64\bin;" + $saved
+            $o2 = & $exe.FullName --version 2>&1 | Out-String
+            "plain: exit $LASTEXITCODE out=[$o2]"
+            $env:PATH = $saved
+          }
