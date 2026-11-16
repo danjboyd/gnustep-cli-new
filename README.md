@@ -68,9 +68,10 @@ sh gnustep-bootstrap.sh doctor          # read-only: reports what setup would ne
 sh gnustep-bootstrap.sh setup --user    # installs under ~/.local/share/gnustep-cli
 ```
 
-- The digest above is v0.1.7's `gnustep-bootstrap.sh`. Every release lists its bootstrap
-  digests in its release notes, and as a `gnustep-bootstrap.sh.sha256` asset. Pin the
-  digest you've reviewed, rather than one fetched in the same step as the script.
+- The digest above is v0.1.7's `gnustep-bootstrap.sh`. Every release publishes its
+  bootstrap digests as `gnustep-bootstrap.sh.sha256` and `gnustep-bootstrap.ps1.sha256`
+  assets. Record the digest once, from a source you trust, and pin it, instead of fetching
+  it in the same step as the script.
 - The script is plain POSIX `sh` (`scripts/bootstrap/gnustep-bootstrap.sh` at the
   release tag), so it can be read before it runs. It then verifies the signed release
   manifest against a trust root built into it, and checks each artifact's sha256 before
