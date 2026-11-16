@@ -10522,12 +10522,16 @@ static NSString *GSExecutableExposureStyleOverride = nil;
           return [lines componentsJoinedByString: @"\n"];
         }
 
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+      /* On Windows the real invocation is a PowerShell/bash launch script; show its gist.
+         Elsewhere the invocation is the openapp command itself, as in the Python engine. */
       if ([[payload objectForKey: @"backend"] isEqualToString: @"openapp"]
           && [[runProject objectForKey: @"project_type"] isEqualToString: @"app"])
         {
           invocation = [NSString stringWithFormat: @"bash -lc openapp ./%@.app",
                                   [runProject objectForKey: @"target_name"]];
         }
+#endif
 
       {
         NSMutableArray *lines = [NSMutableArray array];

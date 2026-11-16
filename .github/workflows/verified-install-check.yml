@@ -6,10 +6,10 @@ name: Verified install check
 # privileged shortcut.
 
 on:
-  # TEMPORARY for the draft PR: a new workflow can't be dispatched before it is on
-  # master, so it also runs on pushes to this branch. Remove before merge.
-  push:
-    branches: [verified-install-check]
+  # Any change to the README (where the steps and the pinned digest live) or to this
+  # check reruns it, so the documented install can't silently rot.
+  pull_request:
+    paths: [README.md, .github/workflows/verified-install-check.yml]
   workflow_dispatch:
 
 permissions:
