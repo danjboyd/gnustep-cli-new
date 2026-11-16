@@ -84,6 +84,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $ErrorActionPreference = 'Continue'
           Get-Content .github/gate/config.env | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
           $env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE = '1'
           $w = 'C:\diag'; New-Item -ItemType Directory -Force $w | Out-Null
@@ -108,7 +109,7 @@ jobs:
             $p = Start-Process -FilePath $exe.FullName -ArgumentList '--version' -NoNewWindow -Wait -PassThru -RedirectStandardOutput "$w\$($c.n).out" -RedirectStandardError "$w\$($c.n).err"
             "direct: exit $($p.ExitCode) (0x$('{0:X8}' -f $p.ExitCode)) out=[$((Get-Content "$w\$($c.n).out" -Raw))] err=[$((Get-Content "$w\$($c.n).err" -Raw))]"
             $env:PATH = $saved
-            $script = "`$env:GNUSTEP_CLI_MANAGED_ROOT='$root'; `$env:GNUSTEP_CLI_NO_DELEGATE='1'; `$env:PATH='$root/clang64/bin;$root/bin;$root/usr/bin;' + `$env:PATH; & '$($exe.FullName)' --version; `"native=`$LASTEXITCODE`""
+            $script = "`$env:GNUSTEP_CLI_MANAGED_ROOT='$root'; `$env:GNUSTEP_CLI_NO_DELEGATE='1'; `$env:PATH='$root/clang64/bin;$root/bin;$root/usr/bin;' + `$env:PATH; & '$($exe.FullName)' --version; exit `$LASTEXITCODE"
             $o = & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $script 2>&1 | Out-String
             "updater form: exit $LASTEXITCODE out=[$o]"
             Remove-Item Env:GNUSTEP_CLI_MANAGED_ROOT, Env:GNUSTEP_CLI_NO_DELEGATE
@@ -118,3 +119,4 @@ jobs:
             "plain: exit $LASTEXITCODE out=[$o2]"
             $env:PATH = $saved
           }
+          exit 0
