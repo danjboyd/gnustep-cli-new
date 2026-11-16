@@ -643,6 +643,11 @@ class RepositoryContractsTests(unittest.TestCase):
         # The check runs after the index is promoted and advertised, before verification and signing.
         self.assertLess(content.index("advertise-package-index"), content.index("package-index-scope-check"))
         self.assertLess(content.index("package-index-scope-check"), content.index("sign-release-metadata"))
+        # First release (no Latest yet, or a Latest without an index): no baseline is passed,
+        # so every package counts as new and must be allowed explicitly.
+        self.assertIn('previous_args=""', content)
+        self.assertIn("No previous Latest package index found; every package counts as new", content)
+        self.assertIn("$previous_args", content)
 
 
 if __name__ == "__main__":
