@@ -20,8 +20,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: ["debian:13", "ubuntu:24.04", "ubuntu:26.04"]
-    runs-on: ubuntu-latest
+        include:
+          - { image: "debian:13", runner: ubuntu-latest }
+          - { image: "ubuntu:24.04", runner: ubuntu-latest }
+          - { image: "ubuntu:26.04", runner: ubuntu-latest }
+          # The README's arm64 targets.
+          - { image: "debian:13", runner: ubuntu-24.04-arm }
+          - { image: "ubuntu:24.04", runner: ubuntu-24.04-arm }
+    name: verified-install (${{ matrix.image }}, ${{ matrix.runner == 'ubuntu-24.04-arm' && 'arm64' || 'amd64' }})
+    runs-on: ${{ matrix.runner }}
     container: ${{ matrix.image }}
     steps:
       - name: Check out repository
@@ -85,3 +92,55 @@ jobs:
           test ! -e /opt/gnustep-cli
           test -d /home/newuser/.local/share/gnustep-cli/bin
           ls -la /home/newuser/.local/share/gnustep-cli | head -20
+
+  verified-install-windows:
+    name: verified-install (windows, amd64)
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: README PowerShell steps, verbatim, as the runner's user
+        shell: powershell
+        run: |
+          $readme = Get-Content README.md
+          $start = ($readme | Select-String -Pattern '^### Verified install' | Select-Object -First 1).LineNumber
+          $in = $false; $steps = @()
+          foreach ($line in $readme[$start..($readme.Count - 1)]) {
+            if (-not $in -and $line -eq '```powershell') { $in = $true; continue }
+            if ($in -and $line -eq '```') { break }
+            if ($in) { $steps += $line }
+          }
+          if ($steps.Count -eq 0) { throw 'no PowerShell block in the Verified install section' }
+          $work = Join-Path $env:RUNNER_TEMP 'verified-install'
+          New-Item -ItemType Directory -Force $work | Out-Null
+          Set-Content -Path (Join-Path $work 'readme-steps.ps1') -Value $steps -Encoding ascii
+          Write-Output 'README steps:'; $steps
+          Set-Location $work
+          & powershell -NoProfile -ExecutionPolicy Bypass -File .\readme-steps.ps1 *>&1 | Tee-Object -FilePath readme-steps.log
+          $log = Get-Content readme-steps.log -Raw
+          if ($log -notmatch 'managed installation completed') { throw 'setup did not complete' }
+          $lines = Get-Content readme-steps.log
+          $i = [array]::IndexOf($lines, ($lines | Where-Object { $_ -eq 'next: Run this in the current shell:' } | Select-Object -First 1))
+          if ($i -lt 0) { throw 'setup printed no PATH line' }
+          $pathLine = $lines[$i + 1].Trim()
+          Write-Output "PATH line from setup: $pathLine"
+          Set-Content -Path (Join-Path $work 'path-line.ps1') -Value $pathLine -Encoding ascii
+
+      - name: New CLI tool, build and run with the installed gnustep
+        shell: powershell
+        run: |
+          $work = Join-Path $env:RUNNER_TEMP 'verified-install'
+          Set-Location $work
+          . .\path-line.ps1
+          gnustep --version
+          gnustep new cli-tool Probe
+          if ($LASTEXITCODE -ne 0) { throw "gnustep new failed ($LASTEXITCODE)" }
+          Set-Location Probe
+          gnustep build
+          if ($LASTEXITCODE -ne 0) { throw "gnustep build failed ($LASTEXITCODE)" }
+          $out = gnustep run 2>&1 | Out-String
+          $out
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'Hello from CLI tool') { throw 'the CLI tool did not run' }
+          if (-not (Test-Path "$env:LOCALAPPDATA\gnustep-cli\bin")) { throw 'not installed under %LOCALAPPDATA%\gnustep-cli' }
+

@@ -79,9 +79,19 @@ sh gnustep-bootstrap.sh setup --user    # installs under ~/.local/share/gnustep-
 - `setup --user` installs only under `~/.local/share/gnustep-cli`. Without `--yes` it
   never uses `sudo`: missing host packages (clang, lld, ICU...) are listed with the
   exact `apt-get` command to run. With `--yes` it runs that command through `sudo` or `doas`.
-- Windows: the same pattern applies to `gnustep-bootstrap.ps1`
-  (`867308a2c1c3febd9a7800564eb131a899db67c2ccc9c5d03d4b921c4b387420` for v0.1.7) with
-  `Get-FileHash -Algorithm SHA256`.
+
+On Windows (PowerShell), the same steps with `gnustep-bootstrap.ps1`:
+
+```powershell
+$V = "0.1.7"
+Invoke-WebRequest -UseBasicParsing "https://github.com/danjboyd/gnustep-cli-new/releases/download/v$V/gnustep-bootstrap.ps1" -OutFile gnustep-bootstrap.ps1
+if ((Get-FileHash -Algorithm SHA256 gnustep-bootstrap.ps1).Hash -ne "867308a2c1c3febd9a7800564eb131a899db67c2ccc9c5d03d4b921c4b387420") { throw "gnustep-bootstrap.ps1: checksum mismatch" }
+powershell -NoProfile -ExecutionPolicy Bypass -File .\gnustep-bootstrap.ps1 doctor
+powershell -NoProfile -ExecutionPolicy Bypass -File .\gnustep-bootstrap.ps1 setup --user
+```
+
+`setup --user` installs under `%LOCALAPPDATA%\gnustep-cli` and prints the `$env:Path` line
+to run in the current shell.
 
 ## Quick start
 
