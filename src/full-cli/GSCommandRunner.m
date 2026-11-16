@@ -116,6 +116,13 @@ static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
                           to:(NSString *)destination
         skippingRelativePaths:(NSArray *)skipRelativePaths
                         error:(NSString **)errorMessage;
+- (NSString *)reasonFromFileError:(NSError *)error;
+- (NSString *)copyFailureMessageForRelativePath:(NSString *)relative
+                                     targetPath:(NSString *)targetPath
+                                  targetExisted:(BOOL)targetExisted
+                                        removed:(BOOL)removed
+                                    removeError:(NSError *)removeError
+                                      copyError:(NSError *)copyError;
 - (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory;
 - (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory timeout:(NSTimeInterval)timeout;
 - (NSDictionary *)runCommand:(NSArray *)arguments currentDirectory:(NSString *)currentDirectory timeout:(NSTimeInterval)timeout additionalPathEntries:(NSArray *)additionalPathEntries;
@@ -2529,18 +2536,67 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
              withIntermediateDirectories: YES
                               attributes: nil
                                    error: NULL];
-          [manager removeItemAtPath: targetPath error: NULL];
-          if ([manager copyItemAtPath: sourcePath toPath: targetPath error: NULL] == NO)
-            {
-              if (errorMessage != NULL)
-                {
-                  *errorMessage = [NSString stringWithFormat: @"Failed to copy %@", relative];
-                }
-              return NO;
-            }
+          {
+            NSError *removeError = nil;
+            NSError *copyError = nil;
+            BOOL targetExisted = [manager fileExistsAtPath: targetPath];
+            BOOL removed = targetExisted ? [manager removeItemAtPath: targetPath error: &removeError] : YES;
+
+            if ([manager copyItemAtPath: sourcePath toPath: targetPath error: &copyError] == NO)
+              {
+                if (errorMessage != NULL)
+                  {
+                    *errorMessage = [self copyFailureMessageForRelativePath: relative
+                                                                 targetPath: targetPath
+                                                              targetExisted: targetExisted
+                                                                    removed: removed
+                                                                removeError: removeError
+                                                                  copyError: copyError];
+                  }
+                return NO;
+              }
+          }
         }
     }
   return YES;
+}
+
+- (NSString *)reasonFromFileError:(NSError *)error
+{
+  NSError *underlying = [[error userInfo] objectForKey: NSUnderlyingErrorKey];
+  NSString *reason = nil;
+
+  if (error == nil)
+    {
+      return nil;
+    }
+  reason = [error localizedDescription];
+  if ([underlying isKindOfClass: [NSError class]] && [[underlying localizedDescription] length] > 0)
+    {
+      reason = [NSString stringWithFormat: @"%@ (%@)", reason, [underlying localizedDescription]];
+    }
+  return [reason length] > 0 ? reason : [error description];
+}
+
+- (NSString *)copyFailureMessageForRelativePath:(NSString *)relative
+                                     targetPath:(NSString *)targetPath
+                                  targetExisted:(BOOL)targetExisted
+                                        removed:(BOOL)removed
+                                    removeError:(NSError *)removeError
+                                      copyError:(NSError *)copyError
+{
+  NSMutableString *message = [NSMutableString stringWithFormat: @"Failed to copy %@", relative];
+  NSString *copyReason = [self reasonFromFileError: copyError];
+
+  [message appendFormat: @" to %@", targetPath];
+  if (targetExisted && removed == NO)
+    {
+      NSString *removeReason = [self reasonFromFileError: removeError];
+      [message appendFormat: @"; the existing file could not be removed first (%@; on Windows this usually means the file is in use)",
+               removeReason ? removeReason : @"no reason reported"];
+    }
+  [message appendFormat: @": %@", copyReason ? copyReason : @"no reason reported (check free disk space and permissions)"];
+  return message;
 }
 
 

@@ -11,6 +11,13 @@
 - (void)setReleaseMetadataSnapshot:(NSData *)data forURL:(NSString *)urlString;
 - (NSData *)releaseMetadataDataForURL:(NSString *)urlString error:(NSString **)errorMessage;
 - (BOOL)verifyReleaseManifestSignatureForReference:(NSString *)reference error:(NSString **)errorMessage;
+- (BOOL)copyTreeContentsFrom:(NSString *)source to:(NSString *)destination error:(NSString **)errorMessage;
+- (NSString *)copyFailureMessageForRelativePath:(NSString *)relative
+                                     targetPath:(NSString *)targetPath
+                                  targetExisted:(BOOL)targetExisted
+                                        removed:(BOOL)removed
+                                    removeError:(NSError *)removeError
+                                      copyError:(NSError *)copyError;
 - (NSDictionary *)readJSONFile:(NSString *)path error:(NSString **)errorMessage;
 - (BOOL)restoreSetupBackup:(NSString *)backupPath toInstallRoot:(NSString *)installRoot;
 - (NSString *)resolvedArtifactPathFromURLString:(NSString *)urlString;
@@ -566,6 +573,61 @@
 #else
   XCTAssertTrue([resolved length] > 0);
 #endif
+}
+
+- (void)testCopyFailureMessageNamesTheReason
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSError *copyError = [NSError errorWithDomain: NSPOSIXErrorDomain
+                                           code: 28
+                                       userInfo: [NSDictionary dictionaryWithObject: @"No space left on device"
+                                                                             forKey: NSLocalizedDescriptionKey]];
+  NSError *removeError = [NSError errorWithDomain: NSPOSIXErrorDomain
+                                             code: 13
+                                         userInfo: [NSDictionary dictionaryWithObject: @"Permission denied"
+                                                                               forKey: NSLocalizedDescriptionKey]];
+  NSString *message = [runner copyFailureMessageForRelativePath: @"bin/libclang.dll"
+                                                      targetPath: @"/root/bin/libclang.dll"
+                                                   targetExisted: NO
+                                                         removed: YES
+                                                     removeError: nil
+                                                       copyError: copyError];
+
+  XCTAssertEqualObjects(message, @"Failed to copy bin/libclang.dll to /root/bin/libclang.dll: No space left on device");
+
+  message = [runner copyFailureMessageForRelativePath: @"bin/libclang.dll"
+                                           targetPath: @"/root/bin/libclang.dll"
+                                        targetExisted: YES
+                                              removed: NO
+                                          removeError: removeError
+                                            copyError: nil];
+  XCTAssertTrue([message rangeOfString: @"could not be removed first (Permission denied"].location != NSNotFound, @"%@", message);
+  XCTAssertTrue([message rangeOfString: @"no reason reported (check free disk space and permissions)"].location != NSNotFound, @"%@", message);
+}
+
+- (void)testCopyTreeReportsWhyACopyFailed
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *source = [self temporaryPathComponent: @"copy-source"];
+  NSString *destination = [self temporaryPathComponent: @"copy-destination"];
+  NSString *blocked = [destination stringByAppendingPathComponent: @"bin"];
+  NSString *errorMessage = nil;
+  BOOL ok = NO;
+
+  if (geteuid() == 0)
+    {
+      return; /* root ignores directory permissions; nothing to observe */
+    }
+  [self ensureDirectory: [source stringByAppendingPathComponent: @"bin"]];
+  [@"payload" writeToFile: [source stringByAppendingPathComponent: @"bin/tool.dll"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [self ensureDirectory: blocked];
+  chmod([blocked fileSystemRepresentation], 0555);
+  ok = [runner copyTreeContentsFrom: source to: destination error: &errorMessage];
+  chmod([blocked fileSystemRepresentation], 0755);
+
+  XCTAssertFalse(ok);
+  XCTAssertTrue([errorMessage hasPrefix: @"Failed to copy bin/tool.dll to "], @"%@", errorMessage);
+  XCTAssertTrue([errorMessage rangeOfString: @"no reason reported"].location == NSNotFound, @"the failure should carry a reason: %@", errorMessage);
 }
 
 - (void)testRunCommandReportsMissingExecutableCleanly
