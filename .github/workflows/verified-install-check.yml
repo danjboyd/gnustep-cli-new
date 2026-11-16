@@ -65,9 +65,17 @@ jobs:
           code=\$?
           set -e
           tail -20 run.log
-          # 124: still running after 20 s, i.e. the app started and stayed up.
           [ "\$code" = 0 ] || [ "\$code" = 124 ]
-          echo "gui app ran (exit \$code)"
+          echo "gnustep run: exit \$code"
+          # gnustep run hands the app to openapp and returns, so also run the app itself:
+          # it must still be up after 15 s on the private X server (timeout exits 124).
+          set +e
+          timeout 15 xvfb-run -a ./Probe.app/Probe > app.log 2>&1
+          code=\$?
+          set -e
+          tail -20 app.log
+          [ "\$code" = 124 ] || { echo "the app exited early (code \$code)"; exit 1; }
+          echo "gui app stayed up for 15 s under Xvfb"
           EOF
           chown newuser /home/newuser/gui-check.sh
           su - newuser -c 'bash ./gui-check.sh'
