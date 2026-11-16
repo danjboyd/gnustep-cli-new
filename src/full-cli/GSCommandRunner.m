@@ -171,6 +171,8 @@ static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface;
 - (NSDictionary *)managedInstallIntegrityCheckForStatePath:(NSString *)statePath candidateStatePaths:(NSArray *)candidateStatePaths;
+- (NSArray *)artifactsInWindowsUpgradeOrder:(NSArray *)artifacts;
+- (BOOL)canKeepInstalledToolchainLayer:(NSDictionary *)artifact installedState:(NSDictionary *)installedState rootMovedToBackup:(BOOL)rootMoved;
 - (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath;
 - (NSString *)versionedInstallRootForReleaseRoot:(NSString *)releaseRoot;
 - (NSString *)gstlsDirectoryForMakefiles:(NSString *)gnustepMakefiles;
@@ -4294,6 +4296,46 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
   return [releasesDir stringByDeletingLastPathComponent];
 }
 
+// A Windows upgrade that isn't pointer-only first moves the whole install root aside
+// as its rollback backup. The new CLI is then staged into releases/<version> and
+// smoke-run with <root>\clang64\bin on PATH, so the toolchain must already be back
+// in the root by then: install every other artifact first and the CLI last. In
+// manifest order (CLI first) the smoke run found no DLLs whenever the updater was
+// updating its own root, exited 1 with no output, and every self-update rolled back.
+- (NSArray *)artifactsInWindowsUpgradeOrder:(NSArray *)artifacts
+{
+  NSMutableArray *ordered = [NSMutableArray arrayWithCapacity: [artifacts count]];
+  NSMutableArray *cli = [NSMutableArray array];
+  NSEnumerator *enumerator = [artifacts objectEnumerator];
+  NSDictionary *artifact = nil;
+
+  while ((artifact = [enumerator nextObject]) != nil)
+    {
+      if ([[artifact objectForKey: @"kind"] isEqualToString: @"cli"])
+        {
+          [cli addObject: artifact];
+        }
+      else
+        {
+          [ordered addObject: artifact];
+        }
+    }
+  [ordered addObjectsFromArray: cli];
+  return ordered;
+}
+
+// A reused toolchain whose sha matches the installed one can stay where it is, but
+// only if the root wasn't moved aside: the upgrade transaction moves the whole root
+// to its backup, after which the "existing" layer is no longer in the root and has to
+// be installed like any other artifact (otherwise the root is left without clang64).
+- (BOOL)canKeepInstalledToolchainLayer:(NSDictionary *)artifact installedState:(NSDictionary *)installedState rootMovedToBackup:(BOOL)rootMoved
+{
+  return rootMoved == NO
+    && [[artifact objectForKey: @"reused"] boolValue]
+    && [[artifact objectForKey: @"kind"] isEqualToString: @"toolchain"]
+    && [[installedState objectForKey: @"toolchain_artifact_sha256"] isEqualToString: [artifact objectForKey: @"sha256"]];
+}
+
 // Same outcomes as the Python doctor: unreadable state is an error; a lifecycle
 // status mid-operation, or leftover staging/transaction paths, needs repair
 // validation; anything else is ok. Finding the file alone used to report ok.
@@ -7466,6 +7508,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
     if (upgradeMode)
       {
         NSUInteger artifactIndex = 0;
+        artifacts = [self artifactsInWindowsUpgradeOrder: artifacts];
         windowsPointerOnlyUpgrade = YES;
         for (artifactIndex = 0; artifactIndex < [artifacts count]; artifactIndex++)
           {
@@ -7531,9 +7574,9 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
           }
 
         if (upgradeMode
-            && [[artifact objectForKey: @"reused"] boolValue]
-            && [[artifact objectForKey: @"kind"] isEqualToString: @"toolchain"]
-            && [[installedState objectForKey: @"toolchain_artifact_sha256"] isEqualToString: [artifact objectForKey: @"sha256"]])
+            && [self canKeepInstalledToolchainLayer: artifact
+                                      installedState: installedState
+                                    rootMovedToBackup: transactionStarted])
           {
             [installedArtifacts addObject: [NSDictionary dictionaryWithObjectsAndKeys:
                                                             [artifact objectForKey: @"id"], @"artifact_id",
@@ -7629,6 +7672,9 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                 smokeReleaseRoot = nestedReleaseRoot;
                 [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.cli.stage.nested-root release=%@ root=%@", releaseVersion, smokeReleaseRoot]];
               }
+            // This runs before relocateManagedToolchainForInstallRoot (after the artifact
+            // loop). `--version` doesn't need relocated paths; any deeper check added here
+            // would have to move after relocation.
             if ([self smokeVersionedReleaseAtPath: smokeReleaseRoot managedRoot: installPath error: &errorMessage] == NO)
               {
                 [self appendInstallTrace: [NSString stringWithFormat: @"windows.upgrade.cli.stage.smoke.failed release=%@ error=%@", releaseVersion, errorMessage]];

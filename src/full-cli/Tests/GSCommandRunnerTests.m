@@ -28,6 +28,8 @@
 - (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath;
 - (NSString *)versionedInstallRootForReleaseRoot:(NSString *)releaseRoot;
 - (NSDictionary *)managedInstallIntegrityCheckForStatePath:(NSString *)statePath candidateStatePaths:(NSArray *)candidateStatePaths;
+- (NSArray *)artifactsInWindowsUpgradeOrder:(NSArray *)artifacts;
+- (BOOL)canKeepInstalledToolchainLayer:(NSDictionary *)artifact installedState:(NSDictionary *)installedState rootMovedToBackup:(BOOL)rootMoved;
 - (NSDictionary *)bundledAuthoritiesCheckWithMakefiles:(NSString *)gnustepMakefiles
                                              interface:(NSString *)interface
                                                  today:(NSDate *)today
@@ -859,6 +861,49 @@ static NSString *GSTestManagedRoot(NSString *base, NSString *name, NSString *sta
   XCTAssertNil([runner versionedInstallRootForReleaseRoot: @"/opt/other/0.1.7"]);
   XCTAssertNil([runner versionedInstallRootForReleaseRoot: @""]);
   XCTAssertNil([runner versionedInstallRootForReleaseRoot: nil]);
+}
+
+- (void)testWindowsUpgradeInstallsToolchainBeforeTheCLISmokeRun
+{
+  // The CLI is staged and smoke-run against <root>\clang64\bin, and the upgrade
+  // transaction has moved the old root aside, so the toolchain must come first.
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *cli = [NSDictionary dictionaryWithObjectsAndKeys: @"cli-windows-amd64-msys2-clang64", @"id", @"cli", @"kind", nil];
+  NSDictionary *toolchain = [NSDictionary dictionaryWithObjectsAndKeys: @"toolchain-windows-amd64-msys2-clang64", @"id", @"toolchain", @"kind", nil];
+  NSDictionary *other = [NSDictionary dictionaryWithObjectsAndKeys: @"extra", @"id", @"package", @"kind", nil];
+  NSArray *ordered = nil;
+
+  ordered = [runner artifactsInWindowsUpgradeOrder: [NSArray arrayWithObjects: cli, toolchain, nil]];
+  XCTAssertEqualObjects(ordered, ([NSArray arrayWithObjects: toolchain, cli, nil]));
+
+  // Already in a safe order, or with other kinds: non-CLI artifacts keep their order, CLI last.
+  ordered = [runner artifactsInWindowsUpgradeOrder: [NSArray arrayWithObjects: toolchain, cli, nil]];
+  XCTAssertEqualObjects(ordered, ([NSArray arrayWithObjects: toolchain, cli, nil]));
+  ordered = [runner artifactsInWindowsUpgradeOrder: [NSArray arrayWithObjects: cli, other, toolchain, nil]];
+  XCTAssertEqualObjects(ordered, ([NSArray arrayWithObjects: other, toolchain, cli, nil]));
+
+  // A CLI-only or empty selection is unchanged.
+  XCTAssertEqualObjects([runner artifactsInWindowsUpgradeOrder: [NSArray arrayWithObject: cli]], [NSArray arrayWithObject: cli]);
+  XCTAssertEqual([[runner artifactsInWindowsUpgradeOrder: [NSArray array]] count], (NSUInteger)0);
+}
+
+- (void)testReusedToolchainLayerIsKeptOnlyWhenTheRootWasNotMoved
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *state = [NSDictionary dictionaryWithObject: @"aaa" forKey: @"toolchain_artifact_sha256"];
+  NSDictionary *reused = [NSDictionary dictionaryWithObjectsAndKeys: @"toolchain", @"kind", [NSNumber numberWithBool: YES], @"reused", @"aaa", @"sha256", nil];
+  NSDictionary *notReused = [NSDictionary dictionaryWithObjectsAndKeys: @"toolchain", @"kind", @"aaa", @"sha256", nil];
+  NSDictionary *otherSha = [NSDictionary dictionaryWithObjectsAndKeys: @"toolchain", @"kind", [NSNumber numberWithBool: YES], @"reused", @"bbb", @"sha256", nil];
+  NSDictionary *cli = [NSDictionary dictionaryWithObjectsAndKeys: @"cli", @"kind", [NSNumber numberWithBool: YES], @"reused", @"aaa", @"sha256", nil];
+
+  // Pointer-only upgrade: the root stays, so the matching reused layer is kept.
+  XCTAssertTrue([runner canKeepInstalledToolchainLayer: reused installedState: state rootMovedToBackup: NO]);
+  // The transaction moved the root to its backup (e.g. a third artifact kind made the
+  // upgrade non-pointer-only): the layer is gone from the root and must be installed.
+  XCTAssertFalse([runner canKeepInstalledToolchainLayer: reused installedState: state rootMovedToBackup: YES]);
+  XCTAssertFalse([runner canKeepInstalledToolchainLayer: notReused installedState: state rootMovedToBackup: NO]);
+  XCTAssertFalse([runner canKeepInstalledToolchainLayer: otherSha installedState: state rootMovedToBackup: NO]);
+  XCTAssertFalse([runner canKeepInstalledToolchainLayer: cli installedState: state rootMovedToBackup: NO]);
 }
 
 - (void)testManagedInstallIntegrityReadsStateStatusAndLeftovers
