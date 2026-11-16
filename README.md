@@ -54,6 +54,35 @@ next: The bootstrap script is no longer required and may be deleted.
 Want to check your machine before installing anything? Run
 `sh gnustep-bootstrap.sh doctor`. It makes no changes.
 
+### Verified install (scripted, CI and agent installs)
+
+Piping a script into `sh` is hard to review. For a scripted install, or when an
+automated agent must have each step approved, pin a release, check the script
+against a known digest before anything runs, look at what it would do, then run it:
+
+```sh
+V=0.1.7
+curl -fsSLO "https://github.com/danjboyd/gnustep-cli-new/releases/download/v$V/gnustep-bootstrap.sh"
+echo "1580d5ddcf774716bc2caa614cb4c217c19ead1645f4362f58ad12277345c961  gnustep-bootstrap.sh" | sha256sum -c -
+sh gnustep-bootstrap.sh doctor          # read-only: reports what setup would need
+sh gnustep-bootstrap.sh setup --user    # installs under ~/.local/share/gnustep-cli
+```
+
+- The digest above is v0.1.7's `gnustep-bootstrap.sh`. Every release publishes its
+  bootstrap digests as `gnustep-bootstrap.sh.sha256` and `gnustep-bootstrap.ps1.sha256`
+  assets. Record the digest once, from a source you trust, and pin it, instead of fetching
+  it in the same step as the script.
+- The script is plain POSIX `sh` (`scripts/bootstrap/gnustep-bootstrap.sh` at the
+  release tag), so it can be read before it runs. It then verifies the signed release
+  manifest against a trust root built into it, and checks each artifact's sha256 before
+  installing.
+- `setup --user` installs only under `~/.local/share/gnustep-cli`. Without `--yes` it
+  never uses `sudo`: missing host packages (clang, lld, ICU...) are listed with the
+  exact `apt-get` command to run. With `--yes` it runs that command through `sudo` or `doas`.
+- Windows: the same pattern applies to `gnustep-bootstrap.ps1`
+  (`867308a2c1c3febd9a7800564eb131a899db67c2ccc9c5d03d4b921c4b387420` for v0.1.7) with
+  `Get-FileHash -Algorithm SHA256`.
+
 ## Quick start
 
 ```console
