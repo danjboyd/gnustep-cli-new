@@ -81,6 +81,20 @@ available when a repository explicitly chooses to hold the package-index private
 key in Actions secrets. The `Package Index` workflow is the controlled producer
 for the signed package-index handoff and uploads `gnustep-signed-package-index`.
 
+**Stable index scope.** Since v0.1.4 the stable index lists only the packages
+the maintainer has approved for stable (currently `io.github.danjboyd.arlen`).
+A release's `Package Index` run must therefore be dispatched with
+`packages=<approved package ids>` and `published_only=true`. Left empty, the
+workflow signs the whole committed index, including packages that were never
+approved for stable. The release workflow's own diff compares the signed index
+with one generated for the *same* package selection, so it can't catch a
+wrong selection. Before Release, compare the signed index artifact with the
+previous release's published `package-index.json`: the package ids, the
+artifact ids, `publish` flags, URLs and digests. Every difference must be one
+the release intends. The manifest pins the index's sha256 and the CLI verifies
+it, so a wrong index can't be swapped out after Release. v0.1.7's first upload
+shipped the full index this way and had to be republished.
+
 Release evidence custody follows the same pattern. The `Release Evidence`
 workflow accepts explicit report URLs and SHA256 values, verifies the evidence
 bytes in GitHub Actions, and uploads `gnustep-release-evidence-inputs`. The
