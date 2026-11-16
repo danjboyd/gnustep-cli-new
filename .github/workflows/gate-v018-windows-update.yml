@@ -304,3 +304,98 @@ jobs:
         with:
           name: gate-s-final-${{ matrix.variant }}
           path: C:\gnustep-smoke\gate-s
+
+  smoke-tier1:
+    # The release's Windows smoke (tier1-core: install, new/build/run, Gorm, update
+    # scenarios) and the Arlen install/remove check, as on the v0.1.8 lease, run as a
+    # standard (non-admin) local user through a scheduled task, like the lease's S4U task.
+    if: ${{ contains(github.event.head_commit.message, '[smoke]') }}
+    name: tier1 smoke + Arlen check (non-admin user)
+    runs-on: windows-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inputs (staged release, release-old copy, bootstrap, fixtures, Arlen)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Get-Content .github/gate/config.env | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
+          $g = 'C:\gnustep-smoke'
+          New-Item -ItemType Directory -Force "$g\release-new", "$g\bootstrap", "$g\fixtures", "$g\arlen", "$g\stage" | Out-Null
+          gh run download $STAGE_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-staged-release -D "$g\stage"
+          if ($LASTEXITCODE -ne 0) { throw 'stage download failed' }
+          Copy-Item "$g\stage\gnustep-*-windows-*.zip", "$g\stage\release-manifest.json", "$g\stage\release-provenance.json", "$g\stage\SHA256SUMS", "$g\stage\windows-current-source-artifact.json" "$g\release-new\"
+          Remove-Item -Recurse -Force "$g\stage"
+          Copy-Item -Recurse "$g\release-new" "$g\release-old"
+          Copy-Item docs/smoke-fixtures/gorm-1_5_0-windows-private-ivar.patch "$g\fixtures\"
+          Copy-Item .github/gate/smoke/windows-full-release-smoke.ps1 "$g\"
+          Copy-Item .github/gate/arlen/* "$g\arlen\"
+          gh release download v0.1.4 --repo $env:GITHUB_REPOSITORY -p 'arlen-arlen-windows-amd64-msys2-clang64-headless-0.3.2.zip' -D "$g\arlen"
+          $h = (Get-FileHash -Algorithm SHA256 "$g\arlen\arlen-arlen-windows-amd64-msys2-clang64-headless-0.3.2.zip").Hash.ToLower()
+          if ($h -ne 'fd39fb7d41f2ea330e8fa0c7083143a3c1eaa6783bedfcc8fab8558fe7e8dfb1') { throw "arlen zip $h" }
+          Get-ChildItem "$g\release-new\*.zip" | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash.ToLower().Substring(0,8) + ' ' + $_.Path }
+
+      - name: Stamp the bootstrap from the git blob and check its digest
+        shell: bash
+        run: |
+          . <(tr -d "\r" < .github/gate/config.env)
+          git show HEAD:scripts/bootstrap/gnustep-bootstrap.ps1 | sed "6s/.*/\$Script:CliVersion = \"$VERSION\"/" > /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1
+          h=$(sha256sum /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1 | cut -d' ' -f1)
+          echo "stamped bootstrap sha256 $h"
+          test "$h" = "$PS1_SHA256"
+
+      - name: Run tier1 smoke, then the Arlen check, as a standard user
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-Content .github/gate/config.env | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
+          $g = 'C:\gnustep-smoke'
+          $user = 'gssmoke'
+          $pw = [Convert]::ToBase64String((1..24 | ForEach-Object { [byte](Get-Random -Maximum 256) })) + 'aA1!'
+          net user $user $pw /add | Out-Null
+          icacls $g /grant "${user}:(OI)(CI)F" /T /Q | Out-Null
+          function Run-AsUser($name, $command, $hours, $exitFile) {
+            Remove-Item -Force $exitFile -ErrorAction SilentlyContinue
+            $arg = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $command; Set-Content -Encoding ascii $exitFile `$LASTEXITCODE }`""
+            $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg -WorkingDirectory $g
+            $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours $hours)
+            Register-ScheduledTask -TaskName $name -Action $action -User $user -Password $pw -RunLevel Limited -Settings $settings -Force | Out-Null
+            Start-ScheduledTask -TaskName $name
+            $deadline = (Get-Date).AddHours($hours)
+            while (-not (Test-Path $exitFile) -and (Get-Date) -lt $deadline) {
+              Start-Sleep 60
+              $info = Get-ScheduledTaskInfo -TaskName $name
+              $state = (Get-ScheduledTask -TaskName $name).State
+              Write-Output "$((Get-Date).ToUniversalTime().ToString('HH:mm')) $name state=$state lastResult=$($info.LastTaskResult)"
+              if ($state -eq 'Ready' -and $info.LastRunTime.Year -gt 2000 -and -not (Test-Path $exitFile)) { Start-Sleep 30; break }
+            }
+            $code = if (Test-Path $exitFile) { (Get-Content $exitFile -Raw).Trim() } else { 'no-exit-file' }
+            Write-Output "$name exit: $code"
+            return $code
+          }
+          $smokeCmd = "& $g\windows-full-release-smoke.ps1 -ReleaseSource v0.1.8-stage-$STAGE_RUN_ID -SuiteId tier1-core -RunnerId github-windows-latest-${env:GITHUB_RUN_ID}-nonadmin *> $g\smoke-run.log"
+          $smoke = Run-AsUser 'gnustep-v018-smoke' $smokeCmd 3 "$g\smoke-exit.txt"
+          $arlen = Run-AsUser 'gnustep-v018-arlen' "& $g\arlen\arlen-check.ps1" 1 "$g\arlen-exit.txt"
+          $report = Get-Content "$g\windows-full-release-report.json" -Raw -Encoding utf8 | ConvertFrom-Json
+          Write-Output "report overall_ok=$($report.overall_ok) status=$($report.status)"
+          Get-Content "$g\arlen-check\arlen-check.txt"
+          # Same pass criteria as the v0.1.7/v0.1.8 lease runs (arlen --help exits 2 there); elevation is recorded, not required.
+          $arlenText = Get-Content "$g\arlen-check\arlen-check.txt" -Raw
+          $arlenOk = ($arlenText -match 'tampered list exit=\d+ refused=True') -and ($arlenText -match 'install ok=True') -and ($arlenText -match 'arlen.cmd --help exit [02]\b') -and ($arlenText -match 'boomhauer.cmd --help exit 0') -and ($arlenText -match 'remove exit=0') -and ($arlenText -match 'leftovers: pkg=False arlen.cmd=False boomhauer.cmd=False')
+          Write-Output "arlen check ok=$arlenOk"
+          if (-not $report.overall_ok -or -not $arlenOk) { throw 'tier1 smoke or Arlen check failed' }
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tier1-smoke-and-arlen
+          path: |
+            C:\gnustep-smoke\windows-full-release-report.json
+            C:\gnustep-smoke\windows-full-release-evidence.json
+            C:\gnustep-smoke\smoke-run.log
+            C:\gnustep-smoke\arlen-check
+            C:\gnustep-smoke\*.json
+            C:\gnustep-smoke\*.txt
