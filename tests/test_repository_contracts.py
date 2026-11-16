@@ -634,5 +634,16 @@ class RepositoryContractsTests(unittest.TestCase):
         self.assertIn("update-all-production-like.json", content)
 
 
+    def test_release_workflow_checks_the_package_index_scope_against_the_previous_latest(self):
+        content = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+        self.assertIn("allow_new_index_packages:", content)
+        self.assertIn("package-index-scope-check", content)
+        self.assertIn('releases/latest" --jq .tag_name', content)
+        self.assertIn('--allow-new-packages "${{ inputs.allow_new_index_packages }}"', content)
+        # The check runs after the index is promoted and advertised, before verification and signing.
+        self.assertLess(content.index("advertise-package-index"), content.index("package-index-scope-check"))
+        self.assertLess(content.index("package-index-scope-check"), content.index("sign-release-metadata"))
+
+
 if __name__ == "__main__":
     unittest.main()
