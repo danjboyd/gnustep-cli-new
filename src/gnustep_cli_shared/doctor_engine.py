@@ -431,7 +431,13 @@ def _managed_install_integrity_check(environment: dict[str, Any], *, interface: 
                 execution_tier="full_only",
                 details={"state_path": str(state_path)},
             )
-        stale_paths = [str(path) for path in (staging_path, transactions_path, setup_transaction_path) if path.exists()]
+        # Every upgrade leaves an empty .staging behind; only a leftover with
+        # content means an interrupted operation.
+        stale_paths = [
+            str(path)
+            for path in (staging_path, transactions_path, setup_transaction_path)
+            if path.exists() and not (path.is_dir() and not any(path.iterdir()))
+        ]
         if state.get("status") in {"installing", "upgrading", "repairing", "needs_repair"} or stale_paths:
             return CheckResult(
                 id="managed.install.integrity",

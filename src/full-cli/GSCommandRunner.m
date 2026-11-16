@@ -4341,9 +4341,14 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
     }
   for (i = 0; i < [leftovers count]; i++)
     {
-      if ([manager fileExistsAtPath: [leftovers objectAtIndex: i]])
+      NSString *leftover = [leftovers objectAtIndex: i];
+      BOOL isDirectory = NO;
+      // Every upgrade leaves an empty .staging behind; only a leftover with
+      // content means an interrupted operation.
+      if ([manager fileExistsAtPath: leftover isDirectory: &isDirectory]
+          && (!isDirectory || [[manager contentsOfDirectoryAtPath: leftover error: NULL] count] > 0))
         {
-          [stalePaths addObject: [leftovers objectAtIndex: i]];
+          [stalePaths addObject: leftover];
         }
     }
   if ([[NSArray arrayWithObjects: @"installing", @"upgrading", @"repairing", @"needs_repair", nil] containsObject: (stateStatus ? stateStatus : @"")]

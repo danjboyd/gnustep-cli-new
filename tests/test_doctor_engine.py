@@ -256,6 +256,25 @@ class DoctorEngineTests(unittest.TestCase):
             self.assertEqual(checks["managed.install.integrity"]["details"]["state_status"], "upgrading")
             self.assertTrue(checks["managed.install.integrity"]["details"]["stale_paths"])
 
+    def test_full_doctor_treats_empty_staging_after_upgrade_as_healthy(self):
+        # Every upgrade leaves an empty .staging behind; it is not an interrupted operation.
+        with tempfile.TemporaryDirectory() as tempdir:
+            root = Path(tempdir)
+            fake_toolchain = {"present": True, "compiler_family": "clang", "compiler_version": "18.1.0", "toolchain_flavor": "clang", "objc_runtime": "libobjc2", "objc_abi": "modern", "gnustep_make": True, "gnustep_base": True, "gnustep_gui": True, "can_compile": True, "can_link": True, "can_run": True, "feature_flags": {"blocks": True, "objc2_syntax": True, "arc": True, "nonfragile_abi": True, "associated_objects": True, "exceptions": True}, "detected_layouts": ["gnustep"]}
+            (root / "state").mkdir()
+            (root / ".staging").mkdir()
+            (root / "state" / "cli-state.json").write_text(json.dumps({"schema_version": 1, "status": "healthy"}))
+            with patch("gnustep_cli_shared.doctor_engine._detect_toolchain", return_value=fake_toolchain):
+                payload = build_doctor_payload(interface="full", managed_root=root)
+            check = {c["id"]: c for c in payload["checks"]}["managed.install.integrity"]
+            self.assertEqual(check["status"], "ok")
+            (root / ".staging" / "payload").mkdir()
+            with patch("gnustep_cli_shared.doctor_engine._detect_toolchain", return_value=fake_toolchain):
+                payload = build_doctor_payload(interface="full", managed_root=root)
+            check = {c["id"]: c for c in payload["checks"]}["managed.install.integrity"]
+            self.assertEqual(check["status"], "warning")
+            self.assertEqual(check["details"]["stale_paths"], [str(root / ".staging")])
+
     def test_full_doctor_uses_deeper_detection_than_bootstrap(self):
         bootstrap_toolchain = {
             "present": True,
