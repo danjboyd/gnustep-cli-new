@@ -19,7 +19,7 @@ jobs:
       matrix:
         gate: [A, BN]
     name: update gates ${{ matrix.gate }}
-    if: ${{ !contains(github.event.head_commit.message, '[diag-only]') }}
+    if: ${{ contains(github.event.head_commit.message, '[gates]') }}
     runs-on: windows-latest
     timeout-minutes: 150
     steps:
@@ -75,6 +75,7 @@ jobs:
 
   diag:
     name: diag CLI-only candidate on a v0.1.7 root
+    if: ${{ contains(github.event.head_commit.message, '[diag]') }}
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -120,3 +121,94 @@ jobs:
             $env:PATH = $saved
           }
           exit 0
+
+  selftest:
+    # Gate S: a root updates itself through the root-moving upgrade path. "fixed" uses the
+    # PR #77 Windows CLI (FIX_WINDOWS_RUN_ID) as the installed CLI and must pass; "control"
+    # uses the staged, unfixed CLI and must fail the way gate A did.
+    if: ${{ contains(github.event.head_commit.message, '[selftest]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [fixed, control]
+    name: gate S self-update (${{ matrix.variant }})
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Staged release, and the PR CLI for the fixed variant
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Get-Content .github/gate/config.env | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
+          New-Item -ItemType Directory -Force C:\gnustep-smoke\release-new, C:\gnustep-smoke\bootstrap, C:\gnustep-smoke\fix | Out-Null
+          gh run download $STAGE_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-staged-release -D C:\gnustep-smoke\release-new
+          if ($LASTEXITCODE -ne 0) { throw 'stage artifact download failed' }
+          if ('${{ matrix.variant }}' -eq 'fixed') {
+            gh run download $FIX_WINDOWS_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-windows-current-source-artifacts -D C:\gnustep-smoke\fix
+            if ($LASTEXITCODE -ne 0) { throw 'PR Windows artifact download failed' }
+            $zip = Get-ChildItem C:\gnustep-smoke\fix -Recurse -Filter "gnustep-cli-windows-amd64-msys2-clang64-$VERSION.zip" | Select-Object -First 1
+            if (-not $zip) { throw 'PR Windows CLI zip not found' }
+            Get-Content (Get-ChildItem C:\gnustep-smoke\fix -Recurse -Filter windows-current-source-artifact.json | Select-Object -First 1).FullName
+            Copy-Item -Force $zip.FullName "C:\gnustep-smoke\release-new\$($zip.Name)"
+          }
+          Get-ChildItem C:\gnustep-smoke\release-new | Format-Table Name, Length
+
+      - name: Manifests X (0.1.8, as staged plus the chosen CLI zip) and Y (same artifacts as 0.1.9)
+        shell: bash
+        run: |
+          python - <<'PY2'
+          import copy, hashlib, json, os
+          d = r"C:\gnustep-smoke\release-new"
+          m = json.load(open(os.path.join(d, "release-manifest.json")))
+          for a in m["releases"][0]["artifacts"]:
+              f = os.path.join(d, a["filename"])
+              if os.path.exists(f):
+                  h = hashlib.sha256(open(f, "rb").read()).hexdigest()
+                  a["sha256"] = h; a["integrity"] = {"sha256": h}; a["size"] = os.path.getsize(f)
+          tc = {a["id"]: a for a in m["releases"][0]["artifacts"] if a["kind"] == "toolchain"}
+          for a in m["releases"][0]["artifacts"]:
+              rt = a.get("requires_toolchain")
+              if isinstance(rt, dict) and rt.get("artifact_id") in tc:
+                  rt["sha256"] = tc[rt["artifact_id"]]["sha256"]
+          json.dump(m, open(os.path.join(d, "release-manifest.s-x.json"), "w"), indent=2)
+          y = copy.deepcopy(m)
+          y["releases"][0]["version"] = "0.1.9"
+          for a in y["releases"][0]["artifacts"]:
+              a["version"] = "0.1.9"
+              if isinstance(a.get("requires_toolchain"), dict):
+                  a["requires_toolchain"]["version"] = "0.1.9"
+          y["metadata_version"] = int(m.get("metadata_version") or 1) + 1
+          y["generated_at"] = "2026-11-17T00:00:00Z"
+          json.dump(y, open(os.path.join(d, "release-manifest.s-y.json"), "w"), indent=2)
+          w = [a for a in m["releases"][0]["artifacts"] if "windows" in a["id"]]
+          print(json.dumps([{k: a[k] for k in ("id", "sha256", "size")} for a in w], indent=1))
+          PY2
+
+      - name: Stamp the bootstrap from the git blob and check its digest
+        shell: bash
+        run: |
+          . <(tr -d "\r" < .github/gate/config.env)
+          git show HEAD:scripts/bootstrap/gnustep-bootstrap.ps1 | sed "6s/.*/\$Script:CliVersion = \"$VERSION\"/" > /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1
+          h=$(sha256sum /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1 | cut -d' ' -f1)
+          echo "stamped bootstrap sha256 $h"
+          test "$h" = "$PS1_SHA256"
+
+      - name: Gate S (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          Copy-Item .github/gate/update-gate-s.ps1 C:\gnustep-smoke\update-gate-s.ps1
+          $expect = $(if ('${{ matrix.variant }}' -eq 'fixed') { 'pass' } else { 'fail' })
+          & powershell -NoProfile -ExecutionPolicy Bypass -File C:\gnustep-smoke\update-gate-s.ps1 -Expect $expect
+          $code = $LASTEXITCODE
+          Get-Content C:\gnustep-smoke\gate-s\gate-s.txt
+          if ($code -ne 0) { throw "gate S (${{ matrix.variant }}, expect $expect) failed ($code)" }
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-s-${{ matrix.variant }}
+          path: C:\gnustep-smoke\gate-s
