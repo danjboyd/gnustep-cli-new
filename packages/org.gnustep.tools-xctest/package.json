@@ -76,13 +76,15 @@
       "toolchain_flavor": "clang",
       "format": "tar.gz",
       "publish": false,
-      "status": "pending_build_v0.8.0",
-      "notes": "To be built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli managed toolchain; no downstream patches. Not publishable until built, tested and given url, sha256 and evidence.",
+      "status": "built_v0.8.0_pending_hosting",
+      "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43916141291; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
       "supported_distributions": [
         "debian"
       ],
       "supported_os_versions": [],
-      "portability_policy": "distribution-scoped"
+      "portability_policy": "distribution-scoped",
+      "sha256": "08073e739ecabb7a65c5724af4ddc3bd62a9379600e95478b5fc8cd99613efb4",
+      "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-linux-amd64-clang-build.json"
     },
     {
       "id": "tools-xctest-linux-ubuntu2404-amd64-clang",
@@ -97,15 +99,17 @@
       "toolchain_flavor": "clang",
       "format": "tar.gz",
       "publish": false,
-      "status": "pending_build_v0.8.0",
-      "notes": "To be built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli managed toolchain; no downstream patches. Not publishable until built, tested and given url, sha256 and evidence.",
+      "status": "built_v0.8.0_pending_hosting",
+      "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43916557595; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
       "supported_distributions": [
         "ubuntu"
       ],
       "supported_os_versions": [
         "ubuntu-24.04"
       ],
-      "portability_policy": "distribution-scoped"
+      "portability_policy": "distribution-scoped",
+      "sha256": "36527099bc268ac371b3642a2a7f0e17a1e6ccbb102be65e98440297803fb5f2",
+      "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-linux-ubuntu2404-amd64-clang-build.json"
     },
     {
       "id": "tools-xctest-linux-ubuntu2604-amd64-clang",
@@ -120,15 +124,17 @@
       "toolchain_flavor": "clang",
       "format": "tar.gz",
       "publish": false,
-      "status": "pending_build_v0.8.0",
-      "notes": "To be built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli managed toolchain; no downstream patches. Not publishable until built, tested and given url, sha256 and evidence.",
+      "status": "built_v0.8.0_pending_hosting",
+      "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43916569941; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
       "supported_distributions": [
         "ubuntu"
       ],
       "supported_os_versions": [
         "ubuntu-26.04"
       ],
-      "portability_policy": "distribution-scoped"
+      "portability_policy": "distribution-scoped",
+      "sha256": "23f4804ee08f61ff617dead506f598f28521ba6201f9ac3a3f1999813b98a8b6",
+      "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-linux-ubuntu2604-amd64-clang-build.json"
     },
     {
       "id": "tools-xctest-linux-arm64-clang",
@@ -143,13 +149,15 @@
       "toolchain_flavor": "clang",
       "format": "tar.gz",
       "publish": false,
-      "status": "pending_build_v0.8.0",
-      "notes": "To be built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli managed toolchain; no downstream patches. Not publishable until built, tested and given url, sha256 and evidence.",
+      "status": "built_v0.8.0_pending_hosting",
+      "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43925275794; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
       "supported_distributions": [
         "debian"
       ],
       "supported_os_versions": [],
-      "portability_policy": "distribution-scoped"
+      "portability_policy": "distribution-scoped",
+      "sha256": "ce6cd09c4bc6adaa34b391a8d63f0d66817c60d3bbf8d3b24c2cf3603662b41e",
+      "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-linux-arm64-clang-build.json"
     },
     {
       "id": "tools-xctest-linux-ubuntu2404-arm64-clang",
@@ -164,15 +172,17 @@
       "toolchain_flavor": "clang",
       "format": "tar.gz",
       "publish": false,
-      "status": "pending_build_v0.8.0",
-      "notes": "To be built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli managed toolchain; no downstream patches. Not publishable until built, tested and given url, sha256 and evidence.",
+      "status": "built_v0.8.0_pending_hosting",
+      "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43916599133; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
       "supported_distributions": [
         "ubuntu"
       ],
       "supported_os_versions": [
         "ubuntu-24.04"
       ],
-      "portability_policy": "distribution-scoped"
+      "portability_policy": "distribution-scoped",
+      "sha256": "2fa0266ab45d715ac683270fe82888805e1e7bc5dc1c1ca6adad945d20f66f35",
+      "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-linux-ubuntu2404-arm64-clang-build.json"
     },
     {
       "id": "tools-xctest-windows-amd64-msys2-clang64",
@@ -187,8 +197,10 @@
       "toolchain_flavor": "msys2-clang64",
       "format": "zip",
       "publish": false,
-      "status": "pending_build_v0.8.0",
-      "notes": "To be built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli managed toolchain; no downstream patches. Not publishable until built, tested and given url, sha256 and evidence."
+      "status": "built_v0.8.0_pending_hosting",
+      "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43917997046; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
+      "sha256": "186c626196dc1fcc89fd2fef96666765a9468b28863bfebebab34c36d452aed4",
+      "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-windows-amd64-msys2-clang64-build.json"
     },
     {
       "id": "tools-xctest-openbsd-amd64-clang",
