@@ -6,11 +6,6 @@ name: Package tools-xctest (managed Windows)
 # signed release manifest. Mirrors package-tools-xctest-managed-linux.yml.
 
 on:
-  # TEMPORARY for PR #71: a new workflow can't be dispatched before it is on master,
-  # so it also runs on pushes to this branch. Remove the push trigger before merge.
-  push:
-    branches: [tools-xctest-v0.8.0]
-    paths: [.github/workflows/package-tools-xctest-managed-windows.yml, packages/org.gnustep.tools-xctest/**]
   workflow_dispatch:
     inputs:
       version:
