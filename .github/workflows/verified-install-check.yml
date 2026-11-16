@@ -1,0 +1,79 @@
+name: Verified install check
+
+# Runs the README's "Verified install" commands verbatim, as an ordinary non-root user
+# with a fresh home, in clean distro containers. Then it builds and runs a GUI app
+# under a private Xvfb, as a new user would. It proves the documented path, not a
+# privileged shortcut.
+
+on:
+  # TEMPORARY for the draft PR: a new workflow can't be dispatched before it is on
+  # master, so it also runs on pushes to this branch. Remove before merge.
+  push:
+    branches: [verified-install-check]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verified-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["debian:13", "ubuntu:24.04", "ubuntu:26.04"]
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: "What a new user has: curl and CA certificates (the bootstrap's only stated needs)"
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl >/dev/null
+          useradd -m -s /bin/bash newuser
+          awk '/^### Verified install/{f=1} f&&/^```sh$/{c=1;next} c&&/^```$/{exit} c' README.md > /home/newuser/readme-steps.sh
+          test -s /home/newuser/readme-steps.sh
+          chown newuser /home/newuser/readme-steps.sh
+          echo "README steps:"; cat /home/newuser/readme-steps.sh
+
+      - name: README steps, verbatim, as the non-root user
+        run: |
+          su - newuser -c 'sh -x ./readme-steps.sh' 2>&1 | tee /tmp/readme-steps.log
+          grep -q "gnustep-bootstrap.sh: OK" /tmp/readme-steps.log
+          grep -q "managed installation completed" /tmp/readme-steps.log
+
+      - name: Install the host packages setup listed (the README says the user runs this)
+        run: |
+          cmd=$(sed -n 's/^setup: to install GNUstep host prerequisites, run: //p' /tmp/readme-steps.log | tail -1)
+          if [ -n "$cmd" ]; then echo "+ $cmd"; sh -c "$cmd" >/tmp/prereqs.log 2>&1 || { tail -40 /tmp/prereqs.log; exit 1; }; else echo "setup listed no host packages"; fi
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb xauth >/dev/null
+
+      - name: New GUI app, build and run under a private Xvfb, as the non-root user
+        run: |
+          path_line=$(grep -A1 '^next: Run this in the current shell:' /tmp/readme-steps.log | tail -1 | sed 's/^ *//')
+          echo "PATH line from setup: $path_line"
+          cat > /home/newuser/gui-check.sh <<EOF
+          set -eu
+          $path_line
+          gnustep --version
+          gnustep new gui-app Probe
+          cd Probe
+          gnustep build
+          set +e
+          timeout 20 xvfb-run -a gnustep run > run.log 2>&1
+          code=\$?
+          set -e
+          tail -20 run.log
+          # 124: still running after 20 s, i.e. the app started and stayed up.
+          [ "\$code" = 0 ] || [ "\$code" = 124 ]
+          echo "gui app ran (exit \$code)"
+          EOF
+          chown newuser /home/newuser/gui-check.sh
+          su - newuser -c 'bash ./gui-check.sh'
+
+      - name: Nothing outside the user's install root and home
+        run: |
+          test ! -e /opt/gnustep-cli
+          test -d /home/newuser/.local/share/gnustep-cli/bin
+          ls -la /home/newuser/.local/share/gnustep-cli | head -20
