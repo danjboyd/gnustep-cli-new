@@ -171,6 +171,7 @@ static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface;
 - (NSDictionary *)managedInstallIntegrityCheckForStatePath:(NSString *)statePath candidateStatePaths:(NSArray *)candidateStatePaths;
+- (NSArray *)artifactsInWindowsUpgradeOrder:(NSArray *)artifacts;
 - (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath;
 - (NSString *)versionedInstallRootForReleaseRoot:(NSString *)releaseRoot;
 - (NSString *)gstlsDirectoryForMakefiles:(NSString *)gnustepMakefiles;
@@ -4294,6 +4295,34 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
   return [releasesDir stringByDeletingLastPathComponent];
 }
 
+// A Windows upgrade that isn't pointer-only first moves the whole install root aside
+// as its rollback backup. The new CLI is then staged into releases/<version> and
+// smoke-run with <root>\clang64\bin on PATH, so the toolchain must already be back
+// in the root by then: install every other artifact first and the CLI last. In
+// manifest order (CLI first) the smoke run found no DLLs whenever the updater was
+// updating its own root, exited 1 with no output, and every self-update rolled back.
+- (NSArray *)artifactsInWindowsUpgradeOrder:(NSArray *)artifacts
+{
+  NSMutableArray *ordered = [NSMutableArray arrayWithCapacity: [artifacts count]];
+  NSMutableArray *cli = [NSMutableArray array];
+  NSEnumerator *enumerator = [artifacts objectEnumerator];
+  NSDictionary *artifact = nil;
+
+  while ((artifact = [enumerator nextObject]) != nil)
+    {
+      if ([[artifact objectForKey: @"kind"] isEqualToString: @"cli"])
+        {
+          [cli addObject: artifact];
+        }
+      else
+        {
+          [ordered addObject: artifact];
+        }
+    }
+  [ordered addObjectsFromArray: cli];
+  return ordered;
+}
+
 // Same outcomes as the Python doctor: unreadable state is an error; a lifecycle
 // status mid-operation, or leftover staging/transaction paths, needs repair
 // validation; anything else is ok. Finding the file alone used to report ok.
@@ -7466,6 +7495,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
     if (upgradeMode)
       {
         NSUInteger artifactIndex = 0;
+        artifacts = [self artifactsInWindowsUpgradeOrder: artifacts];
         windowsPointerOnlyUpgrade = YES;
         for (artifactIndex = 0; artifactIndex < [artifacts count]; artifactIndex++)
           {
