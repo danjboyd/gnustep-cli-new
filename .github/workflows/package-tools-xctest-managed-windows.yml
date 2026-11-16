@@ -37,7 +37,6 @@ jobs:
     env:
       TARGET: windows-amd64-msys2-clang64
       MANAGED_ROOT: C:\gs
-      OUT: ${{ github.workspace }}\..\tools-xctest-package
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -45,6 +44,7 @@ jobs:
       - name: Enforce manifest version
         shell: pwsh
         run: |
+          "OUT=$env:RUNNER_TEMP\tools-xctest-package" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           $manifest = Get-Content packages/org.gnustep.tools-xctest/package.json -Raw | ConvertFrom-Json
           if ($manifest.version -ne '${{ inputs.version || '0.8.0' }}') { throw "version input ${{ inputs.version || '0.8.0' }} does not match manifest version $($manifest.version)" }
 
@@ -74,7 +74,8 @@ jobs:
         run: |
           $script = @'
           set -eu
-          managed_root=$(cygpath -u "$MANAGED_ROOT")
+          # The managed root is the MSYS2 root itself, so cygpath maps it to "/".
+          managed_root=$(cygpath -u "$MANAGED_ROOT"); managed_root=${managed_root%/}
           out=$(cygpath -u "$OUT")
           src=$(cygpath -u "$GITHUB_WORKSPACE")
           export GNUSTEP_MAKEFILES_DIR="$managed_root/clang64/share/GNUstep/Makefiles"
@@ -138,8 +139,8 @@ jobs:
         with:
           name: gnustep-package-tools-xctest-managed-windows-amd64-msys2-clang64-${{ inputs.version || '0.8.0' }}
           path: |
-            ${{ github.workspace }}\..\tools-xctest-package\package\tools-xctest-*
-            ${{ github.workspace }}\..\tools-xctest-package\*.json
-            ${{ github.workspace }}\..\tools-xctest-package\*.log
-            ${{ github.workspace }}\..\tools-xctest-package\*.txt
-            ${{ github.workspace }}\..\tools-xctest-package\SHA256SUMS
+            ${{ runner.temp }}\tools-xctest-package\package\tools-xctest-*
+            ${{ runner.temp }}\tools-xctest-package\*.json
+            ${{ runner.temp }}\tools-xctest-package\*.log
+            ${{ runner.temp }}\tools-xctest-package\*.txt
+            ${{ runner.temp }}\tools-xctest-package\SHA256SUMS
