@@ -20,6 +20,7 @@ from gnustep_cli_shared.compatibility import artifact_matches_host, evaluate_env
 from gnustep_cli_shared.build_infra import (
     package_install_layout_mismatches,
     advertise_package_index,
+    package_index_scope_check,
     cli_version_compile_defines,
     stamped_cli_version,
     assemble_linux_toolchain_artifact,
@@ -144,6 +145,52 @@ class BuildInfraTests(unittest.TestCase):
         (release / "SHA256SUMS").write_text(f"{cli_sha}  {cli.name}\n")
         (release / "package-index.json").write_text(json.dumps({"schema_version": 1, "packages": []}) + "\n")
         return release
+
+    def _write_index(self, path, packages):
+        path.write_text(json.dumps({"schema_version": 1, "packages": [
+            {"id": package_id, "artifacts": [{"id": artifact_id} for artifact_id in artifacts]}
+            for package_id, artifacts in packages.items()
+        ]}))
+        return path
+
+    def test_package_index_scope_check_refuses_packages_the_previous_release_did_not_list(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            previous = self._write_index(temp / "previous.json", {"io.github.danjboyd.arlen": ["arlen-linux"]})
+            same = self._write_index(temp / "same.json", {"io.github.danjboyd.arlen": ["arlen-linux", "arlen-windows"]})
+            full = self._write_index(temp / "full.json", {
+                "io.github.danjboyd.arlen": ["arlen-linux"],
+                "org.gnustep.gorm": ["gorm-linux"],
+                "org.gnustep.tools-xctest": ["tools-xctest-linux"],
+            })
+
+            payload = package_index_scope_check(same, previous)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["new_artifacts"], {"io.github.danjboyd.arlen": ["arlen-windows"]})
+
+            payload = package_index_scope_check(full, previous)
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["unexpected_packages"], ["org.gnustep.gorm", "org.gnustep.tools-xctest"])
+
+            payload = package_index_scope_check(full, previous, allowed_new_packages=["org.gnustep.tools-xctest"])
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["unexpected_packages"], ["org.gnustep.gorm"])
+
+            payload = package_index_scope_check(full, previous, allowed_new_packages=["org.gnustep.tools-xctest", "org.gnustep.gorm", "org.example.unused"])
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["unused_allowances"], ["org.example.unused"])
+
+            payload = package_index_scope_check(previous, full)
+            self.assertTrue(payload["ok"])
+            self.assertEqual(payload["removed_packages"], ["org.gnustep.gorm", "org.gnustep.tools-xctest"])
+
+    def test_package_index_scope_check_without_a_baseline_treats_every_package_as_new(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            index = self._write_index(Path(tempdir) / "index.json", {"io.github.danjboyd.arlen": ["arlen-linux"]})
+            payload = package_index_scope_check(index, None)
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["baseline"], "none")
+            self.assertTrue(package_index_scope_check(index, Path(tempdir) / "missing.json", allowed_new_packages=["io.github.danjboyd.arlen"])["ok"])
 
     def test_advertise_package_index_adds_a_verifiable_manifest_entry(self):
         with tempfile.TemporaryDirectory() as tempdir:

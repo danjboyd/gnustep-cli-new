@@ -50,6 +50,7 @@ from gnustep_cli_shared.build_infra import (
     toolchain_plan,
     verify_release_directory,
     advertise_package_index,
+    package_index_scope_check,
     windows_extracted_toolchain_rebuild_plan,
     release_trust_gate,
     release_claim_consistency_gate,
@@ -200,6 +201,11 @@ def main() -> int:
 
     advertise_index = subparsers.add_parser("advertise-package-index", add_help=False)
     advertise_index.add_argument("--release-dir", required=True)
+
+    index_scope = subparsers.add_parser("package-index-scope-check", add_help=False)
+    index_scope.add_argument("--index", required=True)
+    index_scope.add_argument("--previous-index")
+    index_scope.add_argument("--allow-new-packages", default="")
 
 
     release_provenance = subparsers.add_parser("release-provenance", add_help=False)
@@ -497,6 +503,12 @@ def main() -> int:
         payload = verify_release_directory(args.release_dir)
     elif args.subcommand == "advertise-package-index":
         payload = advertise_package_index(args.release_dir)
+    elif args.subcommand == "package-index-scope-check":
+        payload = package_index_scope_check(
+            args.index,
+            args.previous_index,
+            allowed_new_packages=args.allow_new_packages.replace(",", " ").split(),
+        )
     elif args.subcommand == "release-provenance":
         path = write_release_provenance(args.release_dir)
         payload = {"schema_version": 1, "command": "release-provenance", "ok": True, "status": "ok", "provenance_path": str(path)}

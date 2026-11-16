@@ -4170,6 +4170,65 @@ def stage_release_assets(
     }
 
 
+def package_index_scope_check(
+    index_path: str | Path,
+    previous_index_path: str | Path | None,
+    *,
+    allowed_new_packages: list[str] | None = None,
+) -> dict[str, Any]:
+    """Refuse a release index that adds packages the previous release didn't list.
+
+    The stable index lists only maintainer-approved packages. v0.1.7's first upload
+    shipped the full committed index because its Package Index run lacked the package
+    selection, and the release workflow's own diff compares like with like, so it
+    can't catch that. A package that is meant to enter the index must be named in
+    ``allowed_new_packages``. New artifacts of a package that was already listed, and
+    packages that were dropped, are reported but don't fail the check.
+    """
+    allowed = sorted({item for item in (allowed_new_packages or []) if item})
+    index = json.loads(Path(index_path).read_text())
+    current_packages = {package.get("id"): package for package in index.get("packages", []) if isinstance(package, dict)}
+    previous_packages: dict[str, Any] = {}
+    baseline = "none"
+    if previous_index_path is not None and Path(previous_index_path).exists():
+        previous = json.loads(Path(previous_index_path).read_text())
+        previous_packages = {package.get("id"): package for package in previous.get("packages", []) if isinstance(package, dict)}
+        baseline = str(previous_index_path)
+    added = sorted(set(current_packages) - set(previous_packages))
+    removed = sorted(set(previous_packages) - set(current_packages))
+    unexpected = [package_id for package_id in added if package_id not in allowed]
+    unused_allowances = [package_id for package_id in allowed if package_id not in added]
+    new_artifacts: dict[str, list[str]] = {}
+    for package_id in sorted(set(current_packages) & set(previous_packages)):
+        before = {artifact.get("id") for artifact in previous_packages[package_id].get("artifacts", []) if isinstance(artifact, dict)}
+        after = {artifact.get("id") for artifact in current_packages[package_id].get("artifacts", []) if isinstance(artifact, dict)}
+        if after - before:
+            new_artifacts[package_id] = sorted(after - before)
+    ok = not unexpected
+    summary = (
+        "Package index scope matches the previous release, apart from explicitly allowed additions."
+        if ok
+        else "The package index adds packages the previous release didn't list: " + ", ".join(unexpected)
+        + ". Name them in allow_new_index_packages if they are meant to enter the stable index."
+    )
+    return {
+        "schema_version": 1,
+        "command": "package-index-scope-check",
+        "ok": ok,
+        "status": "ok" if ok else "error",
+        "summary": summary,
+        "index": str(index_path),
+        "baseline": baseline,
+        "packages": sorted(current_packages),
+        "added_packages": added,
+        "allowed_new_packages": allowed,
+        "unexpected_packages": unexpected,
+        "unused_allowances": unused_allowances,
+        "removed_packages": removed,
+        "new_artifacts": new_artifacts,
+    }
+
+
 def advertise_package_index(release_dir: str | Path) -> dict[str, Any]:
     """Add the release's package-index.json to release-manifest.json and SHA256SUMS.
 
