@@ -47,7 +47,7 @@ jobs:
         run: |
           cmd=$(sed -n 's/^setup: to install GNUstep host prerequisites, run: //p' /tmp/readme-steps.log | tail -1)
           if [ -n "$cmd" ]; then echo "+ $cmd"; sh -c "$cmd" >/tmp/prereqs.log 2>&1 || { tail -40 /tmp/prereqs.log; exit 1; }; else echo "setup listed no host packages"; fi
-          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb xauth >/dev/null
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq xvfb xauth procps >/dev/null
 
       - name: New GUI app, build and run under a private Xvfb, as the non-root user
         run: |
@@ -60,22 +60,22 @@ jobs:
           gnustep new gui-app Probe
           cd Probe
           gnustep build
-          set +e
-          timeout 20 xvfb-run -a gnustep run > run.log 2>&1
-          code=\$?
-          set -e
-          tail -20 run.log
-          [ "\$code" = 0 ] || [ "\$code" = 124 ]
-          echo "gnustep run: exit \$code"
-          # gnustep run hands the app to openapp and returns, so also run the app itself:
-          # it must still be up after 15 s on the private X server (timeout exits 124).
-          set +e
-          timeout 15 xvfb-run -a ./Probe.app/Probe > app.log 2>&1
-          code=\$?
-          set -e
-          tail -20 app.log
-          [ "\$code" = 124 ] || { echo "the app exited early (code \$code)"; exit 1; }
-          echo "gui app stayed up for 15 s under Xvfb"
+          # gnustep run launches GUI apps detached (through openapp) and returns, so use a
+          # private X server that outlives it, then check the app is still running.
+          Xvfb :77 -nolisten tcp > xvfb.log 2>&1 &
+          xvfb=\$!
+          sleep 2
+          export DISPLAY=:77
+          gnustep run > run.log 2>&1
+          cat run.log
+          sleep 10
+          if pgrep -u newuser -x Probe > /dev/null; then
+            echo "gui app is running 10 s after gnustep run"
+            pkill -u newuser -x Probe || true
+            kill \$xvfb || true
+          else
+            echo "the app is not running 10 s after gnustep run"; kill \$xvfb || true; exit 1
+          fi
           EOF
           chown newuser /home/newuser/gui-check.sh
           su - newuser -c 'bash ./gui-check.sh'
