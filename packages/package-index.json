@@ -883,14 +883,14 @@
           "format": "tar.gz",
           "publish": false,
           "status": "built_v0.8.1_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44149737974; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167377963; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
           "supported_distributions": [
             "debian"
           ],
           "supported_os_versions": [],
           "portability_policy": "distribution-scoped",
-          "sha256": "e42d0f4d0e3a2789ff06d70d0c1fae9d27ea95202678a6fc8ff91f629b236057",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.1-20261117/tools-xctest-linux-amd64-clang-build.json",
+          "sha256": "9a67b43a4ac0b5012b81f54b2bdf1a7f5dd19a1a32d66feaae3ce4be7bf77de4",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-linux-amd64-clang-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
@@ -926,7 +926,7 @@
           "format": "tar.gz",
           "publish": false,
           "status": "built_v0.8.1_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44149743217; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167396742; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
           "supported_distributions": [
             "ubuntu"
           ],
@@ -934,8 +934,8 @@
             "ubuntu-24.04"
           ],
           "portability_policy": "distribution-scoped",
-          "sha256": "81c7271fb79123c46e3c6f1ec4dc575d86ef3536858173fed5c42890cdbdb7b7",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.1-20261117/tools-xctest-linux-ubuntu2404-amd64-clang-build.json",
+          "sha256": "e4bef95656870b1d266c2bc2a5a592cdc50643cab4ec0b7e90434db92e5b9015",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-linux-ubuntu2404-amd64-clang-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
@@ -971,7 +971,7 @@
           "format": "tar.gz",
           "publish": false,
           "status": "built_v0.8.1_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44149748314; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167412796; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
           "supported_distributions": [
             "ubuntu"
           ],
@@ -979,8 +979,8 @@
             "ubuntu-26.04"
           ],
           "portability_policy": "distribution-scoped",
-          "sha256": "593edffd3c952868cc6d717261296ada485e8541ca722e682549b97a0222f9f6",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.1-20261117/tools-xctest-linux-ubuntu2604-amd64-clang-build.json",
+          "sha256": "b115d4a53b252274c88f370745937d4edc25cacd95656451254ecce03a570ce5",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-linux-ubuntu2604-amd64-clang-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
@@ -1016,14 +1016,14 @@
           "format": "tar.gz",
           "publish": false,
           "status": "built_v0.8.1_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44149753948; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167432955; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
           "supported_distributions": [
             "debian"
           ],
           "supported_os_versions": [],
           "portability_policy": "distribution-scoped",
-          "sha256": "92ad5c12f4c9eb99e271a58be9035a2831a25f22df54bb4aea816b86dbc4d259",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.1-20261117/tools-xctest-linux-arm64-clang-build.json",
+          "sha256": "f2c7bf0355052d1afe476f510edae7d5c063fef04a8f99aa473a2983c844d56e",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-linux-arm64-clang-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
@@ -1059,7 +1059,7 @@
           "format": "tar.gz",
           "publish": false,
           "status": "built_v0.8.1_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44149759404; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167450116; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
           "supported_distributions": [
             "ubuntu"
           ],
@@ -1067,8 +1067,8 @@
             "ubuntu-24.04"
           ],
           "portability_policy": "distribution-scoped",
-          "sha256": "862b0d4c5003534ebb4d75dab445eb576937a28fcd51ebadc306c2ab8027c381",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.1-20261117/tools-xctest-linux-ubuntu2404-arm64-clang-build.json",
+          "sha256": "2c6db21bdf4a990d5e5ddb301fc23d499781c1e8da311c7cdc15b64789d08301",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-linux-ubuntu2404-arm64-clang-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
@@ -1104,9 +1104,9 @@
           "format": "zip",
           "publish": false,
           "status": "built_v0.8.1_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44149763681; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
-          "sha256": "738c74106d479d2d4fd107d76ff37fcc178ae39e6d634d045dbbd4ed05b57d69",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.1-20261117/tools-xctest-windows-amd64-msys2-clang64-build.json",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167466377; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
+          "sha256": "626b9a0d436de2d881f568e209c82ccb73328301b2428db9b7a9448228c9b344",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-windows-amd64-msys2-clang64-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",

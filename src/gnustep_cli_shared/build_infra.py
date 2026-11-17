@@ -4989,6 +4989,10 @@ def package_tools_xctest_artifact(
         shutil.copytree(install_root / "Library" / "Headers" / "XCTest", package_root / "Library" / "Headers" / "XCTest")
         for lib in xctest_dlls + import_libs:
             shutil.copy2(lib, package_libs / lib.name)
+        # xctest.make runs libexec/xctest.exe directly from make's shell, where
+        # the .cmd launcher can't run; Windows looks for its DLL next to it.
+        for lib in xctest_dlls:
+            shutil.copy2(lib, package_root / "libexec" / lib.name)
         artifact_filename = f"tools-xctest-{target_id}-{version}.zip"
         artifact_format = "zip"
     else:
@@ -5006,6 +5010,10 @@ def package_tools_xctest_artifact(
 
     if not windows:
         _stage_unix_tools_xctest_package(install_root, package_root)
+    missing_make = [name for name in ("xctest.make", "xctest-bundle") if not (source / name).is_file()]
+    if missing_make:
+        return failure("The tools-xctest source has no xctest.make or xctest-bundle; v0.8.1 or later is required.", missing=missing_make)
+    _stage_tools_xctest_make_support(source, package_root, "libexec/xctest.exe" if windows else "bin/xctest")
 
     artifact_path = out / artifact_filename
     if artifact_path.exists():
@@ -5028,6 +5036,32 @@ def package_tools_xctest_artifact(
         "installed_root": str(install_root),
         "commands": commands,
     }
+
+
+TOOLS_XCTEST_PACKAGE_MAKEFILE = (
+    "# tools-xctest package: `gnustep install` makes this file available as\n"
+    "# $(GNUSTEP_MAKEFILES)/Auxiliary/xctest.make. It points tools-xctest's\n"
+    "# xctest.make at this package; set any of these variables to override it.\n"
+    "_TOOLS_XCTEST_PACKAGE := $(patsubst %/share/gnustep-make/Auxiliary/,%,$(dir $(lastword $(MAKEFILE_LIST))))\n"
+    "XCTEST_INCLUDE_DIR ?= $(_TOOLS_XCTEST_PACKAGE)/Library/Headers\n"
+    "XCTEST_LIBRARY_DIR ?= $(_TOOLS_XCTEST_PACKAGE)/Library/Libraries\n"
+    "XCTEST ?= $(_TOOLS_XCTEST_PACKAGE)/{xctest}\n"
+    "include $(_TOOLS_XCTEST_PACKAGE)/share/tools-xctest/xctest.make\n"
+)
+
+
+def _stage_tools_xctest_make_support(source: Path, package_root: Path, xctest_relative: str) -> None:
+    """Ship xctest.make and xctest-bundle (#82): projects build test bundles with
+    `include $(GNUSTEP_MAKEFILES)/Auxiliary/xctest.make` and run them with `make check`."""
+    share = package_root / "share" / "tools-xctest"
+    share.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source / "xctest.make", share / "xctest.make")
+    bundle_tool = package_root / "bin" / "xctest-bundle"
+    shutil.copyfile(source / "xctest-bundle", bundle_tool)
+    bundle_tool.chmod(0o755)
+    auxiliary = package_root / "share" / "gnustep-make" / "Auxiliary"
+    auxiliary.mkdir(parents=True, exist_ok=True)
+    (auxiliary / "xctest.make").write_bytes(TOOLS_XCTEST_PACKAGE_MAKEFILE.replace("{xctest}", xctest_relative).encode("ascii"))
 
 
 def _stage_unix_tools_xctest_package(install_root: Path, package_root: Path) -> None:
