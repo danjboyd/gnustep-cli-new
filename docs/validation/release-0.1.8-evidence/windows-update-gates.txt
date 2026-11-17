@@ -1,0 +1,59 @@
+staged 0.1.8 bootstrap exit 0; root C:\gnustep-smoke\gate6-staged-018; version 0.1.8
+disk before B: 21 GB free
+B bootstrap 0.1.5 exit 0; version 0.1.5
+B-new-cli-update-check exit 0 (C:\gnustep-smoke\gate6-staged-018\bin\gnustep.exe update --check --root C:\gnustep-smoke\gate6-b-015)
+B-new-cli-update-yes exit 0 (C:\gnustep-smoke\gate6-staged-018\bin\gnustep.exe update --yes --root C:\gnustep-smoke\gate6-b-015)
+B: 0.1.5 -> 0.1.7 exit 0 ok=True
+B root: .staging
+B root: bin
+B root: clang64
+B root: clangarm64
+B root: current
+B root: dev
+B root: etc
+B root: home
+B root: include
+B root: installerResources
+B root: lib
+B root: mingw32
+B root: mingw64
+B root: releases
+B root: share
+B root: state
+B root: tmp
+B root: ucrt64
+B root: usr
+B root: var
+B root: autorebase.bat
+B root: clang64.exe
+B root: clang64.ico
+B root: clang64.ini
+B root: clangarm64.exe
+B root: clangarm64.ico
+B root: clangarm64.ini
+B root: components.xml
+B root: GNUstep.bat
+B root: GNUstep.ps1
+B root: InstallationLog.txt
+B root: installer.dat
+B root: mingw32.exe
+B root: mingw32.ico
+B root: mingw32.ini
+B root: mingw64.exe
+B root: mingw64.ico
+B root: mingw64.ini
+B root: msys2.exe
+B root: msys2.ico
+B root: msys2.ini
+B root: msys2_shell.cmd
+B root: network.xml
+B root: ucrt64.exe
+B root: ucrt64.ico
+B root: ucrt64.ini
+B root: uninstall.dat
+B root: uninstall.exe
+B root: uninstall.ini
+N-update-cli-noop exit 0 (C:\gnustep-smoke\gate6-staged-018\bin\gnustep.exe update cli --yes --root C:\gnustep-smoke\gate6-b-015)
+N: exit 0 version 0.1.7 current unchanged=True snapshots 1->1 ok=True
+removed gate6-b-015 (and its backups); 15.4 GB free
+done; failed: 
