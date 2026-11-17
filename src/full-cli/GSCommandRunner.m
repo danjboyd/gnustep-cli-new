@@ -9404,6 +9404,7 @@ static NSString *GSExecutableExposureStyleOverride = nil;
   NSString *binRoot = [[managedRoot stringByExpandingTildeInPath] stringByAppendingPathComponent: @"bin"];
   NSArray *expectedLinks = [self expectedExecutableLinksForPackageID: packageID managedRoot: managedRoot installedFiles: installedFiles];
   NSMutableArray *activatedLinks = [NSMutableArray array];
+  NSMutableArray *createdPaths = [NSMutableArray array];
   NSUInteger i = 0;
 
   [manager createDirectoryAtPath: binRoot withIntermediateDirectories: YES attributes: nil error: NULL];
@@ -9435,9 +9436,11 @@ static NSString *GSExecutableExposureStyleOverride = nil;
                 }
               if (errorMessage != NULL)
                 {
-                  *errorMessage = [NSString stringWithFormat: @"Cannot expose package file '%@'; %@ already exists.", [entry objectForKey: @"name"], linkPath];
+                  *errorMessage = makeInclude
+                    ? [NSString stringWithFormat: @"Cannot expose package file '%@'; %@ already exists. It may be from a source install of the same project (for tools-xctest, `make install` from its source tree): run `make uninstall` there, or remove the file, then install again.", [entry objectForKey: @"name"], linkPath]
+                    : [NSString stringWithFormat: @"Cannot expose package file '%@'; %@ already exists.", [entry objectForKey: @"name"], linkPath];
                 }
-              return NO;
+              goto failed;
             }
           if ([shim writeToFile: linkPath atomically: YES] == NO)
             {
@@ -9445,8 +9448,9 @@ static NSString *GSExecutableExposureStyleOverride = nil;
                 {
                   *errorMessage = [NSString stringWithFormat: @"Cannot expose package file '%@' at %@.", [entry objectForKey: @"name"], linkPath];
                 }
-              return NO;
+              goto failed;
             }
+          [createdPaths addObject: linkPath];
           [activatedLinks addObject: entry];
           continue;
         }
@@ -9462,7 +9466,7 @@ static NSString *GSExecutableExposureStyleOverride = nil;
             {
               *errorMessage = [NSString stringWithFormat: @"Cannot expose package executable '%@'; %@ already exists.", [entry objectForKey: @"name"], linkPath];
             }
-          return NO;
+          goto failed;
         }
       if ([manager createSymbolicLinkAtPath: linkPath withDestinationPath: targetPath error: NULL] == NO)
         {
@@ -9470,8 +9474,9 @@ static NSString *GSExecutableExposureStyleOverride = nil;
             {
               *errorMessage = [NSString stringWithFormat: @"Cannot expose package executable '%@' at %@.", [entry objectForKey: @"name"], linkPath];
             }
-          return NO;
+          goto failed;
         }
+      [createdPaths addObject: linkPath];
       [activatedLinks addObject: entry];
     }
   if (links != NULL)
@@ -9479,6 +9484,15 @@ static NSString *GSExecutableExposureStyleOverride = nil;
       *links = activatedLinks;
     }
   return YES;
+
+failed:
+  // Leave nothing this call created behind (e.g. the include, when a later
+  // executable conflicts): the caller removes the package directory too.
+  for (i = 0; i < [createdPaths count]; i++)
+    {
+      [manager removeItemAtPath: [createdPaths objectAtIndex: i] error: NULL];
+    }
+  return NO;
 }
 
 - (NSDictionary *)packageDiscoveryPayloadForCommand:(NSString *)command
