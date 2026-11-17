@@ -1525,7 +1525,7 @@
   XCTAssertTrue([[[state objectForKey: @"previous_release_path"] lastPathComponent] hasPrefix: @".managed-root.setup-backup-"]);
   XCTAssertTrue([manager fileExistsAtPath: otherRoot]);
   XCTAssertTrue([manager fileExistsAtPath: [linkTarget stringByAppendingPathComponent: @"keep.txt"]]);
-  XCTAssertNotNil([manager destinationOfSymbolicLinkAtPath: link error: NULL]);
+  XCTAssertEqualObjects([manager pathContentOfSymbolicLinkAtPath: link], linkTarget);
   // The new backup plus the untouched symlink.
   XCTAssertEqual([backups count], (NSUInteger)2);
 }
