@@ -52,6 +52,18 @@
 - (BOOL)installManagedLauncherForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
 + (void)setExecutableExposureStyleOverride:(NSString *)style;
 - (NSString *)commandShimContentsForPackageExecutable:(NSString *)relativePath;
+- (NSString *)makeIncludeContentsForTarget:(NSString *)target;
+- (BOOL)activatePackageExecutablesForPackageID:(NSString *)packageID
+                                   installRoot:(NSString *)installRoot
+                                installedFiles:(NSArray *)installedFiles
+                                   managedRoot:(NSString *)managedRoot
+                                         links:(NSArray **)links
+                                         error:(NSString **)errorMessage;
+- (NSArray *)removePackageExecutableLinksForPackageID:(NSString *)packageID
+                                          managedRoot:(NSString *)managedRoot
+                                          installRoot:(NSString *)installRoot
+                                       installedFiles:(NSArray *)installedFiles
+                                         recordedLinks:(NSArray *)recordedLinks;
 - (NSString *)materializeVersionedReleaseForInstallRoot:(NSString *)installRoot version:(NSString *)version error:(NSString **)errorMessage;
 @end
 
@@ -2417,6 +2429,89 @@
   XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
   XCTAssertEqualObjects([[[payload objectForKey: @"removed_executable_links"] lastObject] objectForKey: @"name"], @"arlen");
   XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: shimPath]);
+}
+
+- (NSArray *)makeIncludeLinksForMakefiles:(NSString *)makefiles
+                                expected:(NSString *)expectedTarget
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *managedRoot = [[self temporaryPathComponent: @"make-include"] stringByAppendingPathComponent: @"managed"];
+  NSString *packageID = @"org.gnustep.tools-xctest";
+  NSString *source = @"packages/org.gnustep.tools-xctest/share/gnustep-make/Auxiliary/xctest.make";
+  NSString *nested = @"packages/org.gnustep.tools-xctest/share/gnustep-make/Auxiliary/sub/other.make";
+  NSString *includePath = [[managedRoot stringByAppendingPathComponent: makefiles] stringByAppendingPathComponent: @"Auxiliary/xctest.make"];
+  NSArray *files = [NSArray arrayWithObjects: source, nested, nil];
+  NSArray *links = nil;
+  NSArray *again = nil;
+  NSArray *removed = nil;
+  NSString *error = nil;
+  NSString *includeLine = nil;
+
+  [self ensureDirectory: [[managedRoot stringByAppendingPathComponent: source] stringByDeletingLastPathComponent]];
+  [self ensureDirectory: [[managedRoot stringByAppendingPathComponent: nested] stringByDeletingLastPathComponent]];
+  [self ensureDirectory: [managedRoot stringByAppendingPathComponent: makefiles]];
+  [@"" writeToFile: [managedRoot stringByAppendingPathComponent: source] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [@"" writeToFile: [managedRoot stringByAppendingPathComponent: nested] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [@"" writeToFile: [[managedRoot stringByAppendingPathComponent: makefiles] stringByAppendingPathComponent: @"common.make"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+
+  XCTAssertTrue([runner activatePackageExecutablesForPackageID: packageID installRoot: nil installedFiles: files
+                                                   managedRoot: managedRoot links: &links error: &error], @"%@", error);
+  // Only a .make directly in share/gnustep-make/Auxiliary is made available.
+  XCTAssertEqual([links count], (NSUInteger)1);
+  XCTAssertEqualObjects([[links lastObject] objectForKey: @"kind"], @"make-include");
+  XCTAssertEqualObjects([[links lastObject] objectForKey: @"path"], includePath);
+  XCTAssertEqualObjects([[links lastObject] objectForKey: @"target"], expectedTarget);
+  XCTAssertEqualObjects([NSString stringWithContentsOfFile: includePath encoding: NSUTF8StringEncoding error: NULL],
+                        [runner makeIncludeContentsForTarget: expectedTarget]);
+  includeLine = [NSString stringWithFormat: @"\ninclude $(GNUSTEP_MAKEFILES)/%@\n", expectedTarget];
+  XCTAssertTrue([[runner makeIncludeContentsForTarget: expectedTarget] hasSuffix: includeLine]);
+  // Installing again keeps the same include.
+  XCTAssertTrue([runner activatePackageExecutablesForPackageID: packageID installRoot: nil installedFiles: files
+                                                   managedRoot: managedRoot links: &again error: &error], @"%@", error);
+  XCTAssertEqualObjects(again, links);
+
+  removed = [runner removePackageExecutableLinksForPackageID: packageID managedRoot: managedRoot installRoot: nil
+                                              installedFiles: files recordedLinks: links];
+  XCTAssertEqual([removed count], (NSUInteger)1);
+  XCTAssertFalse([manager fileExistsAtPath: includePath]);
+
+  // A file someone else put there is neither replaced nor deleted.
+  [@"# mine\n" writeToFile: includePath atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  XCTAssertFalse([runner activatePackageExecutablesForPackageID: packageID installRoot: nil installedFiles: files
+                                                    managedRoot: managedRoot links: NULL error: &error]);
+  XCTAssertTrue([error rangeOfString: @"already exists"].location != NSNotFound, @"%@", error);
+  removed = [runner removePackageExecutableLinksForPackageID: packageID managedRoot: managedRoot installRoot: nil
+                                              installedFiles: files recordedLinks: links];
+  XCTAssertEqual([removed count], (NSUInteger)0);
+  XCTAssertEqualObjects([NSString stringWithContentsOfFile: includePath encoding: NSUTF8StringEncoding error: NULL], @"# mine\n");
+  return links;
+}
+
+- (void)testPackageMakefileIsIncludedFromTheManagedMakefiles
+{
+  [self makeIncludeLinksForMakefiles: @"System/Library/Makefiles"
+                            expected: @"../../../packages/org.gnustep.tools-xctest/share/gnustep-make/Auxiliary/xctest.make"];
+}
+
+- (void)testPackageMakefileIsIncludedFromTheMSYS2Makefiles
+{
+  [self makeIncludeLinksForMakefiles: @"clang64/share/GNUstep/Makefiles"
+                            expected: @"../../../../packages/org.gnustep.tools-xctest/share/gnustep-make/Auxiliary/xctest.make"];
+}
+
+- (void)testPackageMakefileNeedsAManagedToolchain
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *managedRoot = [[self temporaryPathComponent: @"make-include-none"] stringByAppendingPathComponent: @"managed"];
+  NSArray *links = nil;
+  NSString *error = nil;
+
+  [self ensureDirectory: managedRoot];
+  XCTAssertTrue([runner activatePackageExecutablesForPackageID: @"org.gnustep.tools-xctest" installRoot: nil
+                                                installedFiles: [NSArray arrayWithObject: @"packages/org.gnustep.tools-xctest/share/gnustep-make/Auxiliary/xctest.make"]
+                                                   managedRoot: managedRoot links: &links error: &error], @"%@", error);
+  XCTAssertEqual([links count], (NSUInteger)0);
 }
 
 - (void)testInstallRefusesToReplaceAForeignCommandFile
