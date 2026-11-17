@@ -7,7 +7,7 @@ TOOLS_XCTEST_DIR=${TOOLS_XCTEST_DIR:-"$REPO_ROOT/.ci/tools-xctest"}
 GNUSTEP_MAKEFILES_DIR=${GNUSTEP_MAKEFILES_DIR:-/usr/share/GNUstep/Makefiles}
 TOOLS_XCTEST_REPO=${TOOLS_XCTEST_REPO:-https://github.com/gnustep/tools-xctest.git}
 # Pinned to upstream tag v0.1.1 for the CI test runner. This intentionally differs
-# from packages/org.gnustep.tools-xctest (danjboyd/tools-xctest v0.8.0): later
+# from packages/org.gnustep.tools-xctest (danjboyd/tools-xctest v0.8.1): later
 # versions require blocks, which the distro GCC-flavored GNUstep on the CI runners
 # does not enable.
 TOOLS_XCTEST_REVISION=${TOOLS_XCTEST_REVISION:-2aac3e5fc65586bda718aaca7d36b5c33b5ec2e3}
