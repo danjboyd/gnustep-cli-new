@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "command": "package-tools-xctest-build-evidence",
+  "ok": true,
+  "status": "ok",
+  "package_id": "org.gnustep.tools-xctest",
+  "artifact_id": "tools-xctest-linux-amd64-clang",
+  "target": "linux-amd64-clang",
+  "version": "0.8.1",
+  "source": {
+    "type": "git",
+    "url": "https://github.com/danjboyd/tools-xctest.git",
+    "revision": "80442364840eaef8df77cf97c3f0d100003c403c",
+    "tag": "v0.8.1",
+    "sha256": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0"
+  },
+  "source_archive_sha256_in_ci": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0",
+  "patches": [],
+  "artifact": {
+    "filename": "tools-xctest-linux-amd64-clang-0.8.1.tar.gz",
+    "sha256": "e42d0f4d0e3a2789ff06d70d0c1fae9d27ea95202678a6fc8ff91f629b236057",
+    "size": 1125792,
+    "format": "tar.gz"
+  },
+  "builder": {
+    "workflow": "package-tools-xctest-managed-linux.yml",
+    "run_id": 44149737974,
+    "run_url": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/44149737974",
+    "toolchain": "gnustep-cli v0.1.8 managed toolchain, installed by the checksum-pinned bootstrap from the signed release manifest"
+  },
+  "checks": {
+    "upstream_tests": "All regression and CLI checks passed.",
+    "help_lists_only_testing_and_skip_testing": true
+  }
+}
