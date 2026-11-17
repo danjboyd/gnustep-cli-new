@@ -1503,7 +1503,7 @@
   check = [runner upgradeBackupsCheckForStatePath: statePath];
   details = [check objectForKey: @"details"];
   XCTAssertEqualObjects([check objectForKey: @"status"], @"ok");
-  expected = [NSString stringWithFormat: @"One upgrade backup is kept for `gnustep setup rollback`: %@.", kept];
+  expected = [NSString stringWithFormat: @"One upgrade backup is kept for `gnustep setup --rollback`: %@.", kept];
   XCTAssertEqualObjects([check objectForKey: @"message"], expected);
   XCTAssertEqual([[details objectForKey: @"backups"] count], (NSUInteger)1);
   XCTAssertEqual([[[[details objectForKey: @"backups"] lastObject] objectForKey: @"size_bytes"] unsignedLongLongValue], 1000ULL);

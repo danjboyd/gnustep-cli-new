@@ -104,7 +104,7 @@ class UpgradeBackupsCheckTests(unittest.TestCase):
         self.record_rollback(kept)
         check = _upgrade_backups_check(self.state_path)
         self.assertEqual(check.status, "ok")
-        self.assertEqual(check.message, f"One upgrade backup is kept for `gnustep setup rollback`: {kept}.")
+        self.assertEqual(check.message, f"One upgrade backup is kept for `gnustep setup --rollback`: {kept}.")
         self.assertEqual(check.details["backups"], [{"path": str(kept), "size_bytes": 1000, "used_by_rollback": True}])
         self.assertEqual(check.details["removable_paths"], [])
 

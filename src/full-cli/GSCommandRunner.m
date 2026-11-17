@@ -5478,7 +5478,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
 }
 
 // Same outcomes as the Python doctor (#80): ok with no backups or only the one
-// `gnustep setup rollback` uses; a warning, with sizes, when older ones are left
+// `gnustep setup --rollback` uses; a warning, with sizes, when older ones are left
 // (every upgrade before v0.1.9 left one, and so can an interrupted run).
 - (NSDictionary *)upgradeBackupsCheckForStatePath:(NSString *)statePath
 {
@@ -5537,7 +5537,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
   if ([removable count] == 0)
     {
       message = retainedPath
-        ? [NSString stringWithFormat: @"One upgrade backup is kept for `gnustep setup rollback`: %@.", retainedPath]
+        ? [NSString stringWithFormat: @"One upgrade backup is kept for `gnustep setup --rollback`: %@.", retainedPath]
         : @"No upgrade backups were found beside the managed install.";
     }
   else

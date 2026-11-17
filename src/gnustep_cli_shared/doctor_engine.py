@@ -514,7 +514,7 @@ def _disk_usage(path: Path) -> int:
 
 def _upgrade_backups_check(state_path: Path | None) -> CheckResult:
     """Same outcomes as the native doctor (#80): ok with no backups or only the one
-    `gnustep setup rollback` uses; a warning, with sizes, when older ones are left
+    `gnustep setup --rollback` uses; a warning, with sizes, when older ones are left
     (every upgrade before v0.1.9 left one, and so can an interrupted run)."""
     check = dict(id="managed.install.backups", title="Look for upgrade backups", severity="warning", interface="full", execution_tier="full_only")
     if state_path is None:
@@ -540,7 +540,7 @@ def _upgrade_backups_check(state_path: Path | None) -> CheckResult:
             removable_bytes += size
     if not removable:
         message = (
-            f"One upgrade backup is kept for `gnustep setup rollback`: {retained_path}."
+            f"One upgrade backup is kept for `gnustep setup --rollback`: {retained_path}."
             if retained_path
             else "No upgrade backups were found beside the managed install."
         )
