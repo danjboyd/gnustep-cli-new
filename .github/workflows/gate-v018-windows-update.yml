@@ -358,28 +358,35 @@ jobs:
           New-LocalUser -Name $user -Password (ConvertTo-SecureString $pw -AsPlainText -Force) -PasswordNeverExpires -AccountNeverExpires | Out-Null
           Write-Output "standard user: $((Get-LocalUser $user).Name), admin=$([bool](Get-LocalGroupMember Administrators | Where-Object { $_.Name -like "*\$user" }))"
           icacls $g /grant "${user}:(OI)(CI)F" /T /Q | Out-Null
-          function Run-AsUser($name, $command, $hours, $exitFile) {
+          # Scheduled tasks with a stored password need "Log on as a batch job"; plain Users lack it.
+          # Performance Log Users has it by default and grants no admin rights.
+          Add-LocalGroupMember -Group 'Performance Log Users' -Member $user
+          Write-Output "groups: $((Get-LocalGroup | Where-Object { Get-LocalGroupMember $_ -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*\$user" } }).Name -join ',')"
+          function Run-AsUser($name, $command, $minutes, $exitFile) {
             Remove-Item -Force $exitFile -ErrorAction SilentlyContinue
             $arg = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $command; Set-Content -Encoding ascii $exitFile `$LASTEXITCODE }`""
             $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg -WorkingDirectory $g
-            $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours $hours)
+            $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes $minutes)
             Register-ScheduledTask -TaskName $name -Action $action -User $user -Password $pw -RunLevel Limited -Settings $settings -Force | Out-Null
             Start-ScheduledTask -TaskName $name
-            $deadline = (Get-Date).AddHours($hours)
+            $deadline = (Get-Date).AddMinutes($minutes)
             while (-not (Test-Path $exitFile) -and (Get-Date) -lt $deadline) {
-              Start-Sleep 60
+              Start-Sleep 20
               $info = Get-ScheduledTaskInfo -TaskName $name
               $state = (Get-ScheduledTask -TaskName $name).State
-              Write-Output "$((Get-Date).ToUniversalTime().ToString('HH:mm')) $name state=$state lastResult=$($info.LastTaskResult)"
+              Write-Host "$((Get-Date).ToUniversalTime().ToString('HH:mm')) $name state=$state lastResult=$($info.LastTaskResult)"
               if ($state -eq 'Ready' -and $info.LastRunTime.Year -gt 2000 -and -not (Test-Path $exitFile)) { Start-Sleep 30; break }
             }
             $code = if (Test-Path $exitFile) { (Get-Content $exitFile -Raw).Trim() } else { 'no-exit-file' }
-            Write-Output "$name exit: $code"
+            Write-Host "$name exit: $code"
             return $code
           }
+          $probe = Run-AsUser 'gnustep-v018-probe' "whoami /groups > $g\probe.txt" 3 "$g\probe-exit.txt"
+          if (-not (Test-Path "$g\probe.txt")) { throw "scheduled task as $user never ran (probe exit: $probe)" }
+          Get-Content "$g\probe.txt" | Select-String -Pattern 'Mandatory Label|Administrators|Performance Log'
           $smokeCmd = "& $g\windows-full-release-smoke.ps1 -ReleaseSource v0.1.8-stage-$STAGE_RUN_ID -SuiteId tier1-core -RunnerId github-windows-latest-${env:GITHUB_RUN_ID}-nonadmin *> $g\smoke-run.log"
-          $smoke = Run-AsUser 'gnustep-v018-smoke' $smokeCmd 3 "$g\smoke-exit.txt"
-          $arlen = Run-AsUser 'gnustep-v018-arlen' "& $g\arlen\arlen-check.ps1" 1 "$g\arlen-exit.txt"
+          $smoke = Run-AsUser 'gnustep-v018-smoke' $smokeCmd 180 "$g\smoke-exit.txt"
+          $arlen = Run-AsUser 'gnustep-v018-arlen' "& $g\arlen\arlen-check.ps1" 60 "$g\arlen-exit.txt"
           $report = Get-Content "$g\windows-full-release-report.json" -Raw -Encoding utf8 | ConvertFrom-Json
           Write-Output "report overall_ok=$($report.overall_ok) status=$($report.status)"
           Get-Content "$g\arlen-check\arlen-check.txt"
@@ -455,34 +462,41 @@ jobs:
           New-LocalUser -Name $user -Password (ConvertTo-SecureString $pw -AsPlainText -Force) -PasswordNeverExpires -AccountNeverExpires | Out-Null
           Write-Output "standard user: $((Get-LocalUser $user).Name), admin=$([bool](Get-LocalGroupMember Administrators | Where-Object { $_.Name -like "*\$user" }))"
           icacls $g /grant "${user}:(OI)(CI)F" /T /Q | Out-Null
-          function Run-AsUser($name, $command, $hours, $exitFile) {
+          # Scheduled tasks with a stored password need "Log on as a batch job"; plain Users lack it.
+          # Performance Log Users has it by default and grants no admin rights.
+          Add-LocalGroupMember -Group 'Performance Log Users' -Member $user
+          Write-Output "groups: $((Get-LocalGroup | Where-Object { Get-LocalGroupMember $_ -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*\$user" } }).Name -join ',')"
+          function Run-AsUser($name, $command, $minutes, $exitFile) {
             Remove-Item -Force $exitFile -ErrorAction SilentlyContinue
             $arg = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $command; Set-Content -Encoding ascii $exitFile `$LASTEXITCODE }`""
             $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg -WorkingDirectory $g
-            $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours $hours)
+            $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes $minutes)
             Register-ScheduledTask -TaskName $name -Action $action -User $user -Password $pw -RunLevel Limited -Settings $settings -Force | Out-Null
             Start-ScheduledTask -TaskName $name
-            $deadline = (Get-Date).AddHours($hours)
+            $deadline = (Get-Date).AddMinutes($minutes)
             while (-not (Test-Path $exitFile) -and (Get-Date) -lt $deadline) {
-              Start-Sleep 60
+              Start-Sleep 20
               $info = Get-ScheduledTaskInfo -TaskName $name
               $state = (Get-ScheduledTask -TaskName $name).State
-              Write-Output "$((Get-Date).ToUniversalTime().ToString('HH:mm')) $name state=$state lastResult=$($info.LastTaskResult)"
+              Write-Host "$((Get-Date).ToUniversalTime().ToString('HH:mm')) $name state=$state lastResult=$($info.LastTaskResult)"
               if ($state -eq 'Ready' -and $info.LastRunTime.Year -gt 2000 -and -not (Test-Path $exitFile)) { Start-Sleep 30; break }
             }
             $code = if (Test-Path $exitFile) { (Get-Content $exitFile -Raw).Trim() } else { 'no-exit-file' }
-            Write-Output "$name exit: $code"
+            Write-Host "$name exit: $code"
             return $code
           }
+          $probe = Run-AsUser 'gnustep-v018-probe' "whoami /groups > $g\probe.txt" 3 "$g\probe-exit.txt"
+          if (-not (Test-Path "$g\probe.txt")) { throw "scheduled task as $user never ran (probe exit: $probe)" }
+          Get-Content "$g\probe.txt" | Select-String -Pattern 'Mandatory Label|Administrators|Performance Log'
           # The staged manifest isn't production-signed before Release: install from it with
           # the bootstrap's unsigned-local allowance only for this one setup.
           $install = "`$env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE='1'; `$env:GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED='1'; & powershell -NoProfile -ExecutionPolicy Bypass -File $g\bootstrap\gnustep-bootstrap.ps1 setup --root $g\install-full-toolsmoke --manifest $g\release-new\release-manifest.json *> $g\toolsmoke-install.txt"
-          $ic = Run-AsUser 'gnustep-v018-install' $install 1 "$g\install-exit.txt"
+          $ic = Run-AsUser 'gnustep-v018-install' $install 90 "$g\install-exit.txt"
           Get-Content "$g\toolsmoke-install.txt" -Tail 5
           $ver = (Get-Content "$g\install-full-toolsmoke\state\cli-state.json" -Raw | ConvertFrom-Json).cli_version
           Write-Output "install exit $ic version $ver"
           if ($ver -ne '0.1.8') { throw 'staged install failed' }
-          $pc = Run-AsUser 'gnustep-v018-post' "& $g\post-checks.ps1" 1 "$g\post-exit.txt"
+          $pc = Run-AsUser 'gnustep-v018-post' "& $g\post-checks.ps1" 60 "$g\post-exit.txt"
           Get-Content "$g\post\post-checks.txt"
           $t = Get-Content "$g\post\post-checks.txt" -Raw
           $ok = ($t -match 'smoke-toolchain exit 0') -and ($t -match 'outside bash: https://github.com exit 0') -and ($t -match 'outside bash: https://expired.badssl.com exit 1') -and ($t -match 'outside bash: https://1.1.1.1 exit 0')
