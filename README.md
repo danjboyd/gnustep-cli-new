@@ -61,14 +61,14 @@ automated agent must have each step approved, pin a release, check the script
 against a known digest before anything runs, look at what it would do, then run it:
 
 ```sh
-V=0.1.7
+V=0.1.8
 curl -fsSLO "https://github.com/danjboyd/gnustep-cli-new/releases/download/v$V/gnustep-bootstrap.sh"
-echo "1580d5ddcf774716bc2caa614cb4c217c19ead1645f4362f58ad12277345c961  gnustep-bootstrap.sh" | sha256sum -c -
+echo "322470ad32170b534885063ec67d53c388518a5dc750e34380c2de172a81fa7f  gnustep-bootstrap.sh" | sha256sum -c -
 sh gnustep-bootstrap.sh doctor          # read-only: reports what setup would need
 sh gnustep-bootstrap.sh setup --user    # installs under ~/.local/share/gnustep-cli
 ```
 
-- The digest above is v0.1.7's `gnustep-bootstrap.sh`. Every release publishes its
+- The digest above is v0.1.8's `gnustep-bootstrap.sh`. Every release publishes its
   bootstrap digests as `gnustep-bootstrap.sh.sha256` and `gnustep-bootstrap.ps1.sha256`
   assets. Record the digest once, from a source you trust, and pin it, instead of fetching
   it in the same step as the script.
@@ -83,9 +83,9 @@ sh gnustep-bootstrap.sh setup --user    # installs under ~/.local/share/gnustep-
 On Windows (PowerShell), the same steps with `gnustep-bootstrap.ps1`:
 
 ```powershell
-$V = "0.1.7"
+$V = "0.1.8"
 Invoke-WebRequest -UseBasicParsing "https://github.com/danjboyd/gnustep-cli-new/releases/download/v$V/gnustep-bootstrap.ps1" -OutFile gnustep-bootstrap.ps1
-if ((Get-FileHash -Algorithm SHA256 gnustep-bootstrap.ps1).Hash -ne "867308a2c1c3febd9a7800564eb131a899db67c2ccc9c5d03d4b921c4b387420") { throw "gnustep-bootstrap.ps1: checksum mismatch" }
+if ((Get-FileHash -Algorithm SHA256 gnustep-bootstrap.ps1).Hash -ne "4bd3e6bf4e9e21688424a776bd35dd29d9bca2dd66697354d2ffaf7ef1769975") { throw "gnustep-bootstrap.ps1: checksum mismatch" }
 powershell -NoProfile -ExecutionPolicy Bypass -File .\gnustep-bootstrap.ps1 doctor
 powershell -NoProfile -ExecutionPolicy Bypass -File .\gnustep-bootstrap.ps1 setup --user
 ```
@@ -150,14 +150,16 @@ release and still report success, so move an install on either of those once by
 naming the new release's manifest:
 
 ```sh
-gnustep update --yes --manifest https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.7/release-manifest.json
+gnustep update --yes --manifest https://github.com/danjboyd/gnustep-cli-new/releases/download/v0.1.8/release-manifest.json
 ```
 
 or run the bootstrap above again. Later updates work without `--manifest`.
 
-On Windows, `gnustep update` in v0.1.5 and v0.1.6 doesn't complete a CLI update, with or
-without `--manifest`: in testing it stopped with "Candidate release failed post-upgrade
-smoke validation" and left the install unchanged. Run the bootstrap above again instead.
+On Windows, `gnustep update` up to v0.1.7 can't complete an update to a release with a new
+toolchain, with or without `--manifest`: it stops with "Candidate release failed post-upgrade
+smoke validation" and leaves the install unchanged. Every release so far has had a new
+toolchain, so run the bootstrap above again to move a v0.1.7 or older install to v0.1.8.
+From v0.1.8, `gnustep update --yes` works on Windows too.
 
 ## Already have GNUstep?
 
