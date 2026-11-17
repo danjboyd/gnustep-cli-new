@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "command": "windows-current-source-marker",
+  "ok": true,
+  "status": "ok",
+  "summary": "Windows CLI artifact was built from the current workflow source revision.",
+  "artifact_id": "cli-windows-amd64-msys2-clang64",
+  "source_revision": "5e9612fddc86ebf317328604fcb2a982e479143f",
+  "builder_identity": "github-actions/windows-latest/43975713568",
+  "generated_at": "2026-11-16T23:08:56Z",
+  "cli_artifact": {
+    "sha256": "c48d85bdd5911cc39808653ee08600f538a30ea192f9ac7705a53767e1af6250",
+    "filename": "gnustep-cli-windows-amd64-msys2-clang64-0.1.8.zip"
+  },
+  "toolchain_artifact": {
+    "sha256": "7c18cce6263500c138849fbc7b7b6e329636dee56e3034eca35c70b796fe69c3",
+    "filename": "gnustep-toolchain-windows-amd64-msys2-clang64-0.1.8.zip"
+  }
+}
