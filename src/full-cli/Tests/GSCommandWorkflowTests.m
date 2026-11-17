@@ -1451,6 +1451,85 @@
   XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: [state objectForKey: @"previous_release_path"]]);
 }
 
+// Each upgrade keeps exactly one backup of the root (the one rollback uses). Older
+// backups of the same root, left by earlier upgrades, are removed; another root's
+// backup and a symlink that only looks like a backup are left alone.
+- (void)testUpgradeKeepsOnlyTheNewestBackupOfTheRoot
+{
+  StubbedGSCommandRunner *runner = [[[StubbedGSCommandRunner alloc] init] autorelease];
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *tempRoot = [self temporaryPathComponent: @"upgrade-prunes-backups"];
+  NSString *payloadRoot = [tempRoot stringByAppendingPathComponent: @"payloads"];
+  NSString *cliDir = [payloadRoot stringByAppendingPathComponent: @"cli"];
+  NSString *toolchainDir = [payloadRoot stringByAppendingPathComponent: @"toolchain"];
+  NSString *installRoot = [tempRoot stringByAppendingPathComponent: @"managed-root"];
+  NSString *manifestRoot = [tempRoot stringByAppendingPathComponent: @"manifest"];
+  NSString *cliArchive = [payloadRoot stringByAppendingPathComponent: @"cli.tar.gz"];
+  NSString *toolchainArchive = [payloadRoot stringByAppendingPathComponent: @"toolchain.tar.gz"];
+  NSString *statePath = [[installRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+  NSString *staleOne = [tempRoot stringByAppendingPathComponent: @".managed-root.setup-backup-OLD-1"];
+  NSString *staleTwo = [tempRoot stringByAppendingPathComponent: @".managed-root.setup-backup-OLD-2"];
+  NSString *otherRoot = [tempRoot stringByAppendingPathComponent: @".other-root.setup-backup-KEEP"];
+  NSString *linkTarget = [tempRoot stringByAppendingPathComponent: @"not-a-backup"];
+  NSString *link = [tempRoot stringByAppendingPathComponent: @".managed-root.setup-backup-LINK"];
+  NSString *manifestPath = nil;
+  NSDictionary *payload = nil;
+  NSDictionary *state = nil;
+  NSArray *pruned = nil;
+  NSArray *backups = nil;
+  int exitCode = 0;
+
+  [runner setStubDoctorPayload: [self stubDoctorPayload]];
+  [self ensureDirectory: [cliDir stringByAppendingPathComponent: @"bin"]];
+  [self ensureDirectory: [toolchainDir stringByAppendingPathComponent: @"System/Tools"]];
+  [self ensureDirectory: [statePath stringByDeletingLastPathComponent]];
+  [self ensureDirectory: staleOne];
+  [self ensureDirectory: staleTwo];
+  [self ensureDirectory: otherRoot];
+  [self ensureDirectory: linkTarget];
+  [@"old" writeToFile: [staleOne stringByAppendingPathComponent: @"old.txt"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [@"keep" writeToFile: [linkTarget stringByAppendingPathComponent: @"keep.txt"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  XCTAssertTrue([manager createSymbolicLinkAtPath: link withDestinationPath: linkTarget error: NULL]);
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               @"0.0.9", @"cli_version",
+                                               @"healthy", @"status",
+                                               staleOne, @"previous_release_path",
+                                               nil]
+                       toPath: statePath];
+  [@"#!/bin/sh\nexit 0\n" writeToFile: [cliDir stringByAppendingPathComponent: @"bin/gnustep"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [@"toolchain" writeToFile: [toolchainDir stringByAppendingPathComponent: @"System/Tools/make"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [self archiveDirectory: cliDir toTarball: cliArchive withRunner: runner];
+  [self archiveDirectory: toolchainDir toTarball: toolchainArchive withRunner: runner];
+  manifestPath = [self releaseManifestPathInDirectory: manifestRoot
+                                           cliSHA256: [runner sha256ForFile: cliArchive]
+                                     toolchainSHA256: [runner sha256ForFile: toolchainArchive]
+                                              cliURL: cliArchive
+                                        toolchainURL: toolchainArchive];
+
+  payload = [runner executeSetupForContext: [GSCommandContext contextWithArguments:
+                                                               [NSArray arrayWithObjects: @"setup", @"--upgrade", @"--root", installRoot, @"--manifest", manifestPath, nil]]
+                                  exitCode: &exitCode];
+  state = [runner installedLifecycleStateForInstallRoot: installRoot];
+  pruned = [[payload objectForKey: @"install"] objectForKey: @"pruned_backups"];
+  backups = [[manager contentsOfDirectoryAtPath: tempRoot error: NULL] filteredArrayUsingPredicate:
+                [NSPredicate predicateWithFormat: @"SELF BEGINSWITH '.managed-root.setup-backup'"]];
+
+  XCTAssertEqual(exitCode, 0);
+  XCTAssertTrue([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertFalse([manager fileExistsAtPath: staleOne]);
+  XCTAssertFalse([manager fileExistsAtPath: staleTwo]);
+  XCTAssertEqual([pruned count], (NSUInteger)2);
+  XCTAssertTrue([[[pruned objectAtIndex: 0] objectForKey: @"removed"] boolValue]);
+  XCTAssertTrue([manager fileExistsAtPath: [state objectForKey: @"previous_release_path"]]);
+  XCTAssertTrue([[[state objectForKey: @"previous_release_path"] lastPathComponent] hasPrefix: @".managed-root.setup-backup-"]);
+  XCTAssertTrue([manager fileExistsAtPath: otherRoot]);
+  XCTAssertTrue([manager fileExistsAtPath: [linkTarget stringByAppendingPathComponent: @"keep.txt"]]);
+  XCTAssertNotNil([manager destinationOfSymbolicLinkAtPath: link error: NULL]);
+  // The new backup plus the untouched symlink.
+  XCTAssertEqual([backups count], (NSUInteger)2);
+}
+
 // A failure at any step after setup snapshots the install must put the old install
 // back intact (state, current release, a launcher that runs). On Windows a step that
 // timed out left only the half-written new tree and no gnustep.

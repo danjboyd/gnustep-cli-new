@@ -210,6 +210,7 @@ static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
                                   backupPath:(NSString *)backupPath
                                      success:(BOOL)success
                               preserveBackup:(BOOL)preserveBackup;
+- (NSArray *)pruneSetupBackupsForInstallRoot:(NSString *)installRoot keeping:(NSString *)keepPath;
 - (NSDictionary *)installedLifecycleStateForInstallRoot:(NSString *)installRoot;
 - (NSString *)normalizedManagedInstallRootPath:(NSString *)installRoot;
 - (NSDate *)dateFromManifestTimestamp:(NSString *)timestamp;
@@ -5370,6 +5371,54 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
   [manager removeItemAtPath: transactionRoot error: NULL];
 }
 
+// Each upgrade moves the old root aside as .<root>.setup-backup-<uuid> and records it
+// as previous_release_path for rollback. Before v0.1.9 the older backups were never
+// removed, so every upgrade left a full copy of the previous install (toolchain
+// included) beside the root. After a successful upgrade, remove every other backup of
+// this root, keeping only keepPath (the one rollback uses). Only real directories
+// named for this root are touched; symlinks and anything else are left alone. A
+// backup that can't be removed is reported, not fatal: the upgrade has succeeded.
+- (NSArray *)pruneSetupBackupsForInstallRoot:(NSString *)installRoot keeping:(NSString *)keepPath
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *root = [self normalizedManagedInstallRootPath: installRoot];
+  NSString *parent = [root stringByDeletingLastPathComponent];
+  NSString *prefix = [NSString stringWithFormat: @".%@.setup-backup-", [root lastPathComponent]];
+  NSString *keepName = [keepPath lastPathComponent];
+  NSArray *entries = [manager contentsOfDirectoryAtPath: parent error: NULL];
+  NSMutableArray *results = [NSMutableArray array];
+  NSEnumerator *enumerator = [entries objectEnumerator];
+  NSString *entry = nil;
+
+  while ((entry = [enumerator nextObject]) != nil)
+    {
+      NSString *path = nil;
+      NSDictionary *attributes = nil;
+      NSError *error = nil;
+      BOOL removed = NO;
+
+      if ([entry hasPrefix: prefix] == NO || [entry length] <= [prefix length]
+          || (keepName != nil && [entry isEqualToString: keepName]))
+        {
+          continue;
+        }
+      path = [parent stringByAppendingPathComponent: entry];
+      // attributesOfItemAtPath: does not traverse a final symlink.
+      attributes = [manager attributesOfItemAtPath: path error: NULL];
+      if ([[attributes fileType] isEqualToString: NSFileTypeDirectory] == NO)
+        {
+          continue;
+        }
+      removed = [manager removeItemAtPath: path error: &error];
+      [results addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                          path, @"path",
+                                          [NSNumber numberWithBool: removed], @"removed",
+                                          (removed || error == nil) ? (id)[NSNull null] : (id)[error localizedDescription], @"error",
+                                          nil]];
+    }
+  return results;
+}
+
 // Put the pre-setup snapshot back after a failed setup or upgrade. Every step is
 // checked: on Windows a file still held open under the new root used to make the
 // delete fail silently, so the move back failed too and the install was left with
@@ -7469,6 +7518,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
     NSDictionary *toolchainArtifact = nil;
     NSDictionary *installedState = nil;
     BOOL transactionStarted = NO;
+    NSArray *prunedBackups = [NSArray array];
     BOOL windowsPointerOnlyUpgrade = NO;
     NSUInteger j = 0;
 
@@ -7829,6 +7879,10 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
     if (transactionStarted)
       {
         [self finishSetupTransactionForInstallRoot: installPath backupPath: backupPath success: YES preserveBackup: upgradeMode];
+        if (upgradeMode && backupPath != nil)
+          {
+            prunedBackups = [self pruneSetupBackupsForInstallRoot: installPath keeping: backupPath];
+          }
       }
     *exitCode = 0;
     return [NSDictionary dictionaryWithObjectsAndKeys:
@@ -7859,6 +7913,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                                           installPath, @"install_root",
                                           activeReleasePath ? activeReleasePath : installPath, @"active_release_path",
                                           backupPath ? backupPath : [NSNull null], @"previous_release_path",
+                                          prunedBackups, @"pruned_backups",
                                           nil], @"install",
                           nil];
   }
