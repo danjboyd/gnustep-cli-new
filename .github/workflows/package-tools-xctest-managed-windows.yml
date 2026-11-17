@@ -14,11 +14,11 @@ on:
       toolchain_release_tag:
         description: Release whose bootstrap and manifest install the managed toolchain
         required: true
-        default: v0.1.7
+        default: v0.1.8
       bootstrap_sha256:
         description: Expected sha256 of that release's gnustep-bootstrap.ps1
         required: true
-        default: 867308a2c1c3febd9a7800564eb131a899db67c2ccc9c5d03d4b921c4b387420
+        default: 4bd3e6bf4e9e21688424a776bd35dd29d9bca2dd66697354d2ffaf7ef1769975
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -49,10 +49,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           New-Item -ItemType Directory -Force "$env:OUT\inputs" | Out-Null
-          gh release download "${{ inputs.toolchain_release_tag || 'v0.1.7' }}" --repo "$env:GITHUB_REPOSITORY" --dir "$env:OUT\inputs" `
+          gh release download "${{ inputs.toolchain_release_tag || 'v0.1.8' }}" --repo "$env:GITHUB_REPOSITORY" --dir "$env:OUT\inputs" `
             --pattern gnustep-bootstrap.ps1 --pattern release-manifest.json --pattern release-manifest.json.sig
           $hash = (Get-FileHash -Algorithm SHA256 "$env:OUT\inputs\gnustep-bootstrap.ps1").Hash.ToLower()
-          if ($hash -ne '${{ inputs.bootstrap_sha256 || '867308a2c1c3febd9a7800564eb131a899db67c2ccc9c5d03d4b921c4b387420' }}') { throw "bootstrap sha256 $hash does not match the pinned digest" }
+          if ($hash -ne '${{ inputs.bootstrap_sha256 || '4bd3e6bf4e9e21688424a776bd35dd29d9bca2dd66697354d2ffaf7ef1769975' }}') { throw "bootstrap sha256 $hash does not match the pinned digest" }
 
       - name: Install the managed toolchain
         shell: pwsh

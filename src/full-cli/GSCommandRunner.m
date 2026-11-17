@@ -102,6 +102,8 @@ static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
                                   installedFiles:(NSArray *)installedFiles;
 - (BOOL)exposesPackageExecutablesWithCommandShims;
 - (NSString *)commandShimContentsForPackageExecutable:(NSString *)relativePath;
+- (NSString *)managedMakefilesDirectoryForRoot:(NSString *)expandedRoot relativeRoot:(NSString **)relativeRoot;
+- (NSString *)makeIncludeContentsForTarget:(NSString *)target;
 - (NSArray *)removePackageExecutableLinksForPackageID:(NSString *)packageID
                                           managedRoot:(NSString *)managedRoot
                                           installRoot:(NSString *)installRoot
@@ -1099,10 +1101,13 @@ static void GSRecordAdvertisedPackageIndex(NSString *reference, id sha256)
         {
           continue;
         }
-      if ([[entry objectForKey: @"kind"] isEqualToString: @"cmd-shim"])
+      if ([[entry objectForKey: @"kind"] isEqualToString: @"cmd-shim"] ||
+          [[entry objectForKey: @"kind"] isEqualToString: @"make-include"])
         {
-          // Only delete a shim this CLI generated for this executable, byte for byte.
-          NSData *shim = [[self commandShimContentsForPackageExecutable: targetPath] dataUsingEncoding: NSUTF8StringEncoding];
+          // Only delete a shim or include this CLI generated for this file, byte for byte.
+          NSString *contents = [[entry objectForKey: @"kind"] isEqualToString: @"make-include"]
+            ? [self makeIncludeContentsForTarget: targetPath] : [self commandShimContentsForPackageExecutable: targetPath];
+          NSData *shim = [contents dataUsingEncoding: NSUTF8StringEncoding];
 
           if ([[NSData dataWithContentsOfFile: linkPath] isEqualToData: shim])
             {
@@ -9467,14 +9472,81 @@ static NSString *GSExecutableExposureStyleOverride = nil;
                    windowsPath];
 }
 
+- (NSString *)managedMakefilesDirectoryForRoot:(NSString *)expandedRoot relativeRoot:(NSString **)relativeRoot
+{
+  // gnustep-make's directory in the managed toolchain: System/Library/Makefiles
+  // on Linux and BSD, clang64/share/GNUstep/Makefiles in the MSYS2 toolchain.
+  NSArray *candidates = [NSArray arrayWithObjects: @"System/Library/Makefiles", @"clang64/share/GNUstep/Makefiles", nil];
+  NSUInteger i = 0;
+
+  for (i = 0; i < [candidates count]; i++)
+    {
+      NSString *candidate = [candidates objectAtIndex: i];
+      NSString *directory = [expandedRoot stringByAppendingPathComponent: candidate];
+
+      if ([[NSFileManager defaultManager] fileExistsAtPath: [directory stringByAppendingPathComponent: @"common.make"]])
+        {
+          if (relativeRoot != NULL)
+            {
+              NSMutableArray *ups = [NSMutableArray array];
+              NSUInteger depth = [[candidate pathComponents] count];
+
+              while ([ups count] < depth)
+                {
+                  [ups addObject: @".."];
+                }
+              *relativeRoot = [ups componentsJoinedByString: @"/"];
+            }
+          return directory;
+        }
+    }
+  return nil;
+}
+
+- (NSString *)makeIncludeContentsForTarget:(NSString *)target
+{
+  // The include is relative to $(GNUSTEP_MAKEFILES), so it works whatever form
+  // (C:/..., /c/..., a symlinked root) GNUstep.sh gives that variable.
+  return [NSString stringWithFormat:
+                     @"# Written by gnustep-cli for an installed package; `gnustep remove` deletes it.\n"
+                     @"include $(GNUSTEP_MAKEFILES)/%@\n",
+                   target];
+}
+
 - (NSArray *)expectedExecutableLinksForPackageID:(NSString *)packageID
                                      managedRoot:(NSString *)managedRoot
                                   installedFiles:(NSArray *)installedFiles
 {
   NSMutableArray *links = [NSMutableArray array];
   NSString *packageBinPrefix = [[@"packages" stringByAppendingPathComponent: packageID] stringByAppendingPathComponent: @"bin"];
+  NSString *packageMakePrefix = [[[@"packages" stringByAppendingPathComponent: packageID] stringByAppendingPathComponent: @"share/gnustep-make/Auxiliary"] stringByAppendingString: @"/"];
   NSString *expandedRoot = [managedRoot stringByExpandingTildeInPath];
+  NSString *makefilesRelativeRoot = nil;
+  NSString *makefilesDirectory = [self managedMakefilesDirectoryForRoot: expandedRoot relativeRoot: &makefilesRelativeRoot];
   NSUInteger i = 0;
+
+  // A package's share/gnustep-make/Auxiliary/<name>.make is made available to
+  // GNUmakefiles as $(GNUSTEP_MAKEFILES)/Auxiliary/<name>.make, through a
+  // one-line include written there (tools-xctest's xctest.make).
+  for (i = 0; makefilesDirectory != nil && i < [installedFiles count]; i++)
+    {
+      NSString *relativePath = [installedFiles objectAtIndex: i];
+      NSString *name = [relativePath lastPathComponent];
+
+      if ([relativePath hasPrefix: packageMakePrefix] == NO ||
+          [[relativePath substringFromIndex: [packageMakePrefix length]] isEqualToString: name] == NO ||
+          [[name pathExtension] isEqualToString: @"make"] == NO)
+        {
+          continue;
+        }
+      [links addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                        name, @"name",
+                                        [[makefilesDirectory stringByAppendingPathComponent: @"Auxiliary"] stringByAppendingPathComponent: name], @"path",
+                                        [NSString stringWithFormat: @"%@/%@", makefilesRelativeRoot, relativePath], @"target",
+                                        relativePath, @"source",
+                                        @"make-include", @"kind",
+                                        nil]];
+    }
 
   for (i = 0; i < [installedFiles count]; i++)
     {
@@ -9530,6 +9602,7 @@ static NSString *GSExecutableExposureStyleOverride = nil;
   NSString *binRoot = [[managedRoot stringByExpandingTildeInPath] stringByAppendingPathComponent: @"bin"];
   NSArray *expectedLinks = [self expectedExecutableLinksForPackageID: packageID managedRoot: managedRoot installedFiles: installedFiles];
   NSMutableArray *activatedLinks = [NSMutableArray array];
+  NSMutableArray *createdPaths = [NSMutableArray array];
   NSUInteger i = 0;
 
   [manager createDirectoryAtPath: binRoot withIntermediateDirectories: YES attributes: nil error: NULL];
@@ -9541,10 +9614,17 @@ static NSString *GSExecutableExposureStyleOverride = nil;
       NSString *existingTarget = nil;
       BOOL isDir = NO;
 
-      if ([[entry objectForKey: @"kind"] isEqualToString: @"cmd-shim"])
+      if ([[entry objectForKey: @"kind"] isEqualToString: @"cmd-shim"] ||
+          [[entry objectForKey: @"kind"] isEqualToString: @"make-include"])
         {
-          NSData *shim = [[self commandShimContentsForPackageExecutable: targetPath] dataUsingEncoding: NSUTF8StringEncoding];
+          BOOL makeInclude = [[entry objectForKey: @"kind"] isEqualToString: @"make-include"];
+          NSString *contents = makeInclude ? [self makeIncludeContentsForTarget: targetPath] : [self commandShimContentsForPackageExecutable: targetPath];
+          NSData *shim = [contents dataUsingEncoding: NSUTF8StringEncoding];
 
+          if (makeInclude)
+            {
+              [manager createDirectoryAtPath: [linkPath stringByDeletingLastPathComponent] withIntermediateDirectories: YES attributes: nil error: NULL];
+            }
           if ([manager fileExistsAtPath: linkPath isDirectory: &isDir])
             {
               if (isDir == NO && [[NSData dataWithContentsOfFile: linkPath] isEqualToData: shim])
@@ -9554,18 +9634,21 @@ static NSString *GSExecutableExposureStyleOverride = nil;
                 }
               if (errorMessage != NULL)
                 {
-                  *errorMessage = [NSString stringWithFormat: @"Cannot expose package executable '%@'; %@ already exists.", [entry objectForKey: @"name"], linkPath];
+                  *errorMessage = makeInclude
+                    ? [NSString stringWithFormat: @"Cannot expose package file '%@'; %@ already exists. It may be from a source install of the same project (for tools-xctest, `make install` from its source tree): run `make uninstall` there, or remove the file, then install again.", [entry objectForKey: @"name"], linkPath]
+                    : [NSString stringWithFormat: @"Cannot expose package file '%@'; %@ already exists.", [entry objectForKey: @"name"], linkPath];
                 }
-              return NO;
+              goto failed;
             }
           if ([shim writeToFile: linkPath atomically: YES] == NO)
             {
               if (errorMessage != NULL)
                 {
-                  *errorMessage = [NSString stringWithFormat: @"Cannot expose package executable '%@' at %@.", [entry objectForKey: @"name"], linkPath];
+                  *errorMessage = [NSString stringWithFormat: @"Cannot expose package file '%@' at %@.", [entry objectForKey: @"name"], linkPath];
                 }
-              return NO;
+              goto failed;
             }
+          [createdPaths addObject: linkPath];
           [activatedLinks addObject: entry];
           continue;
         }
@@ -9581,7 +9664,7 @@ static NSString *GSExecutableExposureStyleOverride = nil;
             {
               *errorMessage = [NSString stringWithFormat: @"Cannot expose package executable '%@'; %@ already exists.", [entry objectForKey: @"name"], linkPath];
             }
-          return NO;
+          goto failed;
         }
       if ([manager createSymbolicLinkAtPath: linkPath withDestinationPath: targetPath error: NULL] == NO)
         {
@@ -9589,8 +9672,9 @@ static NSString *GSExecutableExposureStyleOverride = nil;
             {
               *errorMessage = [NSString stringWithFormat: @"Cannot expose package executable '%@' at %@.", [entry objectForKey: @"name"], linkPath];
             }
-          return NO;
+          goto failed;
         }
+      [createdPaths addObject: linkPath];
       [activatedLinks addObject: entry];
     }
   if (links != NULL)
@@ -9598,6 +9682,15 @@ static NSString *GSExecutableExposureStyleOverride = nil;
       *links = activatedLinks;
     }
   return YES;
+
+failed:
+  // Leave nothing this call created behind (e.g. the include, when a later
+  // executable conflicts): the caller removes the package directory too.
+  for (i = 0; i < [createdPaths count]; i++)
+    {
+      [manager removeItemAtPath: [createdPaths objectAtIndex: i] error: NULL];
+    }
+  return NO;
 }
 
 - (NSDictionary *)packageDiscoveryPayloadForCommand:(NSString *)command

@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "command": "package-tools-xctest-build-evidence",
+  "ok": true,
+  "status": "ok",
+  "package_id": "org.gnustep.tools-xctest",
+  "artifact_id": "tools-xctest-windows-amd64-msys2-clang64",
+  "target": "windows-amd64-msys2-clang64",
+  "version": "0.8.1",
+  "source": {
+    "type": "git",
+    "url": "https://github.com/danjboyd/tools-xctest.git",
+    "revision": "80442364840eaef8df77cf97c3f0d100003c403c",
+    "tag": "v0.8.1",
+    "sha256": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0"
+  },
+  "source_archive_sha256_in_ci": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0",
+  "patches": [],
+  "artifact": {
+    "filename": "tools-xctest-windows-amd64-msys2-clang64-0.8.1.zip",
+    "sha256": "738c74106d479d2d4fd107d76ff37fcc178ae39e6d634d045dbbd4ed05b57d69",
+    "size": 279988,
+    "format": "zip"
+  },
+  "builder": {
+    "workflow": "package-tools-xctest-managed-windows.yml",
+    "run_id": 44149763681,
+    "run_url": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/44149763681",
+    "toolchain": "gnustep-cli v0.1.8 managed toolchain, installed by the checksum-pinned bootstrap from the signed release manifest"
+  },
+  "checks": {
+    "upstream_tests": "All regression and CLI checks passed.",
+    "help_lists_only_testing_and_skip_testing": true
+  }
+}

@@ -2398,7 +2398,9 @@ class BuildInfraTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(source), "config", "user.email", "test@example.invalid"], check=True)
             subprocess.run(["git", "-C", str(source), "config", "user.name", "Test"], check=True)
             (source / "README.md").write_text("tools-xctest fixture\n")
-            subprocess.run(["git", "-C", str(source), "add", "README.md"], check=True)
+            (source / "xctest.make").write_text("# xctest.make fixture\n")
+            (source / "xctest-bundle").write_text("#!/bin/sh\n")
+            subprocess.run(["git", "-C", str(source), "add", "README.md", "xctest.make", "xctest-bundle"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             installed = temp / "GNUstep"
             (installed / "Tools").mkdir(parents=True)
@@ -2417,7 +2419,17 @@ class BuildInfraTests(unittest.TestCase):
             with tarfile.open(artifact_path, "r:gz") as archive:
                 names = archive.getnames()
                 launcher = archive.extractfile("./bin/xctest").read().decode()
+                wrapper = archive.extractfile("./share/gnustep-make/Auxiliary/xctest.make").read().decode()
+                bundle_tool = archive.getmember("./bin/xctest-bundle")
+                upstream_make = archive.extractfile("./share/tools-xctest/xctest.make").read().decode()
             self.assertIn("./bin/xctest", names)
+            # #82: xctest.make and xctest-bundle ship, and the wrapper points xctest.make at the package.
+            self.assertEqual(upstream_make, "# xctest.make fixture\n")
+            self.assertTrue(bundle_tool.mode & 0o111)
+            self.assertIn("XCTEST ?= $(_TOOLS_XCTEST_PACKAGE)/bin/xctest\n", wrapper)
+            self.assertIn("XCTEST_INCLUDE_DIR ?= $(_TOOLS_XCTEST_PACKAGE)/Library/Headers\n", wrapper)
+            self.assertIn("XCTEST_LIBRARY_DIR ?= $(_TOOLS_XCTEST_PACKAGE)/Library/Libraries\n", wrapper)
+            self.assertTrue(wrapper.endswith("include $(_TOOLS_XCTEST_PACKAGE)/share/tools-xctest/xctest.make\n"))
             self.assertIn("./libexec/xctest", names)
             self.assertIn("./Library/Headers/XCTest/XCTest.h", names)
             self.assertIn("./Library/Libraries/libXCTest.so", names)
@@ -2435,7 +2447,9 @@ class BuildInfraTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(source), "config", "user.email", "test@example.invalid"], check=True)
             subprocess.run(["git", "-C", str(source), "config", "user.name", "Test"], check=True)
             (source / "README.md").write_text("tools-xctest fixture\n")
-            subprocess.run(["git", "-C", str(source), "add", "README.md"], check=True)
+            (source / "xctest.make").write_text("# xctest.make fixture\n")
+            (source / "xctest-bundle").write_text("#!/bin/sh\n")
+            subprocess.run(["git", "-C", str(source), "add", "README.md", "xctest.make", "xctest-bundle"], check=True)
             subprocess.run(["git", "-C", str(source), "commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
             installed = temp / "GNUstep"
             (installed / "Tools").mkdir(parents=True)
@@ -2468,7 +2482,9 @@ class BuildInfraTests(unittest.TestCase):
         subprocess.run(git + ["config", "user.email", "test@example.invalid"], check=True)
         subprocess.run(git + ["config", "user.name", "Test"], check=True)
         (source / "main.m").write_text("int main(void) { return 0; }\n")
-        subprocess.run(git + ["add", "main.m"], check=True)
+        (source / "xctest.make").write_text("# xctest.make fixture\n")
+        (source / "xctest-bundle").write_text("#!/bin/sh\n")
+        subprocess.run(git + ["add", "main.m", "xctest.make", "xctest-bundle"], check=True)
         subprocess.run(git + ["commit", "-m", "fixture"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
         revision = subprocess.run(git + ["rev-parse", "HEAD"], stdout=subprocess.PIPE, text=True, check=True).stdout.strip()
         source_sha = hashlib.sha256(subprocess.run(git + ["archive", "--format=tar.gz", "HEAD"], stdout=subprocess.PIPE, check=True).stdout).hexdigest()
@@ -2681,22 +2697,40 @@ class BuildInfraTests(unittest.TestCase):
             with zipfile.ZipFile(payload["artifact"]["path"]) as archive:
                 names = set(archive.namelist())
                 launcher = archive.read("bin/xctest.cmd")
+                wrapper = archive.read("share/gnustep-make/Auxiliary/xctest.make").decode("ascii")
             self.assertEqual(
                 names,
                 {
                     "bin/xctest.cmd",
+                    "bin/xctest-bundle",
                     "libexec/xctest.exe",
+                    "libexec/XCTest-0.dll",
                     "Library/Headers/XCTest/XCTest.h",
                     "Library/Libraries/XCTest-0.dll",
                     "Library/Libraries/libXCTest.dll.a",
+                    "share/gnustep-make/Auxiliary/xctest.make",
+                    "share/tools-xctest/xctest.make",
                 },
             )
+            # make check runs xctest.exe from make's shell, not the .cmd launcher.
+            self.assertIn("XCTEST ?= $(_TOOLS_XCTEST_PACKAGE)/libexec/xctest.exe\n", wrapper)
             self.assertNotIn(b"\n", launcher.replace(b"\r\n", b""))
             text = launcher.decode("ascii")
             self.assertIn("%package_root%\\Library\\Libraries;%managed_root%\\clang64\\bin;", text)
             self.assertIn("%managed_root%\\clang64\\etc\\GNUstep\\GNUstep.conf", text)
             self.assertIn('"%package_root%\\libexec\\xctest.exe" %*', text)
             self.assertIn("exit /b %ERRORLEVEL%", text)
+
+    def test_package_tools_xctest_artifact_requires_xctest_make_in_the_source(self):
+        with tempfile.TemporaryDirectory() as tempdir:
+            temp = Path(tempdir)
+            source, manifest, installed = self._tools_xctest_patch_fixture(temp)
+            git = ["git", "-C", str(source)]
+            subprocess.run(git + ["rm", "-q", "xctest.make"], check=True)
+            subprocess.run(git + ["commit", "-m", "older source"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+            payload = package_tools_xctest_artifact(temp / "out", source_dir=source, installed_root=installed, version="9.9.9")
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["missing"], ["xctest.make"])
 
     def test_package_tools_xctest_artifact_windows_requires_dll_and_import_library(self):
         with tempfile.TemporaryDirectory() as tempdir:

@@ -26,11 +26,11 @@ on:
       toolchain_release_tag:
         description: Release whose bootstrap and manifest install the managed toolchain
         required: true
-        default: v0.1.7
+        default: v0.1.8
       bootstrap_sha256:
         description: Expected sha256 of that release's gnustep-bootstrap.sh
         required: true
-        default: 1580d5ddcf774716bc2caa614cb4c217c19ead1645f4362f58ad12277345c961
+        default: 322470ad32170b534885063ec67d53c388518a5dc750e34380c2de172a81fa7f
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

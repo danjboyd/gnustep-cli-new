@@ -799,15 +799,15 @@
       "id": "org.gnustep.tools-xctest",
       "name": "tools-xctest",
       "aliases": [],
-      "version": "0.8.0",
+      "version": "0.8.1",
       "kind": "cli-tool",
       "summary": "XCTest runner and harness for native GNUstep Objective-C unit tests.",
       "source": {
         "type": "git",
         "url": "https://github.com/danjboyd/tools-xctest.git",
-        "sha256": "11e65437002c8775e160799e40f11dd8b76eceeb9cebb5488eecfb35e35c0691",
-        "revision": "69a646939903e8be072de7b9085d4a423910904a",
-        "tag": "v0.8.0",
+        "sha256": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0",
+        "revision": "80442364840eaef8df77cf97c3f0d100003c403c",
+        "tag": "v0.8.1",
         "upstream": "gnustep/tools-xctest",
         "upstream_url": "https://github.com/gnustep/tools-xctest",
         "fork": "danjboyd/tools-xctest",
@@ -819,7 +819,7 @@
         "provides_natively": [
           "add-apple-style-xctest-cli-filters"
         ],
-        "provides_natively_notes": "v0.8.0 implements Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
+        "provides_natively_notes": "v0.8.0 and later implement Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
       },
       "patches": [],
       "build": {
@@ -882,21 +882,21 @@
           "toolchain_flavor": "clang",
           "format": "tar.gz",
           "publish": false,
-          "status": "built_v0.8.0_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43916141291; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
+          "status": "built_v0.8.1_pending_hosting",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167377963; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
           "supported_distributions": [
             "debian"
           ],
           "supported_os_versions": [],
           "portability_policy": "distribution-scoped",
-          "sha256": "08073e739ecabb7a65c5724af4ddc3bd62a9379600e95478b5fc8cd99613efb4",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-linux-amd64-clang-build.json",
+          "sha256": "9a67b43a4ac0b5012b81f54b2bdf1a7f5dd19a1a32d66feaae3ce4be7bf77de4",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-linux-amd64-clang-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
-            "sha256": "11e65437002c8775e160799e40f11dd8b76eceeb9cebb5488eecfb35e35c0691",
-            "revision": "69a646939903e8be072de7b9085d4a423910904a",
-            "tag": "v0.8.0",
+            "sha256": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0",
+            "revision": "80442364840eaef8df77cf97c3f0d100003c403c",
+            "tag": "v0.8.1",
             "upstream": "gnustep/tools-xctest",
             "upstream_url": "https://github.com/gnustep/tools-xctest",
             "fork": "danjboyd/tools-xctest",
@@ -908,7 +908,7 @@
             "provides_natively": [
               "add-apple-style-xctest-cli-filters"
             ],
-            "provides_natively_notes": "v0.8.0 implements Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
+            "provides_natively_notes": "v0.8.0 and later implement Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
           },
           "patches": []
         },
@@ -925,8 +925,8 @@
           "toolchain_flavor": "clang",
           "format": "tar.gz",
           "publish": false,
-          "status": "built_v0.8.0_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43916557595; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
+          "status": "built_v0.8.1_pending_hosting",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167396742; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
           "supported_distributions": [
             "ubuntu"
           ],
@@ -934,14 +934,14 @@
             "ubuntu-24.04"
           ],
           "portability_policy": "distribution-scoped",
-          "sha256": "36527099bc268ac371b3642a2a7f0e17a1e6ccbb102be65e98440297803fb5f2",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-linux-ubuntu2404-amd64-clang-build.json",
+          "sha256": "e4bef95656870b1d266c2bc2a5a592cdc50643cab4ec0b7e90434db92e5b9015",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-linux-ubuntu2404-amd64-clang-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
-            "sha256": "11e65437002c8775e160799e40f11dd8b76eceeb9cebb5488eecfb35e35c0691",
-            "revision": "69a646939903e8be072de7b9085d4a423910904a",
-            "tag": "v0.8.0",
+            "sha256": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0",
+            "revision": "80442364840eaef8df77cf97c3f0d100003c403c",
+            "tag": "v0.8.1",
             "upstream": "gnustep/tools-xctest",
             "upstream_url": "https://github.com/gnustep/tools-xctest",
             "fork": "danjboyd/tools-xctest",
@@ -953,7 +953,7 @@
             "provides_natively": [
               "add-apple-style-xctest-cli-filters"
             ],
-            "provides_natively_notes": "v0.8.0 implements Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
+            "provides_natively_notes": "v0.8.0 and later implement Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
           },
           "patches": []
         },
@@ -970,8 +970,8 @@
           "toolchain_flavor": "clang",
           "format": "tar.gz",
           "publish": false,
-          "status": "built_v0.8.0_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43916569941; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
+          "status": "built_v0.8.1_pending_hosting",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167412796; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
           "supported_distributions": [
             "ubuntu"
           ],
@@ -979,14 +979,14 @@
             "ubuntu-26.04"
           ],
           "portability_policy": "distribution-scoped",
-          "sha256": "23f4804ee08f61ff617dead506f598f28521ba6201f9ac3a3f1999813b98a8b6",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-linux-ubuntu2604-amd64-clang-build.json",
+          "sha256": "b115d4a53b252274c88f370745937d4edc25cacd95656451254ecce03a570ce5",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-linux-ubuntu2604-amd64-clang-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
-            "sha256": "11e65437002c8775e160799e40f11dd8b76eceeb9cebb5488eecfb35e35c0691",
-            "revision": "69a646939903e8be072de7b9085d4a423910904a",
-            "tag": "v0.8.0",
+            "sha256": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0",
+            "revision": "80442364840eaef8df77cf97c3f0d100003c403c",
+            "tag": "v0.8.1",
             "upstream": "gnustep/tools-xctest",
             "upstream_url": "https://github.com/gnustep/tools-xctest",
             "fork": "danjboyd/tools-xctest",
@@ -998,7 +998,7 @@
             "provides_natively": [
               "add-apple-style-xctest-cli-filters"
             ],
-            "provides_natively_notes": "v0.8.0 implements Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
+            "provides_natively_notes": "v0.8.0 and later implement Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
           },
           "patches": []
         },
@@ -1015,21 +1015,21 @@
           "toolchain_flavor": "clang",
           "format": "tar.gz",
           "publish": false,
-          "status": "built_v0.8.0_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43925275794; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
+          "status": "built_v0.8.1_pending_hosting",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167432955; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
           "supported_distributions": [
             "debian"
           ],
           "supported_os_versions": [],
           "portability_policy": "distribution-scoped",
-          "sha256": "ce6cd09c4bc6adaa34b391a8d63f0d66817c60d3bbf8d3b24c2cf3603662b41e",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-linux-arm64-clang-build.json",
+          "sha256": "f2c7bf0355052d1afe476f510edae7d5c063fef04a8f99aa473a2983c844d56e",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-linux-arm64-clang-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
-            "sha256": "11e65437002c8775e160799e40f11dd8b76eceeb9cebb5488eecfb35e35c0691",
-            "revision": "69a646939903e8be072de7b9085d4a423910904a",
-            "tag": "v0.8.0",
+            "sha256": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0",
+            "revision": "80442364840eaef8df77cf97c3f0d100003c403c",
+            "tag": "v0.8.1",
             "upstream": "gnustep/tools-xctest",
             "upstream_url": "https://github.com/gnustep/tools-xctest",
             "fork": "danjboyd/tools-xctest",
@@ -1041,7 +1041,7 @@
             "provides_natively": [
               "add-apple-style-xctest-cli-filters"
             ],
-            "provides_natively_notes": "v0.8.0 implements Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
+            "provides_natively_notes": "v0.8.0 and later implement Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
           },
           "patches": []
         },
@@ -1058,8 +1058,8 @@
           "toolchain_flavor": "clang",
           "format": "tar.gz",
           "publish": false,
-          "status": "built_v0.8.0_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43916599133; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
+          "status": "built_v0.8.1_pending_hosting",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167450116; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
           "supported_distributions": [
             "ubuntu"
           ],
@@ -1067,14 +1067,14 @@
             "ubuntu-24.04"
           ],
           "portability_policy": "distribution-scoped",
-          "sha256": "2fa0266ab45d715ac683270fe82888805e1e7bc5dc1c1ca6adad945d20f66f35",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-linux-ubuntu2404-arm64-clang-build.json",
+          "sha256": "2c6db21bdf4a990d5e5ddb301fc23d499781c1e8da311c7cdc15b64789d08301",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-linux-ubuntu2404-arm64-clang-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
-            "sha256": "11e65437002c8775e160799e40f11dd8b76eceeb9cebb5488eecfb35e35c0691",
-            "revision": "69a646939903e8be072de7b9085d4a423910904a",
-            "tag": "v0.8.0",
+            "sha256": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0",
+            "revision": "80442364840eaef8df77cf97c3f0d100003c403c",
+            "tag": "v0.8.1",
             "upstream": "gnustep/tools-xctest",
             "upstream_url": "https://github.com/gnustep/tools-xctest",
             "fork": "danjboyd/tools-xctest",
@@ -1086,7 +1086,7 @@
             "provides_natively": [
               "add-apple-style-xctest-cli-filters"
             ],
-            "provides_natively_notes": "v0.8.0 implements Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
+            "provides_natively_notes": "v0.8.0 and later implement Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
           },
           "patches": []
         },
@@ -1103,16 +1103,16 @@
           "toolchain_flavor": "msys2-clang64",
           "format": "zip",
           "publish": false,
-          "status": "built_v0.8.0_pending_hosting",
-          "notes": "Built from danjboyd/tools-xctest v0.8.0 (69a6469) with the gnustep-cli v0.1.7 managed toolchain in CI run 43917997046; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated.",
-          "sha256": "186c626196dc1fcc89fd2fef96666765a9468b28863bfebebab34c36d452aed4",
-          "build_evidence": "docs/validation/tools-xctest-v0.8.0-20261116/tools-xctest-windows-amd64-msys2-clang64-build.json",
+          "status": "built_v0.8.1_pending_hosting",
+          "notes": "Built from danjboyd/tools-xctest v0.8.1 (8044236) with the gnustep-cli v0.1.8 managed toolchain in CI run 44167466377; upstream regression and CLI suite passed; xctest --help lists -only-testing:/-skip-testing:. Not publishable until hosted (url) and dogfood-validated. Ships xctest.make and xctest-bundle (#82).",
+          "sha256": "626b9a0d436de2d881f568e209c82ccb73328301b2428db9b7a9448228c9b344",
+          "build_evidence": "docs/validation/tools-xctest-v0.8.1-xctest-make-20261117/tools-xctest-windows-amd64-msys2-clang64-build.json",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
-            "sha256": "11e65437002c8775e160799e40f11dd8b76eceeb9cebb5488eecfb35e35c0691",
-            "revision": "69a646939903e8be072de7b9085d4a423910904a",
-            "tag": "v0.8.0",
+            "sha256": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0",
+            "revision": "80442364840eaef8df77cf97c3f0d100003c403c",
+            "tag": "v0.8.1",
             "upstream": "gnustep/tools-xctest",
             "upstream_url": "https://github.com/gnustep/tools-xctest",
             "fork": "danjboyd/tools-xctest",
@@ -1124,7 +1124,7 @@
             "provides_natively": [
               "add-apple-style-xctest-cli-filters"
             ],
-            "provides_natively_notes": "v0.8.0 implements Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
+            "provides_natively_notes": "v0.8.0 and later implement Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
           },
           "patches": []
         },
@@ -1141,14 +1141,14 @@
           "toolchain_flavor": "clang",
           "format": "tar.gz",
           "publish": false,
-          "status": "not_planned_for_v0.8.0",
-          "notes": "OpenBSD needs Oracle test machines; not built for v0.8.0.",
+          "status": "not_planned_for_v0.8.1",
+          "notes": "OpenBSD needs Oracle test machines; not built for v0.8.1.",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
-            "sha256": "11e65437002c8775e160799e40f11dd8b76eceeb9cebb5488eecfb35e35c0691",
-            "revision": "69a646939903e8be072de7b9085d4a423910904a",
-            "tag": "v0.8.0",
+            "sha256": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0",
+            "revision": "80442364840eaef8df77cf97c3f0d100003c403c",
+            "tag": "v0.8.1",
             "upstream": "gnustep/tools-xctest",
             "upstream_url": "https://github.com/gnustep/tools-xctest",
             "fork": "danjboyd/tools-xctest",
@@ -1160,7 +1160,7 @@
             "provides_natively": [
               "add-apple-style-xctest-cli-filters"
             ],
-            "provides_natively_notes": "v0.8.0 implements Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
+            "provides_natively_notes": "v0.8.0 and later implement Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
           },
           "patches": []
         },
@@ -1177,14 +1177,14 @@
           "toolchain_flavor": "clang",
           "format": "tar.gz",
           "publish": false,
-          "status": "not_planned_for_v0.8.0",
-          "notes": "OpenBSD needs Oracle test machines; not built for v0.8.0.",
+          "status": "not_planned_for_v0.8.1",
+          "notes": "OpenBSD needs Oracle test machines; not built for v0.8.1.",
           "source": {
             "type": "git",
             "url": "https://github.com/danjboyd/tools-xctest.git",
-            "sha256": "11e65437002c8775e160799e40f11dd8b76eceeb9cebb5488eecfb35e35c0691",
-            "revision": "69a646939903e8be072de7b9085d4a423910904a",
-            "tag": "v0.8.0",
+            "sha256": "7f75eb0b0415f9e93ddfd759cbd96eb30a51f8d9440d528d4dfe640c33350ce0",
+            "revision": "80442364840eaef8df77cf97c3f0d100003c403c",
+            "tag": "v0.8.1",
             "upstream": "gnustep/tools-xctest",
             "upstream_url": "https://github.com/gnustep/tools-xctest",
             "fork": "danjboyd/tools-xctest",
@@ -1196,7 +1196,7 @@
             "provides_natively": [
               "add-apple-style-xctest-cli-filters"
             ],
-            "provides_natively_notes": "v0.8.0 implements Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
+            "provides_natively_notes": "v0.8.0 and later implement Apple-style -only-testing:/-skip-testing: itself (fork CHANGELOG 0.2-0.4), so the downstream patch that added them is no longer carried. The package build still checks that xctest --help lists both filters."
           },
           "patches": []
         }

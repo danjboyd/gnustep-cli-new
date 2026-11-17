@@ -50,8 +50,8 @@ class PackageRepositoryTests(unittest.TestCase):
         self.assertEqual(package["build"]["backend"], "gnustep-cli")
         artifact = next(artifact for artifact in package["artifacts"] if artifact["id"] == "tools-xctest-linux-amd64-clang")
         self.assertEqual(artifact["source"]["tracking_strategy"], "tagged-fork-release")
-        self.assertEqual(artifact["source"]["tag"], "v0.8.0")
-        self.assertEqual(artifact["source"]["revision"], "69a646939903e8be072de7b9085d4a423910904a")
+        self.assertEqual(artifact["source"]["tag"], "v0.8.1")
+        self.assertEqual(artifact["source"]["revision"], "80442364840eaef8df77cf97c3f0d100003c403c")
         self.assertEqual(artifact["patches"], [])
 
     def test_package_index_records_runtime_component_profiles(self):
