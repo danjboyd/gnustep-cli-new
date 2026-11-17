@@ -11,7 +11,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from gnustep_cli_shared.doctor_engine import _managed_root_in_use, build_doctor_payload
+from gnustep_cli_shared.doctor_engine import _managed_root_in_use, _upgrade_backups_check, build_doctor_payload
 
 
 def _managed_root(base: Path, name: str = "managed", status: str = "healthy") -> Path:
@@ -70,6 +70,89 @@ class ManagedRootInUseTests(unittest.TestCase):
     def test_the_root_itself_is_not_a_toolchain_inside_it(self):
         root = _managed_root(self.base)
         self.assertIsNone(_managed_root_in_use(str(root), self.state(root)))
+
+
+class UpgradeBackupsCheckTests(unittest.TestCase):
+    """#80: doctor reports the upgrade backups beside the root and which one rollback uses."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self.tmp.name).resolve()
+        self.root = _managed_root(self.base)
+        self.state_path = self.root / "state" / "cli-state.json"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def backup(self, name: str, size: int, root_name: str = "managed") -> Path:
+        path = self.base / f".{root_name}.setup-backup-{name}"
+        (path / "bin").mkdir(parents=True)
+        (path / "bin" / "gnustep").write_bytes(b"x" * size)
+        return path
+
+    def record_rollback(self, path: Path) -> None:
+        self.state_path.write_text(json.dumps({"schema_version": 1, "status": "healthy", "previous_release_path": str(path)}))
+
+    def test_no_backups(self):
+        check = _upgrade_backups_check(self.state_path)
+        self.assertEqual(check.status, "ok")
+        self.assertEqual(check.message, "No upgrade backups were found beside the managed install.")
+        self.assertEqual(check.details["backups"], [])
+
+    def test_only_the_backup_rollback_uses(self):
+        kept = self.backup("b", 1000)
+        self.record_rollback(kept)
+        check = _upgrade_backups_check(self.state_path)
+        self.assertEqual(check.status, "ok")
+        self.assertEqual(check.message, f"One upgrade backup is kept for `gnustep setup rollback`: {kept}.")
+        self.assertEqual(check.details["backups"], [{"path": str(kept), "size_bytes": 1000, "used_by_rollback": True}])
+        self.assertEqual(check.details["removable_paths"], [])
+
+    def test_older_backups_are_a_warning_with_sizes(self):
+        older = self.backup("a", 1500000)
+        kept = self.backup("b", 1000)
+        self.record_rollback(kept)
+        check = _upgrade_backups_check(self.state_path)
+        self.assertEqual(check.status, "warning")
+        self.assertEqual(check.details["removable_paths"], [str(older)])
+        self.assertEqual(check.details["removable_bytes"], 1500000)
+        self.assertEqual(check.details["rollback_backup"], str(kept))
+        self.assertEqual(
+            check.message,
+            f"1 older upgrade backup(s) beside the managed install use 1.5 MB and can be removed (rollback uses only {kept}): {older}",
+        )
+
+    def test_backups_without_a_recorded_rollback_are_all_removable(self):
+        older = self.backup("a", 10)
+        check = _upgrade_backups_check(self.state_path)
+        self.assertEqual(check.status, "warning")
+        self.assertIsNone(check.details["rollback_backup"])
+        self.assertTrue(check.message.startswith("1 older upgrade backup(s) beside the managed install use 0.0 MB and can be removed: "))
+        self.assertEqual(check.details["removable_paths"], [str(older)])
+
+    def test_unrelated_paths_are_ignored(self):
+        self.backup("x", 10, root_name="other")
+        (self.base / ".managed.setup-backup-").mkdir()
+        (self.base / ".managed.setup-backup-file").write_text("not a directory")
+        target = self.base / "elsewhere"
+        (target / "big").mkdir(parents=True)
+        os.symlink(target, self.base / ".managed.setup-backup-link")
+        kept = self.backup("b", 10)
+        # A symlink inside a backup is not followed when sizing it.
+        os.symlink(target, kept / "linked")
+        (target / "big" / "data").write_bytes(b"y" * 5000)
+        self.record_rollback(kept)
+        check = _upgrade_backups_check(self.state_path)
+        self.assertEqual(check.status, "ok")
+        self.assertEqual(check.details["backups"], [{"path": str(kept), "size_bytes": 10, "used_by_rollback": True}])
+
+    def test_no_or_unreadable_state(self):
+        self.assertEqual(_upgrade_backups_check(None).status, "not_run")
+        self.state_path.write_text("{not json")
+        self.backup("a", 10)
+        check = _upgrade_backups_check(self.state_path)
+        self.assertEqual(check.status, "warning")
+        self.assertIsNone(check.details["rollback_backup"])
 
 
 class DoctorManagedWordingTests(unittest.TestCase):

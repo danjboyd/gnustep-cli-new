@@ -6,6 +6,7 @@ import os
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 from datetime import date
@@ -482,6 +483,81 @@ def _managed_install_integrity_check(environment: dict[str, Any], *, interface: 
     )
 
 
+def setup_backup_paths(root: Path) -> list[Path]:
+    """The backups of this root that upgrades left beside it: real directories named
+    .<root>.setup-backup-<id>. Symlinks and anything else are never included."""
+    prefix = f".{root.name}.setup-backup-"
+    try:
+        entries = sorted(root.parent.iterdir())
+    except OSError:
+        return []
+    return [
+        path for path in entries
+        if path.name.startswith(prefix) and len(path.name) > len(prefix)
+        and not path.is_symlink() and path.is_dir()
+    ]
+
+
+def _disk_usage(path: Path) -> int:
+    """Bytes in the regular files under path, without following symlinks."""
+    total = 0
+    for directory, _dirs, files in os.walk(path, followlinks=False):
+        for name in files:
+            try:
+                info = os.lstat(os.path.join(directory, name))
+            except OSError:
+                continue
+            if stat.S_ISREG(info.st_mode):
+                total += info.st_size
+    return total
+
+
+def _upgrade_backups_check(state_path: Path | None) -> CheckResult:
+    """Same outcomes as the native doctor (#80): ok with no backups or only the one
+    `gnustep setup rollback` uses; a warning, with sizes, when older ones are left
+    (every upgrade before v0.1.9 left one, and so can an interrupted run)."""
+    check = dict(id="managed.install.backups", title="Look for upgrade backups", severity="warning", interface="full", execution_tier="full_only")
+    if state_path is None:
+        return CheckResult(status="not_run", message="No managed install state was detected on this host.", details={}, **check)
+    try:
+        state = json.loads(state_path.read_text())
+    except Exception:
+        state = {}
+    previous = state.get("previous_release_path") if isinstance(state, dict) else None
+    retained = Path(previous).name if isinstance(previous, str) and previous else None
+    backups: list[dict[str, Any]] = []
+    removable: list[str] = []
+    removable_bytes = 0
+    retained_path = None
+    for path in setup_backup_paths(state_path.parent.parent):
+        size = _disk_usage(path)
+        used = retained is not None and path.name == retained
+        backups.append({"path": str(path), "size_bytes": size, "used_by_rollback": used})
+        if used:
+            retained_path = str(path)
+        else:
+            removable.append(str(path))
+            removable_bytes += size
+    if not removable:
+        message = (
+            f"One upgrade backup is kept for `gnustep setup rollback`: {retained_path}."
+            if retained_path
+            else "No upgrade backups were found beside the managed install."
+        )
+    else:
+        rollback = f" (rollback uses only {retained_path})" if retained_path else ""
+        message = (
+            f"{len(removable)} older upgrade backup(s) beside the managed install use {removable_bytes / 1000000.0:.1f} MB"
+            f" and can be removed{rollback}: {', '.join(removable)}"
+        )
+    return CheckResult(
+        status="warning" if removable else "ok",
+        message=message,
+        details={"backups": backups, "rollback_backup": retained_path, "removable_paths": removable, "removable_bytes": removable_bytes},
+        **check,
+    )
+
+
 BUNDLED_AUTHORITIES_MAX_AGE_DAYS = 365
 _GSTLS_GLOBS = (
     "lib/GNUstep/Libraries/gnustep-base/Versions/*/Resources/GSTLS",
@@ -821,6 +897,11 @@ def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = 
     else:
         checks.append(_full_only_check("toolchain.probe", "Compile/link/run probe", "error"))
     checks.append(managed_integrity)
+    if interface == "bootstrap":
+        checks.append(_full_only_check("managed.install.backups", "Look for upgrade backups", "warning"))
+    else:
+        integrity_state = managed_integrity.details.get("state_path")
+        checks.append(_upgrade_backups_check(Path(integrity_state) if integrity_state and managed_integrity.status != "error" else None))
     bundled_authorities = _bundled_authorities_check(environment, interface=interface)
     checks.append(bundled_authorities)
     if artifact is not None:
