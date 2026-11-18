@@ -178,6 +178,66 @@ class AbiTests(unittest.TestCase):
         self.assertEqual(abi_failures({"y.dll": compare_exports(stock, stock | {"c"})}), [])
 
 
+class StagingTests(unittest.TestCase):
+    TARGET = "windows-amd64-msys2-clang64"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _toolchain_zip(self, gui=b"stock gui"):
+        path = self.dir / "in" / f"gnustep-toolchain-{self.TARGET}-0.1.9.zip"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("gnustep-toolchain-root/clang64/bin/gnustep-gui-0.dll", gui)
+            archive.writestr("gnustep-toolchain-root/clang64/bin/other.dll", b"other")
+        return path
+
+    def _layer_zip(self, toolchain_sha, stock=b"stock gui"):
+        stock_root = self.dir / "stock"
+        _write(stock_root / "clang64/bin/gnustep-gui-0.dll", stock)
+        package = self.dir / "pkg"
+        _write(package / "clang64/bin/gnustep-gui-0.dll", b"patched gui")
+        files, _ = layer_files(stock_root, [package], ["clang64/bin/gnustep-gui-*.dll"])
+        manifest = layer_manifest(self.TARGET, "0.1.9", toolchain_sha, [], files, {})
+        out = self.dir / "carry" / f"gnustep-carry-{self.TARGET}-0.1.9.zip"
+        write_layer(out, manifest, files)
+        return out
+
+    def test_a_layer_is_checked_against_the_toolchain_archive(self):
+        toolchain = self._toolchain_zip()
+        sha = hashlib.sha256(toolchain.read_bytes()).hexdigest()
+        self.assertEqual(carry_layer.verify_against_toolchain(self._layer_zip(sha), toolchain, sha), [])
+        errors = carry_layer.verify_against_toolchain(self._layer_zip("0" * 64, stock=b"other stock"), toolchain, sha)
+        self.assertEqual(len(errors), 2, errors)
+
+    def test_staging_adds_the_layer_only_for_its_toolchain_and_verify_release_checks_it(self):
+        from gnustep_cli_shared.build_infra import stage_release_assets, verify_release_directory
+
+        toolchain = self._toolchain_zip()
+        sha = hashlib.sha256(toolchain.read_bytes()).hexdigest()
+        layer = self._layer_zip(sha)
+        payload = stage_release_assets("0.1.9", self.dir / "out", "https://example.invalid/releases",
+                                       toolchain_inputs={self.TARGET: toolchain}, carry_inputs={self.TARGET: layer.parent})
+        release_dir = self.dir / "out" / "stable" / "0.1.9"
+        manifest = json.loads((release_dir / "release-manifest.json").read_text())
+        carry = [a for a in manifest["releases"][0]["artifacts"] if a["kind"] == "carry-layer"]
+        self.assertEqual(len(carry), 1, payload)
+        self.assertEqual(carry[0]["id"], f"carry-layer-{self.TARGET}")
+        self.assertEqual(carry[0]["requires_toolchain"]["sha256"], sha)
+        self.assertIn(carry[0]["filename"], (release_dir / "SHA256SUMS").read_text())
+        verified = verify_release_directory(release_dir)
+        self.assertTrue(verified["ok"], verified)
+
+        other = self._layer_zip("f" * 64)
+        with self.assertRaisesRegex(ValueError, "does not match its toolchain"):
+            stage_release_assets("0.1.9", self.dir / "out2", "https://example.invalid/releases",
+                                 toolchain_inputs={self.TARGET: toolchain}, carry_inputs={self.TARGET: other})
+
+
 class CommandTests(unittest.TestCase):
     def test_check_accepts_the_repository_carry_json(self):
         self.assertEqual(carry_layer.main(["check", "--carry-json", str(ROOT / "toolchains" / "carry" / "carry.json")]), 0)

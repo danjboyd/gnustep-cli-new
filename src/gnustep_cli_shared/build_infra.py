@@ -4006,6 +4006,65 @@ def immediate_rc_blocker_status(
     }
 
 
+def _stage_carry_layer(
+    carry_input: str | Path,
+    target: dict[str, Any],
+    version: str,
+    base_url: str,
+    release_dir: Path,
+    toolchain_artifact: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """The patch layer (docs/specs/patch-layer.md) for a target, checked against the
+    toolchain staged with it: only a layer built for exactly that toolchain is staged."""
+    from .carry_layer import verify_against_toolchain
+
+    source = Path(carry_input).resolve()
+    if source.is_dir():
+        found = sorted(source.rglob(f"gnustep-carry-{target['id']}-*.zip"))
+        if len(found) != 1:
+            raise ValueError(f"expected one gnustep-carry-{target['id']}-*.zip under {source}, found {len(found)}")
+        source = found[0]
+    if toolchain_artifact is None or not toolchain_artifact.get("filename"):
+        raise ValueError(f"a patch layer for {target['id']} needs a toolchain staged in the same release")
+    toolchain_path = release_dir / toolchain_artifact["filename"]
+    errors = verify_against_toolchain(source, toolchain_path, toolchain_artifact["sha256"])
+    if errors:
+        raise ValueError(f"patch layer for {target['id']} does not match its toolchain: " + "; ".join(errors))
+    filename = f"gnustep-carry-{target['id']}-{version}.zip"
+    destination = release_dir / filename
+    shutil.copy2(source, destination)
+    digest = _sha256(destination)
+    return {
+        "id": f"carry-layer-{target['id']}",
+        "kind": "carry-layer",
+        "version": version,
+        "os": target["os"],
+        "arch": target["arch"],
+        "compiler_family": target["compiler_family"],
+        "toolchain_flavor": target["toolchain_flavor"],
+        "objc_runtime": "libobjc2" if target["compiler_family"] != "msvc" else "unknown",
+        "objc_abi": "modern" if target["compiler_family"] != "msvc" else "unknown",
+        "required_features": [],
+        "format": "zip",
+        "url": _artifact_url(base_url, version, filename),
+        "sha256": digest,
+        "integrity": {"sha256": digest},
+        "size": destination.stat().st_size,
+        "filename": filename,
+        "supported_distributions": target.get("supported_distributions", []),
+        "supported_os_versions": target.get("supported_os_versions", []),
+        "runtime_requirements": target.get("runtime_requirements", {}),
+        "portability_policy": target.get("portability_policy", "platform-wide"),
+        "published": True,
+        "requires_toolchain": {
+            "artifact_id": toolchain_artifact["id"],
+            "version": toolchain_artifact.get("version"),
+            "sha256": toolchain_artifact["sha256"],
+        },
+        "optional": True,
+    }
+
+
 def stage_release_assets(
     version: str,
     output_dir: str | Path,
@@ -4015,6 +4074,7 @@ def stage_release_assets(
     toolchain_inputs: dict[str, str | Path] | None = None,
     reused_toolchain_artifacts: dict[str, dict[str, Any] | str | Path] | None = None,
     channel: str = "stable",
+    carry_inputs: dict[str, str | Path] | None = None,
 ) -> dict[str, Any]:
     output_root = Path(output_dir).resolve()
     output_root.mkdir(parents=True, exist_ok=True)
@@ -4024,6 +4084,7 @@ def stage_release_assets(
     cli_inputs = cli_inputs or {}
     toolchain_inputs = toolchain_inputs or {}
     reused_toolchain_artifacts = reused_toolchain_artifacts or {}
+    carry_inputs = carry_inputs or {}
     artifacts: list[dict[str, Any]] = []
     checksums: list[dict[str, str]] = []
 
@@ -4125,6 +4186,11 @@ def stage_release_assets(
                     "toolchain_rebuild_required": False,
                     "toolchain_reuse_allowed": True,
                 }
+        carry_input = carry_inputs.get(target["id"])
+        if carry_input is not None:
+            carry = _stage_carry_layer(carry_input, target, version, base_url, release_dir, toolchain_artifact)
+            target_artifacts.append(carry)
+            checksums.append({"filename": carry["filename"], "sha256": carry["sha256"]})
         artifacts.extend(target_artifacts)
 
     manifest = {
@@ -4354,6 +4420,27 @@ def verify_release_directory(release_dir: str | Path) -> dict[str, Any]:
             }
         )
         ok = ok and checksum_ok
+
+    by_id = {artifact.get("id"): artifact for artifact in artifacts}
+    for artifact in artifacts:
+        if artifact.get("kind") != "carry-layer":
+            continue
+        from .carry_layer import CarryError, verify_against_toolchain
+
+        toolchain = by_id.get((artifact.get("requires_toolchain") or {}).get("artifact_id"))
+        layer_path = root / artifact.get("filename", "")
+        errors: list[str] = []
+        if toolchain is None or not toolchain.get("filename") or not (root / toolchain["filename"]).exists():
+            errors.append("the patch layer's toolchain is not in this release")
+        elif not layer_path.exists():
+            errors.append("the patch layer file is missing")
+        else:
+            try:
+                errors = verify_against_toolchain(layer_path, root / toolchain["filename"], toolchain["sha256"])
+            except (CarryError, OSError, ValueError) as error:
+                errors = [str(error)]
+        results.append({"id": artifact.get("id"), "carry_layer_matches_toolchain": not errors, "errors": errors})
+        ok = ok and not errors
 
     package_index_path = root / "package-index.json"
     if package_index_path.exists():

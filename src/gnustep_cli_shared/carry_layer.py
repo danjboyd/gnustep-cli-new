@@ -212,6 +212,65 @@ def write_layer(out_zip: Path, manifest: dict, files: list) -> str:
     return sha256_file(out_zip)
 
 
+def read_layer_manifest(layer_zip: Path) -> dict:
+    with zipfile.ZipFile(layer_zip) as archive:
+        try:
+            return json.loads(archive.read(LAYER_MANIFEST_NAME))
+        except KeyError as error:
+            raise CarryError(f"{layer_zip.name} has no {LAYER_MANIFEST_NAME}") from error
+
+
+def _toolchain_member_digests(toolchain_archive: Path) -> dict:
+    """sha256 of each file in a toolchain archive, keyed by its path below the archive's
+    root (a single top-level directory, as staged toolchains have, is stripped)."""
+    digests = {}
+    if zipfile.is_zipfile(toolchain_archive):
+        with zipfile.ZipFile(toolchain_archive) as archive:
+            members = [(info.filename.replace("\\", "/"), info) for info in archive.infolist() if not info.is_dir()]
+            tops = {name.split("/", 1)[0] for name, _ in members}
+            strip = len(tops) == 1 and all("/" in name for name, _ in members)
+            for name, info in members:
+                key = name.split("/", 1)[1] if strip else name
+                digests[key] = hashlib.sha256(archive.read(info)).hexdigest()
+        return digests
+    import tarfile
+    with tarfile.open(toolchain_archive) as archive:
+        members = [member for member in archive if member.isfile()]
+        names = [member.name.lstrip("./") for member in members]
+        tops = {name.split("/", 1)[0] for name in names}
+        strip = len(tops) == 1 and all("/" in name for name in names)
+        for member, name in zip(members, names):
+            handle = archive.extractfile(member)
+            if handle is not None:
+                digests[name.split("/", 1)[1] if strip else name] = hashlib.sha256(handle.read()).hexdigest()
+    return digests
+
+
+def verify_against_toolchain(layer_zip: Path, toolchain_archive: Path, toolchain_sha256: str) -> list:
+    """Errors if the layer wasn't built for exactly this toolchain archive: its recorded
+    toolchain sha256, and each replaced file's stock_sha256 against the archive's copy."""
+    errors = []
+    layer = read_layer_manifest(layer_zip)
+    if layer.get("requires_toolchain_sha256") != toolchain_sha256:
+        errors.append(f"layer requires toolchain {layer.get('requires_toolchain_sha256')}, staged toolchain is {toolchain_sha256}")
+    digests = _toolchain_member_digests(toolchain_archive)
+    with zipfile.ZipFile(layer_zip) as archive:
+        names = set(archive.namelist())
+        for entry in layer.get("files") or []:
+            path = entry.get("path", "")
+            if path not in names:
+                errors.append(f"{path} is listed but not in the layer")
+            elif hashlib.sha256(archive.read(path)).hexdigest() != entry.get("sha256"):
+                errors.append(f"{path} in the layer does not match its sha256")
+            stock = entry.get("stock_sha256")
+            if stock is None:
+                if path in digests:
+                    errors.append(f"{path} is new in the layer but the toolchain has it")
+            elif digests.get(path) != stock:
+                errors.append(f"{path}: the toolchain's copy is not the stock file the layer replaces")
+    return errors
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
