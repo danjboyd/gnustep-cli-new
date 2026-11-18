@@ -212,6 +212,10 @@ static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
                                   backupPath:(NSString *)backupPath
                                      success:(BOOL)success
                               preserveBackup:(BOOL)preserveBackup;
+- (NSArray *)pruneSetupBackupsForInstallRoot:(NSString *)installRoot keeping:(NSString *)keepPath;
+- (NSArray *)setupBackupPathsForInstallRoot:(NSString *)installRoot;
+- (unsigned long long)diskUsageOfDirectory:(NSString *)path;
+- (NSDictionary *)upgradeBackupsCheckForStatePath:(NSString *)statePath;
 - (NSDictionary *)installedLifecycleStateForInstallRoot:(NSString *)installRoot;
 - (NSString *)normalizedManagedInstallRootPath:(NSString *)installRoot;
 - (BOOL)path:(NSString *)path isInsideDirectory:(NSString *)directory;
@@ -5085,6 +5089,26 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
 
   [self appendInstallTrace: @"doctor.checks.managed-integrity.start"];
   [checks addObject: managedIntegrity];
+  if ([interface isEqualToString: @"bootstrap"] == NO)
+    {
+      NSString *integrityState = [[managedIntegrity objectForKey: @"details"] objectForKey: @"state_path"];
+      BOOL stateFound = [integrityState isKindOfClass: [NSString class]]
+        && [[managedIntegrity objectForKey: @"status"] isEqualToString: @"error"] == NO;
+
+      [checks addObject: [self upgradeBackupsCheckForStatePath: stateFound ? integrityState : nil]];
+    }
+  else
+    {
+      [checks addObject: [self checkWithID: @"managed.install.backups"
+                                     title: @"Look for upgrade backups"
+                                    status: @"not_run"
+                                  severity: @"warning"
+                                   message: @"This check is available in the full CLI only."
+                                 interface: @"full"
+                            executionTier: @"full_only"
+                                   details: [NSDictionary dictionaryWithObject: [NSNumber numberWithBool: YES]
+                                                                        forKey: @"unavailable_in_bootstrap"]]];
+    }
   {
     BOOL windowsHost = NO;
     id makefiles = [toolchain objectForKey: @"gnustep_makefiles"];
@@ -5374,6 +5398,174 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
     }
 
   [manager removeItemAtPath: transactionRoot error: NULL];
+}
+
+// Each upgrade moves the old root aside as .<root>.setup-backup-<uuid> and records it
+// as previous_release_path for rollback. Before v0.1.9 the older backups were never
+// removed, so every upgrade left a full copy of the previous install (toolchain
+// included) beside the root. After a successful upgrade, remove every other backup of
+// this root, keeping only keepPath (the one rollback uses). Only real directories
+// named for this root are touched; symlinks and anything else are left alone. A
+// backup that can't be removed is reported, not fatal: the upgrade has succeeded.
+// The backups of this root that upgrades left beside it: real directories named
+// .<root>.setup-backup-<id>. Symlinks and anything else are never included.
+- (NSArray *)setupBackupPathsForInstallRoot:(NSString *)installRoot
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *root = [self normalizedManagedInstallRootPath: installRoot];
+  NSString *parent = [root stringByDeletingLastPathComponent];
+  NSString *prefix = [NSString stringWithFormat: @".%@.setup-backup-", [root lastPathComponent]];
+  NSArray *entries = [[manager contentsOfDirectoryAtPath: parent error: NULL] sortedArrayUsingSelector: @selector(compare:)];
+  NSMutableArray *paths = [NSMutableArray array];
+  NSEnumerator *enumerator = [entries objectEnumerator];
+  NSString *entry = nil;
+
+  while ((entry = [enumerator nextObject]) != nil)
+    {
+      NSString *path = nil;
+
+      if ([entry hasPrefix: prefix] == NO || [entry length] <= [prefix length])
+        {
+          continue;
+        }
+      path = [parent stringByAppendingPathComponent: entry];
+      // attributesOfItemAtPath: does not traverse a final symlink.
+      if ([[[manager attributesOfItemAtPath: path error: NULL] fileType] isEqualToString: NSFileTypeDirectory])
+        {
+          [paths addObject: path];
+        }
+    }
+  return paths;
+}
+
+- (NSArray *)pruneSetupBackupsForInstallRoot:(NSString *)installRoot keeping:(NSString *)keepPath
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *keepName = [keepPath lastPathComponent];
+  NSMutableArray *results = [NSMutableArray array];
+  NSEnumerator *enumerator = [[self setupBackupPathsForInstallRoot: installRoot] objectEnumerator];
+  NSString *path = nil;
+
+  while ((path = [enumerator nextObject]) != nil)
+    {
+      NSError *error = nil;
+      BOOL removed = NO;
+
+      if (keepName != nil && [[path lastPathComponent] isEqualToString: keepName])
+        {
+          continue;
+        }
+      removed = [manager removeItemAtPath: path error: &error];
+      [results addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                          path, @"path",
+                                          [NSNumber numberWithBool: removed], @"removed",
+                                          (removed || error == nil) ? (id)[NSNull null] : (id)[error localizedDescription], @"error",
+                                          nil]];
+    }
+  return results;
+}
+
+// Bytes in the regular files under path, without following symlinks.
+- (unsigned long long)diskUsageOfDirectory:(NSString *)path
+{
+  NSDirectoryEnumerator *enumerator = [[NSFileManager defaultManager] enumeratorAtPath: path];
+  unsigned long long total = 0;
+
+  while ([enumerator nextObject] != nil)
+    {
+      NSDictionary *attributes = [enumerator fileAttributes];
+
+      if ([[attributes fileType] isEqualToString: NSFileTypeRegular])
+        {
+          total += [attributes fileSize];
+        }
+    }
+  return total;
+}
+
+// Same outcomes as the Python doctor (#80): ok with no backups or only the one
+// `gnustep setup --rollback` uses; a warning, with sizes, when older ones are left
+// (every upgrade before v0.1.9 left one, and so can an interrupted run).
+- (NSDictionary *)upgradeBackupsCheckForStatePath:(NSString *)statePath
+{
+  NSString *root = [[statePath stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
+  NSDictionary *state = nil;
+  NSString *retained = nil;
+  NSString *retainedPath = nil;
+  NSMutableArray *backups = [NSMutableArray array];
+  NSMutableArray *removable = [NSMutableArray array];
+  unsigned long long removableBytes = 0;
+  NSEnumerator *enumerator = nil;
+  NSString *path = nil;
+  NSString *message = nil;
+
+  if (statePath == nil)
+    {
+      return [self checkWithID: @"managed.install.backups"
+                         title: @"Look for upgrade backups"
+                        status: @"not_run"
+                      severity: @"warning"
+                       message: @"No managed install state was detected on this host."
+                     interface: @"full"
+                executionTier: @"full_only"
+                       details: [NSDictionary dictionary]];
+    }
+  NS_DURING
+    state = [NSJSONSerialization JSONObjectWithData: [NSData dataWithContentsOfFile: statePath] options: 0 error: NULL];
+  NS_HANDLER
+    state = nil;
+  NS_ENDHANDLER
+  if ([state isKindOfClass: [NSDictionary class]] && [[state objectForKey: @"previous_release_path"] isKindOfClass: [NSString class]])
+    {
+      retained = [[state objectForKey: @"previous_release_path"] lastPathComponent];
+    }
+  enumerator = [[self setupBackupPathsForInstallRoot: root] objectEnumerator];
+  while ((path = [enumerator nextObject]) != nil)
+    {
+      unsigned long long bytes = [self diskUsageOfDirectory: path];
+      BOOL isRetained = (retained != nil && [[path lastPathComponent] isEqualToString: retained]);
+
+      [backups addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                          path, @"path",
+                                          [NSNumber numberWithUnsignedLongLong: bytes], @"size_bytes",
+                                          [NSNumber numberWithBool: isRetained], @"used_by_rollback",
+                                          nil]];
+      if (isRetained)
+        {
+          retainedPath = path;
+        }
+      else
+        {
+          [removable addObject: path];
+          removableBytes += bytes;
+        }
+    }
+  if ([removable count] == 0)
+    {
+      message = retainedPath
+        ? [NSString stringWithFormat: @"One upgrade backup is kept for `gnustep setup --rollback`: %@.", retainedPath]
+        : @"No upgrade backups were found beside the managed install.";
+    }
+  else
+    {
+      message = [NSString stringWithFormat: @"%lu older upgrade backup(s) beside the managed install use %.1f MB and can be removed%@: %@",
+                          (unsigned long)[removable count], removableBytes / 1000000.0,
+                          retainedPath ? [NSString stringWithFormat: @" (rollback uses only %@)", retainedPath] : @"",
+                          [removable componentsJoinedByString: @", "]];
+    }
+  return [self checkWithID: @"managed.install.backups"
+                     title: @"Look for upgrade backups"
+                    status: ([removable count] == 0 ? @"ok" : @"warning")
+                  severity: @"warning"
+                   message: message
+                 interface: @"full"
+            executionTier: @"full_only"
+                   details: [NSDictionary dictionaryWithObjectsAndKeys:
+                                            backups, @"backups",
+                                            (retainedPath ? (id)retainedPath : (id)[NSNull null]), @"rollback_backup",
+                                            removable, @"removable_paths",
+                                            [NSNumber numberWithUnsignedLongLong: removableBytes], @"removable_bytes",
+                                            nil]];
 }
 
 // Put the pre-setup snapshot back after a failed setup or upgrade. Every step is
@@ -7548,6 +7740,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
     NSDictionary *toolchainArtifact = nil;
     NSDictionary *installedState = nil;
     BOOL transactionStarted = NO;
+    NSArray *prunedBackups = [NSArray array];
     BOOL windowsPointerOnlyUpgrade = NO;
     NSUInteger j = 0;
 
@@ -7908,6 +8101,10 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
     if (transactionStarted)
       {
         [self finishSetupTransactionForInstallRoot: installPath backupPath: backupPath success: YES preserveBackup: upgradeMode];
+        if (upgradeMode && backupPath != nil)
+          {
+            prunedBackups = [self pruneSetupBackupsForInstallRoot: installPath keeping: backupPath];
+          }
       }
     *exitCode = 0;
     return [NSDictionary dictionaryWithObjectsAndKeys:
@@ -7938,6 +8135,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                                           installPath, @"install_root",
                                           activeReleasePath ? activeReleasePath : installPath, @"active_release_path",
                                           backupPath ? backupPath : [NSNull null], @"previous_release_path",
+                                          prunedBackups, @"pruned_backups",
                                           nil], @"install",
                           nil];
   }
