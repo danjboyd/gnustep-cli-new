@@ -438,8 +438,8 @@
       "path": "libs-gui/msys2-0.32.0/0004-GSTheme-capture-override-originals-at-activation.patch",
       "sha256": "9dd374fb1f76db25774f1ca46ae470a27f91e83118f1bb29f7a535f5d859ac58",
       "summary": "GSTheme: record a theme's override originals at activation, so a live switch between two themes no longer recurses until the stack overflows",
-      "source": "apt_portstree packaging/gnustep/libs/gnustep-clang-libs-gui/patches/0012 (5477c5230, 0.32 port of libs-gui master 8c285f3; gnustep's backport e6fd411ab gives identical files)",
-      "upstream": "libs-gui #100 (8c285f3); 0.32 backport upstream review pending",
+      "source": "apt_portstree packaging/gnustep/libs/gnustep-clang-libs-gui/patches/0012 (5477c5230, 0.32 port of the proposed master fix 8c285f3)",
+      "upstream": "master fix proposed as libs-gui #100 (8c285f3), awaiting review, not posted; the 0.32 backport is local (gnustep's e6fd411ab gives the same GSTheme.m, blob 993eb03a)",
       "defaults": [],
       "abi": "none expected (GSTheme.m internals only)",
       "requested_by": [

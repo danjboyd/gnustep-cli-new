@@ -54,7 +54,7 @@ These stay in the stock toolchain: they're security or build fixes that every us
 | libs-gui | GSLayoutManager: compile out the glyph-run sanity check (#94, quadratic layout) | ObjcMarkdown | same | reported as gnustep/libs-gui#992 (issue); patch not sent |
 | libs-gui | GSTheme: the theme sets `GSBackHandlesWindowDecorations` before the backend reads it | ObjcMarkdown | same | prepared in plugins-themes-Adwaita#13; not sent |
 | libs-gui | `3f5efad1`: NSScrollView stops re-tiling without end with `autohidesScrollers` (#121) | ObjcMarkdown | same | upstream commit, newer than 0.32.0 |
-| libs-gui | GSTheme: record override originals at activation, so a live theme switch no longer recurses until the stack overflows (stock 0.32 crashes `0xC00000FD` switching WinUITheme and Gumdrop, 4 of 5 cases) | **nobody yet**; found by WinUITheme 2026-11-18; Adwaita carries it on Linux (csd8) | apt_portstree libs-gui 0012 (`5477c5230`) | libs-gui master `8c285f3` (#100); 0.32 backport `e6fd411ab` gives identical files |
+| libs-gui | GSTheme: record override originals at activation, so a live theme switch no longer recurses until the stack overflows (stock 0.32 crashes `0xC00000FD` switching WinUITheme and Gumdrop, 4 of 5 cases) | **nobody yet**; found by WinUITheme 2026-11-18; Adwaita carries it on Linux (csd8) | apt_portstree libs-gui 0012 (`5477c5230`) | master fix proposed as #100 (`8c285f3`), awaiting Dan's review, **not posted**; 0.32 backport local (`e6fd411ab` gives identical files). Retire when a built release contains the master fix. |
 | libs-base | `bace6f54` | ObjcMarkdown | same | identical to ours |
 
 ### Linux (AppImages, Flatpak, CI images)
