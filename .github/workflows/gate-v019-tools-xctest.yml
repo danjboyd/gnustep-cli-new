@@ -66,6 +66,8 @@ jobs:
       - name: Qualify as an unprivileged user
         run: |
           useradd -m -s /bin/sh gsqual
+          # The bootstrap installs host prerequisites with sudo, as on a user's machine.
+          printf 'gsqual ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/gsqual
           cp -R "$GITHUB_WORKSPACE" /qual/repo
           mkdir -p /qual/out && chown -R gsqual /qual
           pkg=$(ls /qual/xctest/tools-xctest-${{ matrix.target }}-0.8.1.tar.gz)
