@@ -218,6 +218,7 @@ static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
 - (NSDictionary *)upgradeBackupsCheckForStatePath:(NSString *)statePath;
 - (NSDictionary *)installedLifecycleStateForInstallRoot:(NSString *)installRoot;
 - (NSString *)normalizedManagedInstallRootPath:(NSString *)installRoot;
+- (BOOL)path:(NSString *)path isInsideDirectory:(NSString *)directory;
 - (NSDate *)dateFromManifestTimestamp:(NSString *)timestamp;
 - (BOOL)manifestMetadataPolicyAllowsManifest:(NSDictionary *)manifest error:(NSString **)errorMessage;
 - (BOOL)manifest:(NSDictionary *)manifest revokesArtifacts:(NSArray *)artifacts error:(NSString **)errorMessage;
@@ -5658,6 +5659,24 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
   return root;
 }
 
+// YES when path is strictly below directory. Separators are unified and, on
+// Windows, case is ignored, as the file system does.
+- (BOOL)path:(NSString *)path isInsideDirectory:(NSString *)directory
+{
+  NSString *child = [[self normalizedManagedInstallRootPath: path] stringByStandardizingPath];
+  NSString *parent = [[self normalizedManagedInstallRootPath: directory] stringByStandardizingPath];
+
+#if defined(_WIN32) || defined(__MINGW32__) || defined(__MINGW64__)
+  child = [[child stringByReplacingOccurrencesOfString: @"\\" withString: @"/"] lowercaseString];
+  parent = [[parent stringByReplacingOccurrencesOfString: @"\\" withString: @"/"] lowercaseString];
+#endif
+  if ([parent hasSuffix: @"/"] == NO)
+    {
+      parent = [parent stringByAppendingString: @"/"];
+    }
+  return [child hasPrefix: parent];
+}
+
 - (BOOL)dictionaryArray:(NSArray *)values containsString:(NSString *)candidate
 {
   if ([values isKindOfClass: [NSArray class]] == NO || candidate == nil)
@@ -7197,6 +7216,8 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
   NSString *previous = [state objectForKey: @"previous_release_path"];
   NSString *statePath = [[root stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
   NSMutableDictionary *rolledBackState = nil;
+  NSString *asidePath = nil;
+  NSString *leftover = nil;
 
   if ([previous isKindOfClass: [NSString class]] == NO || [manager fileExistsAtPath: previous] == NO)
     {
@@ -7208,11 +7229,63 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                                  data: [NSDictionary dictionaryWithObjectsAndKeys: root, @"install_root", state, @"installed_state", nil]];
     }
 
-  [manager removeItemAtPath: root error: NULL];
-  if ([manager moveItemAtPath: previous toPath: root error: NULL] == NO)
+  // A Windows pointer-only upgrade records a release inside the root as the previous
+  // release. Swapping the whole root can't restore that, and deleting the root would
+  // delete it too, so refuse rather than touch the install.
+  if ([self path: previous isInsideDirectory: root])
+    {
+      *exitCode = 3;
+      return [self payloadWithCommand: @"setup"
+                                   ok: NO
+                               status: @"error"
+                              summary: @"The previous release is inside the install root (a pointer-only upgrade); rollback of that kind isn't supported yet. Nothing was changed."
+                                 data: [NSDictionary dictionaryWithObjectsAndKeys: root, @"install_root", previous, @"previous_release_path", nil]];
+    }
+
+  // Swap, don't delete: move the current root aside to a sibling, then move the
+  // previous release in. On Windows the running gnustep.exe lives in the root and
+  // can't be deleted, so deleting the root first (as this used to) failed part-way
+  // and the move then failed too (#84). Renaming the directory works there, the way
+  // the upgrade's own snapshot does. If the move in fails, the root is put back.
+  // The set-aside root is then deleted; if that fails (the running binary on
+  // Windows) it keeps a setup-backup name, so doctor reports it and the next
+  // update prunes it.
+  asidePath = [self setupBackupPathForInstallRoot: root];
+  if ([self injectedSetupFailureAtStep: @"rollback-aside" error: NULL]
+      || [manager moveItemAtPath: root toPath: asidePath error: NULL] == NO)
     {
       *exitCode = 1;
-      return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: @"Failed to restore previous managed release." data: nil];
+      return [self payloadWithCommand: @"setup"
+                                   ok: NO
+                               status: @"error"
+                              summary: @"Failed to restore previous managed release: the current install root could not be moved aside. Nothing was changed."
+                                 data: [NSDictionary dictionaryWithObjectsAndKeys: root, @"install_root", previous, @"previous_release_path", nil]];
+    }
+  if ([self injectedSetupFailureAtStep: @"rollback-move" error: NULL]
+      || [manager moveItemAtPath: previous toPath: root error: NULL] == NO)
+    {
+      BOOL restored = [manager fileExistsAtPath: root] == NO
+        && [manager moveItemAtPath: asidePath toPath: root error: NULL];
+      *exitCode = 1;
+      return [self payloadWithCommand: @"setup"
+                                   ok: NO
+                               status: @"error"
+                              summary: restored
+                                ? @"Failed to restore previous managed release; the current install was put back unchanged."
+                                : [NSString stringWithFormat: @"Failed to restore previous managed release, and the current install could not be put back: it is at %@. Move it back to %@ to recover.", asidePath, root]
+                                 data: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                       root, @"install_root",
+                                                       previous, @"previous_release_path",
+                                                       [NSNumber numberWithBool: restored], @"current_restored",
+                                                       nil]];
+    }
+  if ([self injectedSetupFailureAtStep: @"rollback-cleanup" error: NULL] == NO)
+    {
+      [manager removeItemAtPath: asidePath error: NULL];
+    }
+  if ([manager fileExistsAtPath: asidePath])
+    {
+      leftover = asidePath;
     }
 
   rolledBackState = [[[self installedLifecycleStateForInstallRoot: root] mutableCopy] autorelease];
@@ -7235,6 +7308,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                         @"rollback", @"operation",
                         root, @"install_root",
                         previous, @"restored_from",
+                        leftover ? leftover : [NSNull null], @"replaced_release_left_at",
                         nil];
 }
 

@@ -1908,6 +1908,157 @@
   XCTAssertEqualObjects([state objectForKey: @"status"], @"healthy");
 }
 
+// Fixture for the rollback tests: <tempRoot>/managed-root holds the current (0.1.2)
+// install with new.txt, and previous_release_path names the 0.1.1 tree holding old.txt.
+- (NSString *)makeRollbackFixtureIn:(NSString *)tempRoot previousPath:(NSString *)previous
+{
+  NSString *installRoot = [tempRoot stringByAppendingPathComponent: @"managed-root"];
+  NSString *backupRoot = previous ? previous : [tempRoot stringByAppendingPathComponent: @"managed-backup"];
+  NSString *statePath = [[installRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+  NSString *backupStatePath = [[backupRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+
+  [self ensureDirectory: [statePath stringByDeletingLastPathComponent]];
+  [self ensureDirectory: [backupStatePath stringByDeletingLastPathComponent]];
+  [@"new" writeToFile: [installRoot stringByAppendingPathComponent: @"new.txt"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [@"old" writeToFile: [backupRoot stringByAppendingPathComponent: @"old.txt"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               @"0.1.2", @"cli_version",
+                                               backupRoot, @"previous_release_path",
+                                               @"upgrade", @"last_action",
+                                               @"healthy", @"status",
+                                               nil]
+                       toPath: statePath];
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               @"0.1.1", @"cli_version",
+                                               @"setup", @"last_action",
+                                               @"healthy", @"status",
+                                               nil]
+                       toPath: backupStatePath];
+  return installRoot;
+}
+
+- (NSDictionary *)runRollbackForInstallRoot:(NSString *)installRoot failingStep:(NSString *)step exitCode:(int *)exitCode
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  GSCommandContext *context = [GSCommandContext contextWithArguments:
+                                                [NSArray arrayWithObjects: @"setup", @"--rollback", @"--root", installRoot, nil]];
+  NSDictionary *payload = nil;
+
+  if (step != nil)
+    {
+      setenv("GNUSTEP_CLI_TEST_FAIL_SETUP_STEP", [step UTF8String], 1);
+    }
+  payload = [runner executeSetupForContext: context exitCode: exitCode];
+  unsetenv("GNUSTEP_CLI_TEST_FAIL_SETUP_STEP");
+  return payload;
+}
+
+- (NSArray *)setupBackupsBesideInstallRoot:(NSString *)installRoot
+{
+  NSString *prefix = [NSString stringWithFormat: @".%@.setup-backup-", [installRoot lastPathComponent]];
+  NSArray *entries = [[NSFileManager defaultManager] contentsOfDirectoryAtPath: [installRoot stringByDeletingLastPathComponent] error: NULL];
+  NSMutableArray *matches = [NSMutableArray array];
+  NSEnumerator *enumerator = [entries objectEnumerator];
+  NSString *entry = nil;
+
+  while ((entry = [enumerator nextObject]) != nil)
+    {
+      if ([entry hasPrefix: prefix])
+        {
+          [matches addObject: [[installRoot stringByDeletingLastPathComponent] stringByAppendingPathComponent: entry]];
+        }
+    }
+  return matches;
+}
+
+// #84: rollback swaps the roots instead of deleting the current one first, and
+// cleans up the replaced root when it can.
+- (void)testSetupRollbackSwapsRootsAndRemovesTheReplacedRoot
+{
+  NSString *installRoot = [self makeRollbackFixtureIn: [self temporaryPathComponent: @"rollback-swap"] previousPath: nil];
+  NSString *backupRoot = [[installRoot stringByDeletingLastPathComponent] stringByAppendingPathComponent: @"managed-backup"];
+  int exitCode = -1;
+  NSDictionary *payload = [self runRollbackForInstallRoot: installRoot failingStep: nil exitCode: &exitCode];
+  NSFileManager *manager = [NSFileManager defaultManager];
+
+  XCTAssertEqual(exitCode, 0, @"%@", payload);
+  XCTAssertTrue([manager fileExistsAtPath: [installRoot stringByAppendingPathComponent: @"old.txt"]]);
+  XCTAssertFalse([manager fileExistsAtPath: backupRoot]);
+  XCTAssertEqualObjects([payload objectForKey: @"replaced_release_left_at"], [NSNull null]);
+  XCTAssertEqual([[self setupBackupsBesideInstallRoot: installRoot] count], (NSUInteger)0);
+}
+
+// On Windows the running gnustep.exe keeps the replaced root from being deleted.
+// Rollback still succeeds, and the leftover keeps a setup-backup name so doctor
+// reports it and the next update prunes it.
+- (void)testSetupRollbackSucceedsWhenTheReplacedRootCannotBeDeleted
+{
+  NSString *installRoot = [self makeRollbackFixtureIn: [self temporaryPathComponent: @"rollback-locked-current"] previousPath: nil];
+  int exitCode = -1;
+  NSDictionary *payload = [self runRollbackForInstallRoot: installRoot failingStep: @"rollback-cleanup" exitCode: &exitCode];
+  NSArray *leftovers = [self setupBackupsBesideInstallRoot: installRoot];
+  NSString *leftover = [leftovers count] == 1 ? [leftovers objectAtIndex: 0] : nil;
+  NSDictionary *state = [[[[GSCommandRunner alloc] init] autorelease] installedLifecycleStateForInstallRoot: installRoot];
+
+  XCTAssertEqual(exitCode, 0, @"%@", payload);
+  XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: [installRoot stringByAppendingPathComponent: @"old.txt"]]);
+  XCTAssertEqualObjects([state objectForKey: @"last_action"], @"rollback");
+  XCTAssertNotNil(leftover, @"%@", leftovers);
+  XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: [leftover stringByAppendingPathComponent: @"new.txt"]]);
+  XCTAssertEqualObjects([payload objectForKey: @"replaced_release_left_at"], leftover);
+}
+
+// If the previous release can't be moved in, the current install is put back.
+- (void)testSetupRollbackPutsTheCurrentRootBackWhenTheMoveInFails
+{
+  NSString *installRoot = [self makeRollbackFixtureIn: [self temporaryPathComponent: @"rollback-move-fails"] previousPath: nil];
+  NSString *backupRoot = [[installRoot stringByDeletingLastPathComponent] stringByAppendingPathComponent: @"managed-backup"];
+  int exitCode = -1;
+  NSDictionary *payload = [self runRollbackForInstallRoot: installRoot failingStep: @"rollback-move" exitCode: &exitCode];
+  NSDictionary *state = [[[[GSCommandRunner alloc] init] autorelease] installedLifecycleStateForInstallRoot: installRoot];
+
+  XCTAssertEqual(exitCode, 1);
+  XCTAssertFalse([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertTrue([[[payload objectForKey: @"data"] objectForKey: @"current_restored"] boolValue], @"%@", payload);
+  XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: [installRoot stringByAppendingPathComponent: @"new.txt"]]);
+  XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: [backupRoot stringByAppendingPathComponent: @"old.txt"]]);
+  XCTAssertEqualObjects([state objectForKey: @"cli_version"], @"0.1.2");
+  XCTAssertEqualObjects([state objectForKey: @"previous_release_path"], backupRoot);
+  XCTAssertEqual([[self setupBackupsBesideInstallRoot: installRoot] count], (NSUInteger)0);
+}
+
+- (void)testSetupRollbackChangesNothingWhenTheCurrentRootCannotBeMovedAside
+{
+  NSString *installRoot = [self makeRollbackFixtureIn: [self temporaryPathComponent: @"rollback-aside-fails"] previousPath: nil];
+  int exitCode = -1;
+  NSDictionary *payload = [self runRollbackForInstallRoot: installRoot failingStep: @"rollback-aside" exitCode: &exitCode];
+
+  XCTAssertEqual(exitCode, 1);
+  XCTAssertFalse([[payload objectForKey: @"ok"] boolValue]);
+  XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: [installRoot stringByAppendingPathComponent: @"new.txt"]]);
+  XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: [installRoot stringByAppendingPathComponent: @"old.txt"]]);
+}
+
+// A Windows pointer-only upgrade records a release inside the root. The old code
+// deleted the whole root, that release included; now rollback refuses and changes nothing.
+- (void)testSetupRollbackRefusesAPreviousReleaseInsideTheRoot
+{
+  NSString *tempRoot = [self temporaryPathComponent: @"rollback-pointer-only"];
+  NSString *installRoot = [tempRoot stringByAppendingPathComponent: @"managed-root"];
+  NSString *inside = [[installRoot stringByAppendingPathComponent: @"releases"] stringByAppendingPathComponent: @"0.1.1"];
+  int exitCode = -1;
+  NSDictionary *payload = nil;
+
+  [self makeRollbackFixtureIn: tempRoot previousPath: inside];
+  payload = [self runRollbackForInstallRoot: installRoot failingStep: nil exitCode: &exitCode];
+
+  XCTAssertEqual(exitCode, 3, @"%@", payload);
+  XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: [installRoot stringByAppendingPathComponent: @"new.txt"]]);
+  XCTAssertTrue([[NSFileManager defaultManager] fileExistsAtPath: [inside stringByAppendingPathComponent: @"old.txt"]]);
+}
+
 - (void)testSetupRepairClearsStaleStateAndMarksInterruptedLifecycle
 {
   GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
