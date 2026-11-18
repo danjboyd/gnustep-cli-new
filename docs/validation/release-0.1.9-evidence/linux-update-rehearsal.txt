@@ -1,0 +1,29 @@
+staged manifest served: http://127.0.0.1:18473/download/v0.1.9/release-manifest.json
+== R1 (0.1.8 install, its own CLI, explicit --manifest = staged 0.1.9)
+bootstrap 0.1.8 -> <scratch>/upd/r1-017: exit 0 version 0.1.8
+R1 exit 0 : 0.1.8 -> 0.1.9
+update: All updates completed.
+update: scope=all mode=apply
+== R3 (0.1.9 install, --check against the staged manifest)
+R3 exit 0
+update: scope=all mode=check
+update: available=no
+0.1.9
+bootstrap 0.1.5 -> <scratch>/upd/r2-015: exit 0 version 0.1.5
+== R2 (staged 0.1.9 CLI, default discovery, production Latest, no --manifest, no trust override)
+R2 check exit 0
+update: scope=all mode=check
+update: available=yes
+R2 exit 0 : 0.1.5 -> 0.1.8
+update: All updates completed.
+update: scope=all mode=apply
+== D (doctor on the 0.1.9 install from R1: must recognise the managed install, #53 + #62)
+D integrity=ok managed_root=<scratch>/upd/r1-017 actions=['use_managed_toolchain'] ok=True
+D message: The detected toolchain is the managed install at <scratch>/upd/r1-017.
+== K (#81: after R1's upgrade, exactly one backup of the root)
+boot-0.1.8-r1-017.log r1-017 .r1-017.setup-backup-560F301B-CF27-AE0E-7372-61F2011D40B4 
+== RB (#85: setup --rollback on R1's install returns to 0.1.8, then the CLI works)
+RB exit 0 : now 0.1.8
+0.1.8
+real ~/GNUstep unchanged
+

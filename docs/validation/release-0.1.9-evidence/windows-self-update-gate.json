@@ -1,0 +1,1 @@
+{"expect":"pass","install":{"exit":0,"version":"0.1.9"},"S":{"exit":0,"version_after":"0.1.10","current":"0.1.10","smoke_ok":true,"smoke_failed":false,"launcher_version_exit":0,"launcher_version":"0.1.9","doctor_exit":0,"integrity":"ok","managed_root":"C:\\gnustep-smoke/gate-s-root","passed":true,"ok":true}}
