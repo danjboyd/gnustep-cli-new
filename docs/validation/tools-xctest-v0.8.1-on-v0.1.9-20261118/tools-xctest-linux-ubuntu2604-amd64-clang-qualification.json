@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "command": "tools-xctest-qualification",
+  "ok": true,
+  "status": "ok",
+  "package_id": "org.gnustep.tools-xctest",
+  "artifact_id": "tools-xctest-linux-ubuntu2604-amd64-clang",
+  "target": "linux-ubuntu2604-amd64-clang",
+  "version": "0.8.1",
+  "artifact_sha256": "b115d4a53b252274c88f370745937d4edc25cacd95656451254ecce03a570ce5",
+  "release_under_test": {
+    "version": "0.1.9",
+    "stage_release_run": 44386009191,
+    "source_revision": "314248b",
+    "cli_sha256": "d5766fe1f50bfe69adfdaaf5d774ce5ce7d5f3b08ae13f7babc2cf29b8d7b43f",
+    "toolchain_sha256": "99ed2d212f308830079db9c5d3df91531d0cbcd94fefe97984aaea00088f5e89"
+  },
+  "environment": {
+    "host": "ubuntu:26.04",
+    "user": "unprivileged user in a fresh distro container (sudo only for host prerequisites)"
+  },
+  "run": {
+    "workflow": "gate-v019-tools-xctest.yml (temporary branch gate-v019-windows, never merged)",
+    "run_id": 44402406762,
+    "run_url": "https://github.com/danjboyd/gnustep-cli-new/actions/runs/44402406762",
+    "authorization": "Dan, AIManager ask #8455 (build, stage and test v0.1.9)"
+  },
+  "procedure": "Install the staged v0.1.9 CLI and toolchain; gnustep install org.gnustep.tools-xctest from a throwaway-signed index listing this exact package; build and make check a sample XCTest bundle through the packaged xctest.make (default and explicit XCTEST), check a failing test makes make check fail, run xctest-bundle, then gnustep remove and check nothing is left.",
+  "checks": {
+    "setup": true,
+    "install": true,
+    "include written into $(GNUSTEP_MAKEFILES)/Auxiliary": true,
+    "make check passes": true,
+    "make check with XCTEST set explicitly passes": true,
+    "a failing test makes make check exit nonzero": true,
+    "xctest-bundle bundle runs": true,
+    "remove": true,
+    "remove leaves nothing behind": true
+  }
+}
