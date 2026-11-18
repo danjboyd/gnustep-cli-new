@@ -88,6 +88,15 @@ prepare() {
 
   # clang 23 rejects __block on an instance variable (gnustep/libs-base#809).
   sed -i 's/BLOCK_SCOPE GSScheduledBlock _block;/GSScheduledBlock _block;/' Headers/Foundation/NSBackgroundActivityScheduler.h
+
+  # Patch layer builds only (toolchains/carry, windows-carry-layer.yml): the carried
+  # patches for this base, in order, on top of the stock ones. Unset for the stock package.
+  if [ -n "${CARRY_PATCH_DIR:-}" ]; then
+    local carry_patch
+    for carry_patch in "${CARRY_PATCH_DIR}"/*.patch; do
+      patch -p1 -i "${carry_patch}"
+    done
+  fi
 }
 
 build() {

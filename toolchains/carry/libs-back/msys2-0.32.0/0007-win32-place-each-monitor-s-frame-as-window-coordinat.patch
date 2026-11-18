@@ -1,0 +1,47 @@
+From c778fc1d2efda221fc5c09d23514759c81739d66 Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Wed, 14 Oct 2026 12:46:44 -0500
+Subject: [PATCH 08/14] win32: place each monitor's frame as window coordinates
+ are
+
+W32DisplayMonitorInfo flipped a monitor's y against the monitor's own
+height (h - bottom), while window and event coordinates are flipped
+against the primary monitor's (MSScreenRectToGS(), SM_CYSCREEN).  A
+monitor shorter than the primary, or not level with its top, got the
+wrong NSScreen frame: a 1280x800 monitor beside a 1920x1080 primary,
+top-aligned, came out at y 0-800 instead of 280-1080.
+
+What followed on the secondary monitor: windows there failed
+-[NSWindow screen]'s containment test and took the primary's screen,
+and its scale, so menus and pop-up lists drew at the primary's scale;
+tool tips were clamped to the primary; and pop-ups placed in the
+screen's visible frame went to the wrong place.  The primary monitor,
+and monitors of the same height level with it, are unchanged.
+
+Found checking a two-monitor setup at 100% and 125% on Windows Server
+2025.
+
+AI assistance: this change and its description were written with Claude
+(Anthropic's Claude Code).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/win32/WIN32Server.m | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/Source/win32/WIN32Server.m b/Source/win32/WIN32Server.m
+index a6eb887..45d184e 100644
+--- a/Source/win32/WIN32Server.m
++++ b/Source/win32/WIN32Server.m
+@@ -110,7 +110,10 @@ static unsigned int mask_for_keystate(BYTE *keyState);
+       CGFloat w = lprcMonitor->right - lprcMonitor->left;
+       CGFloat h = lprcMonitor->bottom - lprcMonitor->top;
+       CGFloat x = lprcMonitor->left;
+-      CGFloat y = h - lprcMonitor->bottom;
++      /* Flipped against the primary monitor's height, as window
++         coordinates are (MSScreenRectToGS()): a monitor shorter than the
++         primary, or not level with its top, sits where its windows do. */
++      CGFloat y = GetSystemMetrics(SM_CYSCREEN) - lprcMonitor->bottom;
+ 
+       _hMonitor = hMonitor;
+       _frame = NSMakeRect(x, y, w, h);

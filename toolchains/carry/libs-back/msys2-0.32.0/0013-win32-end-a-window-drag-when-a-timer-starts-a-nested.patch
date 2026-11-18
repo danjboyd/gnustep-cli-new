@@ -1,0 +1,109 @@
+From 17c274e55fb66c027e42eeb35db469869ebf9bbf Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Wed, 11 Nov 2026 09:57:16 -0600
+Subject: [PATCH 14/14] win32: end a window drag when a timer starts a nested
+ event loop
+
+The move/size-loop timer pumps the run loop's timers while Windows runs
+its own modal drag loop.  If one of those timers starts a nested event
+loop (a modal panel, say), that loop takes the drag's input from under
+Windows' loop, so a later Escape or button-up never reaches the drag.
+
+Before the nested loop asks for its first event, cancel the drag with
+WM_CANCELMODE, as if Escape were pressed.  Windows' loop ends once the
+timer returns, and the nested loop gets the input.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Headers/win32/WIN32Server.h |  1 +
+ Source/win32/WIN32Server.m  |  2 ++
+ Source/win32/w32_movesize.m | 27 ++++++++++++++++++++++++++-
+ 3 files changed, 29 insertions(+), 1 deletion(-)
+
+diff --git a/Headers/win32/WIN32Server.h b/Headers/win32/WIN32Server.h
+index d4f165f..5237d06 100644
+--- a/Headers/win32/WIN32Server.h
++++ b/Headers/win32/WIN32Server.h
+@@ -196,6 +196,7 @@ typedef struct w32serverFlags
+ - (LRESULT) decodeWM_GETMINMAXINFOParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd;
+ - (LRESULT) decodeWM_ENTERSIZEMOVEParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd;
+ - (BOOL) decodeWM_TIMERParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd;
++- (void) cancelSizeMoveForNestedEventLoop;
+ - (LRESULT) decodeWM_EXITSIZEMOVEParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd;
+ - (LRESULT) decodeWM_MOVINGParams: (HWND)hwnd : (WPARAM)wParam : (LPARAM)lParam;
+ - (LRESULT) decodeWM_SIZINGParams: (HWND)hwnd : (WPARAM)wParam : (LPARAM)lParam;
+diff --git a/Source/win32/WIN32Server.m b/Source/win32/WIN32Server.m
+index 0ff119c..8ce8fd3 100644
+--- a/Source/win32/WIN32Server.m
++++ b/Source/win32/WIN32Server.m
+@@ -487,6 +487,8 @@ hasShadowFrame(HWND hwnd)
+                           dequeue: (BOOL)flag
+ {
+ //  [self callback: nil];
++  /* A nested event loop started from the move/size loop's timer. */
++  [self cancelSizeMoveForNestedEventLoop];
+   return [super getEventMatchingMask: mask
+                 beforeDate: limit
+                 inMode: mode
+diff --git a/Source/win32/w32_movesize.m b/Source/win32/w32_movesize.m
+index 801bd3a..34c010c 100644
+--- a/Source/win32/w32_movesize.m
++++ b/Source/win32/w32_movesize.m
+@@ -311,10 +311,19 @@
+    fire: -limitDateForMode: doesn't poll input sources, so the modal loop
+    keeps its own messages.  Not covered: work queued for the main thread
+    (-performSelectorOnMainThread:, so a threaded progress indicator's
+-   redisplay), which only -acceptInputForMode: runs. */
++   redisplay), which only -acceptInputForMode: runs.
++
++   A timer may start a nested event loop of its own (a modal panel, say).
++   That loop would take the drag's input from under Windows' loop, so a
++   later Escape or button-up never reaches the drag.  Before the nested
++   loop asks for its first event, the drag is cancelled (WM_CANCELMODE, as
++   if Escape were pressed) and Windows' loop ends once the timer returns. */
+ #define GS_SIZEMOVE_TIMER_ID 0x4753
+ #define GS_SIZEMOVE_TIMER_MS 15
+ 
++/* The window being moved or sized while the timer pumps the run loop. */
++static HWND pumpingWindow = NULL;
++
+ - (LRESULT) decodeWM_ENTERSIZEMOVEParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd
+ {
+   SetTimer(hwnd, GS_SIZEMOVE_TIMER_ID, GS_SIZEMOVE_TIMER_MS, NULL);
+@@ -327,6 +336,20 @@
+   return DefWindowProc(hwnd, WM_EXITSIZEMOVE, wParam, lParam);
+ }
+ 
++- (void) cancelSizeMoveForNestedEventLoop
++{
++  HWND hwnd = pumpingWindow;
++
++  if (hwnd != NULL)
++    {
++      /* Once is enough: the drag is over, Windows' loop just hasn't
++         returned yet. */
++      pumpingWindow = NULL;
++      KillTimer(hwnd, GS_SIZEMOVE_TIMER_ID);
++      SendMessage(hwnd, WM_CANCELMODE, 0, 0);
++    }
++}
++
+ /* YES if it was the move/size loop's timer. */
+ - (BOOL) decodeWM_TIMERParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd
+ {
+@@ -344,6 +367,7 @@
+       return YES;
+     }
+   pumping = YES;
++  pumpingWindow = hwnd;
+   NS_DURING
+     {
+       CREATE_AUTORELEASE_POOL(pool);
+@@ -375,6 +399,7 @@
+       NSLog(@"exception in the move/size loop's timer: %@", localException);
+     }
+   NS_ENDHANDLER
++  pumpingWindow = NULL;
+   pumping = NO;
+   return YES;
+ }

@@ -1,0 +1,141 @@
+From 7225d7df35c3379cfc7e013b0da6dd88acc34dce Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Tue, 10 Nov 2026 16:37:53 -0600
+Subject: [PATCH 13/14] win32: fire timers and redisplay during a window move
+ or size loop
+
+Windows runs its own modal loop inside DefWindowProc while a window is moved or sized, so the GNUstep run loop doesn't run and timers and redisplay stop: a progress indicator freezes for the whole drag. A Win32 timer set on WM_ENTERSIZEMOVE and killed on WM_EXITSIZEMOVE fires the run loop's due timers in its current mode (-limitDateForMode:, which polls no input) and redisplays windows that need it. Work queued for the main thread (a threaded progress indicator's redisplay) is not covered.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Headers/win32/WIN32Server.h |  1 +
+ Source/win32/WIN32Server.m  |  4 +++
+ Source/win32/w32_movesize.m | 71 +++++++++++++++++++++++++++++++++++++
+ 3 files changed, 76 insertions(+)
+
+diff --git a/Headers/win32/WIN32Server.h b/Headers/win32/WIN32Server.h
+index 0aaef87..d4f165f 100644
+--- a/Headers/win32/WIN32Server.h
++++ b/Headers/win32/WIN32Server.h
+@@ -195,6 +195,7 @@ typedef struct w32serverFlags
+ - (void) decodeWM_WINDOWPOSCHANGEDParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd;
+ - (LRESULT) decodeWM_GETMINMAXINFOParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd;
+ - (LRESULT) decodeWM_ENTERSIZEMOVEParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd;
++- (BOOL) decodeWM_TIMERParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd;
+ - (LRESULT) decodeWM_EXITSIZEMOVEParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd;
+ - (LRESULT) decodeWM_MOVINGParams: (HWND)hwnd : (WPARAM)wParam : (LPARAM)lParam;
+ - (LRESULT) decodeWM_SIZINGParams: (HWND)hwnd : (WPARAM)wParam : (LPARAM)lParam;
+diff --git a/Source/win32/WIN32Server.m b/Source/win32/WIN32Server.m
+index ba8116d..0ff119c 100644
+--- a/Source/win32/WIN32Server.m
++++ b/Source/win32/WIN32Server.m
+@@ -1480,6 +1480,10 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
+       case WM_ENTERSIZEMOVE: 
+         return [self decodeWM_ENTERSIZEMOVEParams: wParam : lParam : hwnd];
+         break;
++      case WM_TIMER:
++        if ([self decodeWM_TIMERParams: wParam : lParam : hwnd])
++          return 0;
++        break;
+       case WM_EXITSIZEMOVE:
+         return [self decodeWM_EXITSIZEMOVEParams: wParam : lParam : hwnd];
+         break;
+diff --git a/Source/win32/w32_movesize.m b/Source/win32/w32_movesize.m
+index 70ab9bc..801bd3a 100644
+--- a/Source/win32/w32_movesize.m
++++ b/Source/win32/w32_movesize.m
+@@ -26,6 +26,10 @@
+ 
+ #include <AppKit/NSEvent.h>
+ #include <AppKit/NSWindow.h>
++#include <AppKit/NSApplication.h>
++#include <Foundation/NSRunLoop.h>
++#include <Foundation/NSException.h>
++#include <Foundation/NSAutoreleasePool.h>
+ #include "win32/WIN32Server.h"
+ #include "win32/WIN32Geometry.h"
+ 
+@@ -298,16 +302,83 @@
+   return 0; 
+ }
+ 
++/* While a window is moved or sized, Windows runs its own modal loop inside
++   DefWindowProc (WM_SYSCOMMAND SC_MOVE / SC_SIZE) until the drag ends, so
++   the GNUstep run loop doesn't run in any mode: timers stop and nothing is
++   redisplayed (a progress indicator freezes, threaded or not).  A Win32
++   timer for the length of the loop fires the run loop's due timers in its
++   current mode and redisplays the windows that need it.  Only timers
++   fire: -limitDateForMode: doesn't poll input sources, so the modal loop
++   keeps its own messages.  Not covered: work queued for the main thread
++   (-performSelectorOnMainThread:, so a threaded progress indicator's
++   redisplay), which only -acceptInputForMode: runs. */
++#define GS_SIZEMOVE_TIMER_ID 0x4753
++#define GS_SIZEMOVE_TIMER_MS 15
++
+ - (LRESULT) decodeWM_ENTERSIZEMOVEParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd
+ {
++  SetTimer(hwnd, GS_SIZEMOVE_TIMER_ID, GS_SIZEMOVE_TIMER_MS, NULL);
+   return DefWindowProc(hwnd, WM_ENTERSIZEMOVE, wParam, lParam);
+ }
+ 
+ - (LRESULT) decodeWM_EXITSIZEMOVEParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd
+ {
++  KillTimer(hwnd, GS_SIZEMOVE_TIMER_ID);
+   return DefWindowProc(hwnd, WM_EXITSIZEMOVE, wParam, lParam);
+ }
+ 
++/* YES if it was the move/size loop's timer. */
++- (BOOL) decodeWM_TIMERParams: (WPARAM)wParam : (LPARAM)lParam : (HWND)hwnd
++{
++  static BOOL pumping = NO;
++  NSRunLoop *loop;
++  NSEnumerator *windows;
++  NSWindow *window;
++
++  if (wParam != GS_SIZEMOVE_TIMER_ID)
++    {
++      return NO;
++    }
++  if (pumping)
++    {
++      return YES;
++    }
++  pumping = YES;
++  NS_DURING
++    {
++      CREATE_AUTORELEASE_POOL(pool);
++
++      NSString *mode;
++
++      /* The mode the run loop was in when it dispatched the message that
++         started the drag: the default mode, or a modal panel's during a
++         modal session, so timers of other modes stay quiet. */
++      loop = [NSRunLoop currentRunLoop];
++      mode = [loop currentMode];
++      if (mode == nil)
++        {
++          mode = NSDefaultRunLoopMode;
++        }
++      [loop limitDateForMode: mode];
++      windows = [[NSApp windows] objectEnumerator];
++      while ((window = [windows nextObject]) != nil)
++        {
++          if ([window isVisible] && [window viewsNeedDisplay])
++            {
++              [window displayIfNeeded];
++            }
++        }
++      [pool drain];
++    }
++  NS_HANDLER
++    {
++      NSLog(@"exception in the move/size loop's timer: %@", localException);
++    }
++  NS_ENDHANDLER
++  pumping = NO;
++  return YES;
++}
++
+ - (LRESULT) decodeWM_SIZINGParams:(HWND)hwnd : (WPARAM)wParam : (LPARAM)lParam
+ {
+   [EVENT_WINDOW(hwnd) displayIfNeeded];

@@ -1,0 +1,210 @@
+From ab84cc4ac0e72438c84f9aacf8bbebcfdbe6957d Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Tue, 13 Oct 2026 13:06:19 -0500
+Subject: [PATCH 06/14] win32: per-monitor DPI awareness, with the
+ GSBackDPIAware default
+
+The backend left the process DPI-unaware, so on a scaled display (125%,
+150%) Windows stretched every window, blurring text and lines, and
+-resolutionForScreen: always gave 72, so the gui never drew at the
+display's scale.
+
+With the GSBackDPIAware default (a user's, or a theme's GSThemeDomain,
+read as the theme loads), the server makes the process per-monitor DPI
+aware: version 2 where Windows has it, which also scales the frame and
+caption, else version 1, and lists the monitors again in physical
+pixels.  -resolutionForScreen: then gives each monitor's own effective
+DPI (times 0.75, so 100% is 72), which the gui draws that screen's
+windows at (-[NSScreen userSpaceScaleFactor]).  WM_DPICHANGED, when a
+window moves to a monitor with another scale, gives it the size Windows
+suggests, and the gui's move and resize events draw it at its new scale.
+-isPerMonitorDPIAware tells the gui whether it is.  Without the default
+nothing changes.  shcore.dll's functions are looked up when first
+needed.
+
+AI assistance: this change and its description were written with Claude
+(Anthropic's Claude Code).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Headers/win32/WIN32Server.h |  10 ++++
+ Source/win32/WIN32Server.m  | 116 +++++++++++++++++++++++++++++++++++-
+ 2 files changed, 124 insertions(+), 2 deletions(-)
+
+diff --git a/Headers/win32/WIN32Server.h b/Headers/win32/WIN32Server.h
+index c9a4eba..efda610 100644
+--- a/Headers/win32/WIN32Server.h
++++ b/Headers/win32/WIN32Server.h
+@@ -102,6 +102,7 @@ typedef struct w32serverFlags
+   BOOL handlesWindowDecorations;
+   BOOL usesNativeTaskbar;
+   BOOL clientDrawsCaptions;
++  BOOL perMonitorDPIAware;
+ 
+   serverFlags flags;
+   HINSTANCE hinstance;
+@@ -130,6 +131,15 @@ typedef struct w32serverFlags
+ - (BOOL) clientDrawsCaptions;
+ - (void) setClientDrawsCaptions: (BOOL)flag;
+ 
++/** Whether the process is per-monitor DPI aware (the GSBackDPIAware
++ * default, or a theme's).  Windows then stops stretching the app's
++ * windows on a scaled display; -resolutionForScreen: gives each monitor's
++ * own scale, which the gui draws windows at (-[NSScreen
++ * userSpaceScaleFactor]), and a window moved to a monitor with another
++ * scale takes the size Windows suggests (WM_DPICHANGED).
++ */
++- (BOOL) isPerMonitorDPIAware;
++
+ /** Declares the parts of a window's caption row the gui drew, for a
+  * window whose client draws its caption.  Each rect, in the window's base
+  * coordinates, has a kind from GSCaptionRegionKind: the parts that drag
+diff --git a/Source/win32/WIN32Server.m b/Source/win32/WIN32Server.m
+index 4f02e5d..a6eb887 100644
+--- a/Source/win32/WIN32Server.m
++++ b/Source/win32/WIN32Server.m
+@@ -209,6 +209,87 @@ BOOL CALLBACK LoadDisplayMonitorInfo(HMONITOR hMonitor,
+   clientDrawsCaptions = flag;
+ }
+ 
++- (BOOL) isPerMonitorDPIAware
++{
++  return perMonitorDPIAware;
++}
++
++/* Makes the process per-monitor DPI aware: version 2 where Windows has it
++   (Windows 10 1703), which also scales the frame and caption, else
++   version 1 (Windows 8.1).  Earlier, or once the process has an
++   awareness (from its manifest), it stays as it is.  The monitors are
++   listed again, in physical pixels now. */
++- (void) _becomePerMonitorDPIAware
++{
++  typedef WINBOOL (WINAPI *SetContextFunc)(HANDLE);
++  typedef HRESULT (WINAPI *SetAwarenessFunc)(int);
++  HMODULE user32 = GetModuleHandleA("user32.dll");
++  SetContextFunc setContext = NULL;
++
++  if (user32 != NULL)
++    {
++      setContext = (SetContextFunc)(void *)GetProcAddress(user32,
++        "SetProcessDpiAwarenessContext");
++    }
++  /* DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 */
++  if (setContext != NULL && setContext((HANDLE)(LONG_PTR)-4))
++    {
++      perMonitorDPIAware = YES;
++    }
++  else
++    {
++      HMODULE shcore = LoadLibraryA("shcore.dll");
++      SetAwarenessFunc setAwareness = NULL;
++
++      if (shcore != NULL)
++        {
++          setAwareness = (SetAwarenessFunc)(void *)GetProcAddress(shcore,
++            "SetProcessDpiAwareness");
++        }
++      /* PROCESS_PER_MONITOR_DPI_AWARE */
++      if (setAwareness != NULL && setAwareness(2) == S_OK)
++        {
++          perMonitorDPIAware = YES;
++        }
++    }
++  NSDebugLLog(@"WTrace", @"per-monitor DPI aware: %d", perMonitorDPIAware);
++  if (perMonitorDPIAware)
++    {
++      [monitorInfo removeAllObjects];
++      EnumDisplayMonitors(NULL, NULL, (MONITORENUMPROC)LoadDisplayMonitorInfo,
++                          (LPARAM)monitorInfo);
++    }
++}
++
++/* A monitor's DPI, when the process is per-monitor DPI aware, or 0. */
++static UINT
++monitorDPI(HMONITOR monitor)
++{
++  typedef HRESULT (WINAPI *GetDpiFunc)(HMONITOR, int, UINT *, UINT *);
++  static GetDpiFunc getDpi = NULL;
++  static BOOL looked = NO;
++  UINT x = 0;
++  UINT y = 0;
++
++  if (!looked)
++    {
++      HMODULE shcore = LoadLibraryA("shcore.dll");
++
++      looked = YES;
++      if (shcore != NULL)
++        {
++          getDpi = (GetDpiFunc)(void *)GetProcAddress(shcore,
++            "GetDpiForMonitor");
++        }
++    }
++  /* MDT_EFFECTIVE_DPI */
++  if (getDpi == NULL || monitor == NULL || getDpi(monitor, 0, &x, &y) != S_OK)
++    {
++      return 0;
++    }
++  return y;
++}
++
+ /* Whether hwnd is a borderless window given a shadow (-setShadow::): it
+    has a frame for DWM's shadow, but its client area is the whole window. */
+ static BOOL
+@@ -540,6 +621,10 @@ hasShadowFrame(HWND hwnd)
+ 	    [self setClientDrawsCaptions:
+ 	      [defs boolForKey: @"GSBackClientDrawsCaptions"]];
+ 	  }
++	if ([defs boolForKey: @"GSBackDPIAware"])
++	  {
++	    [self _becomePerMonitorDPIAware];
++	  }
+ }
+     }
+   return self;
+@@ -620,6 +705,17 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
+   NSSize gnustepRes;
+   HDC hdc;
+ 
++  if (perMonitorDPIAware)
++    {
++      /* Each monitor's own scale (72 is 100%, as 96 DPI is on Windows) */
++      UINT dpi = monitorDPI([self monitorHandleForScreen: screen]);
++
++      if (dpi > 0)
++        {
++          return NSMakeSize(0.75 * dpi, 0.75 * dpi);
++        }
++    }
++
+   hdc = GetDC(NULL);
+   windowsXRes = GetDeviceCaps(hdc, LOGPIXELSX);
+   windowsYRes = GetDeviceCaps(hdc, LOGPIXELSY);
+@@ -1376,9 +1472,25 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
+       case WM_ENTERSIZEMOVE: 
+         return [self decodeWM_ENTERSIZEMOVEParams: wParam : lParam : hwnd];
+         break;
+-      case WM_EXITSIZEMOVE: 
++      case WM_EXITSIZEMOVE:
+         return [self decodeWM_EXITSIZEMOVEParams: wParam : lParam : hwnd];
+-        break; 
++        break;
++#ifndef WM_DPICHANGED
++#define WM_DPICHANGED 0x02E0
++#endif
++      case WM_DPICHANGED:
++        {
++          /* Moved to a monitor with another scale: take the size Windows
++             suggests, the same size in points there.  The gui's move and
++             resize events then draw it at that monitor's scale. */
++          RECT *r = (RECT *)lParam;
++
++          SetWindowPos(hwnd, NULL, r->left, r->top,
++                       r->right - r->left, r->bottom - r->top,
++                       SWP_NOZORDER | SWP_NOACTIVATE);
++          flags._eventHandled = YES;
++        }
++        break;
+       case WM_ACTIVATE: 
+         if ((int)lParam !=0)
+           [self decodeWM_ACTIVEParams: wParam : lParam : hwnd]; 
