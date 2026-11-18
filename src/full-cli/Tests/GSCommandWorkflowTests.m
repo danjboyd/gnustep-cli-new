@@ -66,6 +66,10 @@
                                        installedFiles:(NSArray *)installedFiles
                                          recordedLinks:(NSArray *)recordedLinks;
 - (NSString *)materializeVersionedReleaseForInstallRoot:(NSString *)installRoot version:(NSString *)version error:(NSString **)errorMessage;
+- (NSDictionary *)installedCarryLayerForInstallRoot:(NSString *)installRoot;
+- (BOOL)applyCarryLayerArtifact:(NSDictionary *)artifact manifestPath:(NSString *)manifestPath toInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
+- (BOOL)restoreStockToolchainForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
+- (NSDictionary *)toolchainVariantCheckForStatePath:(NSString *)statePath interface:(NSString *)interface;
 @end
 
 @interface StubbedGSCommandRunner : GSCommandRunner
@@ -1906,6 +1910,154 @@
   XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: [installRoot stringByAppendingPathComponent: @"new.txt"]]);
   XCTAssertEqualObjects([state objectForKey: @"last_action"], @"rollback");
   XCTAssertEqualObjects([state objectForKey: @"status"], @"healthy");
+}
+
+// Patch layer fixture: a managed root on toolchain "toolchain-sha" with a stock
+// clang64/bin/gnustep-gui-0.dll, and next to manifest.json a layer zip replacing it.
+- (NSDictionary *)makeCarryFixtureIn:(NSString *)tempRoot layerStockContent:(NSString *)layerStock requiresToolchain:(NSString *)toolchain
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *installRoot = [tempRoot stringByAppendingPathComponent: @"managed"];
+  NSString *dist = [tempRoot stringByAppendingPathComponent: @"dist"];
+  NSString *layerDir = [tempRoot stringByAppendingPathComponent: @"layer"];
+  NSString *dll = @"clang64/bin/gnustep-gui-0.dll";
+  NSString *zipPath = [dist stringByAppendingPathComponent: @"gnustep-carry-test.zip"];
+  NSString *stockFile = [tempRoot stringByAppendingPathComponent: @"stock-reference"];
+  NSString *patchedFile = [layerDir stringByAppendingPathComponent: dll];
+  NSDictionary *result = nil;
+
+  [self ensureDirectory: [[installRoot stringByAppendingPathComponent: dll] stringByDeletingLastPathComponent]];
+  [self ensureDirectory: [installRoot stringByAppendingPathComponent: @"state"]];
+  [self ensureDirectory: [patchedFile stringByDeletingLastPathComponent]];
+  [self ensureDirectory: dist];
+  [@"stock gui" writeToFile: [installRoot stringByAppendingPathComponent: dll] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [layerStock writeToFile: stockFile atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [@"patched gui" writeToFile: patchedFile atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               @"0.1.9", @"cli_version",
+                                               @"toolchain-sha", @"toolchain_artifact_sha256",
+                                               @"healthy", @"status",
+                                               nil]
+                       toPath: [installRoot stringByAppendingPathComponent: @"state/cli-state.json"]];
+  [self writeJSONStringObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                               [NSNumber numberWithInt: 1], @"schema_version",
+                                               @"windows-amd64-msys2-clang64", @"target",
+                                               @"0.1.9", @"release",
+                                               toolchain, @"requires_toolchain_sha256",
+                                               [NSArray arrayWithObject: [NSDictionary dictionaryWithObjectsAndKeys: @"gui-layout-sanity-checks", @"id", nil]], @"patches",
+                                               [NSArray arrayWithObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                                        dll, @"path",
+                                                                                        [runner sha256ForFile: stockFile], @"stock_sha256",
+                                                                                        [runner sha256ForFile: patchedFile], @"sha256",
+                                                                                        nil]], @"files",
+                                               nil]
+                       toPath: [layerDir stringByAppendingPathComponent: @"carry-layer.json"]];
+  result = [runner runCommand: [NSArray arrayWithObjects: @"python3", @"-c",
+                                          @"import sys, zipfile, os\nz = zipfile.ZipFile(sys.argv[1], 'w')\nfor d, _, fs in os.walk(sys.argv[2]):\n    for f in fs:\n        p = os.path.join(d, f)\n        z.write(p, os.path.relpath(p, sys.argv[2]))\nz.close()",
+                                          zipPath, layerDir, nil]
+             currentDirectory: nil];
+  XCTAssertEqual([[result objectForKey: @"exit_status"] intValue], 0, @"%@", result);
+  return [NSDictionary dictionaryWithObjectsAndKeys:
+                         installRoot, @"root",
+                         [dist stringByAppendingPathComponent: @"manifest.json"], @"manifest",
+                         [NSDictionary dictionaryWithObjectsAndKeys:
+                                         @"carry-layer-windows-amd64-msys2-clang64", @"id",
+                                         @"carry-layer", @"kind",
+                                         @"gnustep-carry-test.zip", @"filename",
+                                         @"https://example.invalid/gnustep-carry-test.zip", @"url",
+                                         [runner sha256ForFile: zipPath], @"sha256",
+                                         nil], @"artifact",
+                         [installRoot stringByAppendingPathComponent: dll], @"dll",
+                         nil];
+}
+
+- (void)testPatchLayerAppliesAndRestoresTheStockFiles
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *fixture = [self makeCarryFixtureIn: [self temporaryPathComponent: @"carry-roundtrip"] layerStockContent: @"stock gui" requiresToolchain: @"toolchain-sha"];
+  NSString *root = [fixture objectForKey: @"root"];
+  NSString *error = nil;
+  NSDictionary *state = nil;
+
+  XCTAssertTrue([runner applyCarryLayerArtifact: [fixture objectForKey: @"artifact"] manifestPath: [fixture objectForKey: @"manifest"] toInstallRoot: root error: &error], @"%@", error);
+  XCTAssertEqualObjects([NSString stringWithContentsOfFile: [fixture objectForKey: @"dll"] encoding: NSUTF8StringEncoding error: NULL], @"patched gui");
+  XCTAssertEqualObjects([NSString stringWithContentsOfFile: [root stringByAppendingPathComponent: @"state/carry/stock/clang64/bin/gnustep-gui-0.dll"] encoding: NSUTF8StringEncoding error: NULL], @"stock gui");
+  XCTAssertEqualObjects([[runner installedCarryLayerForInstallRoot: root] objectForKey: @"artifact_sha256"], [[fixture objectForKey: @"artifact"] objectForKey: @"sha256"]);
+  state = [runner installedLifecycleStateForInstallRoot: root];
+  XCTAssertEqualObjects([state objectForKey: @"toolchain_variant"], @"patched");
+  XCTAssertEqualObjects([[state objectForKey: @"carry_layer"] objectForKey: @"patches"], [NSArray arrayWithObject: @"gui-layout-sanity-checks"]);
+  XCTAssertEqualObjects([state objectForKey: @"cli_version"], @"0.1.9");
+  // Applying the same layer again changes nothing.
+  XCTAssertTrue([runner applyCarryLayerArtifact: [fixture objectForKey: @"artifact"] manifestPath: [fixture objectForKey: @"manifest"] toInstallRoot: root error: &error], @"%@", error);
+  {
+    NSString *statePath = [root stringByAppendingPathComponent: @"state/cli-state.json"];
+    NSDictionary *check = [runner toolchainVariantCheckForStatePath: statePath interface: @"full"];
+    XCTAssertEqualObjects([check objectForKey: @"status"], @"ok");
+    XCTAssertEqualObjects([[check objectForKey: @"details"] objectForKey: @"toolchain_variant"], @"patched");
+    // A stock file back in place by hand: doctor calls the layer partly applied.
+    [@"stock gui" writeToFile: [fixture objectForKey: @"dll"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+    check = [runner toolchainVariantCheckForStatePath: statePath interface: @"full"];
+    XCTAssertEqualObjects([check objectForKey: @"status"], @"error");
+    [@"patched gui" writeToFile: [fixture objectForKey: @"dll"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  }
+
+  XCTAssertTrue([runner restoreStockToolchainForInstallRoot: root error: &error], @"%@", error);
+  XCTAssertEqualObjects([NSString stringWithContentsOfFile: [fixture objectForKey: @"dll"] encoding: NSUTF8StringEncoding error: NULL], @"stock gui");
+  XCTAssertNil([runner installedCarryLayerForInstallRoot: root]);
+  XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: [root stringByAppendingPathComponent: @"state/carry/stock"]]);
+  XCTAssertEqualObjects([[runner installedLifecycleStateForInstallRoot: root] objectForKey: @"toolchain_variant"], @"stock");
+  XCTAssertEqualObjects([[[runner toolchainVariantCheckForStatePath: [root stringByAppendingPathComponent: @"state/cli-state.json"] interface: @"full"] objectForKey: @"details"] objectForKey: @"toolchain_variant"], @"stock");
+}
+
+- (void)testPatchLayerRefusesAChangedStockFileOrAnotherToolchain
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *changed = [self makeCarryFixtureIn: [self temporaryPathComponent: @"carry-changed"] layerStockContent: @"a different stock gui" requiresToolchain: @"toolchain-sha"];
+  NSDictionary *other = [self makeCarryFixtureIn: [self temporaryPathComponent: @"carry-other-toolchain"] layerStockContent: @"stock gui" requiresToolchain: @"another-toolchain"];
+  NSString *error = nil;
+
+  XCTAssertFalse([runner applyCarryLayerArtifact: [changed objectForKey: @"artifact"] manifestPath: [changed objectForKey: @"manifest"] toInstallRoot: [changed objectForKey: @"root"] error: &error]);
+  XCTAssertTrue([error rangeOfString: @"is not the stock file"].location != NSNotFound, @"%@", error);
+  XCTAssertEqualObjects([NSString stringWithContentsOfFile: [changed objectForKey: @"dll"] encoding: NSUTF8StringEncoding error: NULL], @"stock gui");
+  XCTAssertNil([runner installedCarryLayerForInstallRoot: [changed objectForKey: @"root"]]);
+
+  error = nil;
+  XCTAssertFalse([runner applyCarryLayerArtifact: [other objectForKey: @"artifact"] manifestPath: [other objectForKey: @"manifest"] toInstallRoot: [other objectForKey: @"root"] error: &error]);
+  XCTAssertTrue([error rangeOfString: @"is for toolchain another-toolchain"].location != NSNotFound, @"%@", error);
+  XCTAssertEqualObjects([NSString stringWithContentsOfFile: [other objectForKey: @"dll"] encoding: NSUTF8StringEncoding error: NULL], @"stock gui");
+}
+
+- (void)testPatchLayerPutsTheStockFileBackWhenInstallingAPatchedOneFails
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSDictionary *fixture = [self makeCarryFixtureIn: [self temporaryPathComponent: @"carry-copy-fails"] layerStockContent: @"stock gui" requiresToolchain: @"toolchain-sha"];
+  NSString *root = [fixture objectForKey: @"root"];
+  NSString *error = nil;
+  BOOL applied = NO;
+
+  setenv("GNUSTEP_CLI_TEST_FAIL_SETUP_STEP", "carry-copy", 1);
+  applied = [runner applyCarryLayerArtifact: [fixture objectForKey: @"artifact"] manifestPath: [fixture objectForKey: @"manifest"] toInstallRoot: root error: &error];
+  unsetenv("GNUSTEP_CLI_TEST_FAIL_SETUP_STEP");
+
+  XCTAssertFalse(applied);
+  XCTAssertEqualObjects([NSString stringWithContentsOfFile: [fixture objectForKey: @"dll"] encoding: NSUTF8StringEncoding error: NULL], @"stock gui");
+  XCTAssertNil([runner installedCarryLayerForInstallRoot: root]);
+  XCTAssertNil([[runner installedLifecycleStateForInstallRoot: root] objectForKey: @"toolchain_variant"]);
+}
+
+- (void)testSetupVariantRejectsUnknownValuesAndOtherModes
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  int exitCode = 0;
+  NSDictionary *payload = [runner executeSetupForContext: [GSCommandContext contextWithArguments: [NSArray arrayWithObjects: @"setup", @"--variant", @"fancy", nil]] exitCode: &exitCode];
+
+  XCTAssertEqual(exitCode, 2);
+  XCTAssertTrue([[payload objectForKey: @"summary"] rangeOfString: @"use stock or patched"].location != NSNotFound, @"%@", payload);
+  payload = [runner executeSetupForContext: [GSCommandContext contextWithArguments: [NSArray arrayWithObjects: @"setup", @"--variant", @"patched", @"--repair", nil]] exitCode: &exitCode];
+  XCTAssertEqual(exitCode, 2);
+  payload = [runner executeSetupForContext: [GSCommandContext contextWithArguments: [NSArray arrayWithObjects: @"setup", @"--variant", nil]] exitCode: &exitCode];
+  XCTAssertEqual(exitCode, 2);
 }
 
 // Fixture for the rollback tests: <tempRoot>/managed-root holds the current (0.1.2)

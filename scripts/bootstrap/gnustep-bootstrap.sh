@@ -826,6 +826,21 @@ EOF
   if [ "$(id -u)" -eq 0 ] && [ "$selected_scope" = "user" ] && [ "$owner_user" != "root" ]; then
     chown -R "$owner_user" "$selected_root" 2>/dev/null || true
   fi
+  # The patch layer (docs/specs/patch-layer.md) is applied by the installed CLI, so its
+  # checks live in one place; its JSON is folded into this one.
+  carry_layer_json=null
+  if [ "$SETUP_VARIANT" = "patched" ]; then
+    if [ -n "${SETUP_MANIFEST:-}" ]; then
+      variant_output=$("$selected_root/bin/gnustep" setup --variant patched --root "$selected_root" --manifest "$SETUP_MANIFEST" --json 2>&1) && variant_status=0 || variant_status=$?
+    else
+      variant_output=$("$selected_root/bin/gnustep" setup --variant patched --root "$selected_root" --json 2>&1) && variant_status=0 || variant_status=$?
+    fi
+    if [ "$variant_status" -ne 0 ]; then
+      setup_failure "The managed toolchain was installed (stock), but the patch layer was not applied: $variant_output" "Run '$selected_root/bin/gnustep setup --variant patched' again, or keep the stock toolchain."
+      return 1
+    fi
+    carry_layer_json=$variant_output
+  fi
   path_command=$(path_hint "$selected_root")
   path_command_json=$(json_escape "$path_command")
   manifest_source_json=$(json_escape "$manifest_source")
@@ -836,11 +851,14 @@ EOF
 
   if [ "${JSON_MODE:-0}" = "1" ]; then
     cat <<EOF
-{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":true,"status":"ok","summary":"Managed installation completed.","doctor":{"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","manifest_path":$manifest_source_json,"selected_release":"$release_version","selected_artifacts":["$target_id","$toolchain_id"],"system_privileges_ok":true,"host_prerequisites":{"source":"$HOST_PREREQUISITE_SOURCE","source_note":"$HOST_PREREQUISITE_SOURCE_NOTE","platform":"$host_platform","packages":$host_packages_json,"install_command":$host_install_command_json,"auto_install_requested":$([ "$YES_MODE" = "1" ] && printf true || printf false)}},"actions":[{"kind":"add_path","priority":1,"message":"Add $selected_root/bin, $selected_root/Tools, and $selected_root/System/Tools to PATH for future shells."},{"kind":"delete_bootstrap","priority":2,"message":"The bootstrap script is no longer required and may be deleted."}],"install":{"install_root":"$selected_root","path_hint":$path_command_json}}
+{"schema_version":1,"command":"setup","cli_version":"$CLI_VERSION","ok":true,"status":"ok","summary":"Managed installation completed.","toolchain_variant":"$SETUP_VARIANT","carry_layer":$carry_layer_json,"doctor":{"status":"warning","environment_classification":"no_toolchain","summary":"No preexisting GNUstep toolchain was detected.","os":"$host_os"},"plan":{"scope":"$selected_scope","install_root":"$selected_root","channel":"stable","manifest_path":$manifest_source_json,"selected_release":"$release_version","selected_artifacts":["$target_id","$toolchain_id"],"system_privileges_ok":true,"host_prerequisites":{"source":"$HOST_PREREQUISITE_SOURCE","source_note":"$HOST_PREREQUISITE_SOURCE_NOTE","platform":"$host_platform","packages":$host_packages_json,"install_command":$host_install_command_json,"auto_install_requested":$([ "$YES_MODE" = "1" ] && printf true || printf false)}},"actions":[{"kind":"add_path","priority":1,"message":"Add $selected_root/bin, $selected_root/Tools, and $selected_root/System/Tools to PATH for future shells."},{"kind":"delete_bootstrap","priority":2,"message":"The bootstrap script is no longer required and may be deleted."}],"install":{"install_root":"$selected_root","path_hint":$path_command_json}}
 EOF
   else
     printf '%s\n' "setup: managed installation completed"
     printf '%s\n' "setup: scope=$selected_scope root=$selected_root"
+    if [ "$SETUP_VARIANT" = "patched" ]; then
+      printf '%s\n' "setup: toolchain variant=patched (the release's patch layer is applied)"
+    fi
     printf '%s\n' "next: Run this in the current shell:"
     printf '%s\n' "  $path_command"
     printf '%s\n' "next: New shells should include $selected_root/bin, $selected_root/Tools, and $selected_root/System/Tools on PATH."
@@ -859,6 +877,7 @@ Usage:
 
 Commands:
   setup      Install the full GNUstep CLI and its dependencies.
+             --variant patched also applies the release's patch layer (carried GNUstep fixes).
   doctor     Inspect this machine and report GNUstep/toolchain readiness.
   build      Unavailable in bootstrap. Install the full interface first.
   clean      Unavailable in bootstrap. Install the full interface first.
@@ -1014,6 +1033,7 @@ JSON_MODE=0
 ALLOW_UNSIGNED="${GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED:-0}"
 SETUP_SCOPE=""
 SETUP_ROOT=""
+SETUP_VARIANT="stock"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -1059,6 +1079,15 @@ while [ "$#" -gt 0 ]; do
         exit 2
       fi
       SETUP_ROOT="$1"
+      shift
+      ;;
+    --variant)
+      shift
+      if [ "$#" -eq 0 ] || { [ "$1" != "stock" ] && [ "$1" != "patched" ]; }; then
+        printf '%s\n' "--variant requires a value: stock or patched" >&2
+        exit 2
+      fi
+      SETUP_VARIANT="$1"
       shift
       ;;
     --manifest)
@@ -1110,6 +1139,15 @@ while [ "$#" -gt 0 ]; do
         exit 2
       fi
       SETUP_ROOT="$1"
+      shift
+      ;;
+    --variant)
+      shift
+      if [ "$#" -eq 0 ] || { [ "$1" != "stock" ] && [ "$1" != "patched" ]; }; then
+        printf '%s\n' "--variant requires a value: stock or patched" >&2
+        exit 2
+      fi
+      SETUP_VARIANT="$1"
       shift
       ;;
     --manifest)

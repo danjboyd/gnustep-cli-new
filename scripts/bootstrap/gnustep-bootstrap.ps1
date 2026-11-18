@@ -9,6 +9,7 @@ $Script:QuietMode = $false
 $Script:RootDir = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSCommandPath))
 $Script:SetupScope = "user"
 $Script:SetupRoot = $null
+$Script:SetupVariant = "stock"
 $Script:SetupManifest = $env:SETUP_MANIFEST
 $Script:DogfoodManifestUrl = if ($env:DOGFOOD_MANIFEST_URL) { $env:DOGFOOD_MANIFEST_URL } else { "https://github.com/danjboyd/gnustep-cli-new/releases/download/dogfood/release-manifest.json" }
 $Script:DogfoodMode = $false
@@ -651,6 +652,7 @@ Usage:
 
 Commands:
   setup      Install the full GNUstep CLI and its dependencies.
+             --variant patched also applies the release's patch layer (carried GNUstep fixes).
   doctor     Inspect this machine and report GNUstep/toolchain readiness.
   build      Unavailable in bootstrap. Install the full interface first.
   clean      Unavailable in bootstrap. Install the full interface first.
@@ -734,7 +736,7 @@ foreach ($arg in $ArgsList) {
         "--allow-unsigned" { $Script:AllowUnsigned = $true }
         default {
             if ($arg.StartsWith("--")) {
-                if ($arg -eq "--root" -or $arg -eq "--manifest" -or $arg -eq "--trace") {
+                if ($arg -eq "--root" -or $arg -eq "--manifest" -or $arg -eq "--trace" -or $arg -eq "--variant") {
                     continue
                 }
                 Write-Error "Unknown option: $arg"
@@ -759,6 +761,13 @@ for ($i = 0; $i -lt $ArgsList.Count; $i++) {
             exit 2
         }
         $Script:TracePath = $ArgsList[$i + 1]
+    }
+    if ($ArgsList[$i] -eq "--variant") {
+        if ($i + 1 -ge $ArgsList.Count -or @("stock", "patched") -notcontains $ArgsList[$i + 1]) {
+            Write-Error "--variant requires a value: stock or patched"
+            exit 2
+        }
+        $Script:SetupVariant = $ArgsList[$i + 1]
     }
     if ($ArgsList[$i] -eq "--manifest") {
         if ($i + 1 -ge $ArgsList.Count) {
@@ -1020,6 +1029,21 @@ switch ($command) {
                 Ensure-GNUstepActivationScripts -InstallRoot $selectedRoot
                 $pathPersisted = Set-GNUstepUserEnvironment -InstallRoot $selectedRoot -Scope $Script:SetupScope
                 $pathHint = Get-PathSetupCommand -InstallRoot $selectedRoot
+                # The patch layer (docs/specs/patch-layer.md) is applied by the installed CLI,
+                # so its checks live in one place. Its JSON is folded into this one.
+                $variantResult = $null
+                if ($Script:SetupVariant -eq "patched") {
+                    Write-SetupProgress "applying the patch layer"
+                    $variantArgs = @("setup", "--variant", "patched", "--root", $selectedRoot, "--json")
+                    if ($Script:SetupManifest) { $variantArgs += @("--manifest", $Script:SetupManifest) }
+                    $variantText = (& (Join-Path $selectedRoot "bin\gnustep.exe") @variantArgs 2>&1 | Out-String)
+                    $variantCode = $LASTEXITCODE
+                    try { $variantResult = $variantText | ConvertFrom-Json } catch { $variantResult = $null }
+                    if ($variantCode -ne 0) {
+                        $why = if ($variantResult -and $variantResult.summary) { $variantResult.summary } else { $variantText.Trim() }
+                        throw "The managed toolchain was installed (stock), but the patch layer was not applied: $why"
+                    }
+                }
                 if ($Script:JsonMode) {
                     Write-TraceEvent "setup.success" $selectedRoot
                     Write-JsonObject @{
@@ -1029,6 +1053,8 @@ switch ($command) {
                         ok = $true
                         status = "ok"
                         summary = "Managed installation completed."
+                        toolchain_variant = $Script:SetupVariant
+                        carry_layer = $variantResult
                         doctor = @{
                             status = "warning"
                             environment_classification = "no_toolchain"
@@ -1058,6 +1084,9 @@ switch ($command) {
                 else {
                     Write-Output "setup: managed installation completed"
                     Write-Output "setup: scope=$($Script:SetupScope) root=$selectedRoot"
+                    if ($Script:SetupVariant -eq "patched") {
+                        Write-Output "setup: toolchain variant=patched (the release's patch layer is applied)"
+                    }
                     if ($pathPersisted) {
                         Write-Output "setup: updated $($Script:SetupScope) PATH for future PowerShell sessions"
                     }

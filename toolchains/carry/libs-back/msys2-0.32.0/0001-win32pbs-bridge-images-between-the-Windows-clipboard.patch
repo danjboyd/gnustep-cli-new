@@ -1,0 +1,1054 @@
+From 3210007ae449abebb12a8edd0262754e6cc9ecbc Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Thu, 8 Oct 2026 10:59:15 -0500
+Subject: [PATCH 01/14] win32pbs: bridge images between the Windows clipboard
+ and gpbs
+
+gpbs only passed text (CF_UNICODETEXT) between the Windows clipboard and
+the general pasteboard, so an image copied in a Windows program could not
+be pasted into a GNUstep app, nor the reverse.
+
+Windows to GNUstep: when the clipboard holds a DIB, a bitmap (which
+Windows turns into a DIB) or a "PNG", NSTIFFPboardType is declared, and
+NSPasteboardTypePNG as well for a PNG.  The data is made when asked for:
+a PNG is passed through or converted to TIFF; otherwise the CF_DIB is
+converted, 32 bit DIBs directly and other depths and compressions
+through GDI.  CF_DIB is read rather than CF_DIBV5, as the CF_DIBV5
+Windows synthesizes can carry colour masks after its header.
+
+GNUstep to Windows: when the general pasteboard holds TIFF or PNG, CF_DIB
+(32 bit, alpha in the fourth byte) and "PNG" are published with delayed
+rendering, as the text is.  WM_RENDERFORMAT now renders the format it
+is asked for, WM_RENDERALLFORMATS renders the image formats too, and
+CF_UNICODETEXT is only published when the pasteboard holds a string.
+
+Tests/win32/pasteboard.m checks both directions for images and text.
+
+This change was written with the help of an AI assistant (Claude); the
+code was reviewed and tested by the author before submission.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ ChangeLog                        |  17 +
+ Tests/win32/GNUmakefile.preamble |  15 +
+ Tests/win32/TestInfo             |   0
+ Tests/win32/pasteboard.m         | 322 +++++++++++++++++++
+ Tools/GNUmakefile                |   1 +
+ Tools/win32pbs.m                 | 515 ++++++++++++++++++++++++++++++-
+ 6 files changed, 859 insertions(+), 11 deletions(-)
+ create mode 100644 Tests/win32/GNUmakefile.preamble
+ create mode 100644 Tests/win32/TestInfo
+ create mode 100644 Tests/win32/pasteboard.m
+
+diff --git a/ChangeLog b/ChangeLog
+index d59652a..88034da 100644
+--- a/ChangeLog
++++ b/ChangeLog
+@@ -1,3 +1,20 @@
++2026-10-08 Daniel Boyd <danieljboyd@icloud.com>
++
++	* Tools/win32pbs.m:
++	Bridge images between the Windows clipboard and the general
++	pasteboard, not only text.  A DIB (or a bitmap, which Windows
++	converts) on the clipboard is offered as NSTIFFPboardType, and a
++	"PNG" as NSPasteboardTypePNG and NSTIFFPboardType.  TIFF or PNG on
++	the general pasteboard is published as CF_DIB and "PNG", rendered
++	on demand like the text.  WM_RENDERFORMAT now renders the format
++	asked for, and CF_UNICODETEXT is only published when the pasteboard
++	holds a string.
++	* Tools/GNUmakefile: Link gpbs with gdi32 on win32.
++	* Tests/win32/TestInfo:
++	* Tests/win32/GNUmakefile.preamble:
++	* Tests/win32/pasteboard.m:
++	Test text and images passing both ways through gpbs.
++
+ 2025-02-11 Richard Frith-Macdonald <rfm@gnu.org>
+ 
+ 	* ANNOUNCE:
+diff --git a/Tests/win32/GNUmakefile.preamble b/Tests/win32/GNUmakefile.preamble
+new file mode 100644
+index 0000000..e77c2d2
+--- /dev/null
++++ b/Tests/win32/GNUmakefile.preamble
+@@ -0,0 +1,15 @@
++# Extra build settings for the win32 display server tests.
++
++# config.h (used by the source-level guards) sits at the top of the (build)
++# tree.
++ADDITIONAL_INCLUDE_DIRS += -I$(GNUSTEP_BUILD_DIR)/../.. -I../..
++
++-include $(GNUSTEP_BUILD_DIR)/../../config.make
++-include ../../config.make
++
++# The pasteboard test talks to gpbs through AppKit's NSPasteboard and puts
++# data on the Windows clipboard directly.
++ADDITIONAL_TOOL_LIBS += -lgnustep-gui
++ifeq ($(BUILD_SERVER),win32)
++ADDITIONAL_TOOL_LIBS += -luser32 -lgdi32
++endif
+diff --git a/Tests/win32/TestInfo b/Tests/win32/TestInfo
+new file mode 100644
+index 0000000..e69de29
+diff --git a/Tests/win32/pasteboard.m b/Tests/win32/pasteboard.m
+new file mode 100644
+index 0000000..de71eef
+--- /dev/null
++++ b/Tests/win32/pasteboard.m
+@@ -0,0 +1,322 @@
++/* Tests for the Windows clipboard bridge in gpbs (Tools/win32pbs.m).
++ *
++ * Text and images must pass both ways between the Windows clipboard and the
++ * GNUstep general pasteboard:
++ *  - a DIB on the Windows clipboard is offered as NSTIFFPboardType, keeps
++ *    its size, orientation and colours;
++ *  - a "PNG" on the Windows clipboard is offered as NSPasteboardTypePNG
++ *    (passed through unchanged) and as NSTIFFPboardType;
++ *  - a TIFF on the general pasteboard is published as CF_DIB (a 32 bit
++ *    bottom-up DIB carrying alpha) and as "PNG";
++ *  - CF_UNICODETEXT and NSStringPboardType still pass both ways.
++ * These guard against images being dropped, flipped, shifted or losing
++ * their alpha, and against the image formats disturbing text.
++ *
++ * The test talks to whichever gpbs serves the general pasteboard (it is
++ * started on demand, so normally the installed one), and it replaces the
++ * contents of the Windows clipboard.  It guards on the win32 display server
++ * being built and skips cleanly otherwise.
++ */
++#import <Foundation/Foundation.h>
++#import "Testing.h"
++#include "config.h"
++
++#if defined(BUILD_SERVER) && defined(SERVER_win32) \
++  && BUILD_SERVER == SERVER_win32
++
++#import <AppKit/AppKit.h>
++#include <windows.h>
++#include <stdlib.h>
++
++/* Other programs (gpbs among them) hold the clipboard open briefly, so
++   retry for a while rather than fail on the first refusal.  */
++static BOOL
++openClipboard(HWND window)
++{
++  int i;
++
++  for (i = 0; i < 20; i++)
++    {
++      if (OpenClipboard(window))
++	{
++	  return YES;
++	}
++      Sleep(50);
++    }
++  return NO;
++}
++
++/* Replace the Windows clipboard with LEN bytes of FORMAT.  The clipboard
++   owner is a window destroyed straight after, as this thread does not
++   answer the messages Windows sends the owner when gpbs takes over.  */
++static BOOL
++putOnClipboard(UINT format, const void *bytes, size_t len)
++{
++  HGLOBAL hglb = GlobalAlloc(GMEM_MOVEABLE, len);
++  HWND window;
++  BOOL ok = NO;
++
++  if (hglb == NULL)
++    {
++      return NO;
++    }
++  memcpy(GlobalLock(hglb), bytes, len);
++  GlobalUnlock(hglb);
++  window = CreateWindowEx(0, "STATIC", "pasteboard test", 0, 0, 0, 0, 0,
++			  HWND_MESSAGE, NULL, GetModuleHandle(NULL), NULL);
++  if (window != NULL && openClipboard(window))
++    {
++      if (EmptyClipboard() && SetClipboardData(format, hglb) != NULL)
++	{
++	  ok = YES;
++	}
++      CloseClipboard();
++    }
++  if (window != NULL)
++    {
++      DestroyWindow(window);
++    }
++  if (!ok)
++    {
++      GlobalFree(hglb);
++    }
++  return ok;
++}
++
++/* Copy the data for FORMAT from the Windows clipboard.  */
++static NSData *
++getFromClipboard(UINT format)
++{
++  NSData *data = nil;
++
++  if (openClipboard(NULL))
++    {
++      HGLOBAL hglb = GetClipboardData(format);
++      void *p;
++
++      if (hglb != NULL && (p = GlobalLock(hglb)) != NULL)
++	{
++	  data = [NSData dataWithBytes: p length: GlobalSize(hglb)];
++	  GlobalUnlock(hglb);
++	}
++      CloseClipboard();
++    }
++  return data;
++}
++
++/* gpbs follows the Windows clipboard asynchronously; give it a moment.  */
++static BOOL
++waitForType(NSPasteboard *pb, NSString *type)
++{
++  int i;
++
++  for (i = 0; i < 50; i++)
++    {
++      if ([[pb types] containsObject: type])
++	{
++	  return YES;
++	}
++      [NSThread sleepForTimeInterval: 0.1];
++    }
++  return NO;
++}
++
++static BOOL
++waitForFormat(UINT format)
++{
++  int i;
++
++  for (i = 0; i < 50; i++)
++    {
++      if (IsClipboardFormatAvailable(format))
++	{
++	  return YES;
++	}
++      [NSThread sleepForTimeInterval: 0.1];
++    }
++  return NO;
++}
++
++static BOOL
++pixelIs(NSBitmapImageRep *rep, int x, int y, int r, int g, int b, int a)
++{
++  NSUInteger px[5] = {0, 0, 0, 255, 0};
++
++  [rep getPixel: px atX: x y: y];
++  if (![rep hasAlpha])
++    {
++      px[3] = 255;
++    }
++  return abs((int)px[0] - r) <= 2 && abs((int)px[1] - g) <= 2
++    && abs((int)px[2] - b) <= 2 && abs((int)px[3] - a) <= 2;
++}
++
++/* A 4x4 RGBA image: the top half red, the bottom-left quarter green and
++   the bottom-right quarter blue at half alpha.  */
++static NSBitmapImageRep *
++testImage(void)
++{
++  NSBitmapImageRep *rep;
++  unsigned char *d;
++  int x, y;
++
++  rep = [[NSBitmapImageRep alloc]
++	  initWithBitmapDataPlanes: NULL pixelsWide: 4 pixelsHigh: 4
++		     bitsPerSample: 8 samplesPerPixel: 4 hasAlpha: YES
++			  isPlanar: NO colorSpaceName: NSDeviceRGBColorSpace
++		      bitmapFormat: NSAlphaNonpremultipliedBitmapFormat
++		       bytesPerRow: 16 bitsPerPixel: 32];
++  d = [rep bitmapData];
++  for (y = 0; y < 4; y++)
++    {
++      for (x = 0; x < 4; x++, d += 4)
++	{
++	  d[0] = (y < 2) ? 255 : 0;
++	  d[1] = (y >= 2 && x < 2) ? 255 : 0;
++	  d[2] = (y >= 2 && x >= 2) ? 255 : 0;
++	  d[3] = (y >= 2 && x >= 2) ? 128 : 255;
++	}
++    }
++  return [rep autorelease];
++}
++
++int
++main(void)
++{
++  START_SET("win32 clipboard bridge")
++
++  NSPasteboard *pb = [NSPasteboard generalPasteboard];
++  UINT pngFormat = RegisterClipboardFormat("PNG");
++
++  /* Windows to GNUstep: a 4x4 24 bit bottom-up DIB, top half red and
++     bottom half green.  */
++  {
++    unsigned char dib[sizeof(BITMAPINFOHEADER) + 4 * 12];
++    BITMAPINFOHEADER *bih = (BITMAPINFOHEADER*)dib;
++    unsigned char *p = dib + sizeof(BITMAPINFOHEADER);
++    NSBitmapImageRep *rep;
++    int i;
++
++    memset(dib, 0, sizeof(dib));
++    bih->biSize = sizeof(BITMAPINFOHEADER);
++    bih->biWidth = 4;
++    bih->biHeight = 4;
++    bih->biPlanes = 1;
++    bih->biBitCount = 24;
++    bih->biCompression = BI_RGB;
++    for (i = 0; i < 16; i++, p += 3)
++      {
++	/* The first two rows in memory are the bottom of the image.  */
++	p[1] = (i < 8) ? 255 : 0;
++	p[2] = (i < 8) ? 0 : 255;
++      }
++    PASS(putOnClipboard(CF_DIB, dib, sizeof(dib)),
++	 "a DIB can be put on the Windows clipboard")
++    PASS(waitForType(pb, NSTIFFPboardType),
++	 "a DIB on the Windows clipboard is offered as TIFF")
++    rep = [NSBitmapImageRep imageRepWithData:
++			      [pb dataForType: NSTIFFPboardType]];
++    PASS(rep != nil && [rep pixelsWide] == 4 && [rep pixelsHigh] == 4,
++	 "the TIFF made from a DIB has the DIB's size")
++    PASS(pixelIs(rep, 0, 0, 255, 0, 0, 255)
++	 && pixelIs(rep, 3, 1, 255, 0, 0, 255)
++	 && pixelIs(rep, 0, 2, 0, 255, 0, 255)
++	 && pixelIs(rep, 3, 3, 0, 255, 0, 255),
++	 "the TIFF made from a DIB keeps its orientation and colours")
++  }
++
++  /* Windows to GNUstep: a PNG passes through and converts to TIFF.  */
++  {
++    NSData *png = [testImage() representationUsingType: NSPNGFileType
++					     properties: nil];
++    NSBitmapImageRep *rep;
++
++    PASS(png != nil && putOnClipboard(pngFormat, [png bytes], [png length]),
++	 "a PNG can be put on the Windows clipboard")
++    PASS(waitForType(pb, NSPasteboardTypePNG)
++	 && [[pb types] containsObject: NSTIFFPboardType],
++	 "a PNG on the Windows clipboard is offered as PNG and TIFF")
++    PASS_EQUAL([pb dataForType: NSPasteboardTypePNG], png,
++	       "the PNG is passed on unchanged")
++    rep = [NSBitmapImageRep imageRepWithData:
++			      [pb dataForType: NSTIFFPboardType]];
++    PASS(rep != nil && pixelIs(rep, 0, 0, 255, 0, 0, 255)
++	 && pixelIs(rep, 3, 3, 0, 0, 255, 128),
++	 "the TIFF made from a PNG keeps its colours and alpha")
++  }
++
++  /* GNUstep to Windows: a TIFF is published as CF_DIB and PNG.  */
++  {
++    NSData *dib;
++    NSBitmapImageRep *rep;
++    const BITMAPINFOHEADER *bih;
++    const unsigned char *bits;
++
++    [pb declareTypes: [NSArray arrayWithObject: NSTIFFPboardType] owner: nil];
++    [pb setData: [testImage() TIFFRepresentation] forType: NSTIFFPboardType];
++    PASS(waitForFormat(CF_DIB) && IsClipboardFormatAvailable(pngFormat)
++	 && !IsClipboardFormatAvailable(CF_UNICODETEXT),
++	 "a TIFF on the pasteboard is published as CF_DIB and PNG only")
++    dib = getFromClipboard(CF_DIB);
++    bih = [dib bytes];
++    PASS([dib length] >= sizeof(BITMAPINFOHEADER) + 64
++	 && bih->biWidth == 4 && bih->biHeight == 4
++	 && bih->biBitCount == 32 && bih->biCompression == BI_RGB,
++	 "the CF_DIB is a 4x4 32 bit bottom-up DIB")
++    /* Pixels are BGRA; the first row in memory is the bottom one.  */
++    bits = (const unsigned char*)(bih + 1);
++    PASS([dib length] >= sizeof(BITMAPINFOHEADER) + 64
++	 && bits[0] == 0 && bits[1] == 255 && bits[2] == 0 && bits[3] == 255
++	 && bits[12] == 255 && bits[13] == 0 && bits[14] == 0
++	 && bits[15] == 128
++	 && bits[48] == 0 && bits[49] == 0 && bits[50] == 255
++	 && bits[51] == 255,
++	 "the CF_DIB keeps the orientation, colours and alpha")
++    rep = [NSBitmapImageRep imageRepWithData: getFromClipboard(pngFormat)];
++    PASS(rep != nil && [rep pixelsWide] == 4
++	 && pixelIs(rep, 3, 3, 0, 0, 255, 128),
++	 "the PNG published for a TIFF holds the image")
++  }
++
++  /* Text still passes both ways.  */
++  {
++    const WCHAR text[] = {'W', 'i', 'n', ' ', 0xE9, 0x2713, 0};
++    const WCHAR back[] = {'G', 'N', 'U', 's', 't', 'e', 'p', ' ', 0xFC, 0};
++    NSString *expected = [NSString stringWithCharacters: text length: 6];
++    NSData *data;
++
++    PASS(putOnClipboard(CF_UNICODETEXT, text, sizeof(text))
++	 && waitForType(pb, NSStringPboardType)
++	 && ![[pb types] containsObject: NSTIFFPboardType],
++	 "text on the Windows clipboard is offered as a string only")
++    PASS_EQUAL([pb stringForType: NSStringPboardType], expected,
++	       "the string matches the Windows text")
++
++    [pb declareTypes: [NSArray arrayWithObject: NSStringPboardType]
++	       owner: nil];
++    [pb setString: [NSString stringWithCharacters: back length: 9]
++	   forType: NSStringPboardType];
++    PASS(waitForFormat(CF_UNICODETEXT) && !IsClipboardFormatAvailable(CF_DIB),
++	 "a string on the pasteboard is published as text only")
++    data = getFromClipboard(CF_UNICODETEXT);
++    PASS(data != nil && [data length] >= sizeof(back)
++	 && memcmp([data bytes], back, sizeof(back)) == 0,
++	 "the Windows text matches the string")
++  }
++
++  END_SET("win32 clipboard bridge")
++  return 0;
++}
++
++#else
++
++int
++main(void)
++{
++  START_SET("win32 clipboard bridge")
++    SKIP("back is not built with the win32 display server")
++  END_SET("win32 clipboard bridge")
++  return 0;
++}
++
++#endif
+diff --git a/Tools/GNUmakefile b/Tools/GNUmakefile
+index 29b1be1..9eaa824 100644
+--- a/Tools/GNUmakefile
++++ b/Tools/GNUmakefile
+@@ -56,6 +56,7 @@ endif
+ 
+ ifeq ($(BUILD_SERVER),win32)
+ gpbs_OBJC_FILES += win32pbs.m 
++gpbs_TOOL_LIBS += -lgdi32
+ endif
+ 
+ -include GNUmakefile.preamble
+diff --git a/Tools/win32pbs.m b/Tools/win32pbs.m
+index a989bba..b0f0c7a 100755
+--- a/Tools/win32pbs.m
++++ b/Tools/win32pbs.m
+@@ -33,6 +33,9 @@
+ #include <Foundation/Foundation.h>
+ #include <Foundation/NSUserDefaults.h>
+ #include <AppKit/NSPasteboard.h>
++#include <AppKit/NSBitmapImageRep.h>
++#include <AppKit/NSColor.h>
++#include <AppKit/NSGraphics.h>
+ 
+ #include <windows.h>
+ 
+@@ -62,7 +65,7 @@ typedef int WINBOOL;
+ 
+ - (id) initWithOSPb: (NSPasteboard*) ospb;
+ - (void) clipboardHasData;
+-- (void) setClipboardData;
++- (void) setClipboardData: (UINT)format;
+ - (void) grapClipboard;
+ - (void) setupRunLoopInputSourcesForMode: (NSString*)mode;
+ 
+@@ -70,9 +73,349 @@ typedef int WINBOOL;
+ 
+ static Win32PbOwner *wpb = nil;
+ static HWND hwndNextViewer = NULL;
++/* The format browsers and other programs use for PNG images. */
++static UINT pngFormat = 0;
++/* The largest image converted, in pixels (1GB at 32 bits a pixel).  */
++#define MAX_PIXELS 0x10000000
+ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg,
+                              WPARAM wParam, LPARAM lParam);
+ 
++/* Return a copy of the data for FORMAT on the open Windows clipboard.  */
++static NSData *
++clipboardDataForFormat(UINT format)
++{
++  HGLOBAL hglb;
++  NSData *data = nil;
++  void *p;
++
++  hglb = GetClipboardData(format);
++  if (hglb != NULL && (p = GlobalLock(hglb)) != NULL)
++    {
++      data = [NSData dataWithBytes: p length: GlobalSize(hglb)];
++      GlobalUnlock(hglb);
++    }
++  return data;
++}
++
++/* Scale the field selected by MASK in PIXEL to 0-255.  */
++static unsigned char
++maskedComponent(DWORD pixel, DWORD mask)
++{
++  DWORD max;
++  int shift = 0;
++
++  if (mask == 0)
++    {
++      return 0;
++    }
++  while ((mask & ((DWORD)1 << shift)) == 0)
++    {
++      shift++;
++    }
++  max = mask >> shift;
++  return (unsigned char)((((pixel & mask) >> shift) * 255) / max);
++}
++
++/* Convert a packed DIB (the contents of a CF_DIB block) to an
++   8 bit RGB(A) bitmap.  32 bit DIBs are read directly; GDI converts any
++   other depth or compression.  The fourth byte of a 32 bit pixel is only
++   taken as alpha when the header gives an alpha mask, and some pixel is
++   not transparent: programs often leave it zero, and the DIB Windows makes
++   from a bitmap can hold stray values there.  Images with alpha usually
++   come with a PNG as well, which is preferred.  */
++static NSBitmapImageRep *
++bitmapFromDIB(NSData *dib)
++{
++  const BITMAPINFOHEADER *bih = [dib bytes];
++  SIZE_T size = [dib length];
++  DWORD masks[4] = {0x00FF0000, 0x0000FF00, 0x000000FF, 0};
++  NSMutableData *converted = nil;
++  NSBitmapImageRep *rep;
++  const unsigned char *bits;
++  unsigned char *dst;
++  SIZE_T offset;
++  int width, height, x, y, dstRow;
++  BOOL topDown, hasAlpha = NO;
++
++  if (size < sizeof(BITMAPINFOHEADER)
++      || bih->biSize < sizeof(BITMAPINFOHEADER) || bih->biSize > size)
++    {
++      return nil;
++    }
++  width = bih->biWidth;
++  height = bih->biHeight;
++  topDown = (height < 0);
++  if (topDown)
++    {
++      height = -height;
++    }
++  if (width <= 0 || height <= 0 || (SIZE_T)width * height > MAX_PIXELS)
++    {
++      return nil;
++    }
++
++  /* The pixels follow the header, any colour masks and the colour table. */
++  offset = bih->biSize;
++  if (bih->biCompression == BI_BITFIELDS
++      && bih->biSize == sizeof(BITMAPINFOHEADER))
++    {
++      offset += 3 * sizeof(DWORD);
++    }
++  if (bih->biClrUsed != 0)
++    {
++      offset += bih->biClrUsed * sizeof(RGBQUAD);
++    }
++  else if (bih->biBitCount >= 1 && bih->biBitCount <= 8)
++    {
++      offset += (1 << bih->biBitCount) * sizeof(RGBQUAD);
++    }
++  if (offset > size)
++    {
++      return nil;
++    }
++  bits = (const unsigned char*)bih + offset;
++
++  if (bih->biBitCount == 32
++      && (bih->biCompression == BI_RGB || bih->biCompression == BI_BITFIELDS))
++    {
++      if (offset + (SIZE_T)width * 4 * height > size)
++        {
++          return nil;
++        }
++      if (bih->biCompression == BI_BITFIELDS)
++        {
++          /* The masks follow a BITMAPINFOHEADER, or are the first fields
++             a larger header adds; only those carry an alpha mask.  */
++          const DWORD *m = (const DWORD*)((const char*)bih
++                                          + sizeof(BITMAPINFOHEADER));
++
++          masks[0] = m[0];
++          masks[1] = m[1];
++          masks[2] = m[2];
++          if (bih->biSize >= sizeof(BITMAPINFOHEADER) + 4 * sizeof(DWORD))
++            {
++              masks[3] = m[3];
++            }
++        }
++    }
++  else
++    {
++      BITMAPINFO bmi;
++      HDC hdc;
++      HBITMAP hbm;
++      void *pixels = NULL;
++      int lines = 0;
++
++      if (bih->biCompression == BI_RGB || bih->biCompression == BI_BITFIELDS)
++        {
++          SIZE_T rowBytes = (((SIZE_T)width * bih->biBitCount + 31) / 32) * 4;
++
++          if (offset + rowBytes * height > size)
++            {
++              return nil;
++            }
++        }
++      else if (bih->biSizeImage == 0 || bih->biSizeImage > size - offset)
++        {
++          return nil;
++        }
++
++      memset(&bmi, 0, sizeof(bmi));
++      bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
++      bmi.bmiHeader.biWidth = width;
++      bmi.bmiHeader.biHeight = -height;
++      bmi.bmiHeader.biPlanes = 1;
++      bmi.bmiHeader.biBitCount = 32;
++      bmi.bmiHeader.biCompression = BI_RGB;
++      hdc = CreateCompatibleDC(NULL);
++      hbm = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &pixels, NULL, 0);
++      if (hbm != NULL)
++        {
++          HGDIOBJ old = SelectObject(hdc, hbm);
++
++          lines = SetDIBitsToDevice(hdc, 0, 0, width, height, 0, 0, 0, height,
++                                    bits, (const BITMAPINFO*)bih,
++                                    DIB_RGB_COLORS);
++          GdiFlush();
++          if (lines > 0)
++            {
++              converted = [NSMutableData
++                            dataWithBytes: pixels
++                                   length: (SIZE_T)width * 4 * height];
++            }
++          SelectObject(hdc, old);
++          DeleteObject(hbm);
++        }
++      DeleteDC(hdc);
++      if (converted == nil)
++        {
++          return nil;
++        }
++      bits = [converted bytes];
++      topDown = YES;
++    }
++
++  if (masks[3] != 0)
++    {
++      const DWORD *p = (const DWORD*)bits;
++      SIZE_T i, count = (SIZE_T)width * height;
++
++      for (i = 0; i < count && !hasAlpha; i++)
++        {
++          hasAlpha = ((p[i] & masks[3]) != 0);
++        }
++    }
++
++  rep = [[NSBitmapImageRep alloc]
++          initWithBitmapDataPlanes: NULL
++                        pixelsWide: width
++                        pixelsHigh: height
++                     bitsPerSample: 8
++                   samplesPerPixel: (hasAlpha ? 4 : 3)
++                          hasAlpha: hasAlpha
++                          isPlanar: NO
++                    colorSpaceName: NSDeviceRGBColorSpace
++                      bitmapFormat: (hasAlpha
++                                     ? NSAlphaNonpremultipliedBitmapFormat : 0)
++                       bytesPerRow: 0
++                      bitsPerPixel: 0];
++  dst = [rep bitmapData];
++  dstRow = [rep bytesPerRow];
++  for (y = 0; y < height; y++)
++    {
++      const DWORD *src = (const DWORD*)bits
++        + (SIZE_T)width * (topDown ? y : height - 1 - y);
++      unsigned char *d = dst + (SIZE_T)dstRow * y;
++
++      for (x = 0; x < width; x++)
++        {
++          *d++ = maskedComponent(src[x], masks[0]);
++          *d++ = maskedComponent(src[x], masks[1]);
++          *d++ = maskedComponent(src[x], masks[2]);
++          if (hasAlpha)
++            {
++              *d++ = maskedComponent(src[x], masks[3]);
++            }
++        }
++    }
++  return AUTORELEASE(rep);
++}
++
++/* Convert image data GNUstep can read (TIFF, PNG ...) to a packed 32 bit
++   DIB in global memory, with unpremultiplied alpha in the fourth byte.  */
++static HGLOBAL
++dibFromImageData(NSData *data)
++{
++  NSBitmapImageRep *rep;
++  NSString *space;
++  BITMAPINFOHEADER *bih;
++  unsigned char *d;
++  HGLOBAL hglb;
++  NSInteger width, height, x, y, colors;
++  NSUInteger max;
++  BOOL alpha, alphaFirst, premultiplied, integer, rgb, white;
++
++  rep = [NSBitmapImageRep imageRepWithData: data];
++  if (rep == nil)
++    {
++      return NULL;
++    }
++  width = [rep pixelsWide];
++  height = [rep pixelsHigh];
++  if (width <= 0 || height <= 0 || (SIZE_T)width * height > MAX_PIXELS)
++    {
++      return NULL;
++    }
++  hglb = GlobalAlloc(GMEM_MOVEABLE,
++                     sizeof(BITMAPINFOHEADER) + width * 4 * height);
++  if (hglb == NULL)
++    {
++      return NULL;
++    }
++
++  space = [rep colorSpaceName];
++  alpha = [rep hasAlpha];
++  alphaFirst = ([rep bitmapFormat] & NSAlphaFirstBitmapFormat) != 0;
++  premultiplied = alpha
++    && ([rep bitmapFormat] & NSAlphaNonpremultipliedBitmapFormat) == 0;
++  colors = [rep samplesPerPixel] - (alpha ? 1 : 0);
++  /* Read integer RGB and grey samples directly, anything else as colours. */
++  integer = ([rep bitsPerSample] <= 16
++             && !([rep bitmapFormat] & NSFloatingPointSamplesBitmapFormat));
++  max = integer ? (1 << [rep bitsPerSample]) - 1 : 1;
++  rgb = (integer && colors == 3
++         && ([space isEqualToString: NSDeviceRGBColorSpace]
++             || [space isEqualToString: NSCalibratedRGBColorSpace]));
++  white = (integer && colors == 1
++           && ([space isEqualToString: NSDeviceWhiteColorSpace]
++               || [space isEqualToString: NSCalibratedWhiteColorSpace]));
++
++  bih = GlobalLock(hglb);
++  memset(bih, 0, sizeof(BITMAPINFOHEADER));
++  bih->biSize = sizeof(BITMAPINFOHEADER);
++  bih->biWidth = width;
++  bih->biHeight = height;
++  bih->biPlanes = 1;
++  bih->biBitCount = 32;
++  bih->biCompression = BI_RGB;
++  bih->biSizeImage = width * 4 * height;
++
++  /* DIB rows run from the bottom of the image up.  */
++  d = (unsigned char*)(bih + 1);
++  for (y = height - 1; y >= 0; y--)
++    {
++      CREATE_AUTORELEASE_POOL(pool);
++
++      for (x = 0; x < width; x++)
++        {
++          NSUInteger p[5];
++          NSUInteger r, g, b, a;
++
++          if (rgb || white)
++            {
++              NSUInteger *c;
++
++              [rep getPixel: p atX: x y: y];
++              c = (alpha && alphaFirst) ? p + 1 : p;
++              a = alpha ? (alphaFirst ? p[0] : p[colors]) : max;
++              r = c[0];
++              g = rgb ? c[1] : c[0];
++              b = rgb ? c[2] : c[0];
++              if (premultiplied && a != 0 && a != max)
++                {
++                  r = MIN(r * max / a, max);
++                  g = MIN(g * max / a, max);
++                  b = MIN(b * max / a, max);
++                }
++              r = r * 255 / max;
++              g = g * 255 / max;
++              b = b * 255 / max;
++              a = a * 255 / max;
++            }
++          else
++            {
++              NSColor *c;
++              CGFloat fr = 0, fg = 0, fb = 0, fa = 1;
++
++              c = [[rep colorAtX: x y: y]
++                    colorUsingColorSpaceName: NSDeviceRGBColorSpace];
++              [c getRed: &fr green: &fg blue: &fb alpha: &fa];
++              r = (NSUInteger)(fr * 255 + 0.5);
++              g = (NSUInteger)(fg * 255 + 0.5);
++              b = (NSUInteger)(fb * 255 + 0.5);
++              a = (NSUInteger)(fa * 255 + 0.5);
++            }
++          *d++ = b;
++          *d++ = g;
++          *d++ = r;
++          *d++ = a;
++        }
++      [pool drain];
++    }
++  GlobalUnlock(hglb);
++  return hglb;
++}
++
+ 
+ @implementation Win32PbOwner
+ 
+@@ -105,6 +448,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg,
+ 
+   _ignore = NO;  
+   _hinstance = (HINSTANCE)GetModuleHandle(NULL);
++  pngFormat = RegisterClipboardFormat("PNG");
+ 
+   // Register the main window class. 
+   wc.cbSize = sizeof(wc);          
+@@ -142,13 +486,35 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg,
+   [super dealloc];
+ }
+ 
+-- (void) clipboardHasString
++- (void) clipboardHasTypes
+ {
+-  if ((_hwnd != GetClipboardOwner()) &&
+-      IsClipboardFormatAvailable(CF_UNICODETEXT)) 
++  NSMutableArray *types;
++  BOOL png;
++
++  if (_hwnd == GetClipboardOwner())
+     {
+-      [_pb declareTypes: [NSArray arrayWithObject: NSStringPboardType]
+-           owner: self];
++      return;
++    }
++
++  types = [NSMutableArray arrayWithCapacity: 3];
++  if (IsClipboardFormatAvailable(CF_UNICODETEXT))
++    {
++      [types addObject: NSStringPboardType];
++    }
++  png = (pngFormat != 0 && IsClipboardFormatAvailable(pngFormat));
++  if (png || IsClipboardFormatAvailable(CF_DIBV5)
++      || IsClipboardFormatAvailable(CF_DIB)
++      || IsClipboardFormatAvailable(CF_BITMAP))
++    {
++      [types addObject: NSTIFFPboardType];
++    }
++  if (png)
++    {
++      [types addObject: NSPasteboardTypePNG];
++    }
++  if ([types count] > 0)
++    {
++      [_pb declareTypes: types owner: self];
+     }
+ }
+ 
+@@ -161,7 +527,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg,
+   if (!_ignore)
+     {
+       _ignore = YES;
+-      [self clipboardHasString];
++      [self clipboardHasTypes];
+       _ignore = NO;
+     }
+ }
+@@ -194,16 +560,72 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg,
+   SetClipboardData(CF_UNICODETEXT, hglb);
+ }
+ 
++/* Render the pasteboard's image as FORMAT, which is CF_DIB or PNG.  */
++- (void) setClipboardImage: (UINT)format
++{
++  NSArray *types = [_pb types];
++  NSData *data = nil;
++  HGLOBAL hglb = NULL;
++
++  if (format == pngFormat && [types containsObject: NSPasteboardTypePNG])
++    {
++      data = [_pb dataForType: NSPasteboardTypePNG];
++    }
++  if (data == nil && [types containsObject: NSTIFFPboardType])
++    {
++      data = [_pb dataForType: NSTIFFPboardType];
++    }
++  if (data == nil && [types containsObject: NSPasteboardTypePNG])
++    {
++      data = [_pb dataForType: NSPasteboardTypePNG];
++    }
++  if (data == nil)
++    {
++      return;
++    }
++
++  if (format == CF_DIB)
++    {
++      hglb = dibFromImageData(data);
++    }
++  else
++    {
++      if ([data length] < 4 || memcmp([data bytes], "\x89PNG", 4) != 0)
++        {
++          data = [[NSBitmapImageRep imageRepWithData: data]
++                   representationUsingType: NSPNGFileType
++                                properties: nil];
++        }
++      if ([data length] > 0
++          && (hglb = GlobalAlloc(GMEM_MOVEABLE, [data length])) != NULL)
++        {
++          memcpy(GlobalLock(hglb), [data bytes], [data length]);
++          GlobalUnlock(hglb);
++        }
++    }
++  if (hglb != NULL)
++    {
++      SetClipboardData(format, hglb);
++    }
++}
++
+ /* 
+    Data is requested from the Windows clipboard. We are already the 
+    owner of the clipboard.
+  */
+-- (void) setClipboardData
++- (void) setClipboardData: (UINT)format
+ {
+   if (!_ignore)
+     {
+       _ignore = YES;  
+-      [self setClipboardString];
++      if (format == CF_UNICODETEXT)
++        {
++          [self setClipboardString];
++        }
++      else if (format == CF_DIB || (format == pngFormat && pngFormat != 0))
++        {
++          [self setClipboardImage: format];
++        }
+       _ignore = NO;;  
+     }
+ }
+@@ -213,6 +635,8 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg,
+  */
+ - (void) grapClipboard
+ {
++  NSArray *types = [_pb types];
++
+   if (!OpenClipboard(_hwnd)) 
+      {
+        NSLog(@"Failed to get the Win32 clipboard. %d", GetLastError());
+@@ -224,7 +648,19 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg,
+       CloseClipboard();
+       return;
+     }
+-  SetClipboardData(CF_UNICODETEXT, NULL);
++  if ([types containsObject: NSStringPboardType])
++    {
++      SetClipboardData(CF_UNICODETEXT, NULL);
++    }
++  if ([types containsObject: NSTIFFPboardType]
++      || [types containsObject: NSPasteboardTypePNG])
++    {
++      SetClipboardData(CF_DIB, NULL);
++      if (pngFormat != 0)
++        {
++          SetClipboardData(pngFormat, NULL);
++        }
++    }
+ 
+   CloseClipboard();
+ }
+@@ -275,6 +711,51 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg,
+   CloseClipboard(); 
+ }
+ 
++/* Provide the clipboard's image as TYPE, which is TIFF or PNG.  A PNG on
++   the clipboard is passed on as is, or converted to TIFF; otherwise
++   the DIB (which Windows makes from a bitmap if need be) is converted.  */
++- (void) provideImageTo: (NSPasteboard*)pb type: (NSString*)type
++{
++  NSData *png = nil;
++  NSData *dib = nil;
++  NSData *data = nil;
++
++  if (!OpenClipboard(_hwnd))
++    {
++      return;
++    }
++  if (pngFormat != 0 && IsClipboardFormatAvailable(pngFormat))
++    {
++      png = clipboardDataForFormat(pngFormat);
++    }
++  /* CF_DIB rather than CF_DIBV5: the CF_DIBV5 Windows synthesizes can
++     carry colour masks after its header, so where its pixels start
++     is ambiguous.  A 32 bit CF_DIB still holds any alpha.  */
++  if (png == nil && [type isEqual: NSTIFFPboardType]
++      && IsClipboardFormatAvailable(CF_DIB))
++    {
++      dib = clipboardDataForFormat(CF_DIB);
++    }
++  CloseClipboard();
++
++  if ([type isEqual: NSPasteboardTypePNG])
++    {
++      data = png;
++    }
++  else if (png != nil)
++    {
++      data = [[NSBitmapImageRep imageRepWithData: png] TIFFRepresentation];
++    }
++  else if (dib != nil)
++    {
++      data = [bitmapFromDIB(dib) TIFFRepresentation];
++    }
++  if (data != nil)
++    {
++      [pb setData: data forType: type];
++    }
++}
++
+ - (void) pasteboard: (NSPasteboard*)pb provideDataForType: (NSString*)type
+ {
+   if (!_ignore)
+@@ -285,6 +766,13 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg,
+           [self provideStringTo: pb];
+           _ignore = NO;;  
+         }
++      else if ([type isEqual: NSTIFFPboardType]
++               || [type isEqual: NSPasteboardTypePNG])
++        {
++          _ignore = YES;
++          [self provideImageTo: pb type: type];
++          _ignore = NO;
++        }
+     }
+ }
+ 
+@@ -406,7 +894,7 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg,
+       break; 
+ 
+     case WM_RENDERFORMAT: 
+-      [wpb setClipboardData];
++      [wpb setClipboardData: (UINT)wParam];
+       break; 
+  
+     case WM_RENDERALLFORMATS:
+@@ -423,6 +911,11 @@ LRESULT CALLBACK MainWndProc(HWND hwnd, UINT uMsg,
+ 	  else
+ 	    {
+ 	      SendMessage(hwnd, WM_RENDERFORMAT, CF_UNICODETEXT, 0);
++	      SendMessage(hwnd, WM_RENDERFORMAT, CF_DIB, 0);
++	      if (pngFormat != 0)
++		{
++		  SendMessage(hwnd, WM_RENDERFORMAT, pngFormat, 0);
++		}
+ 	      CloseClipboard();
+ 	    }
+ 	}

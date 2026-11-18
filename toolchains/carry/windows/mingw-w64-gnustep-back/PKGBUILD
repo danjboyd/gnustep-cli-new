@@ -1,0 +1,76 @@
+# MSYS2's mingw-w64-gnustep-back 0.32.0-6 (msys2/MINGW-packages b1697f2), for the patch
+# layer only (docs/specs/patch-layer.md): the same release tarball, plus the carried
+# patches in CARRY_PATCH_DIR (toolchains/carry/libs-back/msys2-0.32.0: danjboyd/libs-back
+# carry-0.32.0.6's code changes), applied in order. The build flags are carry's
+# packaging/msys2/PKGBUILD's, which add clang 23 workarounds the stock 2026-05 build
+# didn't need. Built by windows-carry-layer.yml inside the locked toolchain root; only the
+# files that differ from the stock package go into the layer.
+
+_realname=gnustep-back
+pkgbase=mingw-w64-${_realname}
+pkgname=("${MINGW_PACKAGE_PREFIX}-${_realname}")
+pkgver=0.32.0
+pkgrel=6.1
+pkgdesc="GNUstep GUI Backend, with gnustep-cli's carried patches (mingw-w64)"
+arch=('any')
+mingw_arch=('clang64')
+url='https://gnustep.github.io/'
+msys2_repository_url='https://github.com/gnustep/libs-back'
+license=('spdx:LGPL-2.1-or-later')
+depends=("${MINGW_PACKAGE_PREFIX}-gnustep-gui"
+         "${MINGW_PACKAGE_PREFIX}-cairo")
+makedepends=("${MINGW_PACKAGE_PREFIX}-autotools"
+             "${MINGW_PACKAGE_PREFIX}-clang"
+             "${MINGW_PACKAGE_PREFIX}-lld"
+             "${MINGW_PACKAGE_PREFIX}-gnustep-make"
+             rsync)
+source=("${msys2_repository_url}/releases/download/back-${pkgver//./_}/${_realname}-${pkgver}.tar.gz")
+sha256sums=('ce171095012ac5d845f6e1285a5c71e011fd00aa5981ea1d5a5183706478218d')
+
+prepare() {
+  cd "${_realname}-${pkgver}"
+  if [ -z "${CARRY_PATCH_DIR:-}" ]; then
+    echo "CARRY_PATCH_DIR is not set: this recipe only builds the patch layer" >&2
+    return 1
+  fi
+  local carry_patch
+  for carry_patch in "${CARRY_PATCH_DIR}"/*.patch; do
+    patch -p1 -i "${carry_patch}"
+  done
+}
+
+build() {
+  rsync --recursive --times --links "${srcdir}/${_realname}-${pkgver}"/* "${srcdir}/build-${MSYSTEM}"
+  cd "${srcdir}/build-${MSYSTEM}"
+
+  . ${MINGW_PREFIX}/share/GNUstep/Makefiles/GNUstep.sh
+
+  export LDFLAGS="-lc++"
+
+  ./configure \
+    --enable-graphics=cairo \
+    --prefix="${MINGW_PREFIX}" \
+    --build="${MINGW_CHOST}" \
+    --host="${MINGW_CHOST}" \
+    --target="${MINGW_CHOST}" \
+    CC="$MINGW_PREFIX/bin/clang" \
+    CXX="$MINGW_PREFIX/bin/clang++"
+
+  # Clang 23 rejects gnustep-base's __block ivar (BLOCK_SCOPE in
+  # NSBackgroundActivityScheduler.h); libs-back uses no blocks, so __block
+  # can mean nothing (gnustep-make adds -fblocks after these flags).
+  make \
+    messages=yes \
+    CC="$MINGW_PREFIX/bin/clang" \
+    CXX="$MINGW_PREFIX/bin/clang++" \
+    OBJCFLAGS="-U__block -D__block= -Wno-error=incompatible-pointer-types -Wno-int-to-pointer-cast -Wno-pointer-to-int-cast -Wno-format"
+}
+
+package() {
+  cd "${srcdir}/build-${MSYSTEM}"
+
+  make install DESTDIR="${pkgdir}"
+
+  install -Dm644 "${srcdir}/${_realname}-${pkgver}/COPYING.LIB" \
+    "${pkgdir}${MINGW_PREFIX}/share/licenses/${_realname}/COPYING.LIB"
+}

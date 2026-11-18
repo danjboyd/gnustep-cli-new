@@ -1,0 +1,70 @@
+# MSYS2's mingw-w64-gnustep-gui 0.32.0-7 (msys2/MINGW-packages c071b1f, maintainer
+# Frederik Carlier), for the patch layer only (docs/specs/patch-layer.md): the same
+# release tarball and build, plus the carried patches in CARRY_PATCH_DIR
+# (toolchains/carry/libs-gui/msys2-0.32.0), applied in order. Built by
+# windows-carry-layer.yml inside the locked toolchain root; only the files that differ
+# from the stock package go into the layer.
+
+_realname=gnustep-gui
+pkgbase=mingw-w64-${_realname}
+pkgname=("${MINGW_PACKAGE_PREFIX}-${_realname}")
+pkgver=0.32.0
+pkgrel=7.1
+pkgdesc="GNUstep GUI Library, with gnustep-cli's carried patches (mingw-w64)"
+arch=('any')
+mingw_arch=('clang64')
+url='https://gnustep.github.io/'
+msys2_repository_url='https://github.com/gnustep/libs-gui'
+license=('spdx:LGPL-2.1-or-later')
+depends=("${MINGW_PACKAGE_PREFIX}-cc-libs"
+         "${MINGW_PACKAGE_PREFIX}-gnustep-base"
+         "${MINGW_PACKAGE_PREFIX}-libffi"
+         "${MINGW_PACKAGE_PREFIX}-giflib"
+         "${MINGW_PACKAGE_PREFIX}-icu"
+         "${MINGW_PACKAGE_PREFIX}-libjpeg-turbo"
+         "${MINGW_PACKAGE_PREFIX}-libpng"
+         "${MINGW_PACKAGE_PREFIX}-libtiff")
+makedepends=("bison"
+             "${MINGW_PACKAGE_PREFIX}-autotools"
+             "${MINGW_PACKAGE_PREFIX}-clang"
+             "${MINGW_PACKAGE_PREFIX}-lld"
+             "${MINGW_PACKAGE_PREFIX}-gnustep-make"
+             rsync)
+source=("${msys2_repository_url}/releases/download/gui-${pkgver//./_}/${_realname}-${pkgver}.tar.gz")
+sha256sums=('0c03a1b6313babd592ec58fcb825091f77eb27429a4ce4306ec3a7cfa7f9a1f6')
+
+prepare() {
+  cd "${_realname}-${pkgver}"
+  if [ -z "${CARRY_PATCH_DIR:-}" ]; then
+    echo "CARRY_PATCH_DIR is not set: this recipe only builds the patch layer" >&2
+    return 1
+  fi
+  local carry_patch
+  for carry_patch in "${CARRY_PATCH_DIR}"/*.patch; do
+    patch -p1 -i "${carry_patch}"
+  done
+}
+
+build() {
+  rsync --recursive --times --links "${srcdir}/${_realname}-${pkgver}"/* "${srcdir}/build-${MSYSTEM}"
+  cd "${srcdir}/build-${MSYSTEM}"
+
+  export LDFLAGS="-lc++"
+
+  CC="$MINGW_PREFIX/bin/clang" \
+  CXX="$MINGW_PREFIX/bin/clang++" \
+  ./configure \
+    --prefix="${MINGW_PREFIX}"
+
+  CC="$MINGW_PREFIX/bin/clang" \
+  CXX="$MINGW_PREFIX/bin/clang++" \
+  make
+}
+
+package() {
+  cd "${srcdir}/build-${MSYSTEM}"
+
+  make install DESTDIR="${pkgdir}"
+
+  install -Dm644 "${srcdir}/${_realname}-${pkgver}/COPYING.LIB" "${pkgdir}${MINGW_PREFIX}/share/licenses/${_realname}/COPYING.LIB"
+}

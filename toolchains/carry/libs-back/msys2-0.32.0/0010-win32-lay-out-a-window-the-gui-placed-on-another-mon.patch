@@ -1,0 +1,61 @@
+From d3f9def7d4e347ef9cc639e1958a0d19f9c0ed67 Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Wed, 14 Oct 2026 14:13:22 -0500
+Subject: [PATCH 11/14] win32: lay out a window the gui placed on another
+ monitor at its scale
+
+When the gui moves a window to a monitor with another scale itself, the
+WM_DPICHANGED handler now keeps the size the gui gave it.  But the gui
+laid the window out while it was still on the old monitor, at the old
+scale: a reused menu panel drawn on a 125% monitor kept its 150% layout,
+cutting its text off ("Ctrl+Q"), and one drawn back on the 150% monitor
+showed a black strip on its right.  Windows' suggested resize used to
+make the gui lay it out again.
+
+The handler now posts the gui a resize for the window's current rect, so
+the gui lays it out at the new monitor's scale.
+
+Found checking a two-monitor setup at 125% and 150% on Windows Server
+2025.
+
+AI assistance: this change and its description were written with Claude
+(Anthropic's Claude Code).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/win32/WIN32Server.m | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/Source/win32/WIN32Server.m b/Source/win32/WIN32Server.m
+index bb7cae5..ba8116d 100644
+--- a/Source/win32/WIN32Server.m
++++ b/Source/win32/WIN32Server.m
+@@ -1502,6 +1502,28 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
+                            r->right - r->left, r->bottom - r->top,
+                            SWP_NOZORDER | SWP_NOACTIVATE);
+             }
++          else
++            {
++              /* The gui laid the window out for the screen it was on as
++                 it placed it; once it's placed, a resize to the size it
++                 has lays it out at this monitor's scale. */
++              RECT wr;
++              NSRect rect;
++              NSEvent *ev;
++
++              GetWindowRect(hwnd, &wr);
++              rect = MSScreenRectToGS(wr);
++              ev = [NSEvent otherEventWithType: NSAppKitDefined
++                                      location: rect.origin
++                                 modifierFlags: 0
++                                     timestamp: 0
++                                  windowNumber: (int)hwnd
++                                       context: GSCurrentContext()
++                                       subtype: GSAppKitWindowResized
++                                         data1: rect.size.width
++                                         data2: rect.size.height];
++              [NSApp postEvent: ev atStart: NO];
++            }
+           flags._eventHandled = YES;
+         }
+         break;

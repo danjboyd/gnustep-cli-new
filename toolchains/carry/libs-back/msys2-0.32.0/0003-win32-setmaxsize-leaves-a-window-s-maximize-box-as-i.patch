@@ -1,0 +1,65 @@
+From 2ab8f9b613ff78711846fc9cd9bcdf5d92cf997e Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Tue, 13 Oct 2026 12:33:17 -0500
+Subject: [PATCH 04/14] win32: setmaxsize leaves a window's maximize box as its
+ style means it
+
+-setmaxsize:: toggled WS_MAXIMIZEBOX (XOR) when a maximum size was set,
+so a window given one twice got the box back, and it added the box to
+every window whose maximum size was unlimited, so dialogs and panels
+that can't be resized showed a maximize button.
+
+A maximum size now takes the box away, and an unlimited one gives it back
+only to a resizable window with a caption, as -windowStyleForGSStyle:
+gives it.  The frame is redrawn when the box changes.
+
+AI assistance: this change and its description were written with Claude
+(Anthropic's Claude Code).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/win32/WIN32Server.m | 21 +++++++++++++++------
+ 1 file changed, 15 insertions(+), 6 deletions(-)
+
+diff --git a/Source/win32/WIN32Server.m b/Source/win32/WIN32Server.m
+index d26ec69..95d849f 100644
+--- a/Source/win32/WIN32Server.m
++++ b/Source/win32/WIN32Server.m
+@@ -2358,22 +2358,31 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
+ - (void) setmaxsize: (NSSize)size : (int) winNum
+ {
+   WIN_INTERN *win = (WIN_INTERN *)GetWindowLongPtr((HWND)winNum, GWLP_USERDATA);
++  LONG_PTR style = GetWindowLongPtr((HWND)winNum, GWL_STYLE);
++  LONG_PTR wanted = style;
+   POINT p;
+ 
+   p.x = size.width;
+   p.y = size.height;
+   win->minmax.ptMaxTrackSize = p;
+ 
+-  // Disable the maximize box if a maximum size is set
++  /* A maximum size takes the maximize box away; a resizable titled window
++     without one has it.  Only those: a window that can't be resized has
++     no maximize box (-windowStyleForGSStyle:), whatever its maximum size. */
+   if (size.width < 10000 || size.height < 10000)
+     {
+-      SetWindowLongPtr((HWND)winNum, GWL_STYLE, 
+-          GetWindowLongPtr((HWND)winNum, GWL_STYLE) ^ WS_MAXIMIZEBOX);
++      wanted &= ~WS_MAXIMIZEBOX;
+     }
+-  else
++  else if ((style & WS_THICKFRAME) && (style & WS_CAPTION) == WS_CAPTION)
++    {
++      wanted |= WS_MAXIMIZEBOX;
++    }
++  if (wanted != style)
+     {
+-      SetWindowLongPtr((HWND)winNum, GWL_STYLE, 
+-          GetWindowLongPtr((HWND)winNum, GWL_STYLE) | WS_MAXIMIZEBOX);
++      SetWindowLongPtr((HWND)winNum, GWL_STYLE, wanted);
++      SetWindowPos((HWND)winNum, NULL, 0, 0, 0, 0,
++                   SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
++                   | SWP_FRAMECHANGED);
+     }
+ }
+ 

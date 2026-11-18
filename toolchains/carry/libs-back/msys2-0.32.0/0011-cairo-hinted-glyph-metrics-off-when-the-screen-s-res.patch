@@ -1,0 +1,61 @@
+From d89e26e2971e23a785c99cfb09c317d8258b3151 Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Thu, 22 Oct 2026 14:25:15 -0500
+Subject: [PATCH 12/14] cairo: hinted glyph metrics off when the screen's
+ resolution isn't 72
+
+The gui scales a window by the screen's resolution when GSScaleFactor
+isn't set: on Windows, a system DPI aware process at 125% or 150%
+(LOGPIXELSX 120 or 144, so 90 or 108).  windows_are_scaled() only knew
+GSScaleFactor and a per-monitor DPI aware server, so hinting stayed 33
+there and glyphs were spaced unevenly (ScreenshotTool #306: "px  PNG",
+the K and B of "KB" overlapping).  It now also answers YES for a
+screen whose resolution isn't 72, and NO before there's a server.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01WeVjWk33bu6Q889UxX4oaT
+---
+ Source/cairo/CairoFontInfo.m | 20 ++++++++++++++++----
+ 1 file changed, 16 insertions(+), 4 deletions(-)
+
+diff --git a/Source/cairo/CairoFontInfo.m b/Source/cairo/CairoFontInfo.m
+index d141c2c..d6f8b0a 100644
+--- a/Source/cairo/CairoFontInfo.m
++++ b/Source/cairo/CairoFontInfo.m
+@@ -50,20 +50,32 @@
+ @end
+ 
+ /* YES when windows may be drawn at a scale other than 1.0: GSScaleFactor
+-   set to another value, or a server scaling each window by its monitor's
+-   DPI. */
++   set to another value, a server scaling each window by its monitor's
++   DPI, or a screen whose resolution isn't 72 (the gui scales windows by
++   it without GSScaleFactor: a system DPI aware process on Windows at
++   125% or 150%). */
+ static BOOL
+ windows_are_scaled(float scale)
+ {
+   GSDisplayServer *server;
++  NSSize resolution;
+ 
+   if (scale != 0.0f && scale != 1.0f)
+     {
+       return YES;
+     }
+   server = GSCurrentServer();
+-  return [server respondsToSelector: @selector(isPerMonitorDPIAware)]
+-    && [(NSObject *)server isPerMonitorDPIAware];
++  if (server == nil)
++    {
++      return NO;
++    }
++  if ([server respondsToSelector: @selector(isPerMonitorDPIAware)]
++    && [(NSObject *)server isPerMonitorDPIAware])
++    {
++      return YES;
++    }
++  resolution = [server resolutionForScreen: 0];
++  return resolution.width > 0.0 && fabs(resolution.width - 72.0) > 0.5;
+ }
+ 
+ void set_font_options(cairo_font_options_t *options)

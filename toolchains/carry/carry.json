@@ -1,0 +1,453 @@
+{
+  "schema_version": 1,
+  "comment": "Carried GNUstep patches for the patch layer. Protocol: docs/carried-patches/README.md. Each base lists its patches in apply order; paths are relative to this directory. outputs: the installed files a base's rebuild contributes to the layer (glob patterns); every other file the rebuild changes is reported, not shipped.",
+  "bases": {
+    "libs-base/msys2-1.31.1": {
+      "library": "libs-base",
+      "stock": "our mingw-w64-clang-x86_64-gnustep-base 1.31.1-10.5 (toolchains/windows-amd64-msys2-clang64/gnustep-base-package)",
+      "msys2_package": "mingw-w64-clang-x86_64-gnustep-base",
+      "outputs": [
+        "clang64/bin/gnustep-base-*.dll"
+      ]
+    },
+    "libs-gui/msys2-0.32.0": {
+      "library": "libs-gui",
+      "stock": "MSYS2 mingw-w64-clang-x86_64-gnustep-gui 0.32.0-7 (release tarball, no patches)",
+      "msys2_package": "mingw-w64-clang-x86_64-gnustep-gui",
+      "outputs": [
+        "clang64/bin/gnustep-gui-*.dll"
+      ]
+    },
+    "libs-back/msys2-0.32.0": {
+      "library": "libs-back",
+      "stock": "MSYS2 mingw-w64-clang-x86_64-gnustep-back 0.32.0-6 (release tarball, no patches)",
+      "msys2_package": "mingw-w64-clang-x86_64-gnustep-back",
+      "outputs": [
+        "clang64/lib/GNUstep/Bundles/libgnustep-back-*.bundle/*.dll",
+        "clang64/bin/gpbs.exe"
+      ]
+    }
+  },
+  "patches": [
+    {
+      "id": "win32pbs-images",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0001-win32pbs-bridge-images-between-the-Windows-clipboard.patch",
+      "sha256": "140216c13ff73475ad419fb14f35b0400ad1026784d6d61af20d7302095b5f27",
+      "summary": "win32pbs: images between the Windows clipboard and gpbs",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32pbs-images",
+      "topic_commit": "3210007ae449abebb12a8edd0262754e6cc9ecbc",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "gnustep/libs-back#246 merged 2026-11-15 (5e14866), after 0.32.0",
+      "defaults": [],
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "shipped in ScreenshotTool and ObjcMarkdown MSIs as carry-0.32.0.5"
+    },
+    {
+      "id": "win32-client-caption",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0002-win32-let-the-gui-draw-a-titled-window-s-caption.patch",
+      "sha256": "b390889aad907e1d8dbe428898a4e425d73d6bee774e5f1826525e5ba035907b",
+      "summary": "win32: the gui draws a titled window's caption (Snap Layouts, WinUI title bar)",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32-client-caption",
+      "topic_commit": "08788aa803fcec8ba0aafb5be3adf6ad01f72dea",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent",
+      "defaults": [
+        "GSBackClientDrawsCaptions"
+      ],
+      "abi": "added: WIN32Server ivar clientDrawsCaptions (non-fragile ivars; the class is private to the backend bundle)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "shipped in ScreenshotTool and ObjcMarkdown MSIs as carry-0.32.0.5"
+    },
+    {
+      "id": "win32-setmaxsize",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0003-win32-setmaxsize-leaves-a-window-s-maximize-box-as-i.patch",
+      "sha256": "a7a15b43f6c2a46c0985e6bc2f2157efc2398baf5e6e0e04d009f4a79368526e",
+      "summary": "win32: -setmaxsize:: leaves the maximize box as the window's style means it",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32-setmaxsize",
+      "topic_commit": "2ab8f9b613ff78711846fc9cd9bcdf5d92cf997e",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent (winuitheme upstream proposal #101)",
+      "defaults": [],
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "shipped in ScreenshotTool and ObjcMarkdown MSIs as carry-0.32.0.5"
+    },
+    {
+      "id": "win32-popup-shadows",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0004-win32-give-a-borderless-window-Windows-shadow-when-t.patch",
+      "sha256": "7d2191485fff4a340d3f1b488876085ecabfbfbd7ab509b5eaac3b34469ffd95",
+      "summary": "win32: DWM shadow and Windows 11 rounding for borderless windows the gui asks for",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32-popup-shadows",
+      "topic_commit": "49f443eb27aadb2950cb39d0adb5a99ed4f9ad23",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent",
+      "defaults": [],
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "shipped in ScreenshotTool and ObjcMarkdown MSIs as carry-0.32.0.5"
+    },
+    {
+      "id": "win32-per-monitor-dpi",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0005-win32-per-monitor-DPI-awareness-with-the-GSBackDPIAw.patch",
+      "sha256": "d40f1d8b21962eff32816f3c3d94e51c2eab1c0e4cf31531051e7220aeef218d",
+      "summary": "win32: per-monitor DPI awareness",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32-per-monitor-dpi",
+      "topic_commit": "ab84cc4ac0e72438c84f9aacf8bbebcfdbe6957d",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent",
+      "defaults": [
+        "GSBackDPIAware"
+      ],
+      "abi": "added: WIN32Server ivar perMonitorDPIAware (non-fragile ivars; the class is private to the backend bundle)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "shipped in ScreenshotTool and ObjcMarkdown MSIs as carry-0.32.0.5"
+    },
+    {
+      "id": "win32-monitor-handle-decl",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0006-win32-declare-monitorHandleForScreen-in-WIN32Server..patch",
+      "sha256": "cda7669ac5aeaa94e8a1e6a5c359b1d916d5d0ba7333eaf34348fb7844fb1fe7",
+      "summary": "win32: declare -monitorHandleForScreen: in WIN32Server.h",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32-monitor-frames",
+      "topic_commit": "285c614928367763e036142e3600f2a3909bbf7d",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent",
+      "defaults": [],
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "shipped in ScreenshotTool and ObjcMarkdown MSIs as carry-0.32.0.5"
+    },
+    {
+      "id": "win32-monitor-frames",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0007-win32-place-each-monitor-s-frame-as-window-coordinat.patch",
+      "sha256": "3b7624af98ba9999e67074d2f16f1287fceaaac16e6fa8f58ecb7729487af260",
+      "summary": "win32: place each monitor's frame as window coordinates are",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32-monitor-frames",
+      "topic_commit": "c778fc1d2efda221fc5c09d23514759c81739d66",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent",
+      "defaults": [],
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "shipped in ScreenshotTool and ObjcMarkdown MSIs as carry-0.32.0.5"
+    },
+    {
+      "id": "win32-dpichanged-placed-window",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0008-win32-WM_DPICHANGED-keeps-a-window-the-gui-placed-on.patch",
+      "sha256": "83559823dfbd52db0bd45c0251111fd3d07c7f1dc2b4f230ff904c343dd34400",
+      "summary": "win32: WM_DPICHANGED keeps a window the gui placed on another monitor",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32-per-monitor-dpi",
+      "topic_commit": "28119d98c79deb81af3598fe77bdd09b21d10120",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent",
+      "defaults": [
+        "GSBackDPIAware"
+      ],
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "shipped in ScreenshotTool and ObjcMarkdown MSIs as carry-0.32.0.5"
+    },
+    {
+      "id": "cairo-hinting-dpi-scaled",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0009-cairo-hinted-glyph-metrics-off-when-the-server-scale.patch",
+      "sha256": "9e90bf343e9778ca1084f0d4e40f03709eb10689d13a6177dc5d37939b02b081",
+      "summary": "cairo: hinted glyph metrics off when the server scales windows by DPI",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "cairo-hinting-system-dpi",
+      "topic_commit": "57b346991e651e7589d6b688b30ec8f395d8e607",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent",
+      "defaults": [
+        "GSBackDPIAware"
+      ],
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "shipped in ScreenshotTool and ObjcMarkdown MSIs as carry-0.32.0.5"
+    },
+    {
+      "id": "win32-placed-window-scale",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0010-win32-lay-out-a-window-the-gui-placed-on-another-mon.patch",
+      "sha256": "c9f3c1b9f0e70345307ffbecf6824bf53d911f013d4f008bc82d6a96c7c7bdbc",
+      "summary": "win32: lay out a window the gui placed on another monitor at its scale",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32-per-monitor-dpi",
+      "topic_commit": "d3f9def7d4e347ef9cc639e1958a0d19f9c0ed67",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent",
+      "defaults": [
+        "GSBackDPIAware"
+      ],
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "shipped in ScreenshotTool and ObjcMarkdown MSIs as carry-0.32.0.5"
+    },
+    {
+      "id": "cairo-hinting-resolution",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0011-cairo-hinted-glyph-metrics-off-when-the-screen-s-res.patch",
+      "sha256": "4af3ed0d6d44bc5ef64e774dc0f6709dca7bdd3f13b3cc228201be4ff7e6412a",
+      "summary": "cairo: hinted glyph metrics off when the screen's resolution isn't 72",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "cairo-hinting-system-dpi",
+      "topic_commit": "d89e26e2971e23a785c99cfb09c317d8258b3151",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent",
+      "defaults": [],
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "shipped in ScreenshotTool and ObjcMarkdown MSIs as carry-0.32.0.5"
+    },
+    {
+      "id": "win32-sizemove-timers",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0012-win32-fire-timers-and-redisplay-during-a-window-move.patch",
+      "sha256": "cbe4da9000a6c41def8fd25067aca72940aac7a127a1d78ffe9975cd62d5b546",
+      "summary": "win32: fire timers and redisplay during a window move or size loop",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32-sizemove-timers",
+      "topic_commit": "7225d7df35c3379cfc7e013b0da6dd88acc34dce",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent (winuitheme upstream proposal #98)",
+      "defaults": [],
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "carry-0.32.0.6; not yet in an app release"
+    },
+    {
+      "id": "win32-sizemove-nested-loop",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-back/msys2-0.32.0/0013-win32-end-a-window-drag-when-a-timer-starts-a-nested.patch",
+      "sha256": "43e9998cd071bfcf9492b31207b0c5d27821aad38b3c4275e62adbacd63b23e6",
+      "summary": "win32: end a window drag when a timer starts a nested event loop",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32-sizemove-timers",
+      "topic_commit": "17c274e55fb66c027e42eeb35db469869ebf9bbf",
+      "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
+      "upstream": "not_sent",
+      "defaults": [],
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
+      "requested_by": [
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "WinUITheme"
+      ],
+      "owner": "screenshottool-windows",
+      "verified_by": "carry-0.32.0.6; not yet in an app release"
+    },
+    {
+      "id": "gui-3f5efad1-scrollview-retile",
+      "library": "libs-gui",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-gui/msys2-0.32.0/0001-upstream-3f5efad1-NSScrollView-autohidesScrollers-retile.patch",
+      "sha256": "a638ccaab0e49b276a68efdf1a02955fd058f2a3a2e7f5fe00768f348559a767",
+      "summary": "NSScrollView stops re-tiling without end when autohidesScrollers shows one scroller and hides the other",
+      "source": "upstream commit 3f5efad1b (after 0.32.0)",
+      "upstream": "merged 3f5efad1b",
+      "defaults": [],
+      "abi": "unchanged",
+      "requested_by": [
+        "ObjcMarkdown"
+      ],
+      "owner": "markdown-viewer-windows",
+      "verified_by": "ObjcMarkdown #121, shipped in its MSI"
+    },
+    {
+      "id": "gui-layout-sanity-checks",
+      "library": "libs-gui",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-gui/msys2-0.32.0/0002-GSLayoutManager-compile-out-the-glyph-run-sanity-che.patch",
+      "sha256": "4e87417ff703fbdc229bb1dc8a51d67b1ce8ea80caacc8a076fce2477975211f",
+      "summary": "GSLayoutManager: compile out the glyph-run sanity check (quadratic layout)",
+      "source": "ObjcMarkdown packaging/patches/libs-gui/0001",
+      "upstream": "reported as gnustep/libs-gui#992 (issue); patch not sent",
+      "defaults": [],
+      "abi": "unchanged",
+      "requested_by": [
+        "ObjcMarkdown"
+      ],
+      "owner": "markdown-viewer-windows",
+      "verified_by": "ObjcMarkdown #94, shipped in its MSI"
+    },
+    {
+      "id": "gui-theme-backend-defaults",
+      "library": "libs-gui",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-gui/msys2-0.32.0/0003-GSTheme-let-a-theme-turn-GNUstep-drawn-window-decora.patch",
+      "sha256": "f86a600676467e00b831870e830fc3609ddba10800d056658134d9d2b339c3a6",
+      "summary": "GSTheme: a theme sets GSBackHandlesWindowDecorations before the backend reads it",
+      "source": "ObjcMarkdown packaging/patches/libs-gui/0002 (Adwaita bd5a983; newer: danjboyd/libs-gui ai-policy/theme-backend-defaults-v3 de97116da)",
+      "upstream": "prepared in plugins-themes-Adwaita#13; not sent",
+      "defaults": [
+        "GSBackHandlesWindowDecorations"
+      ],
+      "abi": "added: GSThemeInstallBackendDefaults (private header GSThemePrivate.h)",
+      "requested_by": [
+        "ObjcMarkdown",
+        "Adwaita",
+        "WinUITheme"
+      ],
+      "owner": "adwaita",
+      "verified_by": "shipped in ObjcMarkdown's MSI"
+    },
+    {
+      "id": "base-attributed-string-hash",
+      "library": "libs-base",
+      "base": "msys2-1.31.1",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-base/msys2-1.31.1/0001-GSAttributedString-hash-cached-attribute-dictionarie.patch",
+      "sha256": "a7c1b32d2fb6c496faab8578442450d4199612f504b0c9658948dedee59c84ee",
+      "summary": "GSAttributedString: hash cached attribute dictionaries by content (quadratic text building)",
+      "source": "ObjcMarkdown packaging/patches/libs-base/0001",
+      "upstream": "not_sent",
+      "defaults": [],
+      "abi": "unchanged",
+      "requested_by": [
+        "ObjcMarkdown"
+      ],
+      "owner": "markdown-viewer-windows",
+      "verified_by": "ObjcMarkdown #94, shipped in its MSI",
+      "applies_after": "the stock recipe's 11 patches (toolchains/windows-amd64-msys2-clang64/gnustep-base-package)"
+    }
+  ]
+}

@@ -1,0 +1,274 @@
+name: Windows Patch Layer
+
+# Builds the Windows patch layer (docs/specs/patch-layer.md): gnustep-base, gnustep-gui
+# and gnustep-back rebuilt with the carried patches (toolchains/carry), keeping only the
+# files that differ from a given stock toolchain zip. Fails on any removed export (the ABI
+# rule). Smoke-tests the stock root with the layer applied. Nothing is published: the
+# layer is an artifact of this run, and a release takes it only through stage-release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      windows_run:
+        description: Windows Current Source Artifacts run whose toolchain zip is the stock base
+        required: true
+      release:
+        description: Release label recorded in carry-layer.json
+        required: true
+        default: 0.1.9-dev
+  # Builds from the branch that adds the layer; dispatch needs the file on master.
+  push:
+    branches: [carried-patches-protocol]
+    paths:
+      - toolchains/carry/**
+      - toolchains/windows-amd64-msys2-clang64/gnustep-base-package/**
+      - src/gnustep_cli_shared/carry_layer.py
+      - .github/workflows/windows-carry-layer.yml
+      - .github/carry/**
+      - src/full-cli/**
+      - scripts/bootstrap/**
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # For push builds: the stock toolchain of Windows run 44189762879 (assembled from the
+  # same lock as master at beacc8d).
+  DEFAULT_WINDOWS_RUN: "44189762879"
+  DEFAULT_RELEASE: 0.1.9-dev
+  TARGET: windows-amd64-msys2-clang64
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  layer:
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check carry.json
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = "$env:GITHUB_WORKSPACE\src"
+          python -m gnustep_cli_shared.carry_layer check --carry-json toolchains\carry\carry.json
+          if ($LASTEXITCODE -ne 0) { throw 'carry.json check failed' }
+
+      - name: The stock toolchain zip
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $run = '${{ inputs.windows_run }}'; if (-not $run) { $run = $env:DEFAULT_WINDOWS_RUN }
+          $release = '${{ inputs.release }}'; if (-not $release) { $release = $env:DEFAULT_RELEASE }
+          foreach ($try in 1..3) {
+            gh run download $run --repo $env:GITHUB_REPOSITORY -n gnustep-windows-current-source-artifacts -D "$env:RUNNER_TEMP\stock-dl"
+            if ($LASTEXITCODE -eq 0) { break }
+            Remove-Item -Recurse -Force "$env:RUNNER_TEMP\stock-dl" -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 20
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'download failed' }
+          $zip = Get-ChildItem -Recurse "$env:RUNNER_TEMP\stock-dl" -Filter "gnustep-toolchain-$env:TARGET-*.zip" | Select-Object -First 1
+          if (-not $zip) { throw 'no toolchain zip in that run' }
+          $sha = (Get-FileHash -Algorithm SHA256 $zip.FullName).Hash.ToLowerInvariant()
+          Expand-Archive -Path $zip.FullName -DestinationPath "$env:RUNNER_TEMP\stock" -Force
+          "STOCK_ZIP=$($zip.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "STOCK_SHA256=$sha" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "STOCK_ROOT=$env:RUNNER_TEMP\stock" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "RELEASE=$release" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "stock toolchain: $($zip.Name) sha256 $sha (run $run)"
+          if (-not (Test-Path "$env:RUNNER_TEMP\stock\clang64\bin\gnustep-gui-0.dll")) { throw "the stock zip has no clang64\bin\gnustep-gui-0.dll at its root" }
+
+      - name: Assemble the locked MSYS2 build root
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & powershell -NoProfile -ExecutionPolicy Bypass -File toolchains\windows-amd64-msys2-clang64\assemble-toolchain.ps1 -Prefix "$env:RUNNER_TEMP\build-prefix" -CacheDir "$env:RUNNER_TEMP\cache" -MsysRoot "$env:RUNNER_TEMP\msys-root"
+          if ($LASTEXITCODE -ne 0) { throw "assemble failed: $LASTEXITCODE" }
+
+      - name: Build tools, and check the build root's libraries are the stock ones
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $bash = "$env:RUNNER_TEMP\msys-root\usr\bin\bash.exe"
+          $env:MSYSTEM = 'CLANG64'; $env:CHERE_INVOKING = '1'
+          foreach ($dll in 'gnustep-base-1_31.dll', 'gnustep-gui-0.dll') {
+            $a = (Get-FileHash -Algorithm SHA256 "$env:RUNNER_TEMP\msys-root\clang64\bin\$dll").Hash
+            $b = (Get-FileHash -Algorithm SHA256 "$env:STOCK_ROOT\clang64\bin\$dll").Hash
+            "$dll build root $($a.Substring(0,12)) stock $($b.Substring(0,12))"
+            if ($a -ne $b) { throw "$dll in the build root is not the stock zip's" }
+          }
+          & $bash -lc "pacman -Sy --noconfirm && pacman -S --noconfirm --needed base-devel patchutils rsync bison mingw-w64-clang-x86_64-autotools"
+          if ($LASTEXITCODE -ne 0) { throw "tools failed: $LASTEXITCODE" }
+          # As in windows-gnustep-base-package.yml: the toolchain build fixes libdispatch's
+          # generic_win_base.h, and this build root needs the same, or Foundation.h fails.
+          & $bash -lc "sed -i -e 's|^typedef int mode_t;|/* mode_t is provided by MinGW sys/types.h in this managed toolchain. */|' -e 's|^typedef void pthread_attr_t;|#if !defined(__MINGW32__) /* winpthreads defines pthread_attr_t */\ntypedef void pthread_attr_t;\n#endif|' /clang64/include/os/generic_win_base.h"
+          exit 0
+
+      - name: Build gnustep-base, gnustep-gui and gnustep-back with the carried patches
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $bash = "$env:RUNNER_TEMP\msys-root\usr\bin\bash.exe"
+          $env:MSYSTEM = 'CLANG64'; $env:CHERE_INVOKING = '1'
+          $work = "$env:RUNNER_TEMP\recipes"
+          New-Item -ItemType Directory -Force $work | Out-Null
+          Copy-Item -Recurse toolchains\windows-amd64-msys2-clang64\gnustep-base-package "$work\gnustep-base"
+          Copy-Item toolchains\patches\libs-base\000[1-6]*.patch, toolchains\patches\libs-base\0008*.patch "$work\gnustep-base"
+          Copy-Item -Recurse toolchains\carry\windows\mingw-w64-gnustep-gui "$work\gnustep-gui"
+          Copy-Item -Recurse toolchains\carry\windows\mingw-w64-gnustep-back "$work\gnustep-back"
+          $carry = (& $bash -lc "cygpath -u '$env:GITHUB_WORKSPACE\toolchains\carry'").Trim()
+          $pairs = @(@('gnustep-base', 'libs-base/msys2-1.31.1'), @('gnustep-gui', 'libs-gui/msys2-0.32.0'), @('gnustep-back', 'libs-back/msys2-0.32.0'))
+          foreach ($pair in $pairs) {
+            $dir = (& $bash -lc "cygpath -u '$work\$($pair[0])'").Trim()
+            "== $($pair[0]) with $($pair[1])"
+            & $bash -lc "cd '$dir' && CARRY_PATCH_DIR='$carry/$($pair[1])' MINGW_ARCH=clang64 makepkg-mingw --noconfirm --skippgpcheck --nodeps -f"
+            if ($LASTEXITCODE -ne 0) { throw "makepkg $($pair[0]) failed: $LASTEXITCODE" }
+            $pkg = Get-ChildItem "$work\$($pair[0])" -Filter "mingw-w64-clang-x86_64-$($pair[0])-*.pkg.tar.zst" | Select-Object -First 1
+            if (-not $pkg) { throw "no $($pair[0]) package" }
+            New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\pkgroots\$($pair[0])" | Out-Null
+            $out = (& $bash -lc "cygpath -u '$env:RUNNER_TEMP\pkgroots\$($pair[0])'").Trim()
+            & $bash -lc "tar -xf '$dir/$($pkg.Name)' -C '$out'"
+            if ($LASTEXITCODE -ne 0) { throw "extract $($pkg.Name) failed" }
+          }
+          exit 0
+
+      - name: Build the layer (files that differ from stock, ABI check)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:PYTHONPATH = "$env:GITHUB_WORKSPACE\src"
+          $out = "$env:RUNNER_TEMP\layer"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $zip = "$out\gnustep-carry-$env:TARGET-$env:RELEASE.zip"
+          python -m gnustep_cli_shared.carry_layer build --carry-json toolchains\carry\carry.json --stock-root $env:STOCK_ROOT `
+            --package-root "$env:RUNNER_TEMP\pkgroots\gnustep-base" --package-root "$env:RUNNER_TEMP\pkgroots\gnustep-gui" --package-root "$env:RUNNER_TEMP\pkgroots\gnustep-back" `
+            --target $env:TARGET --release $env:RELEASE --toolchain-sha256 $env:STOCK_SHA256 `
+            --objdump "$env:RUNNER_TEMP\msys-root\clang64\bin\llvm-objdump.exe" --out $zip | Tee-Object "$out\layer-build.txt"
+          if ($LASTEXITCODE -ne 0) { throw 'layer build failed' }
+          "LAYER_ZIP=$zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Smoke the stock root with the layer applied
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $patched = "$env:RUNNER_TEMP\patched"
+          Copy-Item -Recurse $env:STOCK_ROOT $patched
+          Expand-Archive -Path $env:LAYER_ZIP -DestinationPath $patched -Force
+          Remove-Item "$patched\carry-layer.json"
+          $bash = Join-Path $patched 'usr\bin\bash.exe'
+          $env:CHERE_INVOKING = '1'
+          $env:GNUSTEP_SMOKE_TLS_EXE = (Join-Path $env:RUNNER_TEMP 'tls.exe')
+          & $bash -lc "bash `"`$(cygpath -u '$env:GITHUB_WORKSPACE')/toolchains/windows-amd64-msys2-clang64/smoke-toolchain.sh`" `"`$(cygpath -u '$patched')`""
+          if ($LASTEXITCODE -ne 0) { throw 'toolchain smoke on the patched root failed' }
+          & $bash -lc "bash `"`$(cygpath -u '$env:GITHUB_WORKSPACE')/toolchains/carry/windows/smoke-layer.sh`" `"`$(cygpath -u '$patched')`""
+          if ($LASTEXITCODE -ne 0) { throw 'layer smoke failed' }
+
+      - name: Upload the layer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-windows-carry-layer
+          path: |
+            ${{ runner.temp }}\layer\*
+            ${{ runner.temp }}\recipes\*\*.log
+
+  variant-gate:
+    name: setup --variant stock/patched round trip and update (Windows PowerShell 5.1)
+    needs: layer
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: The stock toolchain and this run's layer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $run = '${{ inputs.windows_run }}'; if (-not $run) { $run = $env:DEFAULT_WINDOWS_RUN }
+          # Artifact downloads sometimes drop mid-transfer; retry them.
+          foreach ($try in 1..3) {
+            gh run download $run --repo $env:GITHUB_REPOSITORY -n gnustep-windows-current-source-artifacts -D "$env:RUNNER_TEMP\stock-dl"
+            if ($LASTEXITCODE -eq 0) { break }
+            Remove-Item -Recurse -Force "$env:RUNNER_TEMP\stock-dl" -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 20
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'stock download failed' }
+          gh run download $env:GITHUB_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-windows-carry-layer -D "$env:RUNNER_TEMP\layer-dl"
+          if ($LASTEXITCODE -ne 0) { throw 'layer download failed' }
+          $zip = Get-ChildItem -Recurse "$env:RUNNER_TEMP\stock-dl" -Filter "gnustep-toolchain-$env:TARGET-*.zip" | Select-Object -First 1
+          $layer = Get-ChildItem -Recurse "$env:RUNNER_TEMP\layer-dl" -Filter "gnustep-carry-$env:TARGET-*.zip" | Select-Object -First 1
+          if (-not $zip -or -not $layer) { throw 'missing toolchain or layer zip' }
+          Expand-Archive -Path $zip.FullName -DestinationPath "$env:RUNNER_TEMP\stock" -Force
+          "STOCK_ZIP=$($zip.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "LAYER_ZIP=$($layer.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "STOCK_ROOT=$env:RUNNER_TEMP\stock" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Build the CLI from this branch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bash = Join-Path $env:STOCK_ROOT 'usr\bin\bash.exe'
+          $r = $env:STOCK_ROOT -replace '\\','/'
+          & $bash -lc "cd '$($env:GITHUB_WORKSPACE -replace '\\','/')/src/full-cli' && export PATH='$r/clang64/bin:$r/usr/bin':`$PATH && export GNUSTEP_MAKEFILES='$r/clang64/share/GNUstep/Makefiles' && make clean && make GNUSTEP_CLI_VERSION=0.1.9"
+          if ($LASTEXITCODE -ne 0) { throw 'CLI build failed' }
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\cli-root\bin" | Out-Null
+          Copy-Item src\full-cli\obj\gnustep.exe "$env:RUNNER_TEMP\cli-root\bin\gnustep.exe"
+
+      - name: Stage releases X (0.1.9) and Y (0.1.10) with the layer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:PYTHONPATH = "$env:GITHUB_WORKSPACE\src"
+          @"
+          import json, pathlib, sys, zipfile
+          from gnustep_cli_shared.build_infra import stage_release_assets
+          t = "$env:TARGET"
+          stage_release_assets("0.1.9", r"$env:RUNNER_TEMP\staged", "https://gate.invalid/releases",
+              cli_inputs={t: r"$env:RUNNER_TEMP\cli-root"}, toolchain_inputs={t: r"$env:STOCK_ZIP"}, carry_inputs={t: r"$env:LAYER_ZIP"})
+          src = pathlib.Path(r"$env:RUNNER_TEMP\staged") / "stable" / "0.1.9"
+          dest = pathlib.Path(r"C:\carry-gate\release"); dest.mkdir(parents=True, exist_ok=True)
+          manifest = json.loads((src / "release-manifest.json").read_text())
+          for f in src.iterdir():
+              if f.suffix == ".zip":
+                  (dest / f.name).write_bytes(f.read_bytes())
+          print([(a["id"], a["sha256"][:12]) for a in manifest["releases"][0]["artifacts"]])
+          for name, version, meta in (("x", "0.1.9", 1), ("y", "0.1.10", 2)):
+              m = json.loads(json.dumps(manifest))
+              m["metadata_version"] = meta
+              m["releases"][0]["version"] = version
+              for a in m["releases"][0]["artifacts"]:
+                  a["version"] = version
+                  if isinstance(a.get("requires_toolchain"), dict):
+                      a["requires_toolchain"]["version"] = version
+              (dest / f"release-manifest.{name}.json").write_text(json.dumps(m, indent=2))
+          layer = next(dest.glob("gnustep-carry-*.zip"))
+          (dest / "carry-layer.json").write_bytes(zipfile.ZipFile(layer).read("carry-layer.json"))
+          "@ | Out-File -Encoding ascii "$env:RUNNER_TEMP\stage.py"
+          python "$env:RUNNER_TEMP\stage.py"
+          if ($LASTEXITCODE -ne 0) { throw 'staging failed' }
+          New-Item -ItemType Directory -Force C:\carry-gate\bootstrap | Out-Null
+          $lines = Get-Content scripts\bootstrap\gnustep-bootstrap.ps1
+          $lines[5] = '$Script:CliVersion = "0.1.9"'
+          $lines | Set-Content -Encoding UTF8 C:\carry-gate\bootstrap\gnustep-bootstrap.ps1
+
+      - name: The gate
+        shell: powershell
+        run: |
+          Copy-Item .github\carry\variant-gate.ps1 C:\carry-gate\variant-gate.ps1
+          & powershell -NoProfile -ExecutionPolicy Bypass -File C:\carry-gate\variant-gate.ps1
+          $code = $LASTEXITCODE
+          Get-Content C:\carry-gate\out\variant-gate.txt
+          if ($code -ne 0) { throw "variant gate failed ($code)" }
+
+      - name: Upload gate results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-windows-carry-variant-gate
+          path: C:\carry-gate\out

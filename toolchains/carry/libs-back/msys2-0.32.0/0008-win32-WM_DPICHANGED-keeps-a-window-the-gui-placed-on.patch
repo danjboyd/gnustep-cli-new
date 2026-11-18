@@ -1,0 +1,92 @@
+From 28119d98c79deb81af3598fe77bdd09b21d10120 Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Wed, 14 Oct 2026 13:33:42 -0500
+Subject: [PATCH 09/14] win32: WM_DPICHANGED keeps a window the gui placed on
+ another monitor
+
+The per-monitor DPI handler took the size Windows suggests whenever a
+window moved to a monitor with another scale.  When the gui moves a
+window there itself (-placewindow::, -movewindow::) it has already sized
+the window for that monitor, so the suggested size shrank or grew it
+again by the ratio of the two scales.  Menu panels, which the gui reuses
+and last showed on the other monitor, came out 152x41 -> 127x34 pixels
+on a 125% monitor beside a 150% primary: their text was cut off, and
+pop-up lists were clipped and misplaced.
+
+The suggested size is now taken only when the gui didn't place the
+window: when the user drags it, Snap or Win+Shift+Arrow moves it, or the
+scale changes under it.
+
+Found checking a two-monitor setup at 125% and 150% on Windows Server
+2025.
+
+AI assistance: this change and its description were written with Claude
+(Anthropic's Claude Code).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/win32/WIN32Server.m | 23 +++++++++++++++++++----
+ 1 file changed, 19 insertions(+), 4 deletions(-)
+
+diff --git a/Source/win32/WIN32Server.m b/Source/win32/WIN32Server.m
+index 45d184e..bb7cae5 100644
+--- a/Source/win32/WIN32Server.m
++++ b/Source/win32/WIN32Server.m
+@@ -147,6 +147,11 @@ static unsigned int mask_for_keystate(BYTE *keyState);
+ 
+ static BOOL _enableCallbacks = YES;
+ 
++/* Set while the gui places or moves a window itself (-placewindow::,
++   -movewindow::): a window it moves to a monitor with another scale it
++   has already sized for that monitor, so WM_DPICHANGED leaves it so. */
++static int guiPlacesWindow = 0;
++
+ static NSEvent *process_key_event(WIN32Server *svr, 
+                                   HWND hwnd, WPARAM wParam, 
+                                   LPARAM lParam, NSEventType eventType);
+@@ -1485,12 +1490,18 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
+         {
+           /* Moved to a monitor with another scale: take the size Windows
+              suggests, the same size in points there.  The gui's move and
+-             resize events then draw it at that monitor's scale. */
++             resize events then draw it at that monitor's scale.  Not when
++             the gui placed it there: it sized the window for that monitor
++             already (a menu panel it reuses), and the suggested size
++             would shrink or grow it again by the ratio of the scales. */
+           RECT *r = (RECT *)lParam;
+ 
+-          SetWindowPos(hwnd, NULL, r->left, r->top,
+-                       r->right - r->left, r->bottom - r->top,
+-                       SWP_NOZORDER | SWP_NOACTIVATE);
++          if (guiPlacesWindow == 0)
++            {
++              SetWindowPos(hwnd, NULL, r->left, r->top,
++                           r->right - r->left, r->bottom - r->top,
++                           SWP_NOZORDER | SWP_NOACTIVATE);
++            }
+           flags._eventHandled = YES;
+         }
+         break;
+@@ -2368,8 +2379,10 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
+ 	      winNum);
+   p = GSWindowOriginToMS((HWND)winNum, loc);
+ 
++  guiPlacesWindow++;
+   SetWindowPos((HWND)winNum, NULL, p.x, p.y, 0, 0, 
+                SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
++  guiPlacesWindow--;
+ }
+ 
+ - (void) placewindow: (NSRect)frame : (int) winNum
+@@ -2382,9 +2395,11 @@ LRESULT CALLBACK windowEnumCallback(HWND hwnd, LPARAM lParam)
+   r = GSScreenRectToMS(frame);
+   GetWindowRect((HWND)winNum, &r2);
+   
++  guiPlacesWindow++;
+   SetWindowPos((HWND)winNum, NULL, 
+                r.left, r.top, r.right - r.left, r.bottom - r.top, 
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOSENDCHANGING);
++  guiPlacesWindow--;
+   
+ #if (BUILD_GRAPHICS==GRAPHICS_winlib)
+   WIN_INTERN *win = (WIN_INTERN *)GetWindowLongPtr((HWND)winNum, GWLP_USERDATA);

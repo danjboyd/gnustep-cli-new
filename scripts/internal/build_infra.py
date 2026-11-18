@@ -93,6 +93,7 @@ def main() -> int:
     stage_release.add_argument("--channel", default="stable")
     stage_release.add_argument("--cli-input", action="append", default=[])
     stage_release.add_argument("--toolchain-input", action="append", default=[])
+    stage_release.add_argument("--carry-input", action="append", default=[], help="target=path of a patch layer zip (docs/specs/patch-layer.md)")
     stage_release.add_argument("--reuse-toolchain-artifact", action="append", default=[])
 
     bundle_cli = subparsers.add_parser("bundle-cli", add_help=False)
@@ -409,6 +410,7 @@ def main() -> int:
             toolchain_inputs=mapping(args.toolchain_input),
             reused_toolchain_artifacts=mapping(args.reuse_toolchain_artifact),
             channel=args.channel,
+            carry_inputs=mapping(args.carry_input),
         )
     elif args.subcommand == "session-build-box-plan":
         payload = session_build_box_plan(
