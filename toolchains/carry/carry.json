@@ -429,6 +429,26 @@
       "verified_by": "shipped in ObjcMarkdown's MSI"
     },
     {
+      "id": "gui-theme-live-switch",
+      "library": "libs-gui",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-gui/msys2-0.32.0/0004-GSTheme-capture-override-originals-at-activation.patch",
+      "sha256": "9dd374fb1f76db25774f1ca46ae470a27f91e83118f1bb29f7a535f5d859ac58",
+      "summary": "GSTheme: record a theme's override originals at activation, so a live switch between two themes no longer recurses until the stack overflows",
+      "source": "apt_portstree packaging/gnustep/libs/gnustep-clang-libs-gui/patches/0012 (5477c5230, 0.32 port of libs-gui master 8c285f3; gnustep's backport e6fd411ab gives identical files)",
+      "upstream": "libs-gui #100 (8c285f3); 0.32 backport upstream review pending",
+      "defaults": [],
+      "abi": "none expected (GSTheme.m internals only)",
+      "requested_by": [
+        "WinUITheme"
+      ],
+      "owner": "gnustep",
+      "verified_by": "WinUITheme on Windows, stock 0.32.0 + this patch: live switch WinUITheme <-> Gumdrop passes 5/5 (stock: 4/5 crash 0xC00000FD)"
+    },
+    {
       "id": "base-attributed-string-hash",
       "library": "libs-base",
       "base": "msys2-1.31.1",

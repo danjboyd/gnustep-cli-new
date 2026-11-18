@@ -165,6 +165,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'toolchain smoke on the patched root failed' }
           & $bash -lc "bash `"`$(cygpath -u '$env:GITHUB_WORKSPACE')/toolchains/carry/windows/smoke-layer.sh`" `"`$(cygpath -u '$patched')`""
           if ($LASTEXITCODE -ne 0) { throw 'layer smoke failed' }
+          "PATCHED_ROOT=$patched" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: GSTheme live switch, both directions (libs-gui carry 0004)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:CHERE_INVOKING = '1'
+          $script = "`$(cygpath -u '$env:GITHUB_WORKSPACE')/toolchains/carry/windows/check-theme-live-switch.sh"
+          "== patched root: every test must pass"
+          & (Join-Path $env:PATCHED_ROOT 'usr\bin\bash.exe') -lc "bash `"$script`" `"`$(cygpath -u '$env:PATCHED_ROOT')`" pass"
+          if ($LASTEXITCODE -ne 0) { throw 'the live-switch test failed on the patched root' }
+          "== stock root: the test must detect the loop"
+          & (Join-Path $env:STOCK_ROOT 'usr\bin\bash.exe') -lc "bash `"$script`" `"`$(cygpath -u '$env:STOCK_ROOT')`" fail"
+          if ($LASTEXITCODE -ne 0) { throw 'the live-switch test did not detect the bug on the stock root' }
 
       - name: Upload the layer
         if: always()
