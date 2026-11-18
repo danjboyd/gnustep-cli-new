@@ -1,6 +1,6 @@
 # Patch layer: stock or patched GNUstep libraries
 
-Status: **draft for Dan's review.** Dan chose this design (option B) on 2026-11-17.
+Status: **being built for v0.1.9.** Dan chose this design (option B) on 2026-11-17, and put the layer in v0.1.9 the same day.
 
 ## Goal
 
@@ -32,14 +32,17 @@ One per target that has carried patches. A release with nothing carried for a ta
 }
 ```
 
-- **In the release manifest:** the layer is an ordinary artifact. It has a `requires_toolchain` that pins the stock toolchain's sha256, as the CLI already does for the CLI artifact, and it's signed and checksummed like every other artifact.
+- **Staging:** `stage-release --carry-input <target>=<zip>` (the multi-run path finds `gnustep-carry-<target>-<version>.zip`) stages the layer only if every replaced file's `stock_sha256` matches the staged toolchain archive's copy, and its recorded toolchain sha256 matches. `verify-release` repeats the check.
+- **In the release manifest:** the layer is an ordinary artifact, `carry-layer-<target>`. It has a `requires_toolchain` that pins the stock toolchain's sha256, as the CLI already does for the CLI artifact, and it's signed and checksummed like every other artifact.
 - **The patch set** comes from `toolchains/carry/carry.json` and the patch files under `toolchains/carry/<library>/<base>/` ([protocol](../carried-patches/README.md)).
 
 No binary diffs: the layer ships whole files. The `stock_sha256` checks give the same guarantee that it only applies to the exact stock files, without new tooling in the CLI and both bootstraps.
 
 ## Building the layer (CI)
 
-- **Windows:** build each patched library from MSYS2's own recipe (PKGBUILD) with the carried patches, as `toolchains/windows-amd64-msys2-clang64/gnustep-base-package/` already does for libs-base. Do this for gnustep-back and gnustep-gui, and for gnustep-base when it carries app patches on top of ours. Take the resulting files that differ from stock.
+- **Windows** (`windows-carry-layer.yml`): build gnustep-base (our stock recipe, which applies `CARRY_PATCH_DIR`'s patches only when it is set), gnustep-gui and gnustep-back (MSYS2's recipes in `toolchains/carry/windows/`) with the carried patches, inside the locked MSYS2 root.
+  - First check that the root's libraries are the stock zip's.
+  - Each base in `carry.json` declares its `outputs`, glob patterns for the installed files the layer takes (the base, gui and backend DLLs, and gpbs.exe). Each output must differ from stock. Every other file the rebuild changes, such as a rebuilt tool's timestamp, is reported and not shipped.
 - **Linux:** rebuild libs-back, libs-gui or libs-base from the pinned revision with the carried patches, in the same recipe and build environment as the stock toolchain, and take the files that differ.
 - **ABI check:** compare the exported symbols of each replaced library against stock (`llvm-nm --defined-only --extern-only`, and the export table on Windows). Fail on any removed or changed symbol. Added symbols are listed in the layer's evidence.
 - Layer builds are reproducible from the lock and the patch files, like toolchain builds.
@@ -47,8 +50,8 @@ No binary diffs: the layer ships whole files. The `stock_sha256` checks give the
 ## The CLI
 
 - **Choosing:**
-  - `gnustep setup --variant stock|patched` picks the variant at install time. Run on an existing install, it switches.
-  - The bootstraps take the same flag.
+  - `gnustep setup --variant stock|patched` picks the variant at install time. Run on an existing install, it switches without reinstalling.
+  - The bootstraps take the same flag. They install stock, then run the installed CLI's `setup --variant patched`, so the checks live in one place. Its JSON is folded into theirs as `carry_layer`, keeping `--json` a single document.
   - The choice is recorded in `state/cli-state.json` as `toolchain_variant`, with the layer's release and sha256.
 - **Applying the layer,** as a transaction like a package install:
   1. Verify the layer's signature and checksum, and that `requires_toolchain_sha256` matches the installed toolchain.
@@ -61,7 +64,7 @@ No binary diffs: the layer ships whole files. The `stock_sha256` checks give the
   - It keeps the variant.
   - If a new release has no layer for the target, it installs stock and says so: "patched variant unavailable in <release>; using stock".
   - A new toolchain sha always comes with a matching layer, or none.
-- **`doctor`** reports the variant, the layer release and its patch ids. It checks that every layer file matches either its stock or its patched sha256, and flags a mix of the two as an error, with the repair command.
+- **`doctor`** (check `managed.toolchain.variant`, in both doctors) reports the variant, the layer release and its patch ids. It checks that every layer file matches either its stock or its patched sha256, and flags a mix of the two as an error, with the repair command.
 - **`--json`:** `setup`, `update` and `doctor` include `toolchain_variant` and `carry_layer` (release, sha256, patches).
 
 ## Packages and gnustep-packager
