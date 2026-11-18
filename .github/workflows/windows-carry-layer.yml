@@ -63,7 +63,12 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $run = '${{ inputs.windows_run }}'; if (-not $run) { $run = $env:DEFAULT_WINDOWS_RUN }
           $release = '${{ inputs.release }}'; if (-not $release) { $release = $env:DEFAULT_RELEASE }
-          gh run download $run --repo $env:GITHUB_REPOSITORY -n gnustep-windows-current-source-artifacts -D "$env:RUNNER_TEMP\stock-dl"
+          foreach ($try in 1..3) {
+            gh run download $run --repo $env:GITHUB_REPOSITORY -n gnustep-windows-current-source-artifacts -D "$env:RUNNER_TEMP\stock-dl"
+            if ($LASTEXITCODE -eq 0) { break }
+            Remove-Item -Recurse -Force "$env:RUNNER_TEMP\stock-dl" -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 20
+          }
           if ($LASTEXITCODE -ne 0) { throw 'download failed' }
           $zip = Get-ChildItem -Recurse "$env:RUNNER_TEMP\stock-dl" -Filter "gnustep-toolchain-$env:TARGET-*.zip" | Select-Object -First 1
           if (-not $zip) { throw 'no toolchain zip in that run' }
@@ -186,7 +191,13 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $run = '${{ inputs.windows_run }}'; if (-not $run) { $run = $env:DEFAULT_WINDOWS_RUN }
-          gh run download $run --repo $env:GITHUB_REPOSITORY -n gnustep-windows-current-source-artifacts -D "$env:RUNNER_TEMP\stock-dl"
+          # Artifact downloads sometimes drop mid-transfer; retry them.
+          foreach ($try in 1..3) {
+            gh run download $run --repo $env:GITHUB_REPOSITORY -n gnustep-windows-current-source-artifacts -D "$env:RUNNER_TEMP\stock-dl"
+            if ($LASTEXITCODE -eq 0) { break }
+            Remove-Item -Recurse -Force "$env:RUNNER_TEMP\stock-dl" -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 20
+          }
           if ($LASTEXITCODE -ne 0) { throw 'stock download failed' }
           gh run download $env:GITHUB_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-windows-carry-layer -D "$env:RUNNER_TEMP\layer-dl"
           if ($LASTEXITCODE -ne 0) { throw 'layer download failed' }

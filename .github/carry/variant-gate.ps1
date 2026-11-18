@@ -50,7 +50,15 @@ function With-Root([scriptblock]$block) {
   try { & $block } finally { Remove-Item Env:\RELEASE_TRUST_ROOT -ErrorAction SilentlyContinue; $env:PATH = $basePath }
 }
 function Read-Json($path) {
-  try { return (Get-Content $path -Raw | ConvertFrom-Json) } catch { return $null }
+  # The JSON document is the output from its first line starting with "{" (a command may
+  # print warnings to stderr first, which *> merges in).
+  try {
+    $lines = @(Get-Content $path)
+    $start = 0
+    while ($start -lt $lines.Count -and -not $lines[$start].TrimStart().StartsWith('{')) { $start++ }
+    if ($start -ge $lines.Count) { return $null }
+    return ([string]::Join("`n", $lines[$start..($lines.Count - 1)]) | ConvertFrom-Json)
+  } catch { return $null }
 }
 function Tree-Digest {
   # sha256 of every file under clang64, sorted by path: equal digests mean an identical tree.
@@ -95,7 +103,7 @@ function Step($name, [scriptblock]$cli) {
 # 1. Bootstrap install with --variant patched (stock first, so record stock's tree too).
 $env:RELEASE_TRUST_ROOT = $trust
 $env:GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED = '1'
-& powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\carry-gate\bootstrap\gnustep-bootstrap.ps1' --json setup --variant patched --root $root --manifest $mx *> (Join-Path $out 'bootstrap.txt')
+& powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\carry-gate\bootstrap\gnustep-bootstrap.ps1' --json setup --variant patched --root $root --manifest $mx > (Join-Path $out 'bootstrap.txt') 2> (Join-Path $out 'bootstrap-stderr.txt')
 $bsCode = $LASTEXITCODE
 Remove-Item Env:\GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED -ErrorAction SilentlyContinue
 Remove-Item Env:\RELEASE_TRUST_ROOT -ErrorAction SilentlyContinue
