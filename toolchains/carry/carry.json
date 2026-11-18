@@ -45,7 +45,7 @@
       "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
       "upstream": "gnustep/libs-back#246 merged 2026-11-15 (5e14866), after 0.32.0",
       "defaults": [],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -72,7 +72,7 @@
       "defaults": [
         "GSBackClientDrawsCaptions"
       ],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "added: WIN32Server ivar clientDrawsCaptions (non-fragile ivars; the class is private to the backend bundle)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -97,7 +97,7 @@
       "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
       "upstream": "not_sent (winuitheme upstream proposal #101)",
       "defaults": [],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -122,7 +122,7 @@
       "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
       "upstream": "not_sent",
       "defaults": [],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -149,7 +149,7 @@
       "defaults": [
         "GSBackDPIAware"
       ],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "added: WIN32Server ivar perMonitorDPIAware (non-fragile ivars; the class is private to the backend bundle)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -174,7 +174,7 @@
       "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
       "upstream": "not_sent",
       "defaults": [],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -199,7 +199,7 @@
       "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
       "upstream": "not_sent",
       "defaults": [],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -226,7 +226,7 @@
       "defaults": [
         "GSBackDPIAware"
       ],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -253,7 +253,7 @@
       "defaults": [
         "GSBackDPIAware"
       ],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -280,7 +280,7 @@
       "defaults": [
         "GSBackDPIAware"
       ],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -305,7 +305,7 @@
       "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
       "upstream": "not_sent",
       "defaults": [],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -330,7 +330,7 @@
       "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
       "upstream": "not_sent (winuitheme upstream proposal #98)",
       "defaults": [],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
@@ -355,7 +355,7 @@
       "source": "danjboyd/libs-back carry 19c3b89 (carry-0.32.0.6)",
       "upstream": "not_sent",
       "defaults": [],
-      "abi": "not yet measured: the layer build's ABI report decides",
+      "abi": "unchanged (layer build 44238854552: no export added or removed beyond the two WIN32Server ivars)",
       "requested_by": [
         "ScreenshotTool",
         "ObjcMarkdown",
