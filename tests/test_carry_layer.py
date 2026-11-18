@@ -245,3 +245,44 @@ class CommandTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DoctorVariantTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        _write(self.root / "state" / "cli-state.json", json.dumps({"schema_version": 1, "status": "healthy"}).encode())
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _check(self):
+        from gnustep_cli_shared.doctor_engine import _toolchain_variant_check
+
+        return _toolchain_variant_check("full", self.root)
+
+    def _record(self, current: bytes):
+        _write(self.root / "clang64/bin/gnustep-gui-0.dll", current)
+        record = {"release": "0.1.9", "patches": [{"id": "gui-layout-sanity-checks"}],
+                  "files": [{"path": "clang64/bin/gnustep-gui-0.dll", "stock_sha256": _sha(b"stock"), "sha256": _sha(b"patched")}]}
+        _write(self.root / "carry-layer.json", json.dumps(record).encode())
+
+    def test_stock_patched_and_mixed_installs(self):
+        self.assertEqual((self._check().status, self._check().details["toolchain_variant"]), ("ok", "stock"))
+        self._record(b"patched")
+        check = self._check()
+        self.assertEqual(check.status, "ok")
+        self.assertEqual(check.details["patches"], ["gui-layout-sanity-checks"])
+        self._record(b"stock")
+        check = self._check()
+        self.assertEqual(check.status, "error")
+        self.assertEqual(check.details["stock_files"], ["clang64/bin/gnustep-gui-0.dll"])
+
+    def test_a_patched_state_without_its_record_is_an_error(self):
+        _write(self.root / "state" / "cli-state.json", json.dumps({"toolchain_variant": "patched"}).encode())
+        self.assertEqual(self._check().status, "error")
+
+    def test_bootstrap_reports_it_as_full_only(self):
+        from gnustep_cli_shared.doctor_engine import _toolchain_variant_check
+
+        self.assertEqual(_toolchain_variant_check("bootstrap", self.root).status, "not_run")

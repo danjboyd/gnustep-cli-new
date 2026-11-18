@@ -173,6 +173,7 @@ static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
 - (BOOL)hasWindowsManagedToolchainHintWithMakefiles:(NSString *)gnustepMakefiles;
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface;
 - (NSDictionary *)managedInstallIntegrityCheckForStatePath:(NSString *)statePath candidateStatePaths:(NSArray *)candidateStatePaths;
+- (NSDictionary *)toolchainVariantCheckForStatePath:(NSString *)statePath interface:(NSString *)interface;
 - (NSArray *)artifactsInWindowsUpgradeOrder:(NSArray *)artifacts;
 - (BOOL)canKeepInstalledToolchainLayer:(NSDictionary *)artifact installedState:(NSDictionary *)installedState rootMovedToBackup:(BOOL)rootMoved;
 - (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath;
@@ -4350,6 +4351,98 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
 // Same outcomes as the Python doctor: unreadable state is an error; a lifecycle
 // status mid-operation, or leftover staging/transaction paths, needs repair
 // validation; anything else is ok. Finding the file alone used to report ok.
+// Stock or patched toolchain (docs/specs/patch-layer.md), as the Python doctor's
+// managed.toolchain.variant reports it: a mix of stock and patched files is an error.
+- (NSDictionary *)toolchainVariantCheckForStatePath:(NSString *)statePath interface:(NSString *)interface
+{
+  NSString *title = @"Inspect the toolchain variant";
+  NSString *root = nil;
+  NSDictionary *state = nil;
+  NSDictionary *record = nil;
+  NSMutableArray *patched = [NSMutableArray array];
+  NSMutableArray *stock = [NSMutableArray array];
+  NSMutableArray *unexpected = [NSMutableArray array];
+  NSMutableArray *patchIDs = [NSMutableArray array];
+  NSEnumerator *enumerator = nil;
+  NSDictionary *entry = nil;
+
+  if ([interface isEqualToString: @"bootstrap"])
+    {
+      return [self checkWithID: @"managed.toolchain.variant" title: title status: @"not_run" severity: @"warning"
+                       message: @"This check is available in the full CLI only." interface: @"full" executionTier: @"full_only"
+                       details: [NSDictionary dictionaryWithObject: [NSNumber numberWithBool: YES] forKey: @"unavailable_in_bootstrap"]];
+    }
+  if (statePath == nil || [[NSFileManager defaultManager] fileExistsAtPath: statePath] == NO)
+    {
+      return [self checkWithID: @"managed.toolchain.variant" title: title status: @"not_run" severity: @"warning"
+                       message: @"No managed install state was detected." interface: @"full" executionTier: @"full_only"
+                       details: [NSDictionary dictionaryWithObject: [NSNumber numberWithBool: NO] forKey: @"managed_install_detected"]];
+    }
+  root = [[statePath stringByDeletingLastPathComponent] stringByDeletingLastPathComponent];
+  state = [self readJSONFile: statePath error: NULL];
+  record = [self installedCarryLayerForInstallRoot: root];
+  if (record == nil)
+    {
+      if ([[state objectForKey: @"toolchain_variant"] isEqual: @"patched"])
+        {
+          return [self checkWithID: @"managed.toolchain.variant" title: title status: @"error" severity: @"warning"
+                           message: @"The install is recorded as patched, but carry-layer.json is missing. Run `gnustep setup --variant patched` or `--variant stock`."
+                         interface: @"full" executionTier: @"full_only"
+                           details: [NSDictionary dictionaryWithObject: @"patched" forKey: @"toolchain_variant"]];
+        }
+      return [self checkWithID: @"managed.toolchain.variant" title: title status: @"ok" severity: @"warning"
+                       message: @"The stock toolchain is active." interface: @"full" executionTier: @"full_only"
+                       details: [NSDictionary dictionaryWithObject: @"stock" forKey: @"toolchain_variant"]];
+    }
+  enumerator = [[record objectForKey: @"files"] objectEnumerator];
+  while ((entry = [enumerator nextObject]) != nil)
+    {
+      NSString *relative = [entry objectForKey: @"path"];
+      NSString *digest = [[NSFileManager defaultManager] fileExistsAtPath: [root stringByAppendingPathComponent: relative]]
+        ? [self sha256ForFile: [root stringByAppendingPathComponent: relative]] : nil;
+      if (digest != nil && [digest isEqualToString: [entry objectForKey: @"sha256"]])
+        {
+          [patched addObject: relative];
+        }
+      else if (digest != nil && [digest isEqual: [entry objectForKey: @"stock_sha256"]])
+        {
+          [stock addObject: relative];
+        }
+      else
+        {
+          [unexpected addObject: relative ? relative : @"?"];
+        }
+    }
+  enumerator = [[record objectForKey: @"patches"] objectEnumerator];
+  while ((entry = [enumerator nextObject]) != nil)
+    {
+      if ([entry isKindOfClass: [NSDictionary class]] && [entry objectForKey: @"id"])
+        {
+          [patchIDs addObject: [entry objectForKey: @"id"]];
+        }
+    }
+  {
+    NSDictionary *details = [NSDictionary dictionaryWithObjectsAndKeys:
+                                            @"patched", @"toolchain_variant",
+                                            [record objectForKey: @"release"] ? [record objectForKey: @"release"] : [NSNull null], @"release",
+                                            patchIDs, @"patches",
+                                            patched, @"patched_files",
+                                            stock, @"stock_files",
+                                            unexpected, @"unexpected_files",
+                                            nil];
+    if ([stock count] > 0 || [unexpected count] > 0)
+      {
+        return [self checkWithID: @"managed.toolchain.variant" title: title status: @"error" severity: @"warning"
+                         message: [NSString stringWithFormat: @"The patch layer is only partly applied: %lu stock and %lu unexpected files. Run `gnustep setup --variant stock`, then `--variant patched` again.",
+                                            (unsigned long)[stock count], (unsigned long)[unexpected count]]
+                       interface: @"full" executionTier: @"full_only" details: details];
+      }
+    return [self checkWithID: @"managed.toolchain.variant" title: title status: @"ok" severity: @"warning"
+                     message: [NSString stringWithFormat: @"The patched toolchain is active: %lu carried patches (layer %@).", (unsigned long)[patchIDs count], [record objectForKey: @"release"]]
+                   interface: @"full" executionTier: @"full_only" details: details];
+  }
+}
+
 - (NSDictionary *)managedInstallIntegrityCheckForStatePath:(NSString *)statePath candidateStatePaths:(NSArray *)candidateStatePaths
 {
   NSFileManager *manager = [NSFileManager defaultManager];
@@ -5090,6 +5183,10 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
 
   [self appendInstallTrace: @"doctor.checks.managed-integrity.start"];
   [checks addObject: managedIntegrity];
+  {
+    id statePath = [[managedIntegrity objectForKey: @"details"] objectForKey: @"state_path"];
+    [checks addObject: [self toolchainVariantCheckForStatePath: ([statePath isKindOfClass: [NSString class]] ? statePath : nil) interface: interface]];
+  }
   {
     BOOL windowsHost = NO;
     id makefiles = [toolchain objectForKey: @"gnustep_makefiles"];

@@ -408,6 +408,59 @@ def _full_only_check(check_id: str, title: str, severity: str) -> CheckResult:
     )
 
 
+def _toolchain_variant_check(interface: str, managed_root: Path | None = None) -> CheckResult:
+    """Stock or patched toolchain (docs/specs/patch-layer.md), and whether every patched
+    file is intact. A mix of stock and patched files is an error."""
+    title = "Inspect the toolchain variant"
+    if interface == "bootstrap":
+        return _full_only_check("managed.toolchain.variant", title, "warning")
+    root = managed_root or (Path(os.environ.get("GNUSTEP_CLI_MANAGED_ROOT")) if os.environ.get("GNUSTEP_CLI_MANAGED_ROOT") else ROOT)
+    state_path = root / "state" / "cli-state.json"
+    record_path = root / "carry-layer.json"
+
+    def result(status: str, message: str, details: dict[str, Any]) -> CheckResult:
+        return CheckResult(id="managed.toolchain.variant", title=title, status=status, severity="warning",
+                           message=message, interface="full", execution_tier="full_only", details=details)
+
+    if not state_path.exists():
+        return result("not_run", "No managed install state was detected.", {"managed_install_detected": False})
+    try:
+        state = json.loads(state_path.read_text())
+    except (OSError, ValueError):
+        state = {}
+    if not record_path.exists():
+        if state.get("toolchain_variant") == "patched":
+            return result("error", "The install is recorded as patched, but carry-layer.json is missing. "
+                          "Run `gnustep setup --variant patched` or `--variant stock`.", {"toolchain_variant": "patched", "record": None})
+        return result("ok", "The stock toolchain is active.", {"toolchain_variant": "stock"})
+    try:
+        record = json.loads(record_path.read_text())
+    except (OSError, ValueError) as exc:
+        return result("error", f"carry-layer.json is unreadable: {exc}", {"record": str(record_path)})
+    patched, stock, other = [], [], []
+    for entry in record.get("files") or []:
+        target = root / entry.get("path", "")
+        digest = None
+        if target.is_file():
+            import hashlib
+
+            digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        if digest is not None and digest == entry.get("sha256"):
+            patched.append(entry["path"])
+        elif digest is not None and digest == entry.get("stock_sha256"):
+            stock.append(entry["path"])
+        else:
+            other.append(entry.get("path"))
+    patch_ids = [patch.get("id") for patch in record.get("patches") or [] if isinstance(patch, dict)]
+    details = {"toolchain_variant": "patched", "release": record.get("release"), "patches": patch_ids,
+               "patched_files": patched, "stock_files": stock, "unexpected_files": other}
+    if stock or other:
+        return result("error", "The patch layer is only partly applied: "
+                      f"{len(stock)} stock and {len(other)} unexpected files. "
+                      "Run `gnustep setup --variant stock`, then `--variant patched` again.", details)
+    return result("ok", f"The patched toolchain is active: {len(patch_ids)} carried patches (layer {record.get('release')}).", details)
+
+
 def _managed_install_integrity_check(environment: dict[str, Any], *, interface: str, managed_root: Path | None = None) -> CheckResult:
     toolchain = environment["toolchain"]
     if interface == "bootstrap":
@@ -821,6 +874,7 @@ def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = 
     else:
         checks.append(_full_only_check("toolchain.probe", "Compile/link/run probe", "error"))
     checks.append(managed_integrity)
+    checks.append(_toolchain_variant_check(interface, managed_root))
     bundled_authorities = _bundled_authorities_check(environment, interface=interface)
     checks.append(bundled_authorities)
     if artifact is not None:

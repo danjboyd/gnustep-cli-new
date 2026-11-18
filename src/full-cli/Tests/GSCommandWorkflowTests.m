@@ -68,6 +68,7 @@
 - (NSDictionary *)installedCarryLayerForInstallRoot:(NSString *)installRoot;
 - (BOOL)applyCarryLayerArtifact:(NSDictionary *)artifact manifestPath:(NSString *)manifestPath toInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
 - (BOOL)restoreStockToolchainForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
+- (NSDictionary *)toolchainVariantCheckForStatePath:(NSString *)statePath interface:(NSString *)interface;
 @end
 
 @interface StubbedGSCommandRunner : GSCommandRunner
@@ -1840,12 +1841,24 @@
   XCTAssertEqualObjects([state objectForKey: @"cli_version"], @"0.1.9");
   // Applying the same layer again changes nothing.
   XCTAssertTrue([runner applyCarryLayerArtifact: [fixture objectForKey: @"artifact"] manifestPath: [fixture objectForKey: @"manifest"] toInstallRoot: root error: &error], @"%@", error);
+  {
+    NSString *statePath = [root stringByAppendingPathComponent: @"state/cli-state.json"];
+    NSDictionary *check = [runner toolchainVariantCheckForStatePath: statePath interface: @"full"];
+    XCTAssertEqualObjects([check objectForKey: @"status"], @"ok");
+    XCTAssertEqualObjects([[check objectForKey: @"details"] objectForKey: @"toolchain_variant"], @"patched");
+    // A stock file back in place by hand: doctor calls the layer partly applied.
+    [@"stock gui" writeToFile: [fixture objectForKey: @"dll"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+    check = [runner toolchainVariantCheckForStatePath: statePath interface: @"full"];
+    XCTAssertEqualObjects([check objectForKey: @"status"], @"error");
+    [@"patched gui" writeToFile: [fixture objectForKey: @"dll"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  }
 
   XCTAssertTrue([runner restoreStockToolchainForInstallRoot: root error: &error], @"%@", error);
   XCTAssertEqualObjects([NSString stringWithContentsOfFile: [fixture objectForKey: @"dll"] encoding: NSUTF8StringEncoding error: NULL], @"stock gui");
   XCTAssertNil([runner installedCarryLayerForInstallRoot: root]);
   XCTAssertFalse([[NSFileManager defaultManager] fileExistsAtPath: [root stringByAppendingPathComponent: @"state/carry/stock"]]);
   XCTAssertEqualObjects([[runner installedLifecycleStateForInstallRoot: root] objectForKey: @"toolchain_variant"], @"stock");
+  XCTAssertEqualObjects([[[runner toolchainVariantCheckForStatePath: [root stringByAppendingPathComponent: @"state/cli-state.json"] interface: @"full"] objectForKey: @"details"] objectForKey: @"toolchain_variant"], @"stock");
 }
 
 - (void)testPatchLayerRefusesAChangedStockFileOrAnotherToolchain
