@@ -1,0 +1,187 @@
+name: Gate v0.1.9 tools-xctest qualification (temporary; never merged)
+
+# Dan's ask #8455 (build, stage and test v0.1.9; no publishing). On each of the six targets,
+# with the STAGED v0.1.9 CLI and toolchain (stage-release run in .github/gate/config.env):
+# install tools-xctest 0.8.1 (the exact package bytes the v0.1.9 index will list) from a
+# throwaway-signed index, build and `make check` a sample XCTest bundle through the packaged
+# xctest.make, check a failing test fails, run xctest-bundle, then remove and check nothing
+# is left. Linux runs as an unprivileged user in the target's distro container; Windows as a
+# standard (non-admin) local user. This is the validation evidence the publication gate needs.
+
+on:
+  push:
+    branches: [gate-v019-windows]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  linux:
+    if: ${{ contains(github.event.head_commit.message, '[xctest]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-amd64-clang, image: "debian:13", runner: ubuntu-24.04, xctest_run: "44167377963" }
+          - { target: linux-arm64-clang, image: "debian:13", runner: ubuntu-24.04-arm, xctest_run: "44167432955" }
+          - { target: linux-ubuntu2404-amd64-clang, image: "ubuntu:24.04", runner: ubuntu-24.04, xctest_run: "44167396742" }
+          - { target: linux-ubuntu2604-amd64-clang, image: "ubuntu:26.04", runner: ubuntu-24.04, xctest_run: "44167412796" }
+          - { target: linux-ubuntu2404-arm64-clang, image: "ubuntu:24.04", runner: ubuntu-24.04-arm, xctest_run: "44167450116" }
+    name: tools-xctest on ${{ matrix.target }} (${{ matrix.image }}, unprivileged user)
+    runs-on: ${{ matrix.runner }}
+    container: ${{ matrix.image }}
+    timeout-minutes: 60
+    steps:
+      - name: Tools
+        run: apt-get update >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends sudo ca-certificates curl python3 git make >/dev/null
+      - uses: actions/checkout@v4
+      - name: The staged release
+        uses: actions/download-artifact@v4
+        with:
+          name: gnustep-staged-release
+          path: /qual/stage
+          run-id: "44386009191"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: The tools-xctest package
+        uses: actions/download-artifact@v4
+        with:
+          name: gnustep-package-tools-xctest-managed-${{ matrix.target }}-0.8.1
+          path: /qual/xctest-dl
+          run-id: ${{ matrix.xctest_run }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check the inputs against the staged manifest and the package metadata
+        run: |
+          set -eu
+          . ./.github/gate/config.env
+          test "$STAGE_RUN_ID" = 44386009191
+          cd /qual/stage && sha256sum -c SHA256SUMS --ignore-missing
+          mkdir -p /qual/cli /qual/xctest
+          cp /qual/stage/gnustep-cli-${{ matrix.target }}-$VERSION.tar.gz /qual/stage/gnustep-toolchain-${{ matrix.target }}-$VERSION.tar.gz /qual/cli/
+          find /qual/xctest-dl -name 'tools-xctest-${{ matrix.target }}-0.8.1.tar.gz' -exec cp {} /qual/xctest/ \;
+          pkg=$(ls /qual/xctest/tools-xctest-${{ matrix.target }}-0.8.1.tar.gz)
+          want=$(python3 -c 'import json,sys; print(next(a["sha256"] for a in json.load(open("packages/org.gnustep.tools-xctest/package.json"))["artifacts"] if a["id"] == sys.argv[1]))' tools-xctest-${{ matrix.target }})
+          have=$(sha256sum "$pkg" | cut -d' ' -f1)
+          echo "package $have (package.json $want)"; test "$have" = "$want"
+      - name: Qualify as an unprivileged user
+        run: |
+          useradd -m -s /bin/sh gsqual
+          cp -R "$GITHUB_WORKSPACE" /qual/repo
+          mkdir -p /qual/out && chown -R gsqual /qual
+          pkg=$(ls /qual/xctest/tools-xctest-${{ matrix.target }}-0.8.1.tar.gz)
+          su - gsqual -c "sh /qual/repo/.github/dogfood/linux-dogfood.sh /qual/repo /qual/cli $pkg /qual/out ${{ matrix.target }}"
+          python3 /qual/repo/.github/dogfood/verdict.py /qual/out
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tools-xctest-qual-${{ matrix.target }}
+          path: /qual/out
+
+  windows:
+    if: ${{ contains(github.event.head_commit.message, '[xctest]') }}
+    name: tools-xctest on windows-amd64-msys2-clang64 (standard user)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: The staged CLI and toolchain, and the tools-xctest package
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Get-Content .github/gate/config.env | Where-Object { $_ -match '^[A-Z]' } | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
+          $g = 'C:\dogfood'
+          New-Item -ItemType Directory -Force "$g\rel", "$g\xctest", "$g\out" | Out-Null
+          gh run download $STAGE_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-staged-release -D "$g\stage"
+          if ($LASTEXITCODE -ne 0) { throw 'stage download failed' }
+          Push-Location "$g\stage"
+          $bad = Get-Content SHA256SUMS | Where-Object { $_ } | ForEach-Object { $h, $f = $_ -split '\s+\*?', 2; if ((Get-FileHash -Algorithm SHA256 $f).Hash.ToLower() -ne $h) { $f } }
+          Pop-Location
+          if ($bad) { throw "SHA256SUMS mismatch: $bad" }
+          Copy-Item "$g\stage\gnustep-cli-windows-amd64-msys2-clang64-$VERSION.zip", "$g\stage\gnustep-toolchain-windows-amd64-msys2-clang64-$VERSION.zip" "$g\rel"
+          gh run download 44167466377 --repo $env:GITHUB_REPOSITORY -D "$g\xctest-dl"
+          if ($LASTEXITCODE -ne 0) { throw 'tools-xctest download failed' }
+          Get-ChildItem -Recurse "$g\xctest-dl" -Filter 'tools-xctest-windows-amd64-msys2-clang64-0.8.1.zip' | Copy-Item -Destination "$g\xctest"
+          $want = (Get-Content packages/org.gnustep.tools-xctest/package.json -Raw | ConvertFrom-Json).artifacts | Where-Object { $_.id -eq 'tools-xctest-windows-amd64-msys2-clang64' } | ForEach-Object { $_.sha256 }
+          $have = (Get-FileHash -Algorithm SHA256 "$g\xctest\tools-xctest-windows-amd64-msys2-clang64-0.8.1.zip").Hash.ToLower()
+          "package $have (package.json $want)"
+          if ($have -ne $want) { throw 'tools-xctest package sha differs from package.json' }
+          Get-ChildItem "$g\rel", "$g\xctest" | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash.ToLower().Substring(0,12) + ' ' + $_.Path }
+          Copy-Item -Recurse .github\dogfood\sample "$g\sample"
+          Copy-Item .github\dogfood\checks.sh, .github\dogfood\windows-user.ps1 "$g\"
+      - name: Release manifest for the downloaded CLI and toolchain
+        shell: bash
+        run: |
+          cli=$(ls /c/dogfood/rel/gnustep-cli-windows-amd64-msys2-clang64-*.zip); version=${cli##*/gnustep-cli-windows-amd64-msys2-clang64-}; version=${version%.zip}
+          PYTHONPATH=src python - windows-amd64-msys2-clang64 "$version" <<'PY'
+          import hashlib, json, sys
+          from pathlib import Path
+          from gnustep_cli_shared.build_infra import release_manifest_from_matrix
+          target, version = sys.argv[1:]
+          rel = Path("C:/dogfood/rel")
+          manifest = release_manifest_from_matrix(version, "https://dogfood.invalid/unused")
+          release = manifest["releases"][0]
+          release["artifacts"] = [a for a in release["artifacts"] if a["id"] in (f"cli-{target}", f"toolchain-{target}")]
+          for artifact in release["artifacts"]:
+              # The bootstrap uses a file next to the manifest named as the URL's basename.
+              path = next(rel.glob(f"gnustep-{artifact['kind']}-{target}-*.zip"))
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              artifact.update({"url": f"https://dogfood.invalid/{path.name}", "filename": path.name, "sha256": digest, "integrity": {"sha256": digest}, "published": True})
+              print(artifact["id"], digest[:12], path.name)
+          (rel / "release-manifest.json").write_text(json.dumps(manifest, indent=2))
+          PY
+          pkg=$(ls /c/dogfood/xctest/tools-xctest-windows-amd64-msys2-clang64-*.zip)
+          python .github/dogfood/make-index.py . tools-xctest-windows-amd64-msys2-clang64 "$pkg" "file:///$(cygpath -m "$pkg")" /c/dogfood/index
+      - name: Install, tools-xctest and make check, as a standard user
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $g = 'C:\dogfood'
+          $user = 'gsdog'
+          $pw = [Convert]::ToBase64String((1..24 | ForEach-Object { [byte](Get-Random -Maximum 256) })) + 'aA1!'
+          New-LocalUser -Name $user -Password (ConvertTo-SecureString $pw -AsPlainText -Force) -PasswordNeverExpires -AccountNeverExpires | Out-Null
+          Write-Output "standard user: $user, admin=$([bool](Get-LocalGroupMember Administrators | Where-Object { $_.Name -like "*\$user" }))"
+          icacls $g /grant "${user}:(OI)(CI)F" /T /Q | Out-Null
+          # Scheduled tasks with a stored password need "Log on as a batch job";
+          # Performance Log Users has it by default and grants no admin rights.
+          Add-LocalGroupMember -Group 'Performance Log Users' -Member $user
+          function Run-AsUser($name, $command, $minutes, $exitFile) {
+            Remove-Item -Force $exitFile -ErrorAction SilentlyContinue
+            $arg = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $command; Set-Content -Encoding ascii $exitFile `$LASTEXITCODE }`""
+            $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg -WorkingDirectory $g
+            $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes $minutes)
+            Register-ScheduledTask -TaskName $name -Action $action -User $user -Password $pw -RunLevel Limited -Settings $settings -Force | Out-Null
+            Start-ScheduledTask -TaskName $name
+            $deadline = (Get-Date).AddMinutes($minutes)
+            while (-not (Test-Path $exitFile) -and (Get-Date) -lt $deadline) {
+              Start-Sleep 20
+              $info = Get-ScheduledTaskInfo -TaskName $name
+              $state = (Get-ScheduledTask -TaskName $name).State
+              Write-Host "$((Get-Date).ToUniversalTime().ToString('HH:mm')) $name state=$state lastResult=$($info.LastTaskResult)"
+              if ($state -eq 'Ready' -and $info.LastRunTime.Year -gt 2000 -and -not (Test-Path $exitFile)) { Start-Sleep 30; break }
+            }
+            $code = if (Test-Path $exitFile) { (Get-Content $exitFile -Raw).Trim() } else { 'no-exit-file' }
+            Write-Host "$name exit: $code"
+            return $code
+          }
+          $probe = Run-AsUser 'dogfood-probe' "whoami /groups > $g\out\probe.txt" 3 "$g\probe-exit.txt"
+          if (-not (Test-Path "$g\out\probe.txt")) { throw "scheduled task as $user never ran (probe exit: $probe)" }
+          Get-Content "$g\out\probe.txt" | Select-String -Pattern 'Mandatory Label|Administrators|Performance Log'
+          $setup = "`$env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE='1'; `$env:GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED='1'; & powershell -NoProfile -ExecutionPolicy Bypass -File $env:GITHUB_WORKSPACE\scripts\bootstrap\gnustep-bootstrap.ps1 setup --root $g\root --manifest $g\rel\release-manifest.json *> $g\out\setup.txt"
+          $sc = Run-AsUser 'dogfood-setup' $setup 60 "$g\setup-exit.txt"
+          Add-Content -Encoding utf8 "$g\out\dogfood.txt" "setup exit $sc"
+          Get-Content "$g\out\setup.txt" -Tail 5
+          if ($sc -ne '0') { throw 'setup failed' }
+          # Sign the index with a throwaway key and point the root's state at it.
+          & python scripts\dev\make-qualification-release.py --work "$g\index" --root "$g\root"
+          $uc = Run-AsUser 'dogfood-checks' "& $g\windows-user.ps1" 60 "$g\user-exit.txt"
+          Get-Content "$g\out\dogfood.txt", "$g\out\checks.txt" -ErrorAction SilentlyContinue
+          & python .github\dogfood\verdict.py "$g\out"
+          if ($LASTEXITCODE -ne 0) { throw 'dogfood failed' }
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tools-xctest-qual-windows-amd64-msys2-clang64
+          path: C:\dogfood\out
