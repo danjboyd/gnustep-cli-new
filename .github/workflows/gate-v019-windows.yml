@@ -133,7 +133,7 @@ jobs:
               if isinstance(a.get("requires_toolchain"), dict):
                   a["requires_toolchain"]["version"] = "0.1.10"
           y["metadata_version"] = int(m.get("metadata_version") or 1) + 1
-          y["generated_at"] = "2026-11-17T00:00:00Z"
+          # Keep X's generated_at: an earlier fixed date makes the CLI refuse Y as older.
           json.dump(y, open(os.path.join(d, "release-manifest.s-y.json"), "w"), indent=2)
           w = [a for a in m["releases"][0]["artifacts"] if "windows" in a["id"]]
           print(json.dumps([{k: a[k] for k in ("id", "sha256", "size")} for a in w], indent=1))
