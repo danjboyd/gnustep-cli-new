@@ -3299,8 +3299,8 @@ class BuildInfraTests(unittest.TestCase):
     def test_package_artifact_build_plan(self):
         payload = package_artifact_build_plan(ROOT / "packages")
         self.assertTrue(payload["ok"])
-        # tools-xctest is re-pinned to danjboyd/tools-xctest v0.8.0 and its artifacts are
-        # unpublished until rebuilt, so they don't count toward production readiness.
+        # tools-xctest 0.8.1: the six rebuilt artifacts are v0.1.9 release candidates with
+        # build and validation evidence; the OpenBSD ones stay unpublished.
         self.assertTrue(payload["production_ready"])
         self.assertEqual(payload["policy_blockers"], [])
         package_map = {package["id"]: package for package in payload["packages"]}
@@ -3321,7 +3321,10 @@ class BuildInfraTests(unittest.TestCase):
                 "tools-xctest-openbsd-arm64-clang",
             },
         )
-        self.assertFalse(any(artifact["publish"] for artifact in artifacts.values()))
+        self.assertEqual(
+            {artifact_id for artifact_id, artifact in artifacts.items() if artifact["publish"]},
+            set(artifacts) - {"tools-xctest-openbsd-amd64-clang", "tools-xctest-openbsd-arm64-clang"},
+        )
         linux_artifact = artifacts["tools-xctest-linux-amd64-clang"]
         self.assertEqual(linux_artifact["build_backend"], "gnustep-cli")
         self.assertEqual(linux_artifact["build_invocation"][:2], ["gnustep", "build"])
@@ -3398,7 +3401,9 @@ class BuildInfraTests(unittest.TestCase):
         payload = tools_xctest_release_gate(
             ROOT / "packages", evidence_dir=ROOT / "docs" / "validation" / "tools-xctest-release-20260420"
         )
-        # Re-pinned to danjboyd/tools-xctest v0.8.0: no target is releasable until rebuilt.
+        # This Phase 24 gate reads the April dogfood evidence format, which covers only some
+        # targets, and the OpenBSD artifacts are unpublished: it stays blocked. (The release
+        # path uses package-artifact-publication-gate, which reads validation_evidence.)
         self.assertFalse(payload["ok"])
         self.assertEqual(payload["status"], "blocked")
         self.assertEqual(payload["phase"], "24.E-G")
@@ -3409,7 +3414,8 @@ class BuildInfraTests(unittest.TestCase):
         self.assertIn("artifact_not_publishable", codes)
         targets = {target["id"]: target for target in payload["targets"]}
         self.assertEqual(len(targets), 8)
-        self.assertFalse(any(target["release_ready"] for target in targets.values()))
+        self.assertFalse(targets["tools-xctest-openbsd-amd64-clang"]["release_ready"])
+        self.assertFalse(targets["tools-xctest-openbsd-arm64-clang"]["release_ready"])
         self.assertEqual(targets["tools-xctest-linux-amd64-clang"]["selected_patches"], [])
         self.assertEqual(targets["tools-xctest-windows-amd64-msys2-clang64"]["format"], "zip")
         self.assertIn("minimal XCTest bundle execution", payload["dogfood_checks"])
