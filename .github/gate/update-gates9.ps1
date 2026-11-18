@@ -120,7 +120,7 @@ if (-not (Test-Path $stagedLauncher)) { $stagedLauncher = Join-Path $staged 'bin
 $smoke = "`$env:GNUSTEP_CLI_MANAGED_ROOT='$staged'; `$env:GNUSTEP_CLI_NO_DELEGATE='1'; `$env:PATH='$staged\clang64\bin;$staged\bin;$staged\usr\bin;' + `$env:PATH; & '$stagedLauncher' --version"
 & powershell.exe -NoProfile -ExecutionPolicy Bypass -Command $smoke *> (Join-Path $out 'A0-candidate-smoke.txt'); $codeA0 = $LASTEXITCODE
 $a0Text = (Get-Content (Join-Path $out 'A0-candidate-smoke.txt') -Raw -ErrorAction SilentlyContinue)
-$results.A0 = [ordered]@{ launcher = $stagedLauncher; exit = $codeA0; output = "$a0Text".Trim(); ok = ($codeA0 -eq 0 -and "$a0Text" -match '0\.1\.8') }
+$results.A0 = [ordered]@{ launcher = $stagedLauncher; exit = $codeA0; output = "$a0Text".Trim(); ok = ($codeA0 -eq 0 -and "$a0Text" -match '0\.1\.9') }
 Say "A0: exit $codeA0 output=$("$a0Text".Trim()) ok=$($results.A0.ok)"
 $rootA = 'C:\gnustep-smoke\gate6-a-017'
 if (-not (Check-Disk 'A')) { $results.A = [ordered]@{ ok = $false; not_run = 'low disk' }; $results | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $out 'update-gates.json') -Encoding utf8; Say 'STOP: low disk before A'; exit 1 }

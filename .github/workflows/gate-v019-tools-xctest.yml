@@ -60,7 +60,7 @@ jobs:
           cp /qual/stage/gnustep-cli-${{ matrix.target }}-$VERSION.tar.gz /qual/stage/gnustep-toolchain-${{ matrix.target }}-$VERSION.tar.gz /qual/cli/
           find /qual/xctest-dl -name 'tools-xctest-${{ matrix.target }}-0.8.1.tar.gz' -exec cp {} /qual/xctest/ \;
           pkg=$(ls /qual/xctest/tools-xctest-${{ matrix.target }}-0.8.1.tar.gz)
-          want=$(python3 -c 'import json,sys; print(next(a["sha256"] for a in json.load(open("packages/org.gnustep.tools-xctest/package.json"))["artifacts"] if a["id"] == sys.argv[1]))' tools-xctest-${{ matrix.target }})
+          want=$(python3 -c 'import json,sys; print(next(a["sha256"] for a in json.load(open(sys.argv[2]))["artifacts"] if a["id"] == sys.argv[1]))' tools-xctest-${{ matrix.target }} "$GITHUB_WORKSPACE/packages/org.gnustep.tools-xctest/package.json")
           have=$(sha256sum "$pkg" | cut -d' ' -f1)
           echo "package $have (package.json $want)"; test "$have" = "$want"
       - name: Qualify as an unprivileged user
