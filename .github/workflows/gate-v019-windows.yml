@@ -1,0 +1,429 @@
+name: Gate v0.1.9 Windows update checks (temporary; never merged)
+
+# v0.1.9 release checks (Dan's ask #8455: build, stage and test; no publishing), on fresh
+# GitHub runners as for v0.1.8. A (+A0, C2, C) and B+N run on separate runners, so neither
+# runs short of disk. Runs only on pushes to this temporary branch.
+
+on:
+  push:
+    branches: [gate-v019-windows]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  gates:
+    strategy:
+      fail-fast: false
+      matrix:
+        # A: a v0.1.8 install upgraded to the staged 0.1.9 by its own 0.1.8 CLI (v0.1.8 fixed
+        # Windows upgrades, #77, so this is the path existing users take). BN: v0.1.5 to Latest.
+        gate: [A, BN]
+    name: update gates ${{ matrix.gate }}
+    if: ${{ contains(github.event.head_commit.message, '[gates]') }}
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk
+        shell: pwsh
+        run: Get-PSDrive -PSProvider FileSystem | Format-Table Name, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}
+
+      - name: Staged release (stage-release run) and the stamped bootstrap
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Get-Content .github/gate/config.env | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
+          New-Item -ItemType Directory -Force C:\gnustep-smoke\release-new, C:\gnustep-smoke\bootstrap | Out-Null
+          gh run download $STAGE_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-staged-release -D C:\gnustep-smoke\release-new
+          if ($LASTEXITCODE -ne 0) { throw 'stage artifact download failed' }
+          Push-Location C:\gnustep-smoke\release-new
+          $bad = Get-Content SHA256SUMS | Where-Object { $_ } | ForEach-Object {
+            $h, $f = $_ -split '\s+\*?', 2
+            if ((Get-FileHash -Algorithm SHA256 $f).Hash.ToLower() -ne $h) { $f }
+          }
+          Pop-Location
+          if ($bad) { throw "SHA256SUMS mismatch: $bad" }
+          Get-ChildItem C:\gnustep-smoke\release-new | Format-Table Name, Length
+
+      - name: Stamp the bootstrap from the git blob (no line-ending conversion) and check its digest
+        shell: bash
+        run: |
+          . <(tr -d "\r" < .github/gate/config.env)
+          git show HEAD:scripts/bootstrap/gnustep-bootstrap.ps1 | sed "6s/.*/\$Script:CliVersion = \"$VERSION\"/" > /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1
+          h=$(sha256sum /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1 | cut -d' ' -f1)
+          echo "stamped bootstrap sha256 $h"
+          test "$h" = "$PS1_SHA256"
+
+      - name: Update gates (Windows PowerShell 5.1, as users run it)
+        shell: powershell
+        run: |
+          Copy-Item .github/gate/update-gates9.ps1 C:\gnustep-smoke\update-gates9.ps1
+          & powershell -NoProfile -ExecutionPolicy Bypass -File C:\gnustep-smoke\update-gates9.ps1 -Gates ${{ matrix.gate }}
+          $code = $LASTEXITCODE
+          Get-Content C:\gnustep-smoke\update-gates6\update-gates.txt
+          Get-Content C:\gnustep-smoke\update-gates6\exit.txt -ErrorAction SilentlyContinue
+          if ($code -ne 0) { throw "update gates ${{ matrix.gate }} failed ($code)" }
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-gates-${{ matrix.gate }}
+          path: C:\gnustep-smoke\update-gates6
+
+  selftest-final:
+    # Gate S on the release candidate itself: the staged CLI (which contains #77) installs
+    # and then updates its own root through the root-moving path. Must pass.
+    if: ${{ contains(github.event.head_commit.message, '[selftest-final]') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [staged]
+    name: gate S self-update on the final stage (${{ matrix.variant }})
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Staged release, and the PR CLI for the fixed variant
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Get-Content .github/gate/config.env | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
+          New-Item -ItemType Directory -Force C:\gnustep-smoke\release-new, C:\gnustep-smoke\bootstrap, C:\gnustep-smoke\fix | Out-Null
+          gh run download $STAGE_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-staged-release -D C:\gnustep-smoke\release-new
+          if ($LASTEXITCODE -ne 0) { throw 'stage artifact download failed' }
+          if ('${{ matrix.variant }}' -eq 'fixed') {
+            gh run download $FIX_WINDOWS_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-windows-current-source-artifacts -D C:\gnustep-smoke\fix
+            if ($LASTEXITCODE -ne 0) { throw 'PR Windows artifact download failed' }
+            $zip = Get-ChildItem C:\gnustep-smoke\fix -Recurse -Filter "gnustep-cli-windows-amd64-msys2-clang64-$VERSION.zip" | Select-Object -First 1
+            if (-not $zip) { throw 'PR Windows CLI zip not found' }
+            Get-Content (Get-ChildItem C:\gnustep-smoke\fix -Recurse -Filter windows-current-source-artifact.json | Select-Object -First 1).FullName
+            Copy-Item -Force $zip.FullName "C:\gnustep-smoke\release-new\$($zip.Name)"
+          }
+          Get-ChildItem C:\gnustep-smoke\release-new | Format-Table Name, Length
+
+      - name: Manifests X (0.1.9, as staged plus the chosen CLI zip) and Y (same artifacts as 0.1.10)
+        shell: bash
+        run: |
+          python - <<'PY2'
+          import copy, hashlib, json, os
+          d = r"C:\gnustep-smoke\release-new"
+          m = json.load(open(os.path.join(d, "release-manifest.json")))
+          for a in m["releases"][0]["artifacts"]:
+              f = os.path.join(d, a["filename"])
+              if os.path.exists(f):
+                  h = hashlib.sha256(open(f, "rb").read()).hexdigest()
+                  a["sha256"] = h; a["integrity"] = {"sha256": h}; a["size"] = os.path.getsize(f)
+          tc = {a["id"]: a for a in m["releases"][0]["artifacts"] if a["kind"] == "toolchain"}
+          for a in m["releases"][0]["artifacts"]:
+              rt = a.get("requires_toolchain")
+              if isinstance(rt, dict) and rt.get("artifact_id") in tc:
+                  rt["sha256"] = tc[rt["artifact_id"]]["sha256"]
+          json.dump(m, open(os.path.join(d, "release-manifest.s-x.json"), "w"), indent=2)
+          y = copy.deepcopy(m)
+          y["releases"][0]["version"] = "0.1.10"
+          for a in y["releases"][0]["artifacts"]:
+              a["version"] = "0.1.10"
+              if isinstance(a.get("requires_toolchain"), dict):
+                  a["requires_toolchain"]["version"] = "0.1.10"
+          y["metadata_version"] = int(m.get("metadata_version") or 1) + 1
+          y["generated_at"] = "2026-11-17T00:00:00Z"
+          json.dump(y, open(os.path.join(d, "release-manifest.s-y.json"), "w"), indent=2)
+          w = [a for a in m["releases"][0]["artifacts"] if "windows" in a["id"]]
+          print(json.dumps([{k: a[k] for k in ("id", "sha256", "size")} for a in w], indent=1))
+          PY2
+
+      - name: Stamp the bootstrap from the git blob and check its digest
+        shell: bash
+        run: |
+          . <(tr -d "\r" < .github/gate/config.env)
+          git show HEAD:scripts/bootstrap/gnustep-bootstrap.ps1 | sed "6s/.*/\$Script:CliVersion = \"$VERSION\"/" > /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1
+          h=$(sha256sum /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1 | cut -d' ' -f1)
+          echo "stamped bootstrap sha256 $h"
+          test "$h" = "$PS1_SHA256"
+
+      - name: Gate S (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          Copy-Item .github/gate/update-gate-s.ps1 C:\gnustep-smoke\update-gate-s.ps1
+          $expect = 'pass'
+          & powershell -NoProfile -ExecutionPolicy Bypass -File C:\gnustep-smoke\update-gate-s.ps1 -Expect $expect
+          $code = $LASTEXITCODE
+          Get-Content C:\gnustep-smoke\gate-s\gate-s.txt
+          if ($code -ne 0) { throw "gate S (${{ matrix.variant }}, expect $expect) failed ($code)" }
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-s-final-${{ matrix.variant }}
+          path: C:\gnustep-smoke\gate-s
+
+  variant:
+    # The patch layer on the staged release: bootstrap --variant patched, stock <-> patched
+    # round trip (byte-identical stock tree), update to the same artifacts relabelled 0.1.10
+    # keeps the variant. The same script as windows-carry-layer.yml's gate, on staged bytes.
+    if: ${{ contains(github.event.head_commit.message, '[variant]') }}
+    name: patch layer variant gate on the staged release
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Staged release, manifests X (0.1.9 as staged) and Y (0.1.10), the stamped bootstrap
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          . <(tr -d "\r" < .github/gate/config.env)
+          d=/c/carry-gate/release; mkdir -p $d /c/carry-gate/bootstrap
+          gh run download "$STAGE_RUN_ID" --repo "$GITHUB_REPOSITORY" -n gnustep-staged-release -D $d
+          (cd $d && sha256sum -c SHA256SUMS)
+          layer=$(ls $d/gnustep-carry-windows-amd64-msys2-clang64-$VERSION.zip)
+          unzip -p "$layer" carry-layer.json > $d/carry-layer.json
+          python - "$(cygpath -w $d)" <<'PY'
+          import copy, json, os, sys
+          d = sys.argv[1]
+          m = json.load(open(os.path.join(d, "release-manifest.json")))
+          json.dump(m, open(os.path.join(d, "release-manifest.x.json"), "w"), indent=2)
+          y = copy.deepcopy(m)
+          y["releases"][0]["version"] = "0.1.10"
+          for a in y["releases"][0]["artifacts"]:
+              a["version"] = "0.1.10"
+              if isinstance(a.get("requires_toolchain"), dict):
+                  a["requires_toolchain"]["version"] = "0.1.10"
+          y["metadata_version"] = int(m.get("metadata_version") or 1) + 1
+          json.dump(y, open(os.path.join(d, "release-manifest.y.json"), "w"), indent=2)
+          print([a["id"] for a in m["releases"][0]["artifacts"] if "windows" in a["id"]])
+          PY
+          git show HEAD:scripts/bootstrap/gnustep-bootstrap.ps1 | sed "6s/.*/\$Script:CliVersion = \"$VERSION\"/" > /c/carry-gate/bootstrap/gnustep-bootstrap.ps1
+          h=$(sha256sum /c/carry-gate/bootstrap/gnustep-bootstrap.ps1 | cut -d' ' -f1)
+          echo "stamped bootstrap sha256 $h"
+          test "$h" = "$PS1_SHA256"
+
+      - name: The gate (Windows PowerShell 5.1)
+        shell: powershell
+        run: |
+          & powershell -NoProfile -ExecutionPolicy Bypass -File .github\carry\variant-gate.ps1 -Dir C:\carry-gate\release
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { throw "variant gate failed ($code)" }
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: variant-gate-staged
+          path: C:\carry-gate\out
+
+  smoke-tier1:
+    # The release's Windows smoke (tier1-core: install, new/build/run, Gorm, update
+    # scenarios) and the Arlen install/remove check, as on the v0.1.9 lease, run as a
+    # standard (non-admin) local user through a scheduled task, like the lease's S4U task.
+    if: ${{ contains(github.event.head_commit.message, '[smoke]') }}
+    name: tier1 smoke + Arlen check (non-admin user)
+    runs-on: windows-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inputs (staged release, release-old copy, bootstrap, fixtures, Arlen)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Get-Content .github/gate/config.env | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
+          $g = 'C:\gnustep-smoke'
+          New-Item -ItemType Directory -Force "$g\release-new", "$g\bootstrap", "$g\fixtures", "$g\arlen", "$g\stage" | Out-Null
+          gh run download $STAGE_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-staged-release -D "$g\stage"
+          if ($LASTEXITCODE -ne 0) { throw 'stage download failed' }
+          Copy-Item "$g\stage\gnustep-*-windows-*.zip", "$g\stage\release-manifest.json", "$g\stage\release-provenance.json", "$g\stage\SHA256SUMS", "$g\stage\windows-current-source-artifact.json" "$g\release-new\"
+          Remove-Item -Recurse -Force "$g\stage"
+          Copy-Item -Recurse "$g\release-new" "$g\release-old"
+          Copy-Item docs/smoke-fixtures/gorm-1_5_0-windows-private-ivar.patch "$g\fixtures\"
+          Copy-Item .github/gate/smoke/windows-full-release-smoke.ps1 "$g\"
+          Copy-Item .github/gate/arlen/* "$g\arlen\"
+          gh release download v0.1.4 --repo $env:GITHUB_REPOSITORY -p 'arlen-arlen-windows-amd64-msys2-clang64-headless-0.3.2.zip' -D "$g\arlen"
+          $h = (Get-FileHash -Algorithm SHA256 "$g\arlen\arlen-arlen-windows-amd64-msys2-clang64-headless-0.3.2.zip").Hash.ToLower()
+          if ($h -ne 'fd39fb7d41f2ea330e8fa0c7083143a3c1eaa6783bedfcc8fab8558fe7e8dfb1') { throw "arlen zip $h" }
+          Get-ChildItem "$g\release-new\*.zip" | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash.ToLower().Substring(0,8) + ' ' + $_.Path }
+
+      - name: Stamp the bootstrap from the git blob and check its digest
+        shell: bash
+        run: |
+          . <(tr -d "\r" < .github/gate/config.env)
+          git show HEAD:scripts/bootstrap/gnustep-bootstrap.ps1 | sed "6s/.*/\$Script:CliVersion = \"$VERSION\"/" > /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1
+          h=$(sha256sum /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1 | cut -d' ' -f1)
+          echo "stamped bootstrap sha256 $h"
+          test "$h" = "$PS1_SHA256"
+
+      - name: Run tier1 smoke, then the Arlen check, as a standard user
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Get-Content .github/gate/config.env | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
+          $g = 'C:\gnustep-smoke'
+          $user = 'gssmoke'
+          $pw = [Convert]::ToBase64String((1..24 | ForEach-Object { [byte](Get-Random -Maximum 256) })) + 'aA1!'
+          # New-LocalUser: `net user /add` stops to confirm passwords longer than 14 characters.
+          New-LocalUser -Name $user -Password (ConvertTo-SecureString $pw -AsPlainText -Force) -PasswordNeverExpires -AccountNeverExpires | Out-Null
+          Write-Output "standard user: $((Get-LocalUser $user).Name), admin=$([bool](Get-LocalGroupMember Administrators | Where-Object { $_.Name -like "*\$user" }))"
+          icacls $g /grant "${user}:(OI)(CI)F" /T /Q | Out-Null
+          # Scheduled tasks with a stored password need "Log on as a batch job"; plain Users lack it.
+          # Performance Log Users has it by default and grants no admin rights.
+          Add-LocalGroupMember -Group 'Performance Log Users' -Member $user
+          Write-Output "groups: $((Get-LocalGroup | Where-Object { Get-LocalGroupMember $_ -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*\$user" } }).Name -join ',')"
+          function Run-AsUser($name, $command, $minutes, $exitFile) {
+            Remove-Item -Force $exitFile -ErrorAction SilentlyContinue
+            $arg = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $command; Set-Content -Encoding ascii $exitFile `$LASTEXITCODE }`""
+            $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg -WorkingDirectory $g
+            $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes $minutes)
+            Register-ScheduledTask -TaskName $name -Action $action -User $user -Password $pw -RunLevel Limited -Settings $settings -Force | Out-Null
+            Start-ScheduledTask -TaskName $name
+            $deadline = (Get-Date).AddMinutes($minutes)
+            while (-not (Test-Path $exitFile) -and (Get-Date) -lt $deadline) {
+              Start-Sleep 20
+              $info = Get-ScheduledTaskInfo -TaskName $name
+              $state = (Get-ScheduledTask -TaskName $name).State
+              Write-Host "$((Get-Date).ToUniversalTime().ToString('HH:mm')) $name state=$state lastResult=$($info.LastTaskResult)"
+              if ($state -eq 'Ready' -and $info.LastRunTime.Year -gt 2000 -and -not (Test-Path $exitFile)) { Start-Sleep 30; break }
+            }
+            $code = if (Test-Path $exitFile) { (Get-Content $exitFile -Raw).Trim() } else { 'no-exit-file' }
+            Write-Host "$name exit: $code"
+            return $code
+          }
+          $probe = Run-AsUser 'gnustep-v018-probe' "whoami /groups > $g\probe.txt" 3 "$g\probe-exit.txt"
+          if (-not (Test-Path "$g\probe.txt")) { throw "scheduled task as $user never ran (probe exit: $probe)" }
+          Get-Content "$g\probe.txt" | Select-String -Pattern 'Mandatory Label|Administrators|Performance Log'
+          $smokeCmd = "& $g\windows-full-release-smoke.ps1 -ReleaseSource v0.1.9-stage-$STAGE_RUN_ID -SuiteId tier1-core -RunnerId github-windows-latest-${env:GITHUB_RUN_ID}-nonadmin *> $g\smoke-run.log"
+          $smoke = Run-AsUser 'gnustep-v018-smoke' $smokeCmd 180 "$g\smoke-exit.txt"
+          $arlen = Run-AsUser 'gnustep-v018-arlen' "& $g\arlen\arlen-check.ps1" 60 "$g\arlen-exit.txt"
+          $report = Get-Content "$g\windows-full-release-report.json" -Raw -Encoding utf8 | ConvertFrom-Json
+          Write-Output "report overall_ok=$($report.overall_ok) status=$($report.status)"
+          Get-Content "$g\arlen-check\arlen-check.txt"
+          # Same pass criteria as the v0.1.8/v0.1.9 lease runs (arlen --help exits 2 there); elevation is recorded, not required.
+          $arlenText = Get-Content "$g\arlen-check\arlen-check.txt" -Raw
+          $arlenOk = ($arlenText -match 'tampered list exit=\d+ refused=True') -and ($arlenText -match 'install ok=True') -and ($arlenText -match 'arlen.cmd --help exit [02]\b') -and ($arlenText -match 'boomhauer.cmd --help exit 0') -and ($arlenText -match 'remove exit=0') -and ($arlenText -match 'leftovers: pkg=False arlen.cmd=False boomhauer.cmd=False')
+          Write-Output "arlen check ok=$arlenOk"
+          if (-not $report.overall_ok -or -not $arlenOk) { throw 'tier1 smoke or Arlen check failed' }
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tier1-smoke-and-arlen
+          path: |
+            C:\gnustep-smoke\windows-full-release-report.json
+            C:\gnustep-smoke\windows-full-release-evidence.json
+            C:\gnustep-smoke\smoke-run.log
+            C:\gnustep-smoke\arlen-check
+            C:\gnustep-smoke\*.json
+            C:\gnustep-smoke\*.txt
+
+  toolchain-smoke:
+    # v0.1.8's windows-toolchain-smoke-check (post-checks.ps1 + smoke-toolchain.sh: gdnc,
+    # TLS inside and outside the toolchain's bash) on a fresh install of the staged release,
+    # as a standard local user.
+    if: ${{ contains(github.event.head_commit.message, '[toolsmoke]') }}
+    name: toolchain smoke (gdnc, TLS) on a fresh staged install (non-admin user)
+    runs-on: windows-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inputs (staged release, release-old copy, bootstrap, fixtures, Arlen)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          Get-Content .github/gate/config.env | ForEach-Object { $k, $v = $_ -split '=', 2; Set-Variable -Name $k.Trim() -Value $v.Trim() }
+          $g = 'C:\gnustep-smoke'
+          New-Item -ItemType Directory -Force "$g\release-new", "$g\bootstrap", "$g\fixtures", "$g\arlen", "$g\stage" | Out-Null
+          gh run download $STAGE_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-staged-release -D "$g\stage"
+          if ($LASTEXITCODE -ne 0) { throw 'stage download failed' }
+          Copy-Item "$g\stage\gnustep-*-windows-*.zip", "$g\stage\release-manifest.json", "$g\stage\release-provenance.json", "$g\stage\SHA256SUMS", "$g\stage\windows-current-source-artifact.json" "$g\release-new\"
+          Remove-Item -Recurse -Force "$g\stage"
+          Copy-Item -Recurse "$g\release-new" "$g\release-old"
+          Copy-Item docs/smoke-fixtures/gorm-1_5_0-windows-private-ivar.patch "$g\fixtures\"
+          Copy-Item .github/gate/smoke/windows-full-release-smoke.ps1 "$g\"
+          Copy-Item .github/gate/arlen/* "$g\arlen\"
+          gh release download v0.1.4 --repo $env:GITHUB_REPOSITORY -p 'arlen-arlen-windows-amd64-msys2-clang64-headless-0.3.2.zip' -D "$g\arlen"
+          $h = (Get-FileHash -Algorithm SHA256 "$g\arlen\arlen-arlen-windows-amd64-msys2-clang64-headless-0.3.2.zip").Hash.ToLower()
+          if ($h -ne 'fd39fb7d41f2ea330e8fa0c7083143a3c1eaa6783bedfcc8fab8558fe7e8dfb1') { throw "arlen zip $h" }
+          Get-ChildItem "$g\release-new\*.zip" | Get-FileHash -Algorithm SHA256 | ForEach-Object { $_.Hash.ToLower().Substring(0,8) + ' ' + $_.Path }
+
+      - name: Stamp the bootstrap from the git blob and check its digest
+        shell: bash
+        run: |
+          . <(tr -d "\r" < .github/gate/config.env)
+          git show HEAD:scripts/bootstrap/gnustep-bootstrap.ps1 | sed "6s/.*/\$Script:CliVersion = \"$VERSION\"/" > /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1
+          h=$(sha256sum /c/gnustep-smoke/bootstrap/gnustep-bootstrap.ps1 | cut -d' ' -f1)
+          echo "stamped bootstrap sha256 $h"
+          test "$h" = "$PS1_SHA256"
+
+      - name: Fresh staged install, then the toolchain smoke, as a standard user
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $g = 'C:\gnustep-smoke'
+          Copy-Item .github/gate/smoke/smoke-toolchain.sh, .github/gate/smoke/post-checks.ps1 "$g\"
+          $user = 'gssmoke'
+          $pw = [Convert]::ToBase64String((1..24 | ForEach-Object { [byte](Get-Random -Maximum 256) })) + 'aA1!'
+          # New-LocalUser: `net user /add` stops to confirm passwords longer than 14 characters.
+          New-LocalUser -Name $user -Password (ConvertTo-SecureString $pw -AsPlainText -Force) -PasswordNeverExpires -AccountNeverExpires | Out-Null
+          Write-Output "standard user: $((Get-LocalUser $user).Name), admin=$([bool](Get-LocalGroupMember Administrators | Where-Object { $_.Name -like "*\$user" }))"
+          icacls $g /grant "${user}:(OI)(CI)F" /T /Q | Out-Null
+          # Scheduled tasks with a stored password need "Log on as a batch job"; plain Users lack it.
+          # Performance Log Users has it by default and grants no admin rights.
+          Add-LocalGroupMember -Group 'Performance Log Users' -Member $user
+          Write-Output "groups: $((Get-LocalGroup | Where-Object { Get-LocalGroupMember $_ -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*\$user" } }).Name -join ',')"
+          function Run-AsUser($name, $command, $minutes, $exitFile) {
+            Remove-Item -Force $exitFile -ErrorAction SilentlyContinue
+            $arg = "-NoProfile -ExecutionPolicy Bypass -Command `"& { $command; Set-Content -Encoding ascii $exitFile `$LASTEXITCODE }`""
+            $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg -WorkingDirectory $g
+            $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes $minutes)
+            Register-ScheduledTask -TaskName $name -Action $action -User $user -Password $pw -RunLevel Limited -Settings $settings -Force | Out-Null
+            Start-ScheduledTask -TaskName $name
+            $deadline = (Get-Date).AddMinutes($minutes)
+            while (-not (Test-Path $exitFile) -and (Get-Date) -lt $deadline) {
+              Start-Sleep 20
+              $info = Get-ScheduledTaskInfo -TaskName $name
+              $state = (Get-ScheduledTask -TaskName $name).State
+              Write-Host "$((Get-Date).ToUniversalTime().ToString('HH:mm')) $name state=$state lastResult=$($info.LastTaskResult)"
+              if ($state -eq 'Ready' -and $info.LastRunTime.Year -gt 2000 -and -not (Test-Path $exitFile)) { Start-Sleep 30; break }
+            }
+            $code = if (Test-Path $exitFile) { (Get-Content $exitFile -Raw).Trim() } else { 'no-exit-file' }
+            Write-Host "$name exit: $code"
+            return $code
+          }
+          $probe = Run-AsUser 'gnustep-v018-probe' "whoami /groups > $g\probe.txt" 3 "$g\probe-exit.txt"
+          if (-not (Test-Path "$g\probe.txt")) { throw "scheduled task as $user never ran (probe exit: $probe)" }
+          Get-Content "$g\probe.txt" | Select-String -Pattern 'Mandatory Label|Administrators|Performance Log'
+          # The staged manifest isn't production-signed before Release: install from it with
+          # the bootstrap's unsigned-local allowance only for this one setup.
+          $install = "`$env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE='1'; `$env:GNUSTEP_BOOTSTRAP_ALLOW_UNSIGNED='1'; & powershell -NoProfile -ExecutionPolicy Bypass -File $g\bootstrap\gnustep-bootstrap.ps1 setup --root $g\install-full-toolsmoke --manifest $g\release-new\release-manifest.json *> $g\toolsmoke-install.txt"
+          $ic = Run-AsUser 'gnustep-v018-install' $install 90 "$g\install-exit.txt"
+          Get-Content "$g\toolsmoke-install.txt" -Tail 5
+          $ver = (Get-Content "$g\install-full-toolsmoke\state\cli-state.json" -Raw | ConvertFrom-Json).cli_version
+          Write-Output "install exit $ic version $ver"
+          if ($ver -ne '0.1.9') { throw 'staged install failed' }
+          $pc = Run-AsUser 'gnustep-v018-post' "& $g\post-checks.ps1" 60 "$g\post-exit.txt"
+          Get-Content "$g\post\post-checks.txt"
+          $t = Get-Content "$g\post\post-checks.txt" -Raw
+          $ok = ($t -match 'smoke-toolchain exit 0') -and ($t -match 'outside bash: https://github.com exit 0') -and ($t -match 'outside bash: https://expired.badssl.com exit 1') -and ($t -match 'outside bash: https://1.1.1.1 exit 0')
+          Write-Output "toolchain smoke ok=$ok"
+          if (-not $ok) { throw 'toolchain smoke failed' }
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolchain-smoke
+          path: |
+            C:\gnustep-smoke\post
+            C:\gnustep-smoke\*.txt
