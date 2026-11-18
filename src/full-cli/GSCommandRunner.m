@@ -244,6 +244,12 @@ static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
 - (NSString *)materializeVersionedReleaseForInstallRoot:(NSString *)installRoot version:(NSString *)version error:(NSString **)errorMessage;
 - (NSDictionary *)rollbackManagedInstallRoot:(NSString *)installRoot exitCode:(int *)exitCode;
 - (NSDictionary *)repairManagedInstallRoot:(NSString *)installRoot;
+- (NSDictionary *)installedCarryLayerForInstallRoot:(NSString *)installRoot;
+- (void)recordToolchainVariant:(NSString *)variant layer:(NSDictionary *)layer forInstallRoot:(NSString *)installRoot;
+- (NSDictionary *)executeStockSetupForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
+- (BOOL)applyCarryLayerArtifact:(NSDictionary *)artifact manifestPath:(NSString *)manifestPath toInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
+- (BOOL)restoreStockToolchainForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
+- (NSDictionary *)reconcileToolchainVariant:(NSString *)variant forInstallRoot:(NSString *)installRoot manifest:(NSString *)manifestPath upgrade:(BOOL)upgrade exitCode:(int *)exitCode;
 - (NSDictionary *)executeBuildForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSDictionary *)executeCleanForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
 - (NSDictionary *)executeRunForContext:(GSCommandContext *)context exitCode:(int *)exitCode;
@@ -7046,6 +7052,359 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                         nil];
 }
 
+// The patch layer (docs/specs/patch-layer.md): a signed artifact of kind "carry-layer"
+// whose files replace a few stock toolchain files with builds carrying the patches in
+// toolchains/carry. The stock files are moved to state/carry/stock and put back to switch
+// to stock; carry-layer.json at the root records what is applied. Moving (a rename) works
+// for a DLL a running process has loaded on Windows, where overwriting or deleting it
+// doesn't.
+- (NSString *)carryLayerRecordPathForInstallRoot:(NSString *)installRoot
+{
+  return [installRoot stringByAppendingPathComponent: @"carry-layer.json"];
+}
+
+- (NSString *)carryStockBackupRootForInstallRoot:(NSString *)installRoot
+{
+  return [[[installRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"carry"] stringByAppendingPathComponent: @"stock"];
+}
+
+- (NSDictionary *)installedCarryLayerForInstallRoot:(NSString *)installRoot
+{
+  NSString *path = [self carryLayerRecordPathForInstallRoot: [self normalizedManagedInstallRootPath: installRoot]];
+  if ([[NSFileManager defaultManager] fileExistsAtPath: path] == NO)
+    {
+      return nil;
+    }
+  return [self readJSONFile: path error: NULL];
+}
+
+- (void)recordToolchainVariant:(NSString *)variant layer:(NSDictionary *)layer forInstallRoot:(NSString *)installRoot
+{
+  NSString *statePath = [[installRoot stringByAppendingPathComponent: @"state"] stringByAppendingPathComponent: @"cli-state.json"];
+  NSMutableDictionary *state = [[[self installedLifecycleStateForInstallRoot: installRoot] mutableCopy] autorelease];
+  NSMutableArray *patchIDs = [NSMutableArray array];
+  NSEnumerator *enumerator = [[layer objectForKey: @"patches"] objectEnumerator];
+  NSDictionary *patch = nil;
+
+  if (state == nil)
+    {
+      return;
+    }
+  while ((patch = [enumerator nextObject]) != nil)
+    {
+      if ([patch isKindOfClass: [NSDictionary class]] && [patch objectForKey: @"id"] != nil)
+        {
+          [patchIDs addObject: [patch objectForKey: @"id"]];
+        }
+    }
+  [state setObject: variant forKey: @"toolchain_variant"];
+  [state setObject: (layer != nil
+                     ? (id)[NSDictionary dictionaryWithObjectsAndKeys:
+                                           [layer objectForKey: @"release"] ? [layer objectForKey: @"release"] : [NSNull null], @"release",
+                                           [layer objectForKey: @"artifact_sha256"] ? [layer objectForKey: @"artifact_sha256"] : [NSNull null], @"sha256",
+                                           patchIDs, @"patches",
+                                           nil]
+                     : (id)[NSNull null])
+            forKey: @"carry_layer"];
+  [self writeJSONStringObject: state toPath: statePath error: NULL];
+}
+
+// Puts each moved stock file back after a failed apply, newest first.
+- (void)undoCarryMoves:(NSArray *)moves
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSEnumerator *enumerator = [moves reverseObjectEnumerator];
+  NSDictionary *move = nil;
+
+  while ((move = [enumerator nextObject]) != nil)
+    {
+      NSString *target = [move objectForKey: @"target"];
+      NSString *backup = [move objectForKey: @"backup"];
+      NSString *aside = [NSString stringWithFormat: @"%@.carry-undo-%@", target, [[NSProcessInfo processInfo] globallyUniqueString]];
+      if ([manager fileExistsAtPath: target])
+        {
+          if ([manager removeItemAtPath: target error: NULL] == NO)
+            {
+              [manager moveItemAtPath: target toPath: aside error: NULL];
+            }
+        }
+      if ([backup length] > 0 && [manager fileExistsAtPath: backup])
+        {
+          [manager moveItemAtPath: backup toPath: target error: NULL];
+        }
+    }
+}
+
+- (BOOL)applyCarryLayerArtifact:(NSDictionary *)artifact manifestPath:(NSString *)manifestPath toInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *root = [self normalizedManagedInstallRootPath: installRoot];
+  NSString *staging = [root stringByAppendingPathComponent: @".staging/carry"];
+  NSString *fileName = [artifact objectForKey: @"filename"] ? [artifact objectForKey: @"filename"] : [[artifact objectForKey: @"url"] lastPathComponent];
+  NSString *localCandidate = [[manifestPath stringByDeletingLastPathComponent] stringByAppendingPathComponent: fileName];
+  NSString *downloadPath = [staging stringByAppendingPathComponent: fileName];
+  NSString *extractPath = [staging stringByAppendingPathComponent: @"extract"];
+  NSString *backupRoot = [self carryStockBackupRootForInstallRoot: root];
+  NSDictionary *state = [self installedLifecycleStateForInstallRoot: root];
+  NSDictionary *applied = [self installedCarryLayerForInstallRoot: root];
+  NSMutableDictionary *layer = nil;
+  NSMutableArray *moves = [NSMutableArray array];
+  NSArray *files = nil;
+  NSString *checksum = nil;
+  NSString *failure = nil;
+  NSUInteger i = 0;
+
+  if ([[applied objectForKey: @"artifact_sha256"] isEqualToString: [artifact objectForKey: @"sha256"]])
+    {
+      [self recordToolchainVariant: @"patched" layer: applied forInstallRoot: root];
+      return YES;
+    }
+
+  [manager removeItemAtPath: staging error: NULL];
+  [manager createDirectoryAtPath: staging withIntermediateDirectories: YES attributes: nil error: NULL];
+  if ([manifestPath length] > 0 && [manager fileExistsAtPath: localCandidate])
+    {
+      [manager copyItemAtPath: localCandidate toPath: downloadPath error: NULL];
+    }
+  else if ([self downloadURLString: [artifact objectForKey: @"url"] toPath: downloadPath error: &failure] == NO)
+    {
+      goto failed;
+    }
+  checksum = [self sha256ForFile: downloadPath];
+  if (checksum == nil || [checksum isEqualToString: [artifact objectForKey: @"sha256"]] == NO)
+    {
+      failure = [NSString stringWithFormat: @"checksum mismatch for %@", [artifact objectForKey: @"id"]];
+      goto failed;
+    }
+  if ([self extractArchive: downloadPath toDirectory: extractPath error: &failure] == NO)
+    {
+      goto failed;
+    }
+  layer = [[[self readJSONFile: [extractPath stringByAppendingPathComponent: @"carry-layer.json"] error: NULL] mutableCopy] autorelease];
+  files = [layer objectForKey: @"files"];
+  if (layer == nil || [files isKindOfClass: [NSArray class]] == NO || [files count] == 0)
+    {
+      failure = @"The patch layer has no carry-layer.json listing its files.";
+      goto failed;
+    }
+  if ([[state objectForKey: @"toolchain_artifact_sha256"] isKindOfClass: [NSString class]] == NO
+      || [[layer objectForKey: @"requires_toolchain_sha256"] isEqualToString: [state objectForKey: @"toolchain_artifact_sha256"]] == NO)
+    {
+      failure = [NSString stringWithFormat: @"The patch layer is for toolchain %@, but this install has %@.",
+                          [layer objectForKey: @"requires_toolchain_sha256"], [state objectForKey: @"toolchain_artifact_sha256"]];
+      goto failed;
+    }
+
+  // A different layer may be applied (an update kept the toolchain): go back to stock first.
+  if (applied != nil && [self restoreStockToolchainForInstallRoot: root error: &failure] == NO)
+    {
+      goto failed;
+    }
+
+  // Every file must be exactly the stock one before anything moves.
+  for (i = 0; i < [files count]; i++)
+    {
+      NSDictionary *file = [files objectAtIndex: i];
+      NSString *relative = [file objectForKey: @"path"];
+      NSString *target = [root stringByAppendingPathComponent: relative];
+      id stockSHA = [file objectForKey: @"stock_sha256"];
+      if ([relative length] == 0 || [relative hasPrefix: @"/"] || [relative rangeOfString: @".."].location != NSNotFound
+          || [manager fileExistsAtPath: [extractPath stringByAppendingPathComponent: relative]] == NO)
+        {
+          failure = [NSString stringWithFormat: @"The patch layer lists an invalid file: %@", relative];
+          goto failed;
+        }
+      if ([stockSHA isKindOfClass: [NSString class]])
+        {
+          if ([[self sha256ForFile: target] isEqualToString: stockSHA] == NO)
+            {
+              failure = [NSString stringWithFormat: @"%@ is not the stock file the patch layer replaces; nothing was changed.", relative];
+              goto failed;
+            }
+        }
+      else if ([manager fileExistsAtPath: target])
+        {
+          failure = [NSString stringWithFormat: @"%@ already exists; the patch layer expects to add it. Nothing was changed.", relative];
+          goto failed;
+        }
+    }
+
+  [manager removeItemAtPath: backupRoot error: NULL];
+  for (i = 0; i < [files count]; i++)
+    {
+      NSDictionary *file = [files objectAtIndex: i];
+      NSString *relative = [file objectForKey: @"path"];
+      NSString *target = [root stringByAppendingPathComponent: relative];
+      NSString *backup = [backupRoot stringByAppendingPathComponent: relative];
+      BOOL hadStock = [[file objectForKey: @"stock_sha256"] isKindOfClass: [NSString class]];
+
+      if (hadStock)
+        {
+          [manager createDirectoryAtPath: [backup stringByDeletingLastPathComponent] withIntermediateDirectories: YES attributes: nil error: NULL];
+          if ([self injectedSetupFailureAtStep: @"carry-move" error: NULL] || [manager moveItemAtPath: target toPath: backup error: NULL] == NO)
+            {
+              failure = [NSString stringWithFormat: @"Could not move the stock %@ aside.", relative];
+              goto undo;
+            }
+        }
+      [moves addObject: [NSDictionary dictionaryWithObjectsAndKeys: target, @"target", hadStock ? backup : @"", @"backup", nil]];
+      [manager createDirectoryAtPath: [target stringByDeletingLastPathComponent] withIntermediateDirectories: YES attributes: nil error: NULL];
+      if ([self injectedSetupFailureAtStep: @"carry-copy" error: NULL]
+          || [manager copyItemAtPath: [extractPath stringByAppendingPathComponent: relative] toPath: target error: NULL] == NO
+          || [[self sha256ForFile: target] isEqualToString: [file objectForKey: @"sha256"]] == NO)
+        {
+          failure = [NSString stringWithFormat: @"Could not install the patched %@.", relative];
+          goto undo;
+        }
+    }
+
+  [layer setObject: [artifact objectForKey: @"sha256"] forKey: @"artifact_sha256"];
+  [layer setObject: [artifact objectForKey: @"id"] ? [artifact objectForKey: @"id"] : @"carry-layer" forKey: @"artifact_id"];
+  if ([self writeJSONStringObject: layer toPath: [self carryLayerRecordPathForInstallRoot: root] error: &failure] == NO)
+    {
+      goto undo;
+    }
+  [self recordToolchainVariant: @"patched" layer: layer forInstallRoot: root];
+  [manager removeItemAtPath: staging error: NULL];
+  return YES;
+
+undo:
+  [self undoCarryMoves: moves];
+failed:
+  [manager removeItemAtPath: staging error: NULL];
+  if (errorMessage != NULL)
+    {
+      *errorMessage = failure ? failure : @"The patch layer could not be applied.";
+    }
+  return NO;
+}
+
+- (BOOL)restoreStockToolchainForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage
+{
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSString *root = [self normalizedManagedInstallRootPath: installRoot];
+  NSDictionary *layer = [self installedCarryLayerForInstallRoot: root];
+  NSArray *files = [layer objectForKey: @"files"];
+  NSString *backupRoot = [self carryStockBackupRootForInstallRoot: root];
+  NSString *replaced = [[backupRoot stringByDeletingLastPathComponent] stringByAppendingPathComponent:
+                                     [NSString stringWithFormat: @"replaced-%@", [[NSProcessInfo processInfo] globallyUniqueString]]];
+  NSMutableArray *problems = [NSMutableArray array];
+  NSUInteger i = 0;
+
+  if (layer == nil)
+    {
+      [self recordToolchainVariant: @"stock" layer: nil forInstallRoot: root];
+      return YES;
+    }
+  for (i = 0; i < [files count]; i++)
+    {
+      NSDictionary *file = [files objectAtIndex: i];
+      NSString *relative = [file objectForKey: @"path"];
+      NSString *target = [root stringByAppendingPathComponent: relative];
+      NSString *backup = [backupRoot stringByAppendingPathComponent: relative];
+      NSString *aside = [replaced stringByAppendingPathComponent: relative];
+      id stockSHA = [file objectForKey: @"stock_sha256"];
+
+      if ([manager fileExistsAtPath: target])
+        {
+          [manager createDirectoryAtPath: [aside stringByDeletingLastPathComponent] withIntermediateDirectories: YES attributes: nil error: NULL];
+          if ([manager moveItemAtPath: target toPath: aside error: NULL] == NO)
+            {
+              [problems addObject: [NSString stringWithFormat: @"could not move the patched %@ aside", relative]];
+              continue;
+            }
+        }
+      if ([stockSHA isKindOfClass: [NSString class]])
+        {
+          if ([manager moveItemAtPath: backup toPath: target error: NULL] == NO
+              || [[self sha256ForFile: target] isEqualToString: stockSHA] == NO)
+            {
+              [problems addObject: [NSString stringWithFormat: @"could not restore the stock %@", relative]];
+            }
+        }
+    }
+  // The replaced files may still be loaded on Windows; a later restore or update cleans up.
+  [manager removeItemAtPath: replaced error: NULL];
+  if ([problems count] > 0)
+    {
+      if (errorMessage != NULL)
+        {
+          *errorMessage = [NSString stringWithFormat: @"Restoring the stock toolchain failed: %@. Run `gnustep setup --repair`, or reinstall.", [problems componentsJoinedByString: @"; "]];
+        }
+      return NO;
+    }
+  [manager removeItemAtPath: backupRoot error: NULL];
+  [manager removeItemAtPath: [self carryLayerRecordPathForInstallRoot: root] error: NULL];
+  [self recordToolchainVariant: @"stock" layer: nil forInstallRoot: root];
+  return YES;
+}
+
+- (NSDictionary *)reconcileToolchainVariant:(NSString *)variant forInstallRoot:(NSString *)installRoot manifest:(NSString *)manifestPath upgrade:(BOOL)upgrade exitCode:(int *)exitCode
+{
+  NSString *root = [self normalizedManagedInstallRootPath: installRoot];
+  NSString *failure = nil;
+  NSDictionary *manifest = nil;
+  NSDictionary *release = nil;
+  NSDictionary *artifact = nil;
+  NSString *selectionError = nil;
+
+  if ([variant isEqualToString: @"stock"])
+    {
+      if ([self restoreStockToolchainForInstallRoot: root error: &failure] == NO)
+        {
+          *exitCode = 1;
+          return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: failure data: nil];
+        }
+      *exitCode = 0;
+      return [self payloadWithCommand: @"setup" ok: YES status: @"ok" summary: @"The stock toolchain is active."
+                                 data: [NSDictionary dictionaryWithObjectsAndKeys: root, @"install_root", @"stock", @"toolchain_variant", nil]];
+    }
+
+  if (manifestPath == nil)
+    {
+      manifestPath = [self updateManifestForInstallRoot: root warning: NULL];
+    }
+  manifest = [self validateAndLoadManifest: manifestPath error: &failure];
+  release = manifest ? [self selectReleaseFromManifest: manifest] : nil;
+  if (release != nil)
+    {
+      NSDictionary *doctorPayload = [self buildDoctorPayloadWithInterface: @"full" manifestPath: manifestPath quick: YES];
+      artifact = [self selectedArtifactOfKind: @"carry-layer"
+                                  fromRelease: release
+                                  environment: [doctorPayload objectForKey: @"environment"]
+                               selectionError: &selectionError];
+    }
+  if (artifact == nil)
+    {
+      NSString *summary = [NSString stringWithFormat: @"No patch layer for this platform in release %@%@.",
+                                    [release objectForKey: @"version"] ? [release objectForKey: @"version"] : @"(unknown)",
+                                    selectionError ? [NSString stringWithFormat: @" (%@)", selectionError] : @""];
+      if (upgrade)
+        {
+          // An update never fails over a missing layer: it leaves the new stock toolchain.
+          [self restoreStockToolchainForInstallRoot: root error: NULL];
+          *exitCode = 0;
+          return [self payloadWithCommand: @"setup" ok: YES status: @"warning"
+                                  summary: [summary stringByAppendingString: @" Using the stock toolchain."]
+                                     data: [NSDictionary dictionaryWithObjectsAndKeys: root, @"install_root", @"stock", @"toolchain_variant", nil]];
+        }
+      *exitCode = 3;
+      return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: failure ? failure : summary data: nil];
+    }
+  if ([self applyCarryLayerArtifact: artifact manifestPath: manifestPath toInstallRoot: root error: &failure] == NO)
+    {
+      *exitCode = 1;
+      return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: failure data: nil];
+    }
+  *exitCode = 0;
+  return [self payloadWithCommand: @"setup" ok: YES status: @"ok" summary: @"The patched toolchain is active."
+                             data: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                   root, @"install_root",
+                                                   @"patched", @"toolchain_variant",
+                                                   [self installedCarryLayerForInstallRoot: root] ? [[self installedCarryLayerForInstallRoot: root] objectForKey: @"patches"] : [NSArray array], @"carry_patches",
+                                                   nil]];
+}
+
 - (NSDictionary *)repairManagedInstallRoot:(NSString *)installRoot
 {
   NSFileManager *manager = [NSFileManager defaultManager];
@@ -7332,7 +7691,138 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
                         nil];
 }
 
+// setup with the patch layer (docs/specs/patch-layer.md):
+// - `--variant stock|patched` on an existing install switches it, without reinstalling;
+// - on a new install it installs stock, then applies the layer when `patched`;
+// - `--upgrade` (what update runs) re-applies the layer afterwards when the install was
+//   patched, or leaves the new stock toolchain with a warning when the release has none.
 - (NSDictionary *)executeSetupForContext:(GSCommandContext *)context exitCode:(int *)exitCode
+{
+  NSArray *arguments = [context commandArguments];
+  NSMutableArray *stockArguments = [NSMutableArray arrayWithObject: @"setup"];
+  NSString *variant = nil;
+  NSString *scope = @"user";
+  NSString *installRoot = nil;
+  NSString *manifestPath = nil;
+  NSString *previousVariant = nil;
+  NSString *root = nil;
+  BOOL upgradeMode = NO;
+  BOOL otherMode = NO;
+  BOOL installed = NO;
+  NSDictionary *payload = nil;
+  NSDictionary *variantPayload = nil;
+  NSMutableDictionary *merged = nil;
+  NSUInteger i = 0;
+
+  for (i = 0; i < [arguments count]; i++)
+    {
+      NSString *argument = [arguments objectAtIndex: i];
+      if ([argument isEqualToString: @"--variant"])
+        {
+          if (i + 1 >= [arguments count])
+            {
+              *exitCode = 2;
+              return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: @"--variant requires a value: stock or patched." data: nil];
+            }
+          variant = [arguments objectAtIndex: ++i];
+          if ([variant isEqualToString: @"stock"] == NO && [variant isEqualToString: @"patched"] == NO)
+            {
+              *exitCode = 2;
+              return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: [NSString stringWithFormat: @"Unknown --variant %@: use stock or patched.", variant] data: nil];
+            }
+          continue;
+        }
+      [stockArguments addObject: argument];
+      if ([argument isEqualToString: @"--upgrade"])
+        {
+          upgradeMode = YES;
+        }
+      else if ([argument isEqualToString: @"--repair"] || [argument isEqualToString: @"--rollback"] || [argument isEqualToString: @"--check-updates"])
+        {
+          otherMode = YES;
+        }
+      else if ([argument isEqualToString: @"--system"])
+        {
+          scope = @"system";
+        }
+      else if (([argument isEqualToString: @"--root"] || [argument isEqualToString: @"--manifest"]) && i + 1 < [arguments count])
+        {
+          if ([argument isEqualToString: @"--root"])
+            {
+              installRoot = [arguments objectAtIndex: i + 1];
+            }
+          else
+            {
+              manifestPath = [arguments objectAtIndex: i + 1];
+            }
+          [stockArguments addObject: [arguments objectAtIndex: ++i]];
+        }
+    }
+
+  if (variant == nil && upgradeMode == NO)
+    {
+      return [self executeStockSetupForContext: context exitCode: exitCode];
+    }
+  if (variant != nil && otherMode)
+    {
+      *exitCode = 2;
+      return [self payloadWithCommand: @"setup" ok: NO status: @"error" summary: @"--variant can't be combined with --repair, --rollback or --check-updates." data: nil];
+    }
+
+  root = [self normalizedManagedInstallRootPath: installRoot != nil ? installRoot : ([scope isEqualToString: @"system"] ? @"/opt/gnustep-cli" : [self defaultManagedRoot])];
+  {
+    NSDictionary *state = [self installedLifecycleStateForInstallRoot: root];
+    installed = [[state objectForKey: @"cli_version"] isKindOfClass: [NSString class]];
+    previousVariant = [state objectForKey: @"toolchain_variant"];
+    if ([previousVariant isKindOfClass: [NSString class]] == NO)
+      {
+        previousVariant = [self installedCarryLayerForInstallRoot: root] != nil ? @"patched" : @"stock";
+      }
+  }
+  if (variant == nil)
+    {
+      variant = previousVariant;
+    }
+
+  // Switching an existing install: no reinstall.
+  if (installed && upgradeMode == NO)
+    {
+      return [self reconcileToolchainVariant: variant forInstallRoot: root manifest: manifestPath upgrade: NO exitCode: exitCode];
+    }
+
+  payload = [self executeStockSetupForContext: [GSCommandContext contextWithArguments: stockArguments] exitCode: exitCode];
+  if ([[payload objectForKey: @"ok"] boolValue] == NO
+      || ([variant isEqualToString: @"stock"] && [self installedCarryLayerForInstallRoot: root] == nil))
+    {
+      if ([[payload objectForKey: @"ok"] boolValue] && [variant isEqualToString: @"stock"])
+        {
+          [self recordToolchainVariant: @"stock" layer: nil forInstallRoot: root];
+        }
+      return payload;
+    }
+
+  {
+    int variantExit = 0;
+    variantPayload = [self reconcileToolchainVariant: variant forInstallRoot: root manifest: manifestPath upgrade: upgradeMode exitCode: &variantExit];
+    merged = [[payload mutableCopy] autorelease];
+    [merged setObject: variantPayload forKey: @"toolchain_variant"];
+    if ([[variantPayload objectForKey: @"ok"] boolValue] == NO)
+      {
+        [merged setObject: [NSNumber numberWithBool: NO] forKey: @"ok"];
+        [merged setObject: @"error" forKey: @"status"];
+        [merged setObject: [NSString stringWithFormat: @"%@ The patch layer was not applied: %@", [payload objectForKey: @"summary"], [variantPayload objectForKey: @"summary"]] forKey: @"summary"];
+        *exitCode = variantExit;
+      }
+    else if ([[variantPayload objectForKey: @"status"] isEqualToString: @"warning"])
+      {
+        [merged setObject: @"warning" forKey: @"status"];
+        [merged setObject: [NSString stringWithFormat: @"%@ %@", [payload objectForKey: @"summary"], [variantPayload objectForKey: @"summary"]] forKey: @"summary"];
+      }
+    return merged;
+  }
+}
+
+- (NSDictionary *)executeStockSetupForContext:(GSCommandContext *)context exitCode:(int *)exitCode
 {
   NSArray *arguments = [context commandArguments];
   NSString *scope = @"user";
