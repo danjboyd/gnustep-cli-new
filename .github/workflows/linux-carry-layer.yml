@@ -1,0 +1,101 @@
+name: Linux Patch Layer
+
+# Builds the Linux patch layer (docs/specs/patch-layer.md) for each Linux target: the
+# carried libs-gui patches (toolchains/carry, bases with Linux platforms) rebuilt from the
+# target's pin in its own build image against a stock toolchain, keeping only the files
+# that differ. Fails on any removed dynamic symbol (the ABI rule). The carried patches'
+# libs-gui tests run on Xvfb: they must fail on the stock root and pass with the layer.
+# Nothing is published: the layers are artifacts of this run, and a release takes them
+# only through stage-release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      stock_tag:
+        description: Release whose toolchain archives are the stock base
+        required: true
+        default: v0.1.9
+      stock_version:
+        description: Version in those archives' names
+        required: true
+        default: 0.1.9
+      release:
+        description: Release label recorded in carry-layer.json
+        required: true
+        default: 0.1.10-dev
+  # Builds from the branch that adds the layer; dispatch needs the file on master.
+  push:
+    branches: [linux-patch-layer]
+    paths:
+      - toolchains/carry/**
+      - src/gnustep_cli_shared/carry_layer.py
+      - .github/workflows/linux-carry-layer.yml
+
+permissions:
+  contents: read
+
+jobs:
+  layer:
+    name: layer ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64-clang
+            runner: ubuntu-24.04
+            prefix: /tmp/gnustep-cli-linux-toolchain/install
+          - target: linux-arm64-clang
+            runner: ubuntu-24.04-arm
+            prefix: /tmp/gnustep-cli-linux-arm64-toolchain/install
+          - target: linux-ubuntu2404-amd64-clang
+            runner: ubuntu-24.04
+            prefix: /tmp/gnustep-cli-ubuntu2404-toolchain/install
+          - target: linux-ubuntu2404-arm64-clang
+            runner: ubuntu-24.04-arm
+            prefix: /tmp/gnustep-cli-ubuntu2404-arm64-toolchain/install
+          - target: linux-ubuntu2604-amd64-clang
+            runner: ubuntu-24.04
+            prefix: /tmp/gnustep-cli-ubuntu2604-toolchain/install
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check carry.json
+        run: PYTHONPATH=src python3 -m gnustep_cli_shared.carry_layer check --carry-json toolchains/carry/carry.json
+
+      - name: The stock toolchain archive
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          tag='${{ inputs.stock_tag }}'; tag=${tag:-v0.1.9}
+          version='${{ inputs.stock_version }}'; version=${version:-0.1.9}
+          mkdir -p "$RUNNER_TEMP/stock" "$RUNNER_TEMP/layer"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/stock" \
+            --pattern "gnustep-toolchain-${{ matrix.target }}-$version.tar.gz"
+          ls -l "$RUNNER_TEMP/stock"
+
+      - name: Build and test the layer in the target's build image
+        run: |
+          set -eu
+          release='${{ inputs.release }}'; release=${release:-0.1.10-dev}
+          version='${{ inputs.stock_version }}'; version=${version:-0.1.9}
+          image="gnustep-managed-build-${{ matrix.target }}"
+          docker build -t "$image" "toolchains/${{ matrix.target }}"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src" \
+            -v "$RUNNER_TEMP/stock:/stock" \
+            -v "$RUNNER_TEMP/layer:/out" \
+            "$image" \
+            bash /src/toolchains/carry/linux/build-layer.sh "${{ matrix.target }}" "${{ matrix.prefix }}" \
+              "/stock/gnustep-toolchain-${{ matrix.target }}-$version.tar.gz" /out "$release"
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/layer"
+
+      - name: Upload the layer
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-linux-carry-layer-${{ matrix.target }}
+          path: ${{ runner.temp }}/layer

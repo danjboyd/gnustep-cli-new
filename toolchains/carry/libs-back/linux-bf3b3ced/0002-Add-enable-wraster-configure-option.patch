@@ -1,0 +1,113 @@
+From 990cd16d7abeb92d9ab3f7d4b83205398ab5c47e Mon Sep 17 00:00:00 2001
+From: Todd White <todd.white@thalion.global>
+Date: Sun, 26 Jul 2026 19:19:38 -0400
+Subject: [PATCH 2/9] Add --enable-wraster configure option
+
+(cherry picked from commit db5c482dc1388dda4b66c4ae1abe531ab7c0315e)
+---
+ config.h.in    |  3 +++
+ config.make.in |  1 +
+ configure      | 19 +++++++++++++++++++
+ configure.ac   | 19 +++++++++++++++++++
+ 4 files changed, 42 insertions(+)
+
+diff --git a/config.h.in b/config.h.in
+index 18ed752..d945682 100644
+--- a/config.h.in
++++ b/config.h.in
+@@ -170,6 +170,9 @@
+ /* Define to enable glitz support */
+ #undef USE_GLITZ
+ 
++/* Define to 1 to use the wraster image code, 0 for the plain-Xlib layer. */
++#undef USE_WRASTER
++
+ /* Define to enable XIM support */
+ #undef USE_XIM
+ 
+diff --git a/config.make.in b/config.make.in
+index fc6e2e9..ad11565 100644
+--- a/config.make.in
++++ b/config.make.in
+@@ -3,6 +3,7 @@
+ #
+ 
+ WITH_WRASTER=@WITH_WRASTER@
++USE_WRASTER=@USE_WRASTER@
+ WITH_XFT=@WITH_XFT@
+ WITH_GLITZ=@WITH_GLITZ@
+ 
+diff --git a/configure b/configure
+index 55ce041..c9a4e81 100755
+--- a/configure
++++ b/configure
+@@ -653,6 +653,7 @@ WARN_FLAGS
+ BUILD_SERVER
+ BUILD_GRAPHICS
+ WITH_WRASTER
++USE_WRASTER
+ WITH_GLITZ
+ GLITZ_WGL_LIBS
+ GLITZ_WGL_CFLAGS
+@@ -1440,6 +1441,7 @@ Optional Features:
+   --enable-glitz          Enable Glitz support
+   --enable-server=SRV     Build server type: x11, win32, wayland, headless
+   --enable-graphics=GPH   Build graphics: xlib, xdps, winlib, art, cairo, opal, headless
++  --enable-wraster        use the wraster image code instead of the plain-Xlib layer (default: no)
+ 
+ Optional Packages:
+   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
+@@ -7582,6 +7584,23 @@ fi
+ #--------------------------------------------------------------------
+ WITH_WRASTER=no
+ 
++# Check whether --enable-wraster was given.
++if test ${enable_wraster+y}
++then :
++  enableval=$enable_wraster;
++else case e in #(
++  e) enable_wraster=no ;;
++esac
++fi
++
++if test "x$enable_wraster" = "xyes"; then
++  USE_WRASTER=1
++else
++  USE_WRASTER=0
++fi
++
++printf '%s\n' "#define USE_WRASTER $USE_WRASTER" >>confdefs.h
++
+ 
+ # Revert to previous flags (removing added GNUstep flags)
+ CPPFLAGS=${GRAPHIC_CFLAGS}
+diff --git a/configure.ac b/configure.ac
+index 93b8ba1..586f7a6 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -551,6 +551,25 @@ fi
+ WITH_WRASTER=no
+ AC_SUBST(WITH_WRASTER)
+ 
++dnl Whether to build against the wraster image code. Default: no (use the
++dnl plain-Xlib xlibimage layer). --enable-wraster restores the wraster path.
++dnl Orthogonal to WITH_WRASTER above, which selects a system vs bundled
++dnl wraster when the wraster path is in use.
++AC_ARG_ENABLE([wraster],
++  [AS_HELP_STRING([--enable-wraster],
++    [use the wraster image code instead of the plain-Xlib layer (default: no)])],
++  [enable_wraster=$enableval],
++  [enable_wraster=no])
++
++if test "x$enable_wraster" = "xyes"; then
++  USE_WRASTER=1
++else
++  USE_WRASTER=0
++fi
++AC_SUBST(USE_WRASTER)
++AC_DEFINE_UNQUOTED([USE_WRASTER], [$USE_WRASTER],
++  [Define to 1 to use the wraster image code, 0 for the plain-Xlib layer.])
++
+ # Revert to previous flags (removing added GNUstep flags)
+ CPPFLAGS=${GRAPHIC_CFLAGS}
+ LDFLAGS=${GRAPHIC_LFLAGS}

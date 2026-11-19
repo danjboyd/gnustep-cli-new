@@ -1,0 +1,163 @@
+From 12cc2811406a8aa5836ded552f4151cc8e746640 Mon Sep 17 00:00:00 2001
+From: Todd White <todd.white@thalion.global>
+Date: Sun, 26 Jul 2026 19:30:08 -0400
+Subject: [PATCH 3/9] Build the x11 server without wraster by default
+
+(cherry picked from commit 4a6f21cd383ff8aa725752d64b6ad15e41daf5e2)
+---
+ Headers/x11/xlibimage.h     |  3 +++
+ Headers/xlib/XGPrivate.h    | 10 +++++++---
+ Source/x11/GNUmakefile      |  6 ++++++
+ Source/x11/XGServer.m       | 18 +++++++++++++-----
+ Source/x11/XGServerEvent.m  | 10 +++++++---
+ Source/x11/XGServerWindow.m | 10 +++++++---
+ 6 files changed, 43 insertions(+), 14 deletions(-)
+
+diff --git a/Headers/x11/xlibimage.h b/Headers/x11/xlibimage.h
+index 00355f2..9da2f1e 100644
+--- a/Headers/x11/xlibimage.h
++++ b/Headers/x11/xlibimage.h
+@@ -9,6 +9,9 @@
+ 
+ #include <X11/Xlib.h>
+ #include <X11/Xutil.h>
++#ifdef XSHM
++#include <X11/extensions/XShm.h>
++#endif
+ 
+ /* RContextAttributes flag bits (values match wraster.h). */
+ #define RC_RenderMode        (1<<0)
+diff --git a/Headers/xlib/XGPrivate.h b/Headers/xlib/XGPrivate.h
+index a6847a0..8cff771 100644
+--- a/Headers/xlib/XGPrivate.h
++++ b/Headers/xlib/XGPrivate.h
+@@ -28,10 +28,14 @@
+ #ifndef _XGPrivate_h_INCLUDE
+ #define _XGPrivate_h_INCLUDE
+ 
+-#ifdef HAVE_WRASTER_H
+-#include "wraster.h"
++#if USE_WRASTER
++# ifdef HAVE_WRASTER_H
++#  include "wraster.h"
++# else
++#  include "x11/wraster.h"
++# endif
+ #else
+-#include "x11/wraster.h"
++# include "x11/xlibimage.h"
+ #endif
+ 
+ #include "x11/XGServer.h"
+diff --git a/Source/x11/GNUmakefile b/Source/x11/GNUmakefile
+index 51b8ae1..fa08eb5 100644
+--- a/Source/x11/GNUmakefile
++++ b/Source/x11/GNUmakefile
+@@ -33,6 +33,7 @@ include ../../config.make
+ SUBPROJECT_NAME=x11
+ 
+ # The C source files to be compiled
++ifeq ($(USE_WRASTER),1)
+ ifeq ($(WITH_WRASTER),yes)
+ x11_C_FILES = \
+ xdnd.c
+@@ -45,6 +46,11 @@ scale.c \
+ xdnd.c \
+ xutil.c
+ endif
++else
++x11_C_FILES = \
++xdnd.c \
++xlibimage.c
++endif
+ 
+ # The Objective-C source files to be compiled
+ x11_OBJC_FILES = \
+diff --git a/Source/x11/XGServer.m b/Source/x11/XGServer.m
+index de52a90..03907fe 100644
+--- a/Source/x11/XGServer.m
++++ b/Source/x11/XGServer.m
+@@ -57,10 +57,14 @@ terminate(int sig)
+     }
+ }
+ 
+-#ifdef HAVE_WRASTER_H
+-#include "wraster.h"
++#if USE_WRASTER
++# ifdef HAVE_WRASTER_H
++#  include "wraster.h"
++# else
++#  include "x11/wraster.h"
++# endif
+ #else
+-#include "x11/wraster.h"
++# include "x11/xlibimage.h"
+ #endif
+ 
+ #include "x11/XGServer.h"
+@@ -297,8 +301,8 @@ _parse_display_name(NSString *name, int *dn, int *sn)
+ 
+ - (void) dealloc
+ {
+-#ifndef HAVE_WRASTER_H
+-  // FIXME: context.c does not include a clean up function for Rcontext, 
++#if USE_WRASTER && !defined(HAVE_WRASTER_H)
++  // FIXME: context.c does not include a clean up function for Rcontext,
+   // so we try do it here.
+ 
+   /*
+@@ -330,6 +334,10 @@ _parse_display_name(NSString *name, int *dn, int *sn)
+       free(rcontext->attribs);
+       free(rcontext);
+     }
++#endif
++#if !USE_WRASTER
++  if (rcontext)
++    RDestroyContext(rcontext);
+ #endif
+   [super dealloc];
+ }
+diff --git a/Source/x11/XGServerEvent.m b/Source/x11/XGServerEvent.m
+index fb8f976..c4c5fe8 100644
+--- a/Source/x11/XGServerEvent.m
++++ b/Source/x11/XGServerEvent.m
+@@ -51,10 +51,14 @@
+ #include "x11/XGGeneric.h"
+ #include "x11/xdnd.h"
+ 
+-#ifdef HAVE_WRASTER_H
+-#include "wraster.h"
++#if USE_WRASTER
++# ifdef HAVE_WRASTER_H
++#  include "wraster.h"
++# else
++#  include "x11/wraster.h"
++# endif
+ #else
+-#include "x11/wraster.h"
++# include "x11/xlibimage.h"
+ #endif
+ #ifdef HAVE_XRANDR
+ #include <X11/extensions/Xrandr.h>
+diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
+index 9839269..60735b3 100644
+--- a/Source/x11/XGServerWindow.m
++++ b/Source/x11/XGServerWindow.m
+@@ -48,10 +48,14 @@
+ #include <unistd.h>
+ #endif
+ 
+-#ifdef HAVE_WRASTER_H
+-#include "wraster.h"
++#if USE_WRASTER
++# ifdef HAVE_WRASTER_H
++#  include "wraster.h"
++# else
++#  include "x11/wraster.h"
++# endif
+ #else
+-#include "x11/wraster.h"
++# include "x11/xlibimage.h"
+ #endif
+ 
+ // For X_HAVE_UTF8_STRING

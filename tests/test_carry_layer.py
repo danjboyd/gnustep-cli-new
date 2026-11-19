@@ -19,6 +19,7 @@ from gnustep_cli_shared.carry_layer import (
     layer_files,
     layer_manifest,
     load_carry,
+    parse_nm_exports,
     parse_objdump_exports,
     patches_for,
     write_layer,
@@ -101,8 +102,22 @@ class CarryJsonTests(unittest.TestCase):
         data = load_carry(ROOT / "toolchains" / "carry" / "carry.json")
         self.assertTrue(data["patches"])
         self.assertTrue(carry_layer.layer_outputs(data))
+        bases = data["bases"]
         for entry in data["patches"]:
-            self.assertIn("windows-amd64-msys2-clang64", entry["platforms"])
+            # A patch is built only for the platforms of its base.
+            base = bases[f"{entry['library']}/{entry['base']}"]
+            self.assertTrue(set(entry["platforms"]) <= set(base["platforms"]), entry["id"])
+        self.assertEqual(carry_layer.layer_outputs(data, "linux-amd64-clang"), ["Local/Library/Bundles/libgnustep-back-*.bundle/libgnustep-back-*", "Local/Library/Libraries/libgnustep-gui.so", "Local/Library/Libraries/libgnustep-gui.so.*"])
+        self.assertNotIn("Local/Library/Libraries/libgnustep-gui.so.*", carry_layer.layer_outputs(data, "windows-amd64-msys2-clang64"))
+        linux = [p["id"] for p in data["patches"] if "linux-amd64-clang" in p["platforms"]]
+        self.assertEqual(linux[:2], ["gui-theme-live-switch-linux", "gui-command-key-bindings-linux"])
+        self.assertEqual([p.split("-linux")[0] for p in linux[2:]], ["x11-xlibimage-layer", "x11-enable-wraster-option", "x11-no-wraster-by-default", "x11-keep-wm-functions", "x11-window-types", "x11-borderless-alpha", "x11-orderwindow-focus-root", "x11-window-shadows", "x11-popover-shadows"])
+
+    def test_bases_without_platforms_count_for_every_target(self):
+        data = {"bases": {"a/x": {"outputs": ["a"]}, "b/y": {"platforms": ["linux-amd64-clang"], "outputs": ["b"]}}}
+        self.assertEqual(carry_layer.layer_outputs(data, "windows-amd64-msys2-clang64"), ["a"])
+        self.assertEqual(carry_layer.layer_outputs(data, "linux-amd64-clang"), ["a", "b"])
+        self.assertEqual(carry_layer.layer_outputs(data), ["a", "b"])
 
 
 class LayerFilesTests(unittest.TestCase):
@@ -169,6 +184,50 @@ class LayerFilesTests(unittest.TestCase):
 class AbiTests(unittest.TestCase):
     def test_export_table_names_are_read_from_objdump_output(self):
         self.assertEqual(parse_objdump_exports(OBJDUMP_EXPORTS), {"GSBackendClass", "_OBJC_CLASS_WIN32Server", "__objc_class_name_WIN32Server"})
+
+    def test_dynamic_symbols_are_read_from_nm_output(self):
+        text = """0000000000123a40 T GSBackendClass
+0000000000456b00 D _OBJC_CLASS_NSInputManager
+                 U objc_msgSend
+                 w __gmon_start__
+0000000000000000 A GNUSTEP_GUI_0.32
+0000000000789c00 T NSApplicationMain@@GNUSTEP_GUI_0.32
+"""
+        self.assertEqual(parse_nm_exports(text), {"GSBackendClass", "_OBJC_CLASS_NSInputManager", "GNUSTEP_GUI_0.32", "NSApplicationMain"})
+
+    def test_a_shared_object_needs_nm_and_a_dll_needs_objdump(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stock = Path(tmp)
+            so = {"path": "Local/Library/Libraries/libgnustep-gui.so.0.32.0", "stock_sha256": "x", "source": str(stock / "p.so")}
+            dll = {"path": "clang64/bin/gnustep-gui-0.dll", "stock_sha256": "x", "source": str(stock / "p.dll")}
+            with self.assertRaisesRegex(CarryError, "needs --nm"):
+                carry_layer.abi_report("llvm-objdump", stock, [so])
+            with self.assertRaisesRegex(CarryError, "needs --objdump"):
+                carry_layer.abi_report(None, stock, [dll], nm="nm")
+            # A bundle binary has no suffix: it counts when its ELF header says ET_DYN.
+            elf = bytearray(b"\x7fELF" + b"\x02\x01\x01" + b"\x00" * 9 + b"\x03\x00" + b"\x00" * 46)
+            _write(stock / "Local/Library/Bundles/libgnustep-back-032.bundle/libgnustep-back-032", bytes(elf))
+            _write(stock / "Local/Tools/gpbs", bytes(elf[:16]) + b"\x02\x00" + bytes(elf[18:]))
+            bundle = {"path": "Local/Library/Bundles/libgnustep-back-032.bundle/libgnustep-back-032", "stock_sha256": "x", "source": "p"}
+            with self.assertRaisesRegex(CarryError, "needs --nm"):
+                carry_layer.abi_report(None, stock, [bundle])
+            self.assertEqual(carry_layer.abi_report(None, stock, [{"path": "Local/Tools/gpbs", "stock_sha256": "x", "source": "p"}]), {})
+            # A new file (no stock) and a non-library are not compared.
+            self.assertEqual(carry_layer.abi_report(None, stock, [dict(so, stock_sha256=None), {"path": "a.txt", "stock_sha256": "x", "source": "a"}]), {})
+
+    def test_a_bundle_ivar_whose_type_changed_is_internal_but_a_vanished_one_is_removed(self):
+        stock = {"GSBackendClass", "__objc_ivar_offset_XGServer.generic.{XGGeneric=[70Q]}", "__objc_ivar_offset_XGServer.gone.i"}
+        patched = {"GSBackendClass", "__objc_ivar_offset_XGServer.generic.{XGGeneric=[72Q]}", "__objc_ivar_offset_XGServer.xfixesEventBase.i"}
+        change = carry_layer.compare_bundle_exports(stock, patched)
+        self.assertEqual(change["removed"], ["__objc_ivar_offset_XGServer.gone.i"])
+        self.assertEqual(change["ivar_types_changed"], ["XGServer.generic"])
+        self.assertIn("__objc_ivar_offset_XGServer.xfixesEventBase.i", change["added"])
+        # A removal nothing in the toolchain imports is reported, not counted.
+        change = carry_layer.compare_bundle_exports(stock | {"RCreateImage", "GSUsed"}, patched, imported={"GSUsed"})
+        self.assertEqual(change["removed"], ["GSUsed"])
+        self.assertEqual(change["removed_unreferenced"], ["RCreateImage", "__objc_ivar_offset_XGServer.gone.i"])
+        # A linked library gets no such allowance.
+        self.assertEqual(len(compare_exports(stock, patched)["removed"]), 2)
 
     def test_a_removed_export_fails_and_an_added_one_is_reported(self):
         stock = {"a", "b"}

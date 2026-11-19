@@ -8,6 +8,9 @@
       "msys2_package": "mingw-w64-clang-x86_64-gnustep-base",
       "outputs": [
         "clang64/bin/gnustep-base-*.dll"
+      ],
+      "platforms": [
+        "windows-amd64-msys2-clang64"
       ]
     },
     "libs-gui/msys2-0.32.0": {
@@ -16,6 +19,9 @@
       "msys2_package": "mingw-w64-clang-x86_64-gnustep-gui",
       "outputs": [
         "clang64/bin/gnustep-gui-*.dll"
+      ],
+      "platforms": [
+        "windows-amd64-msys2-clang64"
       ]
     },
     "libs-back/msys2-0.32.0": {
@@ -25,6 +31,38 @@
       "outputs": [
         "clang64/lib/GNUstep/Bundles/libgnustep-back-*.bundle/*.dll",
         "clang64/bin/gpbs.exe"
+      ],
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ]
+    },
+    "libs-gui/linux-7892137b": {
+      "library": "libs-gui",
+      "stock": "the Linux managed toolchains' source-built libs-gui at the pin 7892137bdedd007eba8425f766e41481ddb4fda6 (toolchains/linux-*/source-lock.json)",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "outputs": [
+        "Local/Library/Libraries/libgnustep-gui.so",
+        "Local/Library/Libraries/libgnustep-gui.so.*"
+      ]
+    },
+    "libs-back/linux-bf3b3ced": {
+      "library": "libs-back",
+      "stock": "the Linux managed toolchains' source-built libs-back at the pin bf3b3ced525f08415a20d109f05be1f91492414c (toolchains/linux-*/source-lock.json)",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "outputs": [
+        "Local/Library/Bundles/libgnustep-back-*.bundle/libgnustep-back-*"
       ]
     }
   },
@@ -468,6 +506,295 @@
       "owner": "markdown-viewer-windows",
       "verified_by": "ObjcMarkdown #94, shipped in its MSI",
       "applies_after": "the stock recipe's 11 patches (toolchains/windows-amd64-msys2-clang64/gnustep-base-package)"
+    },
+    {
+      "id": "gui-theme-live-switch-linux",
+      "library": "libs-gui",
+      "base": "linux-7892137b",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-gui/linux-7892137b/0001-GSTheme-capture-override-originals-at-activation.patch",
+      "sha256": "9dd374fb1f76db25774f1ca46ae470a27f91e83118f1bb29f7a535f5d859ac58",
+      "summary": "GSTheme: record a theme's override originals at activation, so a live switch between two themes no longer recurses until the stack overflows",
+      "source": "the same bytes as Windows carry gui-theme-live-switch (libs-gui/msys2-0.32.0/0004): Source/GSTheme.m is identical in 0.32.0 and the Linux pin 7892137b",
+      "upstream": "master fix proposed as libs-gui #100 (8c285f3), awaiting review, not posted; the 0.32 backport is local (gnustep's e6fd411ab gives the same GSTheme.m, blob 993eb03a)",
+      "defaults": [],
+      "abi": "none expected (GSTheme.m internals only)",
+      "requested_by": [
+        "WinUITheme",
+        "Adwaita"
+      ],
+      "owner": "gnustep",
+      "verified_by": "applies to 7892137b (git apply --check); its Tests/gui/GSTheme/liveSwitch.m runs on stock (expected to fail) and patched (expected to pass) in linux-carry-layer.yml"
+    },
+    {
+      "id": "gui-command-key-bindings-linux",
+      "library": "libs-gui",
+      "base": "linux-7892137b",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-gui/linux-7892137b/0002-NSInputManager-parse-and-match-the-Command-modifier.patch",
+      "sha256": "724ea8342f4027beb9c81781b18c94594cb4a9ea2b7f7cbb63efbc9b2a20c5e9",
+      "summary": "NSInputManager: parse \"Command\"/\"Cmd\" in key bindings and keep NSCommandKeyMask when matching, so gnustep-packager's Ctrl-to-Command word moves (CommandWordMoves.dict) fire",
+      "source": "danjboyd/libs-gui 543628d9 (tag gnustep-swift-2026-11-03b), git format-patch; the patch of the closed PR #33, moved to the layer on Dan's decision (ask #8718); Source/NSInputManager.m is identical in 0.32.0 and 7892137b",
+      "upstream": "not sent; gnustep/libs-gui master 1b4e125c (2026-11-15) has no equivalent",
+      "defaults": [],
+      "abi": "none expected (NSInputManager.m internals only)",
+      "requested_by": [
+        "gnustep-packager"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "applies to 7892137b after 0001 (git apply --check); its Tests/gui/NSInputManager/commandBindings.m runs on stock and patched in linux-carry-layer.yml"
+    },
+    {
+      "id": "x11-xlibimage-layer-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0001-Add-a-plain-Xlib-image-layer-to-replace-wraster.patch",
+      "sha256": "25884706dfd1ba670c44168cac2ccda713a28e7db73a03bd32b9965f1ec186af",
+      "summary": "upstream e4c71bf: Add a plain-Xlib image layer to replace wraster",
+      "source": "gnustep/libs-back e4c71bfc75a521b1084b3cd7303612f4cf70b115, cherry-picked onto bf3b3ced (needed under the X11 series, per the adwaita agent: at the pin the bundled wraster gives every window a depth-32 visual)",
+      "upstream": "upstream commit e4c71bf, newer than the pin",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "the X11 series' Tests/x11 tests pass on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
+      "id": "x11-enable-wraster-option-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0002-Add-enable-wraster-configure-option.patch",
+      "sha256": "7e637d658927d0fee6cbbad30ff7fda6180692f8b6a1f3ac883566818cb8e3b1",
+      "summary": "upstream db5c482: Add --enable-wraster configure option",
+      "source": "gnustep/libs-back db5c482dc1388dda4b66c4ae1abe531ab7c0315e, cherry-picked onto bf3b3ced (needed under the X11 series, per the adwaita agent: at the pin the bundled wraster gives every window a depth-32 visual)",
+      "upstream": "upstream commit db5c482, newer than the pin",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "the X11 series' Tests/x11 tests pass on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
+      "id": "x11-no-wraster-by-default-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0003-Build-the-x11-server-without-wraster-by-default.patch",
+      "sha256": "b667928d2746863cf7169c9c3d09b928ca4adbe499402e9aa7198820009401eb",
+      "summary": "upstream 4a6f21c: Build the x11 server without wraster by default (ordinary windows get the screen's default visual instead of wraster's depth-32 choice, which the X11 series assumes)",
+      "source": "gnustep/libs-back 4a6f21cd383ff8aa725752d64b6ad15e41daf5e2, cherry-picked onto bf3b3ced (needed under the X11 series, per the adwaita agent: at the pin the bundled wraster gives every window a depth-32 visual)",
+      "upstream": "upstream commit 4a6f21c, newer than the pin",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "the X11 series' Tests/x11 tests pass on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
+      "id": "x11-keep-wm-functions-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0004-x11-keep-the-window-manager-functions-of-windows-the.patch",
+      "sha256": "6196cf2aa1a331ad3d4c6bee605e266fe55167f2f8f954b1aabd5e28df4dd4d0",
+      "summary": "x11: keep the window manager functions (Motif hints) of windows the gui decorates",
+      "source": "danjboyd/libs-back x11-keep-wm-functions dbfbe5397bc18895ef3e49951574e312603b03fa, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
+      "topic_commit": "dbfbe5397bc18895ef3e49951574e312603b03fa",
+      "upstream": "gnustep/libs-back#244, open",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce",
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "LinDirStat"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "its Tests/x11 test passes on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
+      "id": "x11-window-types-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0005-x11-type-menus-tool-tips-drag-images-and-modal-panel.patch",
+      "sha256": "fb5704cc782420f79c593dd07f5bd3db1922be424ff11169788c058bf0c0ae57",
+      "summary": "x11: type menus, tool tips, drag images and modal panels as GTK does",
+      "source": "danjboyd/libs-back x11-window-types-v7 c5d247f249c546796455e85b47efa871f232d602, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
+      "topic_commit": "c5d247f249c546796455e85b47efa871f232d602",
+      "upstream": "x11-window-types; not sent",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce",
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "LinDirStat"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "its Tests/x11 test passes on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
+      "id": "x11-borderless-alpha-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0006-x11-an-alpha-channel-for-borderless-windows-when-a-t.patch",
+      "sha256": "8f05f5c6b583f3d09db354cc1adeaf44f2f9b96f06f3b492fa6ea81047feaa7f",
+      "summary": "x11: an alpha channel for borderless windows, when a theme asks",
+      "source": "danjboyd/libs-back x11-borderless-alpha-v7 f4e32a7de1d5c0c3bd18f6fd33399c6474abc2aa, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
+      "topic_commit": "f4e32a7de1d5c0c3bd18f6fd33399c6474abc2aa",
+      "upstream": "x11-borderless-alpha; not sent",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce",
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "LinDirStat"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "its Tests/x11 test passes on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
+      "id": "x11-orderwindow-focus-root-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0007-x11-don-t-stack-a-window-against-the-focus-when-no-w.patch",
+      "sha256": "1aa6336c0525442f12e18f083d3e5f2ae3babfbebf08280f0e33bc187ccd222d",
+      "summary": "x11: don't stack a window against the focus when no window has it (window shadows build on it)",
+      "source": "danjboyd/libs-back x11-orderwindow-focus-root-v7 (in the window-shadows-v7 stack) bc0e9f7637a42b2cb13751245801a66ffb09a458, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
+      "topic_commit": "bc0e9f7637a42b2cb13751245801a66ffb09a458",
+      "upstream": "x11-orderwindow-focus-root; not sent",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce",
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "LinDirStat"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "its Tests/x11 test passes on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
+      "id": "x11-window-shadows-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0008-x11-cairo-window-shadows-and-rounded-corners-for-win.patch",
+      "sha256": "5aa02ef5469227d23f9fbb86940cfa9fe33f6fcce753256639446636f0364103",
+      "summary": "x11: window shadows and rounded corners (cairo) for windows the gui decorates",
+      "source": "danjboyd/libs-back x11-window-shadows-v7 bbe49da961d178bac55c50437b04a9ae02e03eff, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
+      "topic_commit": "bbe49da961d178bac55c50437b04a9ae02e03eff",
+      "upstream": "x11-window-shadows; not sent",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce",
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "LinDirStat"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "its Tests/x11 test passes on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
+      "id": "x11-popover-shadows-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0009-x11-cairo-popover-shadows-for-menus-when-a-theme-ask.patch",
+      "sha256": "840701ea4ad6f64838e9b09522e4848003b6dc6b7dd0369ff904999d33f9da51",
+      "summary": "x11: popover shadows for menus (cairo), when a theme asks",
+      "source": "danjboyd/libs-back x11-popover-shadows-v7 bd16074f34338f9b8b956975708a8e1752ef1855, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
+      "topic_commit": "bd16074f34338f9b8b956975708a8e1752ef1855",
+      "upstream": "x11-popover-shadows; not sent",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce",
+        "ScreenshotTool",
+        "ObjcMarkdown",
+        "LinDirStat"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "its Tests/x11 test passes on the patched root in linux-carry-layer.yml (Xvfb)"
     }
   ]
 }

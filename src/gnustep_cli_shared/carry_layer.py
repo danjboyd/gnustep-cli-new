@@ -6,10 +6,12 @@ the carried patches (toolchains/carry/carry.json). This module:
 - checks carry.json against the patch files it names;
 - compares packages built with the carried patches against the stock toolchain root,
   keeping only the files that differ;
-- compares a DLL's export table with the stock one (the ABI rule: nothing removed);
+- compares a library's exports with the stock one (the ABI rule: nothing removed): a
+  DLL's export table on Windows, an ELF shared object's dynamic symbols on Linux;
 - writes the layer zip, with carry-layer.json describing it.
 
-It runs on the Windows layer build (windows-carry-layer.yml) and in the unit tests.
+It runs on the layer builds (windows-carry-layer.yml, linux-carry-layer.yml) and in the
+unit tests.
 """
 
 from __future__ import annotations
@@ -91,10 +93,20 @@ def _installed_files(package_root: Path):
             yield relative, path
 
 
-def layer_outputs(data: dict) -> list:
-    """Every base's output patterns: the installed files the layer takes from a rebuild."""
+def bases_for(data: dict, target: str | None = None) -> dict:
+    """The bases a target's layer is built from: those whose platforms list it. A base
+    without a platforms list counts for every target (carry.json before Linux had none)."""
+    return {
+        key: base for key, base in (data.get("bases") or {}).items()
+        if target is None or "platforms" not in base or target in base["platforms"]
+    }
+
+
+def layer_outputs(data: dict, target: str | None = None) -> list:
+    """The output patterns of a target's bases (every base without a target): the
+    installed files the layer takes from a rebuild."""
     patterns = []
-    for key, base in sorted((data.get("bases") or {}).items()):
+    for key, base in sorted(bases_for(data, target).items()):
         outputs = base.get("outputs") or []
         if not outputs:
             raise CarryError(f"base {key} lists no outputs")
@@ -165,20 +177,131 @@ def compare_exports(stock: set, patched: set) -> dict:
     return {"removed": sorted(stock - patched), "added": sorted(patched - stock)}
 
 
+_IVAR_OFFSET = "__objc_ivar_offset_"
+
+
+def _ivar_key(symbol: str) -> str | None:
+    """`Class.ivar` from libobjc2's `__objc_ivar_offset_<Class>.<ivar>.<type encoding>`."""
+    if not symbol.startswith(_IVAR_OFFSET):
+        return None
+    parts = symbol[len(_IVAR_OFFSET):].split(".", 2)
+    return f"{parts[0]}.{parts[1]}" if len(parts) == 3 else None
+
+
+def stock_imports(nm: str, stock_root: Path, skip: set) -> set:
+    """Every dynamic symbol the stock root's ELF files (other than `skip`, root-relative)
+    import: what something in the toolchain could need from a bundle."""
+    imports = set()
+    for path in sorted(stock_root.rglob("*")):
+        relative = path.relative_to(stock_root).as_posix()
+        if relative in skip or not path.is_file() or path.is_symlink():
+            continue
+        try:
+            with open(path, "rb") as handle:
+                if handle.read(4) != b"\x7fELF":
+                    continue
+        except OSError:
+            continue
+        run = subprocess.run([nm, "-D", "--undefined-only", str(path)], capture_output=True, text=True)
+        for line in run.stdout.splitlines():
+            parts = line.split()
+            if parts:
+                imports.add(parts[-1].split("@", 1)[0])
+    return imports
+
+
+def compare_bundle_exports(stock: set, patched: set, imported: set | None = None) -> dict:
+    """compare_exports for a plugin bundle (a GNUstep backend bundle: loaded by libs-gui,
+    linked against by nothing, its headers not installed). libobjc2 puts an ivar's type in
+    its offset symbol, so a carried patch that changes the type of one of the bundle's
+    own ivars renames that symbol. When the same Class.ivar is still exported, the change
+    is internal to the bundle: it is reported, not counted as a removal."""
+    result = compare_exports(stock, patched)
+    added_keys = {_ivar_key(symbol) for symbol in result["added"]} - {None}
+    internal = [symbol for symbol in result["removed"] if _ivar_key(symbol) in added_keys]
+    if internal:
+        result["removed"] = [symbol for symbol in result["removed"] if symbol not in internal]
+        result["ivar_types_changed"] = sorted({_ivar_key(symbol) for symbol in internal})
+    # Nothing links against a bundle: a symbol it stops exporting matters only if a file
+    # in the toolchain imports it. The rest are reported as unreferenced removals.
+    if imported is not None:
+        unreferenced = [symbol for symbol in result["removed"] if symbol not in imported]
+        if unreferenced:
+            result["removed"] = [symbol for symbol in result["removed"] if symbol in imported]
+            result["removed_unreferenced"] = unreferenced
+    return result
+
+
 def dll_exports(objdump: str, dll: Path) -> set:
     output = subprocess.run([objdump, "-p", str(dll)], check=True, capture_output=True, text=True).stdout
     return parse_objdump_exports(output)
 
 
-def abi_report(objdump: str, stock_root: Path, files: list) -> dict:
-    """Export-table comparison of every replaced DLL. Fails the build on a removal."""
+def parse_nm_exports(text: str) -> set:
+    """Defined dynamic symbols from `nm -D --defined-only <so>`: "<value> <type> <name>"
+    rows (the value is missing for absolute symbols). Undefined (U) and weak-undefined
+    (w, v) symbols are imports, not exports."""
+    names = set()
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and len(parts[-2]) == 1:
+            kind, name = parts[-2], parts[-1]
+            if kind not in ("U", "w", "v"):
+                names.add(name.split("@", 1)[0])
+    return names
+
+
+def so_exports(nm: str, path: Path) -> set:
+    output = subprocess.run([nm, "-D", "--defined-only", str(path)], check=True, capture_output=True, text=True).stdout
+    return parse_nm_exports(output)
+
+
+def _is_shared_object(path: str, file: Path | None = None) -> bool:
+    """A .so by name, or (a GNUstep bundle's binary has no suffix) an ELF file whose
+    header says it is a shared object (e_type ET_DYN), checked when `file` is given."""
+    name = PurePosixPath(path).name
+    if name.endswith(".so") or ".so." in name:
+        return True
+    if file is None or "." in name:
+        return False
+    try:
+        with open(file, "rb") as handle:
+            header = handle.read(18)
+    except OSError:
+        return False
+    if len(header) < 18 or header[:4] != b"\x7fELF":
+        return False
+    byteorder = "little" if header[5] == 1 else "big"
+    return int.from_bytes(header[16:18], byteorder) == 3
+
+
+def abi_report(objdump: str | None, stock_root: Path, files: list, nm: str | None = None) -> dict:
+    """Export comparison of every replaced library (DLLs with objdump, ELF shared objects
+    with nm). Fails the build on a removal, or when a library's tool wasn't given."""
     report = {}
+    imported = None
     for entry in files:
-        if not entry["path"].lower().endswith(".dll") or entry["stock_sha256"] is None:
+        if entry["stock_sha256"] is None:
             continue
-        stock = dll_exports(objdump, stock_root / entry["path"])
-        patched = dll_exports(objdump, Path(entry["source"]))
-        report[entry["path"]] = compare_exports(stock, patched)
+        path = entry["path"]
+        if path.lower().endswith(".dll"):
+            if not objdump:
+                raise CarryError(f"{path}: the ABI check of a DLL needs --objdump")
+            stock = dll_exports(objdump, stock_root / path)
+            patched = dll_exports(objdump, Path(entry["source"]))
+        elif _is_shared_object(path, stock_root / path):
+            if not nm:
+                raise CarryError(f"{path}: the ABI check of a shared object needs --nm")
+            stock = so_exports(nm, stock_root / path)
+            patched = so_exports(nm, Path(entry["source"]))
+            if ".bundle/" in path:
+                if imported is None:
+                    imported = stock_imports(nm, stock_root, {f["path"] for f in files})
+                report[path] = compare_bundle_exports(stock, patched, imported)
+                continue
+        else:
+            continue
+        report[path] = compare_exports(stock, patched)
     return report
 
 
@@ -283,7 +406,8 @@ def main(argv=None) -> int:
     build.add_argument("--target", required=True)
     build.add_argument("--release", required=True)
     build.add_argument("--toolchain-sha256", required=True)
-    build.add_argument("--objdump", required=True)
+    build.add_argument("--objdump", help="llvm-objdump, for the ABI check of DLLs (Windows)")
+    build.add_argument("--nm", help="nm, for the ABI check of ELF shared objects (Linux)")
     build.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
 
@@ -293,8 +417,8 @@ def main(argv=None) -> int:
             print(f"carry.json ok: {len(data['patches'])} patches")
             return 0
         patches = [p for p in data["patches"] if args.target in p["platforms"]]
-        files, others = layer_files(args.stock_root, args.package_root, layer_outputs(data))
-        abi = abi_report(args.objdump, args.stock_root, files)
+        files, others = layer_files(args.stock_root, args.package_root, layer_outputs(data, args.target))
+        abi = abi_report(args.objdump, args.stock_root, files, nm=args.nm)
         failures = abi_failures(abi)
         manifest = layer_manifest(args.target, args.release, args.toolchain_sha256, patches, files, abi)
         print(json.dumps({"files": manifest["files"], "abi": abi, "other_changed_files_not_shipped": others}, indent=2))

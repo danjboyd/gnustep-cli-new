@@ -1,0 +1,287 @@
+From 5477c5230527a63564c1965a5ac1fb82a5fc9e9d Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Mon, 16 Nov 2026 12:37:32 -0600
+Subject: [PATCH] GSTheme: capture override originals at activation
+
+A theme's _override...Method_ originals were recorded when the theme was
+loaded. A theme loaded while another theme was active recorded that
+theme's override as its original, so after a live switch the two
+overrides called each other forever (Trellis Preview hung switching
+Adwaita <-> Gumdrop). Record the original in -activate, just before
+installing, and restore it in -deactivate only while the theme's own
+implementation is still installed. Loading a theme no longer adds an
+override of an inherited method to the class (class_addMethod); that now
+happens at activation.
+
+Port to 0.32 of gnustep's libs-gui master commit 8c285f3 (without its
+-description hunk, which 0.32 has no counterpart for, and its ChangeLog
+entry), with its regression test Tests/gui/GSTheme/liveSwitch.m.
+Upstream review pending.
+---
+ Source/GSTheme.m               |  45 ++++++---
+ Tests/gui/GSTheme/liveSwitch.m | 162 +++++++++++++++++++++++++++++++++
+ 2 files changed, 196 insertions(+), 11 deletions(-)
+ create mode 100644 Tests/gui/GSTheme/liveSwitch.m
+
+diff --git a/Source/GSTheme.m b/Source/GSTheme.m
+index 2c585a212..ff8a28fdb 100644
+--- a/Source/GSTheme.m
++++ b/Source/GSTheme.m
+@@ -325,8 +325,9 @@ GSStringFromImageFrameStyle(NSImageFrameStyle type)
+   Class		cls;
+   SEL		sel;
+   IMP		imp;	// The new method implementation
+-  IMP		old;	// The original method implementation
+-  Method	mth;	// The method information
++  IMP		old;	// The original method implementation while active
++  Method	mth;	// The method information while active
++  const char	*types;	// The type encoding of the new method
+ }
+ @end
+ 
+@@ -691,7 +692,13 @@ typedef	struct {
+     }
+   RELEASE(searchList);
+ 
+-  /* Install any overridden methods.
++  /* Install any overridden methods.  The original implementation is
++   * recorded now rather than when the theme was loaded: a theme loaded
++   * while another theme was active would otherwise record that theme's
++   * override as its original, and the two overrides would call each other.
++   * A method the class only inherits is added to the class here.  Methods
++   * cannot be removed, so after deactivation the class keeps its own copy,
++   * set back to the implementation it inherited at activation.
+    */
+   if (_overrides != nil)
+     {
+@@ -700,7 +707,22 @@ typedef	struct {
+ 
+       while ((m = [e nextObject]) != nil)
+ 	{
+-	  method_setImplementation(m->mth, m->imp);
++	  Method	current = class_getInstanceMethod(m->cls, m->sel);
++
++	  if (current == NULL || method_getImplementation(current) == m->imp)
++	    {
++	      continue;	/* Not found, or already installed. */
++	    }
++	  if (class_addMethod(m->cls, m->sel, m->imp, m->types))
++	    {
++	      m->old = method_getImplementation(current);
++	      m->mth = class_getInstanceMethod(m->cls, m->sel);
++	    }
++	  else
++	    {
++	      m->mth = current;
++	      m->old = method_setImplementation(m->mth, m->imp);
++	    }
+ 	}
+     }
+ 
+@@ -883,7 +905,12 @@ typedef	struct {
+ 
+       while ((m = [e nextObject]) != nil)
+ 	{
+-	  method_setImplementation(m->mth, m->old);
++	  if (m->mth != NULL && method_getImplementation(m->mth) == m->imp)
++	    {
++	      method_setImplementation(m->mth, m->old);
++	    }
++	  m->mth = NULL;
++	  m->old = 0;
+ 	}
+     }
+ 
+@@ -1042,9 +1069,7 @@ typedef	struct {
+ 		  NSLog(@"Instances do not respond for '%s'", name);
+ 		  continue;
+ 		}
+-	      mth->old = [mth->cls instanceMethodForSelector: mth->sel];
+-	      class_addMethod(mth->cls, mth->sel, mth->imp, types);
+-	      mth->mth = class_getInstanceMethod(mth->cls, mth->sel);
++	      mth->types = types;
+ 
+ 	      if (_overrides == nil)
+ 		{
+@@ -1099,9 +1124,7 @@ typedef	struct {
+ 		  NSLog(@"Class does not respond for '%s'", name);
+ 		  continue;
+ 		}
+-	      mth->old = [cls methodForSelector: mth->sel];
+-	      class_addMethod(mth->cls, mth->sel, mth->imp, types);
+-	      mth->mth = class_getClassMethod(cls, mth->sel);
++	      mth->types = types;
+ 
+ 	      if (_overrides == nil)
+ 		{
+diff --git a/Tests/gui/GSTheme/liveSwitch.m b/Tests/gui/GSTheme/liveSwitch.m
+new file mode 100644
+index 000000000..faa603c52
+--- /dev/null
++++ b/Tests/gui/GSTheme/liveSwitch.m
+@@ -0,0 +1,162 @@
++/* Switching between two themes that override the same method.
++ * Written with Claude (Anthropic).
++ */
++#import "Testing.h"
++
++#import <Foundation/Foundation.h>
++#import <AppKit/AppKit.h>
++#import <GNUstepGUI/GSTheme.h>
++
++/* Plain classes, so the test does not depend on AppKit drawing. */
++@interface SwitchProbe : NSObject
++- (int) switchValue;
++@end
++@implementation SwitchProbe
++- (int) switchValue { return 7; }
++@end
++
++/* Inherits -switchValue without implementing it. */
++@interface SwitchSubProbe : SwitchProbe
++@end
++@implementation SwitchSubProbe
++@end
++
++static NSMutableString	*trace = nil;
++static int		depth = 0;
++static BOOL		looped = NO;
++
++/* Each override records its theme letter and chains to the original the
++ * active theme reports.  A depth guard turns a chaining loop into a
++ * failure instead of a stack overflow.
++ */
++static int
++chain(id receiver, SEL cmd, NSString *letter)
++{
++  typedef int (*ValueIMP)(id, SEL);
++  ValueIMP	original;
++  int		result;
++
++  if (depth > 8)
++    {
++      looped = YES;
++      return -1;
++    }
++  depth++;
++  [trace appendString: letter];
++  original = (ValueIMP)[[GSTheme theme] overriddenMethod: cmd for: receiver];
++  result = original ? original(receiver, cmd) : -2;
++  depth--;
++  return result;
++}
++
++@interface SwitchThemeA : GSTheme
++@end
++@implementation SwitchThemeA
++- (int) _overrideSwitchProbeMethod_switchValue
++{
++  return chain(self, _cmd, @"A");
++}
++@end
++
++@interface SwitchThemeB : GSTheme
++@end
++@implementation SwitchThemeB
++- (int) _overrideSwitchProbeMethod_switchValue
++{
++  return chain(self, _cmd, @"B");
++}
++@end
++
++@interface SwitchThemeC : GSTheme
++@end
++@implementation SwitchThemeC
++- (int) _overrideSwitchSubProbeMethod_switchValue
++{
++  return chain(self, _cmd, @"C");
++}
++@end
++
++/* The value -switchValue returns, with the theme letters it went through. */
++static NSString *
++call(SwitchProbe *probe)
++{
++  int	v;
++
++  [trace setString: @""];
++  depth = 0;
++  looped = NO;
++  v = [probe switchValue];
++  return [NSString stringWithFormat: @"%@%d%@",
++    trace, v, looped ? @" loop" : @""];
++}
++
++int main(int argc, const char *argv[])
++{
++  ENTER_POOL
++    SwitchProbe		*probe;
++    SwitchSubProbe	*sub;
++    IMP			baseIMP;
++    IMP			subIMP;
++    GSTheme		*a;
++    GSTheme		*b;
++    GSTheme		*c;
++
++    START_SET("GSTheme live switch")
++
++    NS_DURING
++      [NSApplication sharedApplication];
++    NS_HANDLER
++      if ([[localException name] isEqual: NSInternalInconsistencyException])
++        SKIP("It looks like GNUstep backend is not yet installed")
++    NS_ENDHANDLER
++
++    trace = [NSMutableString new];
++    probe = AUTORELEASE([SwitchProbe new]);
++    sub = AUTORELEASE([SwitchSubProbe new]);
++    baseIMP = [SwitchProbe instanceMethodForSelector: @selector(switchValue)];
++    subIMP = [SwitchSubProbe instanceMethodForSelector: @selector(switchValue)];
++
++    a = AUTORELEASE([[SwitchThemeA alloc] initWithBundle: nil]);
++    PASS_EQUAL(call(probe), @"7",
++      "loading a theme does not install its overrides")
++    [GSTheme setTheme: a];
++    PASS_EQUAL(call(probe), @"A7",
++      "the active theme's override chains to the original")
++
++    /* Load B while A is active. */
++    b = AUTORELEASE([[SwitchThemeB alloc] initWithBundle: nil]);
++    PASS_EQUAL(call(probe), @"A7",
++      "loading a second theme leaves the active theme's override in place")
++    [GSTheme setTheme: b];
++    PASS_EQUAL(call(probe), @"B7",
++      "after switching A to B, B chains to the original, not to A")
++    [GSTheme setTheme: a];
++    PASS_EQUAL(call(probe), @"A7",
++      "after switching back to A, A chains to the original, not to B")
++    [GSTheme setTheme: b];
++    PASS_EQUAL(call(probe), @"B7", "a second switch to B still ends at the original")
++    PASS([b overriddenMethod: @selector(switchValue) for: probe] == baseIMP,
++      "the active theme reports the class's own implementation as original")
++
++    [GSTheme setTheme: nil];
++    PASS_EQUAL(call(probe), @"7", "the default theme removes every override")
++    PASS([SwitchProbe instanceMethodForSelector: @selector(switchValue)] == baseIMP,
++      "deactivation restores the original implementation")
++
++    /* An override of a method the class only inherits. */
++    c = AUTORELEASE([[SwitchThemeC alloc] initWithBundle: nil]);
++    PASS_EQUAL(call(sub), @"7",
++      "loading a theme does not install an override of an inherited method")
++    [GSTheme setTheme: c];
++    PASS_EQUAL(call(sub), @"C7", "an inherited method's override chains to the original")
++    PASS_EQUAL(call(probe), @"7", "the superclass is not affected")
++    [GSTheme setTheme: nil];
++    PASS_EQUAL(call(sub), @"7", "deactivation removes an inherited method's override")
++    PASS([SwitchSubProbe instanceMethodForSelector: @selector(switchValue)] == subIMP,
++      "the subclass behaves as it did before the theme was loaded")
++
++    DESTROY(trace);
++    END_SET("GSTheme live switch")
++  LEAVE_POOL
++  return 0;
++}
+-- 
+2.47.3
+
