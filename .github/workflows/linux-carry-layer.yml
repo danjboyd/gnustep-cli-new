@@ -99,3 +99,52 @@ jobs:
         with:
           name: gnustep-linux-carry-layer-${{ matrix.target }}
           path: ${{ runner.temp }}/layer
+
+  variant-gate:
+    name: setup --variant stock/patched round trip and update (Linux, clean debian:13)
+    needs: layer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      TARGET: linux-amd64-clang
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: This run's layer
+        uses: actions/download-artifact@v4
+        with:
+          name: gnustep-linux-carry-layer-linux-amd64-clang
+          path: ${{ runner.temp }}/layer
+
+      - name: The stock CLI and toolchain archives
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          tag='${{ inputs.stock_tag }}'; tag=${tag:-v0.1.9}
+          version='${{ inputs.stock_version }}'; version=${version:-0.1.9}
+          mkdir -p "$RUNNER_TEMP/stock"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/stock" \
+            --pattern "gnustep-toolchain-$TARGET-$version.tar.gz" --pattern "gnustep-cli-$TARGET-$version.tar.gz"
+          ls -l "$RUNNER_TEMP/stock" "$RUNNER_TEMP/layer"
+
+      - name: The gate
+        run: |
+          set -eu
+          version='${{ inputs.stock_version }}'; version=${version:-0.1.9}
+          layer=$(ls "$RUNNER_TEMP"/layer/gnustep-carry-$TARGET-*.zip)
+          mkdir -p "$RUNNER_TEMP/gate"
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/src" -v "$RUNNER_TEMP/stock:/stock" -v "$RUNNER_TEMP/layer:/layer" -v "$RUNNER_TEMP/gate:/out" \
+            debian:13 bash /src/.github/carry/linux-variant-gate.sh "$TARGET" \
+              "/stock/gnustep-cli-$TARGET-$version.tar.gz" "/stock/gnustep-toolchain-$TARGET-$version.tar.gz" \
+              "/layer/$(basename "$layer")" /out
+          sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/gate"
+
+      - name: Upload gate results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-linux-carry-variant-gate
+          path: ${{ runner.temp }}/gate
