@@ -462,6 +462,76 @@ def _toolchain_variant_check(interface: str, managed_root: Path | None = None) -
     return result("ok", f"The patched toolchain is active: {len(patch_ids)} carried patches (layer {record.get('release')}).", details)
 
 
+GNUSTEP_SOURCE_LIBRARIES = (("libs-base", "gnustep-base"), ("libs-gui", "gnustep-gui"), ("libs-back", "gnustep-back"))
+MSYS2_CLANG64_PACKAGE_PREFIX = "mingw-w64-clang-x86_64-"
+
+
+def gnustep_library_sources(root: Path) -> list[dict[str, Any]]:
+    """Where each GNUstep library in this managed root comes from (#87): a source-built
+    root records the upstream git revision in component-inventory.json; an MSYS2 root
+    has the installed package (an upstream release) in its pacman database."""
+    revisions: dict[str, str] = {}
+    try:
+        inventory = json.loads((root / "component-inventory.json").read_text())
+    except (OSError, ValueError):
+        inventory = {}
+    components = inventory.get("components") if isinstance(inventory, dict) else None
+    for entry in components if isinstance(components, list) else []:
+        if isinstance(entry, dict) and isinstance(entry.get("source_revision"), str) and entry["source_revision"] not in ("", "TBD"):
+            revisions[str(entry.get("name"))] = entry["source_revision"]
+    try:
+        installed = sorted(path.name for path in (root / "var" / "lib" / "pacman" / "local").iterdir() if path.is_dir())
+    except OSError:
+        installed = []
+    sources = []
+    for library, package in GNUSTEP_SOURCE_LIBRARIES:
+        if library in revisions:
+            sources.append({"library": library, "kind": "revision", "revision": revisions[library]})
+            continue
+        prefix = f"{MSYS2_CLANG64_PACKAGE_PREFIX}{package}-"
+        # pacman names the directory <package>-<pkgver>-<pkgrel>; the version starts with a digit.
+        match = next((name[len(prefix):] for name in installed if name.startswith(prefix) and name[len(prefix):][:1].isdigit()), None)
+        if match is not None:
+            sources.append({"library": library, "kind": "release", "version": match.rsplit("-", 1)[0], "package_version": match})
+        else:
+            sources.append({"library": library, "kind": "unknown"})
+    return sources
+
+
+def describe_gnustep_library_source(source: dict[str, Any]) -> str:
+    if source["kind"] == "revision":
+        return f"{source['library']} {source['revision'][:8]} (upstream git)"
+    if source["kind"] == "release":
+        return f"{source['library']} {source['version']} release (MSYS2 package {source['package_version']})"
+    return f"{source['library']} unknown"
+
+
+def _gnustep_sources_check(interface: str, managed_root: Path | None = None) -> CheckResult:
+    """Report each GNUstep library's upstream source (#87). Informational: the Windows
+    toolchain ships MSYS2's release packages while the Linux toolchains build from git
+    revisions, so an API can exist on one platform and not the other."""
+    title = "Report where the GNUstep libraries come from"
+    if interface == "bootstrap":
+        return _full_only_check("managed.toolchain.sources", title, "warning")
+    root = managed_root or (Path(os.environ.get("GNUSTEP_CLI_MANAGED_ROOT")) if os.environ.get("GNUSTEP_CLI_MANAGED_ROOT") else ROOT)
+
+    def result(status: str, message: str, details: dict[str, Any]) -> CheckResult:
+        return CheckResult(id="managed.toolchain.sources", title=title, status=status, severity="warning",
+                           message=message, interface="full", execution_tier="full_only", details=details)
+
+    if not (root / "state" / "cli-state.json").exists():
+        return result("not_run", "No managed install state was detected.", {"managed_install_detected": False})
+    sources = gnustep_library_sources(root)
+    if all(source["kind"] == "unknown" for source in sources):
+        return result("not_run", "The managed root records no source for the GNUstep libraries.", {"libraries": sources})
+    message = (
+        "GNUstep libraries: " + ", ".join(describe_gnustep_library_source(source) for source in sources) + ". "
+        "The Windows toolchain uses release packages and the Linux toolchains build from newer git revisions, "
+        "so some APIs exist on one platform only (https://github.com/danjboyd/gnustep-cli-new/issues/87)."
+    )
+    return result("ok", message, {"libraries": sources, "issue": "https://github.com/danjboyd/gnustep-cli-new/issues/87"})
+
+
 def _managed_install_integrity_check(environment: dict[str, Any], *, interface: str, managed_root: Path | None = None) -> CheckResult:
     toolchain = environment["toolchain"]
     if interface == "bootstrap":
@@ -956,6 +1026,7 @@ def build_doctor_payload(manifest_path: Path | None = None, *, interface: str = 
         integrity_state = managed_integrity.details.get("state_path")
         checks.append(_upgrade_backups_check(Path(integrity_state) if integrity_state and managed_integrity.status != "error" else None))
     checks.append(_toolchain_variant_check(interface, managed_root))
+    checks.append(_gnustep_sources_check(interface, managed_root))
     bundled_authorities = _bundled_authorities_check(environment, interface=interface)
     checks.append(bundled_authorities)
     if artifact is not None:

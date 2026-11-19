@@ -70,6 +70,7 @@
 - (BOOL)applyCarryLayerArtifact:(NSDictionary *)artifact manifestPath:(NSString *)manifestPath toInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
 - (BOOL)restoreStockToolchainForInstallRoot:(NSString *)installRoot error:(NSString **)errorMessage;
 - (NSDictionary *)toolchainVariantCheckForStatePath:(NSString *)statePath interface:(NSString *)interface;
+- (NSDictionary *)gnustepSourcesCheckForStatePath:(NSString *)statePath interface:(NSString *)interface;
 @end
 
 @interface StubbedGSCommandRunner : GSCommandRunner
@@ -1970,6 +1971,44 @@
                                          nil], @"artifact",
                          [installRoot stringByAppendingPathComponent: dll], @"dll",
                          nil];
+}
+
+- (void)testDoctorReportsWhereTheGNUstepLibrariesComeFrom
+{
+  GSCommandRunner *runner = [[[GSCommandRunner alloc] init] autorelease];
+  NSString *root = [self temporaryPathComponent: @"gnustep-sources"];
+  NSString *statePath = [root stringByAppendingPathComponent: @"state/cli-state.json"];
+  NSString *local = [root stringByAppendingPathComponent: @"var/lib/pacman/local"];
+  NSFileManager *manager = [NSFileManager defaultManager];
+  NSDictionary *check = nil;
+  NSEnumerator *enumerator = nil;
+  NSString *name = nil;
+
+  [manager createDirectoryAtPath: [root stringByAppendingPathComponent: @"state"] withIntermediateDirectories: YES attributes: nil error: NULL];
+  XCTAssertEqualObjects([[runner gnustepSourcesCheckForStatePath: statePath interface: @"full"] objectForKey: @"status"], @"not_run");
+  [@"{\"schema_version\": 1, \"status\": \"healthy\"}" writeToFile: statePath atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  XCTAssertEqualObjects([[runner gnustepSourcesCheckForStatePath: statePath interface: @"full"] objectForKey: @"status"], @"not_run");
+  XCTAssertEqualObjects([[runner gnustepSourcesCheckForStatePath: statePath interface: @"bootstrap"] objectForKey: @"execution_tier"], @"full_only");
+
+  // An MSYS2 root: release packages in the pacman database.
+  enumerator = [[NSArray arrayWithObjects: @"mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.5", @"mingw-w64-clang-x86_64-gnustep-gui-0.32.0-7",
+                                           @"mingw-w64-clang-x86_64-gnustep-back-0.32.0-6", @"mingw-w64-clang-x86_64-gnustep-make-2.9.3-1", nil] objectEnumerator];
+  while ((name = [enumerator nextObject]) != nil)
+    {
+      [manager createDirectoryAtPath: [local stringByAppendingPathComponent: name] withIntermediateDirectories: YES attributes: nil error: NULL];
+    }
+  check = [runner gnustepSourcesCheckForStatePath: statePath interface: @"full"];
+  XCTAssertEqualObjects([check objectForKey: @"id"], @"managed.toolchain.sources");
+  XCTAssertEqualObjects([check objectForKey: @"status"], @"ok");
+  XCTAssertTrue([[check objectForKey: @"message"] hasPrefix: @"GNUstep libraries: libs-base 1.31.1 release (MSYS2 package 1.31.1-10.5), libs-gui 0.32.0 release (MSYS2 package 0.32.0-7), libs-back 0.32.0 release (MSYS2 package 0.32.0-6). "], @"%@", check);
+  XCTAssertEqualObjects([[[[check objectForKey: @"details"] objectForKey: @"libraries"] objectAtIndex: 1] objectForKey: @"package_version"], @"0.32.0-7");
+
+  // A source-built root: the inventory's git revisions win.
+  [@"{\"components\": [{\"name\": \"libs-base\", \"source_revision\": \"d898f703e618b86f9b7ecb0f05a257cb6ed3ffac\"}, {\"name\": \"libs-gui\", \"source_revision\": \"7892137bdedd007eba8425f766e41481ddb4fda6\"}, {\"name\": \"libs-back\", \"source_revision\": \"TBD\"}]}"
+    writeToFile: [root stringByAppendingPathComponent: @"component-inventory.json"] atomically: YES encoding: NSUTF8StringEncoding error: NULL];
+  check = [runner gnustepSourcesCheckForStatePath: statePath interface: @"full"];
+  XCTAssertTrue([[check objectForKey: @"message"] hasPrefix: @"GNUstep libraries: libs-base d898f703 (upstream git), libs-gui 7892137b (upstream git), libs-back 0.32.0 release (MSYS2 package 0.32.0-6). "], @"%@", check);
+  XCTAssertTrue([[check objectForKey: @"message"] rangeOfString: @"issues/87"].location != NSNotFound);
 }
 
 - (void)testPatchLayerAppliesAndRestoresTheStockFiles

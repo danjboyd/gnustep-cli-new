@@ -11,7 +11,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from gnustep_cli_shared.doctor_engine import _managed_root_in_use, _upgrade_backups_check, build_doctor_payload
+from gnustep_cli_shared.doctor_engine import _gnustep_sources_check, _managed_root_in_use, _upgrade_backups_check, build_doctor_payload
 
 
 def _managed_root(base: Path, name: str = "managed", status: str = "healthy") -> Path:
@@ -153,6 +153,60 @@ class UpgradeBackupsCheckTests(unittest.TestCase):
         check = _upgrade_backups_check(self.state_path)
         self.assertEqual(check.status, "warning")
         self.assertIsNone(check.details["rollback_backup"])
+
+
+class GnustepSourcesCheckTests(unittest.TestCase):
+    """#87: doctor says where libs-base, libs-gui and libs-back come from."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = _managed_root(Path(self.tmp.name).resolve())
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_source_built_root_reports_git_revisions(self):
+        (self.root / "component-inventory.json").write_text(json.dumps({"components": [
+            {"name": "libobjc2", "source_revision": "b67709ad7851973fde127022d8ac6a710c82b1d5"},
+            {"name": "libs-base", "source_revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac"},
+            {"name": "libs-gui", "source_revision": "7892137bdedd007eba8425f766e41481ddb4fda6"},
+            {"name": "libs-back", "source_revision": "bf3b3ced525f08415a20d109f05be1f91492414c"},
+        ]}))
+        check = _gnustep_sources_check("full", self.root)
+        self.assertEqual(check.id, "managed.toolchain.sources")
+        self.assertEqual(check.status, "ok")
+        self.assertTrue(check.message.startswith(
+            "GNUstep libraries: libs-base d898f703 (upstream git), libs-gui 7892137b (upstream git), libs-back bf3b3ced (upstream git). "))
+        self.assertIn("issues/87", check.message)
+        self.assertEqual(check.details["libraries"][0], {"library": "libs-base", "kind": "revision", "revision": "d898f703e618b86f9b7ecb0f05a257cb6ed3ffac"})
+
+    def test_msys2_root_reports_release_packages(self):
+        (self.root / "component-inventory.json").write_text(json.dumps({"components": [
+            {"name": "libs-base", "version": "TBD", "source": "curated-binary-input"},
+        ]}))
+        local = self.root / "var" / "lib" / "pacman" / "local"
+        for name in ("mingw-w64-clang-x86_64-gnustep-base-1.31.1-10.5", "mingw-w64-clang-x86_64-gnustep-gui-0.32.0-7",
+                     "mingw-w64-clang-x86_64-gnustep-back-0.32.0-6", "mingw-w64-clang-x86_64-gnustep-make-2.9.3-1"):
+            (local / name).mkdir(parents=True)
+        check = _gnustep_sources_check("full", self.root)
+        self.assertEqual(check.status, "ok")
+        self.assertTrue(check.message.startswith(
+            "GNUstep libraries: libs-base 1.31.1 release (MSYS2 package 1.31.1-10.5), "
+            "libs-gui 0.32.0 release (MSYS2 package 0.32.0-7), libs-back 0.32.0 release (MSYS2 package 0.32.0-6). "))
+        self.assertEqual(check.details["libraries"][1], {"library": "libs-gui", "kind": "release", "version": "0.32.0", "package_version": "0.32.0-7"})
+
+    def test_nothing_recorded_or_no_install(self):
+        self.assertEqual(_gnustep_sources_check("full", self.root).status, "not_run")
+        (self.root / "component-inventory.json").write_text("{not json")
+        self.assertEqual(_gnustep_sources_check("full", self.root).status, "not_run")
+        (self.root / "state" / "cli-state.json").unlink()
+        check = _gnustep_sources_check("full", self.root)
+        self.assertEqual(check.status, "not_run")
+        self.assertEqual(check.details, {"managed_install_detected": False})
+
+    def test_bootstrap_lists_it_as_full_only(self):
+        check = _gnustep_sources_check("bootstrap", self.root)
+        self.assertEqual((check.status, check.execution_tier), ("not_run", "full_only"))
 
 
 class DoctorManagedWordingTests(unittest.TestCase):
