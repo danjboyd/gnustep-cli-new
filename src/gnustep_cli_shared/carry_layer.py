@@ -188,7 +188,29 @@ def _ivar_key(symbol: str) -> str | None:
     return f"{parts[0]}.{parts[1]}" if len(parts) == 3 else None
 
 
-def compare_bundle_exports(stock: set, patched: set) -> dict:
+def stock_imports(nm: str, stock_root: Path, skip: set) -> set:
+    """Every dynamic symbol the stock root's ELF files (other than `skip`, root-relative)
+    import: what something in the toolchain could need from a bundle."""
+    imports = set()
+    for path in sorted(stock_root.rglob("*")):
+        relative = path.relative_to(stock_root).as_posix()
+        if relative in skip or not path.is_file() or path.is_symlink():
+            continue
+        try:
+            with open(path, "rb") as handle:
+                if handle.read(4) != b"\x7fELF":
+                    continue
+        except OSError:
+            continue
+        run = subprocess.run([nm, "-D", "--undefined-only", str(path)], capture_output=True, text=True)
+        for line in run.stdout.splitlines():
+            parts = line.split()
+            if parts:
+                imports.add(parts[-1].split("@", 1)[0])
+    return imports
+
+
+def compare_bundle_exports(stock: set, patched: set, imported: set | None = None) -> dict:
     """compare_exports for a plugin bundle (a GNUstep backend bundle: loaded by libs-gui,
     linked against by nothing, its headers not installed). libobjc2 puts an ivar's type in
     its offset symbol, so a carried patch that changes the type of one of the bundle's
@@ -200,6 +222,13 @@ def compare_bundle_exports(stock: set, patched: set) -> dict:
     if internal:
         result["removed"] = [symbol for symbol in result["removed"] if symbol not in internal]
         result["ivar_types_changed"] = sorted({_ivar_key(symbol) for symbol in internal})
+    # Nothing links against a bundle: a symbol it stops exporting matters only if a file
+    # in the toolchain imports it. The rest are reported as unreferenced removals.
+    if imported is not None:
+        unreferenced = [symbol for symbol in result["removed"] if symbol not in imported]
+        if unreferenced:
+            result["removed"] = [symbol for symbol in result["removed"] if symbol in imported]
+            result["removed_unreferenced"] = unreferenced
     return result
 
 
@@ -250,6 +279,7 @@ def abi_report(objdump: str | None, stock_root: Path, files: list, nm: str | Non
     """Export comparison of every replaced library (DLLs with objdump, ELF shared objects
     with nm). Fails the build on a removal, or when a library's tool wasn't given."""
     report = {}
+    imported = None
     for entry in files:
         if entry["stock_sha256"] is None:
             continue
@@ -265,7 +295,9 @@ def abi_report(objdump: str | None, stock_root: Path, files: list, nm: str | Non
             stock = so_exports(nm, stock_root / path)
             patched = so_exports(nm, Path(entry["source"]))
             if ".bundle/" in path:
-                report[path] = compare_bundle_exports(stock, patched)
+                if imported is None:
+                    imported = stock_imports(nm, stock_root, {f["path"] for f in files})
+                report[path] = compare_bundle_exports(stock, patched, imported)
                 continue
         else:
             continue

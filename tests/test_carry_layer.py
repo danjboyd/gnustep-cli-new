@@ -222,6 +222,10 @@ class AbiTests(unittest.TestCase):
         self.assertEqual(change["removed"], ["__objc_ivar_offset_XGServer.gone.i"])
         self.assertEqual(change["ivar_types_changed"], ["XGServer.generic"])
         self.assertIn("__objc_ivar_offset_XGServer.xfixesEventBase.i", change["added"])
+        # A removal nothing in the toolchain imports is reported, not counted.
+        change = carry_layer.compare_bundle_exports(stock | {"RCreateImage", "GSUsed"}, patched, imported={"GSUsed"})
+        self.assertEqual(change["removed"], ["GSUsed"])
+        self.assertEqual(change["removed_unreferenced"], ["RCreateImage", "__objc_ivar_offset_XGServer.gone.i"])
         # A linked library gets no such allowance.
         self.assertEqual(len(compare_exports(stock, patched)["removed"]), 2)
 
