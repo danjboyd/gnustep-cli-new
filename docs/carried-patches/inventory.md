@@ -33,7 +33,6 @@ So the same change exists as several backports.
 | libs-base | 0007 security improvement, without its test hunk | Windows | upstream commit |
 | libs-base | 0009 on Windows, also trust the bundled authorities | Windows | ours (#44); not sent |
 | libs-base | 0010 clang 23 compile fix, without its CI hunk | Windows | upstream #856 |
-| libs-gui | Command modifier in key bindings (`543628d9`) | Linux and OpenBSD, **PR #33 only, not merged** | danjboyd/libs-gui; not sent |
 
 These stay in the stock toolchain: they're security or build fixes that every user needs. They are not candidates for the layer.
 
@@ -56,6 +55,7 @@ These stay in the stock toolchain: they're security or build fixes that every us
 | libs-gui | `3f5efad1`: NSScrollView stops re-tiling without end with `autohidesScrollers` (#121) | ObjcMarkdown | same | upstream commit, newer than 0.32.0 |
 | libs-gui | GSTheme: record override originals at activation, so a live theme switch no longer recurses until the stack overflows (stock 0.32 crashes `0xC00000FD` switching WinUITheme and Gumdrop, 4 of 5 cases) | **nobody yet**; found by WinUITheme 2026-11-18; Adwaita carries it on Linux (csd8) | apt_portstree libs-gui 0012 (`5477c5230`) | master fix proposed as #100 (`8c285f3`), awaiting Dan's review, **not posted**; 0.32 backport local (`e6fd411ab` gives identical files). Retire when a built release contains the master fix. |
 | libs-base | `bace6f54` | ObjcMarkdown | same | identical to ours |
+| libs-gui | NSInputManager: parse and match the Command modifier in key bindings, so gnustep-packager's Ctrl→Command word moves (`CommandWordMoves.dict`) fire | **the patch layer** (`gui-command-key-bindings`, carry 0005), moved from the closed PR #33 on Dan's decision (2026-11-19, layer, not stock) | danjboyd/libs-gui `543628d9`, applies unchanged to 0.32.0 | not sent; upstream master `1b4e125c` has no equivalent. A Linux layer entry comes with the Linux layer design. |
 
 ### Linux (AppImages, Flatpak, CI images)
 
