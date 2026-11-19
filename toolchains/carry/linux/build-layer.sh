@@ -30,7 +30,9 @@ work=/work/carry-layer
 export PYTHONPATH="$repo/src"
 
 apt-get update -qq
-apt-get install -y -qq --no-install-recommends binutils xvfb xauth >/dev/null
+# libxfixes-dev: the X11 shadow series follows the compositing manager through XFixes
+# (without it the backend gives no window a shadow margin); stock was built without it.
+apt-get install -y -qq --no-install-recommends binutils xvfb xauth libxfixes-dev >/dev/null
 
 rm -rf "$work" "$prefix"
 mkdir -p "$work/stock" "$work/pkg" "$work/home" "$prefix" "$out"
