@@ -1,7 +1,7 @@
-From d37b305268398cc51735815d268c1ed0162c142f Mon Sep 17 00:00:00 2001
+From ec8de34bc732c22cb17c9d4e43c04fe92543d4b2 Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:33:53 -0500
-Subject: [PATCH 6/6] x11, cairo: popover shadows for menus, when a theme asks
+Subject: [PATCH 9/9] x11, cairo: popover shadows for menus, when a theme asks
 
 GNOME's menus are popovers: rounded, with a soft shadow of their own,
 fainter and shorter than a window's.  A theme that draws GNUstep's menus
@@ -186,10 +186,10 @@ index 186d59e..969a530 100644
  
        /*NSLog(@"Window surface type %d, back buffer type %d, w %d h %d",
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index 6914385..35c7ca3 100644
+index 56c10d4..24f91e5 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
-@@ -629,6 +629,17 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -633,6 +633,17 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
   */
  static const int shadowMargin[4] = { 30, 30, 24, 36 };
  
@@ -207,7 +207,7 @@ index 6914385..35c7ca3 100644
  /* How far outside the visible edge a resizable window takes presses, for
   * resizing from the shadow (GTK 4 under Mutter: 12 pixels).
   */
-@@ -815,6 +826,34 @@ static int compositorRunning = -1;
+@@ -819,6 +830,34 @@ static int compositorRunning = -1;
    return [self _compositorShowsMargin];
  }
  
@@ -242,7 +242,7 @@ index 6914385..35c7ca3 100644
  /*
   * A borderless window (menus, tool tips) gets an alpha channel when
   * GSBackBorderlessWindowAlpha is YES (a theme that draws them with rounded
-@@ -894,7 +933,7 @@ static int compositorRunning = -1;
+@@ -898,7 +937,7 @@ static int compositorRunning = -1;
      }
    for (i = 0; i < 4; i++)
      {
@@ -251,7 +251,7 @@ index 6914385..35c7ca3 100644
  
        if (win->shadow[i] != wanted)
  	{
-@@ -2312,21 +2351,24 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
+@@ -2316,21 +2355,24 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
          = style & (NSIconWindowMask | NSMiniWindowMask);
      }
    /* A non-retained window has no backing store to keep its shadow in. */

@@ -1,7 +1,7 @@
-From ba27a29552abf6fb2f79c0b3bc0d91da2961dffa Mon Sep 17 00:00:00 2001
+From e86d8071121d1a184b1d6e7c69a508edf5318664 Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:19:03 -0500
-Subject: [PATCH 1/6] x11: keep the window manager functions of windows the gui
+Subject: [PATCH 4/9] x11: keep the window manager functions of windows the gui
  decorates
 
 With GSBackHandlesWindowDecorations (or GSX11HandlesWindowDecorations)
@@ -54,10 +54,10 @@ Backported to libs-back bf3b3ced for gnustep-cli's Linux patch layer from danjbo
  create mode 100644 Tests/x11/motifhints.m
 
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index 9839269..2e24b21 100644
+index 60735b3..c2cf03a 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
-@@ -337,8 +337,7 @@ static void setWindowHintsForStyle (Display *dpy, Window window,
+@@ -341,8 +341,7 @@ static void setWindowHintsForStyle (Display *dpy, Window window,
    hints->functions = 0;
  
    /* Now add to the hints from the styleMask */
@@ -67,7 +67,7 @@ index 9839269..2e24b21 100644
      {
        hints->flags |= MWM_HINTS_DECORATIONS;
        hints->flags |= MWM_HINTS_FUNCTIONS;
-@@ -382,6 +381,19 @@ static void setWindowHintsForStyle (Display *dpy, Window window,
+@@ -386,6 +385,19 @@ static void setWindowHintsForStyle (Display *dpy, Window window,
  	  hints->functions |= MWM_FUNC_MAXIMIZE;
  	  hints->functions |= MWM_FUNC_MOVE;
          }

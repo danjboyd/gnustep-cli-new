@@ -1,7 +1,7 @@
-From 854cae3da98288c140d7cbcc2d4409b8ad23bf33 Mon Sep 17 00:00:00 2001
+From 3117c84752c8c29c3b9d247210ce52fd35a4f0c1 Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Thu, 5 Nov 2026 12:02:05 -0600
-Subject: [PATCH 4/6] x11: don't stack a window against the focus when no
+Subject: [PATCH 7/9] x11: don't stack a window against the focus when no
  window has it
 
 -orderwindow::: puts a window ordered in front (NSWindowAbove, no other
@@ -37,10 +37,10 @@ Backported to libs-back bf3b3ced for gnustep-cli's Linux patch layer from danjbo
  create mode 100644 Tests/x11/orderfocusroot.m
 
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index be2988a..dd8887b 100644
+index 634016e..6f4b3f9 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
-@@ -3170,7 +3170,9 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3174,7 +3174,9 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
        int revert, status;
        status = XGetInputFocus(dpy, &keywin, &revert);
        other = NULL;

@@ -1,7 +1,7 @@
-From 94e65315985e39cd8a83d57d54599db302727f55 Mon Sep 17 00:00:00 2001
+From 196e8e6956ee1589a716c3e66706eaa36dc1640c Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:30:32 -0500
-Subject: [PATCH 5/6] x11, cairo: window shadows and rounded corners for
+Subject: [PATCH 8/9] x11, cairo: window shadows and rounded corners for
  windows the gui decorates
 
 When the gui draws a window's decorations (GSBackHandlesWindowDecorations
@@ -741,10 +741,10 @@ index bf60a75..498dcfd 100644
    height = NSHeight(rect);
  
 diff --git a/Source/x11/XGServer.m b/Source/x11/XGServer.m
-index de52a90..3f2f0b2 100644
+index 03907fe..5e88720 100644
 --- a/Source/x11/XGServer.m
 +++ b/Source/x11/XGServer.m
-@@ -72,6 +72,9 @@ terminate(int sig)
+@@ -76,6 +76,9 @@ terminate(int sig)
  #ifdef HAVE_XRANDR
  #include <X11/extensions/Xrandr.h>
  #endif
@@ -754,7 +754,7 @@ index de52a90..3f2f0b2 100644
  
  #include <X11/Xlib.h>
  #include <X11/Xutil.h>
-@@ -519,6 +522,29 @@ static NSString	*startupID = nil;
+@@ -527,6 +530,29 @@ static NSString	*startupID = nil;
  #ifdef HAVE_XRANDR
    XRRQueryExtension(dpy, &randrEventBase, &randrErrorBase);
    XRRSelectInput(dpy, RootWindow(dpy, defScreen), RRScreenChangeNotifyMask);
@@ -785,10 +785,10 @@ index de52a90..3f2f0b2 100644
    return self;
  }
 diff --git a/Source/x11/XGServerEvent.m b/Source/x11/XGServerEvent.m
-index fb8f976..4be064c 100644
+index c4c5fe8..47cebaa 100644
 --- a/Source/x11/XGServerEvent.m
 +++ b/Source/x11/XGServerEvent.m
-@@ -59,6 +59,9 @@
+@@ -63,6 +63,9 @@
  #ifdef HAVE_XRANDR
  #include <X11/extensions/Xrandr.h>
  #endif
@@ -798,7 +798,7 @@ index fb8f976..4be064c 100644
  
  #include "math.h"
  #include <X11/keysym.h>
-@@ -128,6 +131,7 @@ static void (*procEvent)(id, SEL, XEvent*) = 0;
+@@ -132,6 +135,7 @@ static void (*procEvent)(id, SEL, XEvent*) = 0;
                    forMode: (NSString*)mode;
  - (int) XGErrorHandler: (Display*)display : (XErrorEvent*)err;
  - (void) processEvent: (XEvent *) event;
@@ -806,7 +806,7 @@ index fb8f976..4be064c 100644
  - (NSEvent *)_handleTakeFocusAtom: (XEvent)xEvent 
          	       forContext: (NSGraphicsContext *)gcontext;
  @end
-@@ -334,7 +338,7 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+@@ -338,7 +342,7 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
    NSPoint o;
    float t, b, l, r;
  
@@ -815,7 +815,7 @@ index fb8f976..4be064c 100644
    o.x = x.x + l;
    o.y = NSHeight(win->xframe) - x.y + b;
  
-@@ -974,7 +978,20 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+@@ -978,7 +982,20 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
                }
  
              cWin->xframe = x;
@@ -836,7 +836,7 @@ index fb8f976..4be064c 100644
              NSDebugLLog(@"Moving",
                          @"Update win %lu:\n   original:%@\n   new:%@",
                          cWin->number, NSStringFromRect(r), 
-@@ -999,6 +1016,14 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+@@ -1003,6 +1020,14 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
                  cWin->siz_hints.y = h.origin.y;
                }
  
@@ -851,7 +851,7 @@ index fb8f976..4be064c 100644
              /*
               * create GNUstep event(s)
               */
-@@ -1195,6 +1220,17 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+@@ -1199,6 +1224,17 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
                {
                  NSRect rect;
                  NSTimeInterval ts = (NSTimeInterval)generic.lastMotion;
@@ -869,7 +869,7 @@ index fb8f976..4be064c 100644
                  
                  rect = [self _XWinRectToOSWinRect: NSMakeRect(
                          rectangle.x, rectangle.y, rectangle.width, rectangle.height)
-@@ -1591,6 +1627,18 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+@@ -1595,6 +1631,18 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
          NSDebugLLog(@"NSEvent", @"%lu PropertyNotify - '%s'\n",
                      xEvent.xproperty.window,
                      XGetAtomName(dpy, xEvent.xproperty.atom));
@@ -888,7 +888,7 @@ index fb8f976..4be064c 100644
  	if (xEvent.xproperty.atom == generic.WM_STATE_ATOM)
  	  {
  	    if (cWin == 0 || xEvent.xproperty.window != cWin->ident)
-@@ -1896,6 +1944,15 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
+@@ -1900,6 +1948,15 @@ posixFileDescriptor: (NSPosixFileDescriptor*)fileDescriptor
  
              // We shouldn't get here unless we forgot to trap an event above
        default:
@@ -904,7 +904,7 @@ index fb8f976..4be064c 100644
  #ifdef XSHM
          if (xEvent.type == XShmGetEventBase(dpy)+ShmCompletion
              && [gcontext respondsToSelector: @selector(gotShmCompletion:)])
-@@ -2622,6 +2679,106 @@ process_modifier_flags(unsigned int state)
+@@ -2626,6 +2683,106 @@ process_modifier_flags(unsigned int state)
    return [XGDragView sharedDragView];
  }
  
@@ -1012,10 +1012,10 @@ index fb8f976..4be064c 100644
  
  @implementation XGServer (XSync)
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index dd8887b..6914385 100644
+index 6f4b3f9..56c10d4 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
-@@ -464,6 +464,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -468,6 +468,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
  - (void) _setSupportedWMProtocols: (gswindow_device_t *) window;
  - (unsigned long *) _getExtents: (Window)win;
  - (void) _setWindowType: (gswindow_device_t *)window;
@@ -1023,7 +1023,7 @@ index dd8887b..6914385 100644
  @end
  
  @implementation XGServer (WindowOps)
-@@ -519,7 +520,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -523,7 +524,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    NSRect	x;
    float	t, b, l, r;
  
@@ -1032,7 +1032,7 @@ index dd8887b..6914385 100644
  
    x.size.width = o.size.width - l - r;
    x.size.height = o.size.height - t - b;
-@@ -563,11 +564,10 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -567,11 +568,10 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
  - (NSRect) _XWinRectToOSWinRect: (NSRect)x for: (void*)window
  {
    gswindow_device_t	*win = (gswindow_device_t*)window;
@@ -1045,7 +1045,7 @@ index dd8887b..6914385 100644
    o.size.width = x.size.width;
    o.size.height = x.size.height;
    o.origin.x = x.origin.x + l;
-@@ -590,7 +590,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -594,7 +594,7 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    NSRect	o;
    float	t, b, l, r;
  
@@ -1054,7 +1054,7 @@ index dd8887b..6914385 100644
    o = x;
    o.origin.y = xScreenSize.height - x.origin.y;
    o.origin.y = o.origin.y - x.size.height - b;
-@@ -603,6 +603,56 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -607,6 +607,56 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    return o;
  }
  
@@ -1111,7 +1111,7 @@ index dd8887b..6914385 100644
  /*
   * A 32-bit visual with an alpha channel, and a colormap for it, for windows
   * that show what is behind them where the gui leaves them transparent.
-@@ -664,14 +714,27 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
+@@ -668,14 +718,27 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
  
  /*
   * Whether a compositing manager runs on the default screen: it owns the
@@ -1141,7 +1141,7 @@ index dd8887b..6914385 100644
  }
  
  /*
-@@ -688,6 +751,70 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
+@@ -692,6 +755,70 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
      && argb_visual(dpy, defScreen, &visual, &cmap);
  }
  
@@ -1212,7 +1212,7 @@ index dd8887b..6914385 100644
  /*
   * A borderless window (menus, tool tips) gets an alpha channel when
   * GSBackBorderlessWindowAlpha is YES (a theme that draws them with rounded
-@@ -708,6 +835,163 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
+@@ -712,6 +839,163 @@ argb_visual(Display *dpy, int screen, Visual **visual, Colormap *cmap)
    return [self _compositorShowsAlpha];
  }
  
@@ -1376,7 +1376,7 @@ index dd8887b..6914385 100644
  /*
   * Convert a window frame in X absolute screen coordinates to
   * a frame suitable for setting X hints for a window manager.
-@@ -2027,6 +2311,23 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
+@@ -2031,6 +2315,23 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
        window->win_attrs.window_style
          = style & (NSIconWindowMask | NSMiniWindowMask);
      }
@@ -1400,7 +1400,7 @@ index dd8887b..6914385 100644
  
    frame = [self _OSFrameToXFrame: frame for: window];
  
-@@ -2053,13 +2354,13 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
+@@ -2057,13 +2358,13 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
  
    window->xwn_attrs.override_redirect = False;
  
@@ -1417,7 +1417,7 @@ index dd8887b..6914385 100644
        argb_visual(dpy, defScreen, &visual, &cmap);
        window->depth = 32;
        window->xwn_attrs.colormap = cmap;
-@@ -2101,6 +2402,8 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
+@@ -2105,6 +2406,8 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
    window->visibility = -1;
    window->wm_state = WithdrawnState;
  
@@ -1426,7 +1426,7 @@ index dd8887b..6914385 100644
    // Create an X GC for the content view set it's colors
    values.foreground = window->xwn_attrs.background_pixel;
    values.background = window->xwn_attrs.background_pixel;
-@@ -2352,6 +2655,16 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
+@@ -2356,6 +2659,16 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
      }
    if (window->ident)
      {
@@ -1443,7 +1443,7 @@ index dd8887b..6914385 100644
        XDestroyWindow(dpy, window->ident);
        if (window->gc)
  	XFreeGC (dpy, window->gc);
-@@ -2816,8 +3129,7 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
+@@ -2820,8 +3133,7 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
      }
  #endif
  
@@ -1453,7 +1453,7 @@ index dd8887b..6914385 100644
    GSSetDevice(ctxt, window, l, NSHeight(window->xframe) + b);
    DPSinitmatrix(ctxt);
    //DPStranslate(ctxt, -l, -b);
-@@ -3471,6 +3783,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3475,6 +3787,13 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    and we don't have to do anything when the ConfigureNotify arrives later.
    If we're wrong, the ConfigureNotify will have the exact coordinates, and
    at that point, we'll send new GSAppKitWindow* events to -gui. */
@@ -1467,7 +1467,7 @@ index dd8887b..6914385 100644
    window->xframe = xFrame;
  
    /* Update the hints.  Note that we do this _after_ updating xframe since
-@@ -3951,8 +4270,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
+@@ -3955,8 +4274,7 @@ swapColors(unsigned char *image_data, NSBitmapImageRep *rep)
    valuemask = (GCFunction | GCPlaneMask | GCClipMask);
    XChangeGC(dpy, window->gc, valuemask, &values);
  

@@ -557,6 +557,78 @@
       "verified_by": "applies to 7892137b after 0001 (git apply --check); its Tests/gui/NSInputManager/commandBindings.m runs on stock and patched in linux-carry-layer.yml"
     },
     {
+      "id": "x11-xlibimage-layer-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0001-Add-a-plain-Xlib-image-layer-to-replace-wraster.patch",
+      "sha256": "25884706dfd1ba670c44168cac2ccda713a28e7db73a03bd32b9965f1ec186af",
+      "summary": "upstream e4c71bf: Add a plain-Xlib image layer to replace wraster",
+      "source": "gnustep/libs-back e4c71bfc75a521b1084b3cd7303612f4cf70b115, cherry-picked onto bf3b3ced (needed under the X11 series, per the adwaita agent: at the pin the bundled wraster gives every window a depth-32 visual)",
+      "upstream": "upstream commit e4c71bf, newer than the pin",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "the X11 series' Tests/x11 tests pass on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
+      "id": "x11-enable-wraster-option-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0002-Add-enable-wraster-configure-option.patch",
+      "sha256": "7e637d658927d0fee6cbbad30ff7fda6180692f8b6a1f3ac883566818cb8e3b1",
+      "summary": "upstream db5c482: Add --enable-wraster configure option",
+      "source": "gnustep/libs-back db5c482dc1388dda4b66c4ae1abe531ab7c0315e, cherry-picked onto bf3b3ced (needed under the X11 series, per the adwaita agent: at the pin the bundled wraster gives every window a depth-32 visual)",
+      "upstream": "upstream commit db5c482, newer than the pin",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "the X11 series' Tests/x11 tests pass on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
+      "id": "x11-no-wraster-by-default-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0003-Build-the-x11-server-without-wraster-by-default.patch",
+      "sha256": "b667928d2746863cf7169c9c3d09b928ca4adbe499402e9aa7198820009401eb",
+      "summary": "upstream 4a6f21c: Build the x11 server without wraster by default (ordinary windows get the screen's default visual instead of wraster's depth-32 choice, which the X11 series assumes)",
+      "source": "gnustep/libs-back 4a6f21cd383ff8aa725752d64b6ad15e41daf5e2, cherry-picked onto bf3b3ced (needed under the X11 series, per the adwaita agent: at the pin the bundled wraster gives every window a depth-32 visual)",
+      "upstream": "upstream commit 4a6f21c, newer than the pin",
+      "defaults": [],
+      "abi": "none expected (backend bundle internals)",
+      "requested_by": [
+        "Invito Agent Workforce"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "the X11 series' Tests/x11 tests pass on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
       "id": "x11-keep-wm-functions-linux",
       "library": "libs-back",
       "base": "linux-bf3b3ced",
@@ -567,8 +639,8 @@
         "linux-ubuntu2404-arm64-clang",
         "linux-ubuntu2604-amd64-clang"
       ],
-      "path": "libs-back/linux-bf3b3ced/0001-x11-keep-the-window-manager-functions-of-windows-the.patch",
-      "sha256": "cd5d34ad06ce5468ae7ba66c221e1b655ec3fb1e8b79c8f2c26408defc965fa8",
+      "path": "libs-back/linux-bf3b3ced/0004-x11-keep-the-window-manager-functions-of-windows-the.patch",
+      "sha256": "6196cf2aa1a331ad3d4c6bee605e266fe55167f2f8f954b1aabd5e28df4dd4d0",
       "summary": "x11: keep the window manager functions (Motif hints) of windows the gui decorates",
       "source": "danjboyd/libs-back x11-keep-wm-functions dbfbe5397bc18895ef3e49951574e312603b03fa, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
       "topic_commit": "dbfbe5397bc18895ef3e49951574e312603b03fa",
@@ -595,8 +667,8 @@
         "linux-ubuntu2404-arm64-clang",
         "linux-ubuntu2604-amd64-clang"
       ],
-      "path": "libs-back/linux-bf3b3ced/0002-x11-type-menus-tool-tips-drag-images-and-modal-panel.patch",
-      "sha256": "0e68fd68f027a9246ca8bbf1c52823a8dfa930ab7b8bc9d23c254c1c67c028dc",
+      "path": "libs-back/linux-bf3b3ced/0005-x11-type-menus-tool-tips-drag-images-and-modal-panel.patch",
+      "sha256": "fb5704cc782420f79c593dd07f5bd3db1922be424ff11169788c058bf0c0ae57",
       "summary": "x11: type menus, tool tips, drag images and modal panels as GTK does",
       "source": "danjboyd/libs-back x11-window-types-v7 c5d247f249c546796455e85b47efa871f232d602, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
       "topic_commit": "c5d247f249c546796455e85b47efa871f232d602",
@@ -623,8 +695,8 @@
         "linux-ubuntu2404-arm64-clang",
         "linux-ubuntu2604-amd64-clang"
       ],
-      "path": "libs-back/linux-bf3b3ced/0003-x11-an-alpha-channel-for-borderless-windows-when-a-t.patch",
-      "sha256": "53e70aa01f6213a82533f4a83b9dc51c4706c23f40e4630c176cc1fa9603b486",
+      "path": "libs-back/linux-bf3b3ced/0006-x11-an-alpha-channel-for-borderless-windows-when-a-t.patch",
+      "sha256": "8f05f5c6b583f3d09db354cc1adeaf44f2f9b96f06f3b492fa6ea81047feaa7f",
       "summary": "x11: an alpha channel for borderless windows, when a theme asks",
       "source": "danjboyd/libs-back x11-borderless-alpha-v7 f4e32a7de1d5c0c3bd18f6fd33399c6474abc2aa, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
       "topic_commit": "f4e32a7de1d5c0c3bd18f6fd33399c6474abc2aa",
@@ -651,8 +723,8 @@
         "linux-ubuntu2404-arm64-clang",
         "linux-ubuntu2604-amd64-clang"
       ],
-      "path": "libs-back/linux-bf3b3ced/0004-x11-don-t-stack-a-window-against-the-focus-when-no-w.patch",
-      "sha256": "57382100eaa4d816dd2762e74e7439bbecfa36df30932b9f91c13337e61a10b3",
+      "path": "libs-back/linux-bf3b3ced/0007-x11-don-t-stack-a-window-against-the-focus-when-no-w.patch",
+      "sha256": "1aa6336c0525442f12e18f083d3e5f2ae3babfbebf08280f0e33bc187ccd222d",
       "summary": "x11: don't stack a window against the focus when no window has it (window shadows build on it)",
       "source": "danjboyd/libs-back x11-orderwindow-focus-root-v7 (in the window-shadows-v7 stack) bc0e9f7637a42b2cb13751245801a66ffb09a458, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
       "topic_commit": "bc0e9f7637a42b2cb13751245801a66ffb09a458",
@@ -679,8 +751,8 @@
         "linux-ubuntu2404-arm64-clang",
         "linux-ubuntu2604-amd64-clang"
       ],
-      "path": "libs-back/linux-bf3b3ced/0005-x11-cairo-window-shadows-and-rounded-corners-for-win.patch",
-      "sha256": "d4c28f86424df0ea03cb8c78d5cfdaf7c1fca188542f1e60b74c68f45e29dcf4",
+      "path": "libs-back/linux-bf3b3ced/0008-x11-cairo-window-shadows-and-rounded-corners-for-win.patch",
+      "sha256": "5aa02ef5469227d23f9fbb86940cfa9fe33f6fcce753256639446636f0364103",
       "summary": "x11: window shadows and rounded corners (cairo) for windows the gui decorates",
       "source": "danjboyd/libs-back x11-window-shadows-v7 bbe49da961d178bac55c50437b04a9ae02e03eff, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
       "topic_commit": "bbe49da961d178bac55c50437b04a9ae02e03eff",
@@ -707,8 +779,8 @@
         "linux-ubuntu2404-arm64-clang",
         "linux-ubuntu2604-amd64-clang"
       ],
-      "path": "libs-back/linux-bf3b3ced/0006-x11-cairo-popover-shadows-for-menus-when-a-theme-ask.patch",
-      "sha256": "47ed1e33a6aad1d3bc1bec0a554acee71f72600ffe3b863b2b3ac4481f0e8c5c",
+      "path": "libs-back/linux-bf3b3ced/0009-x11-cairo-popover-shadows-for-menus-when-a-theme-ask.patch",
+      "sha256": "840701ea4ad6f64838e9b09522e4848003b6dc6b7dd0369ff904999d33f9da51",
       "summary": "x11: popover shadows for menus (cairo), when a theme asks",
       "source": "danjboyd/libs-back x11-popover-shadows-v7 bd16074f34338f9b8b956975708a8e1752ef1855, backported to bf3b3ced without its ChangeLog entry (gnustep-cli's Linux layer, Dan's decision on ask #8806, option A)",
       "topic_commit": "bd16074f34338f9b8b956975708a8e1752ef1855",

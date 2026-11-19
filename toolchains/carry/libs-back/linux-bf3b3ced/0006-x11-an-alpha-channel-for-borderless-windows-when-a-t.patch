@@ -1,7 +1,7 @@
-From 9c061773204197bb8a7aa4b1c9ddecea68d86317 Mon Sep 17 00:00:00 2001
+From d05521df8b1229a42f0573aea2dd63ae6b68676c Mon Sep 17 00:00:00 2001
 From: Daniel Boyd <danieljboyd@icloud.com>
 Date: Tue, 6 Oct 2026 11:23:43 -0500
-Subject: [PATCH 3/6] x11: an alpha channel for borderless windows, when a
+Subject: [PATCH 6/9] x11: an alpha channel for borderless windows, when a
  theme asks
 
 A theme that draws menus and tool tips with rounded corners, as GNOME's
@@ -47,7 +47,7 @@ Backported to libs-back bf3b3ced for gnustep-cli's Linux patch layer from danjbo
  create mode 100644 Tests/x11/borderlessalpha.m
 
 diff --git a/Source/x11/XGServerWindow.m b/Source/x11/XGServerWindow.m
-index fff3daa..be2988a 100644
+index 3698ab8..634016e 100644
 --- a/Source/x11/XGServerWindow.m
 +++ b/Source/x11/XGServerWindow.m
 @@ -40,6 +40,7 @@
@@ -58,7 +58,7 @@ index fff3daa..be2988a 100644
  #include <AppKit/NSWindow.h>
  #include <AppKit/NSImage.h>
  #include <AppKit/NSBitmapImageRep.h>
-@@ -60,6 +61,9 @@
+@@ -64,6 +65,9 @@
  #if HAVE_XCURSOR
  #include <X11/Xcursor/Xcursor.h>
  #endif
@@ -68,7 +68,7 @@ index fff3daa..be2988a 100644
  #ifdef HAVE_XSHAPE
  #include <X11/extensions/shape.h>
  #endif
-@@ -599,6 +603,111 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
+@@ -603,6 +607,111 @@ BOOL AtomPresentAndPointsToItself(Display *dpy, Atom atom, Atom type)
    return o;
  }
  
@@ -180,7 +180,7 @@ index fff3daa..be2988a 100644
  /*
   * Convert a window frame in X absolute screen coordinates to
   * a frame suitable for setting X hints for a window manager.
-@@ -1944,17 +2053,41 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
+@@ -1948,17 +2057,41 @@ _get_next_prop_new_event(Display *display, XEvent *event, char *arg)
  
    window->xwn_attrs.override_redirect = False;
  
