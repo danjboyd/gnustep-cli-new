@@ -59,6 +59,12 @@ These stay in the stock toolchain: they're security or build fixes that every us
 
 ### Linux (AppImages, Flatpak, CI images)
 
+**The Linux patch layer** (draft PR #96, not released) carries, for the five Linux targets:
+- libs-gui at the pin `7892137b`: the GSTheme live-switch fix and the Command-modifier key bindings (Dan's "small" scope, ask #8738);
+- libs-back at the pin `bf3b3ced`: the X11 series from the `x11-*-v7` topic branches (Motif hints, window types, borderless alpha, the focus-stacking fix it builds on, window shadows and rounded corners, popover shadows), backported without their ChangeLog entries (Dan's decision on ask #8806, option A, for Invito Agent Workforce). Not in it: `_NET_FRAME_EXTENTS` (upstream since `170c643`, newer than the pin), `WM_DELETE_WINDOW`, XDND and xpbs.
+
+Until a release ships it, the apps below carry their own copies:
+
 All libs-back, X11 backend:
 
 | Change | ScreenshotTool | ObjcMarkdown | LinDirStat | Upstream |

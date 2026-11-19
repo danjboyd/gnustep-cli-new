@@ -201,9 +201,23 @@ def so_exports(nm: str, path: Path) -> set:
     return parse_nm_exports(output)
 
 
-def _is_shared_object(path: str) -> bool:
+def _is_shared_object(path: str, file: Path | None = None) -> bool:
+    """A .so by name, or (a GNUstep bundle's binary has no suffix) an ELF file whose
+    header says it is a shared object (e_type ET_DYN), checked when `file` is given."""
     name = PurePosixPath(path).name
-    return name.endswith(".so") or ".so." in name
+    if name.endswith(".so") or ".so." in name:
+        return True
+    if file is None or "." in name:
+        return False
+    try:
+        with open(file, "rb") as handle:
+            header = handle.read(18)
+    except OSError:
+        return False
+    if len(header) < 18 or header[:4] != b"\x7fELF":
+        return False
+    byteorder = "little" if header[5] == 1 else "big"
+    return int.from_bytes(header[16:18], byteorder) == 3
 
 
 def abi_report(objdump: str | None, stock_root: Path, files: list, nm: str | None = None) -> dict:
@@ -219,7 +233,7 @@ def abi_report(objdump: str | None, stock_root: Path, files: list, nm: str | Non
                 raise CarryError(f"{path}: the ABI check of a DLL needs --objdump")
             stock = dll_exports(objdump, stock_root / path)
             patched = dll_exports(objdump, Path(entry["source"]))
-        elif _is_shared_object(path):
+        elif _is_shared_object(path, stock_root / path):
             if not nm:
                 raise CarryError(f"{path}: the ABI check of a shared object needs --nm")
             stock = so_exports(nm, stock_root / path)

@@ -12,9 +12,10 @@
 #    installed into a DESTDIR.
 # 3. carry_layer keeps the output files that differ from stock, checks the ABI (no
 #    removed dynamic symbol) and writes the layer zip; it is checked against the archive.
-# 4. The carried patches' own libs-gui tests run on Xvfb against the stock root (each
-#    must fail: they show the bug) and then against the same root with the layer applied
-#    (each must pass).
+# 4. The carried patches' own tests run on Xvfb, first against the stock root and then
+#    against the same root with the layer applied. With the layer, every test must pass.
+#    On stock, each libs-gui carry's regression test must fail (it shows the bug); the
+#    libs-back X11 tests are only recorded there.
 set -euo pipefail
 
 target=${1:?usage: build-layer.sh <target> <staging-prefix> <toolchain.tar.gz> <out-dir> <release>}
@@ -116,46 +117,65 @@ PY
 # The carried patches' tests, compiled once against the stock headers.
 testing_h=$(find "$GNUSTEP_MAKEFILES" -name Testing.h -path '*TestFramework*' | head -n 1)
 test -n "$testing_h" || { echo "no TestFramework/Testing.h under $GNUSTEP_MAKEFILES" >&2; exit 1; }
-tests=(
-  "libs-gui/Tests/gui/GSTheme/liveSwitch.m"
-  "libs-gui/Tests/gui/NSInputManager/commandBindings.m"
-)
+# Each entry: <source path>|<stock expectation>. "fail": the test shows the bug on the
+# stock root (a libs-gui carry's own regression test). "record": the stock result is only
+# reported (the libs-back X11 tests cover new behaviour; some parts may pass on stock).
+# Every test must pass with the layer applied.
+tests=()
+if [ -d "$work/src/libs-gui" ]; then
+  tests+=("libs-gui/Tests/gui/GSTheme/liveSwitch.m|fail" "libs-gui/Tests/gui/NSInputManager/commandBindings.m|fail")
+fi
+if [ -d "$work/src/libs-back" ]; then
+  for t in "$work"/src/libs-back/Tests/x11/*.m; do
+    tests+=("libs-back/Tests/x11/$(basename "$t")|record")
+  done
+fi
 mkdir -p "$work/tests"
-for t in "${tests[@]}"; do
+for entry in "${tests[@]}"; do
+  t=${entry%%|*}
   name=$(basename "$t" .m)
+  extra=()
+  case "$t" in
+    libs-back/*) extra=(-I"$work/src/libs-back" -I"$work/src/libs-back/Tests/x11" -lX11 -lXrender -lXext) ;;
+  esac
   # shellcheck disable=SC2046
-  clang $(gnustep-config --objc-flags) -I"$(dirname "$testing_h")" -o "$work/tests/$name" "$work/src/$t" $(gnustep-config --gui-libs)
+  clang $(gnustep-config --objc-flags) -I"$(dirname "$testing_h")" -o "$work/tests/$name" "$work/src/$t" \
+    $(gnustep-config --gui-libs) "${extra[@]}"
 done
 
-run_tests() { # <pass|fail>
-  local expect=$1 status=0
-  for t in "${tests[@]}"; do
-    local name log code passed failed other
+run_tests() { # <stock|layer>
+  local phase=$1 status=0
+  for entry in "${tests[@]}"; do
+    local t=${entry%%|*} stock_expect=${entry##*|} name log code passed failed skipped other
     name=$(basename "$t" .m)
-    log="$out/test-$name-$expect.txt"
+    log="$out/test-$name-$phase.txt"
     set +e
-    (cd "$work/tests" && timeout 120 xvfb-run -a "./$name") > "$log" 2>&1
+    (cd "$work/tests" && timeout 180 xvfb-run -a -s "-screen 0 1280x1024x24" "./$name") > "$log" 2>&1
     code=$?
     set -e
     passed=$(grep -c '^Passed test' "$log" || true)
     failed=$(grep -c -E '^(Failed test|Dashed hope)' "$log" || true)
-    other=$(grep -c -E '^(Skipped set|Failed set)|Uncaught' "$log" || true)
-    echo "$name ($expect expected): exit $code, passed $passed, failed $failed, other $other"
-    if [ "$expect" = pass ]; then
-      if [ "$code" -ne 0 ] || [ "$passed" -eq 0 ] || [ "$failed" -ne 0 ] || [ "$other" -ne 0 ]; then
+    skipped=$(grep -c '^Skipped set' "$log" || true)
+    other=$(grep -c -E '^Failed set|Uncaught' "$log" || true)
+    echo "$name ($phase): exit $code, passed $passed, failed $failed, skipped sets $skipped, other $other"
+    if [ "$phase" = layer ]; then
+      # A libs-back set that needs a real desktop (GNOME Shell) may skip on Xvfb; a
+      # libs-gui carry's test must run in full.
+      if [ "$code" -ne 0 ] || [ "$passed" -eq 0 ] || [ "$failed" -ne 0 ] || [ "$other" -ne 0 ] \
+         || { [ "$stock_expect" = fail ] && [ "$skipped" -ne 0 ]; }; then
         cat "$log"; status=1
       fi
-    elif [ "$failed" -eq 0 ] && [ "$code" -eq 0 ]; then
+    elif [ "$stock_expect" = fail ] && [ "$failed" -eq 0 ] && [ "$code" -eq 0 ]; then
       echo "$name: expected the stock root to fail (the bug the patch fixes)"; cat "$log"; status=1
     fi
   done
   return $status
 }
 
-echo "== stock root: each test must show the bug"
-run_tests fail
-echo "== stock root with the layer applied: each test must pass"
+echo "== stock root: each libs-gui carry's test must show its bug; the libs-back tests are recorded"
+run_tests stock
+echo "== stock root with the layer applied: every test must pass"
 (cd "$prefix" && python3 -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1]); [z.extract(n) for n in z.namelist() if n != "carry-layer.json"]' "$layer")
-run_tests pass
+run_tests layer
 sha256sum "$layer" | tee "$out/SHA256SUMS"
 echo "linux patch layer for $target: ok"
