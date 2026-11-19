@@ -47,6 +47,7 @@
         "linux-ubuntu2604-amd64-clang"
       ],
       "outputs": [
+        "Local/Library/Libraries/libgnustep-gui.so",
         "Local/Library/Libraries/libgnustep-gui.so.*"
       ]
     }

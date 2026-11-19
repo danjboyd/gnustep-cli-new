@@ -107,7 +107,7 @@ class CarryJsonTests(unittest.TestCase):
             # A patch is built only for the platforms of its base.
             base = bases[f"{entry['library']}/{entry['base']}"]
             self.assertTrue(set(entry["platforms"]) <= set(base["platforms"]), entry["id"])
-        self.assertEqual(carry_layer.layer_outputs(data, "linux-amd64-clang"), ["Local/Library/Libraries/libgnustep-gui.so.*"])
+        self.assertEqual(carry_layer.layer_outputs(data, "linux-amd64-clang"), ["Local/Library/Libraries/libgnustep-gui.so", "Local/Library/Libraries/libgnustep-gui.so.*"])
         self.assertNotIn("Local/Library/Libraries/libgnustep-gui.so.*", carry_layer.layer_outputs(data, "windows-amd64-msys2-clang64"))
         linux = [p["id"] for p in data["patches"] if "linux-amd64-clang" in p["platforms"]]
         self.assertEqual(linux, ["gui-theme-live-switch-linux", "gui-command-key-bindings-linux"])

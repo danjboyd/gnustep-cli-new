@@ -90,6 +90,13 @@ while read -r library revision patches; do
     make -j"$(nproc)" > "$out/make-$library.log" 2>&1
     make install DESTDIR="$work/pkg/$library" > "$out/install-$library.log" 2>&1
   ) || { tail -n 60 "$out"/*-"$library".log; exit 1; }
+  # The packaged toolchain holds each library's .so, .so.<soname> and .so.<version> as
+  # three copies, not symlinks (its packaging dereferences them), and programs load the
+  # soname file. Turn the install's symlinks into copies too, so the layer replaces every
+  # one of them.
+  find "$work/pkg/$library" -type l | while read -r link; do
+    if [ -f "$link" ]; then cp --remove-destination "$(readlink -f "$link")" "$link"; fi
+  done
   package_args+=(--package-root "$work/pkg/$library$prefix")
 done < "$work/bases.txt"
 
