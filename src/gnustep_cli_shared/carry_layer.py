@@ -177,6 +177,32 @@ def compare_exports(stock: set, patched: set) -> dict:
     return {"removed": sorted(stock - patched), "added": sorted(patched - stock)}
 
 
+_IVAR_OFFSET = "__objc_ivar_offset_"
+
+
+def _ivar_key(symbol: str) -> str | None:
+    """`Class.ivar` from libobjc2's `__objc_ivar_offset_<Class>.<ivar>.<type encoding>`."""
+    if not symbol.startswith(_IVAR_OFFSET):
+        return None
+    parts = symbol[len(_IVAR_OFFSET):].split(".", 2)
+    return f"{parts[0]}.{parts[1]}" if len(parts) == 3 else None
+
+
+def compare_bundle_exports(stock: set, patched: set) -> dict:
+    """compare_exports for a plugin bundle (a GNUstep backend bundle: loaded by libs-gui,
+    linked against by nothing, its headers not installed). libobjc2 puts an ivar's type in
+    its offset symbol, so a carried patch that changes the type of one of the bundle's
+    own ivars renames that symbol. When the same Class.ivar is still exported, the change
+    is internal to the bundle: it is reported, not counted as a removal."""
+    result = compare_exports(stock, patched)
+    added_keys = {_ivar_key(symbol) for symbol in result["added"]} - {None}
+    internal = [symbol for symbol in result["removed"] if _ivar_key(symbol) in added_keys]
+    if internal:
+        result["removed"] = [symbol for symbol in result["removed"] if symbol not in internal]
+        result["ivar_types_changed"] = sorted({_ivar_key(symbol) for symbol in internal})
+    return result
+
+
 def dll_exports(objdump: str, dll: Path) -> set:
     output = subprocess.run([objdump, "-p", str(dll)], check=True, capture_output=True, text=True).stdout
     return parse_objdump_exports(output)
@@ -238,6 +264,9 @@ def abi_report(objdump: str | None, stock_root: Path, files: list, nm: str | Non
                 raise CarryError(f"{path}: the ABI check of a shared object needs --nm")
             stock = so_exports(nm, stock_root / path)
             patched = so_exports(nm, Path(entry["source"]))
+            if ".bundle/" in path:
+                report[path] = compare_bundle_exports(stock, patched)
+                continue
         else:
             continue
         report[path] = compare_exports(stock, patched)

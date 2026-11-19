@@ -215,6 +215,16 @@ class AbiTests(unittest.TestCase):
             # A new file (no stock) and a non-library are not compared.
             self.assertEqual(carry_layer.abi_report(None, stock, [dict(so, stock_sha256=None), {"path": "a.txt", "stock_sha256": "x", "source": "a"}]), {})
 
+    def test_a_bundle_ivar_whose_type_changed_is_internal_but_a_vanished_one_is_removed(self):
+        stock = {"GSBackendClass", "__objc_ivar_offset_XGServer.generic.{XGGeneric=[70Q]}", "__objc_ivar_offset_XGServer.gone.i"}
+        patched = {"GSBackendClass", "__objc_ivar_offset_XGServer.generic.{XGGeneric=[72Q]}", "__objc_ivar_offset_XGServer.xfixesEventBase.i"}
+        change = carry_layer.compare_bundle_exports(stock, patched)
+        self.assertEqual(change["removed"], ["__objc_ivar_offset_XGServer.gone.i"])
+        self.assertEqual(change["ivar_types_changed"], ["XGServer.generic"])
+        self.assertIn("__objc_ivar_offset_XGServer.xfixesEventBase.i", change["added"])
+        # A linked library gets no such allowance.
+        self.assertEqual(len(compare_exports(stock, patched)["removed"]), 2)
+
     def test_a_removed_export_fails_and_an_added_one_is_reported(self):
         stock = {"a", "b"}
         report = {"clang64/bin/x.dll": compare_exports(stock, {"a", "c"})}
