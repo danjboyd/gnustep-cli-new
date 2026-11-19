@@ -174,6 +174,8 @@ static const NSTimeInterval GSCandidateSmokeTimeout = 120.0;
 - (NSDictionary *)managedInstallIntegrityCheckForEnvironment:(NSDictionary *)environment interface:(NSString *)interface;
 - (NSDictionary *)managedInstallIntegrityCheckForStatePath:(NSString *)statePath candidateStatePaths:(NSArray *)candidateStatePaths;
 - (NSDictionary *)toolchainVariantCheckForStatePath:(NSString *)statePath interface:(NSString *)interface;
+- (NSArray *)gnustepLibrarySourcesForInstallRoot:(NSString *)root;
+- (NSDictionary *)gnustepSourcesCheckForStatePath:(NSString *)statePath interface:(NSString *)interface;
 - (NSArray *)artifactsInWindowsUpgradeOrder:(NSArray *)artifacts;
 - (BOOL)canKeepInstalledToolchainLayer:(NSDictionary *)artifact installedState:(NSDictionary *)installedState rootMovedToBackup:(BOOL)rootMoved;
 - (NSString *)managedRootInUseForToolchainMakefiles:(NSString *)gnustepMakefiles statePath:(NSString *)statePath;
@@ -4448,6 +4450,145 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
   }
 }
 
+/* Where each GNUstep library in a managed root comes from (#87): a source-built root
+   records the upstream git revision in component-inventory.json; an MSYS2 root has the
+   installed package, an upstream release, in its pacman database. Same as the Python
+   doctor's gnustep_library_sources. */
+- (NSArray *)gnustepLibrarySourcesForInstallRoot:(NSString *)root
+{
+  NSArray *libraries = [NSArray arrayWithObjects: @"libs-base", @"libs-gui", @"libs-back", nil];
+  NSArray *packages = [NSArray arrayWithObjects: @"gnustep-base", @"gnustep-gui", @"gnustep-back", nil];
+  NSMutableDictionary *revisions = [NSMutableDictionary dictionary];
+  NSMutableArray *sources = [NSMutableArray array];
+  NSDictionary *inventory = [self readJSONFile: [root stringByAppendingPathComponent: @"component-inventory.json"] error: NULL];
+  NSArray *components = [inventory isKindOfClass: [NSDictionary class]] ? [inventory objectForKey: @"components"] : nil;
+  NSString *localDB = [root stringByAppendingPathComponent: @"var/lib/pacman/local"];
+  NSArray *installed = [[[NSFileManager defaultManager] contentsOfDirectoryAtPath: localDB error: NULL]
+                         sortedArrayUsingSelector: @selector(compare:)];
+  NSUInteger i;
+
+  if ([components isKindOfClass: [NSArray class]])
+    {
+      NSEnumerator *enumerator = [components objectEnumerator];
+      NSDictionary *entry;
+
+      while ((entry = [enumerator nextObject]) != nil)
+        {
+          id revision = [entry isKindOfClass: [NSDictionary class]] ? [entry objectForKey: @"source_revision"] : nil;
+          id name = [entry isKindOfClass: [NSDictionary class]] ? [entry objectForKey: @"name"] : nil;
+
+          if ([revision isKindOfClass: [NSString class]] && [revision length] > 0 && [revision isEqualToString: @"TBD"] == NO
+              && [name isKindOfClass: [NSString class]])
+            {
+              [revisions setObject: revision forKey: name];
+            }
+        }
+    }
+  for (i = 0; i < [libraries count]; i++)
+    {
+      NSString *library = [libraries objectAtIndex: i];
+      NSString *prefix = [NSString stringWithFormat: @"mingw-w64-clang-x86_64-%@-", [packages objectAtIndex: i]];
+      NSString *match = nil;
+      NSEnumerator *enumerator = [installed objectEnumerator];
+      NSString *name;
+
+      if ([revisions objectForKey: library] != nil)
+        {
+          [sources addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                              library, @"library", @"revision", @"kind",
+                                              [revisions objectForKey: library], @"revision", nil]];
+          continue;
+        }
+      /* pacman names the directory <package>-<pkgver>-<pkgrel>; the version starts with a digit. */
+      while (match == nil && (name = [enumerator nextObject]) != nil)
+        {
+          BOOL isDirectory = NO;
+
+          if ([name hasPrefix: prefix] && [name length] > [prefix length]
+              && [[NSCharacterSet decimalDigitCharacterSet] characterIsMember: [name characterAtIndex: [prefix length]]]
+              && [[NSFileManager defaultManager] fileExistsAtPath: [localDB stringByAppendingPathComponent: name] isDirectory: &isDirectory]
+              && isDirectory)
+            {
+              match = [name substringFromIndex: [prefix length]];
+            }
+        }
+      if (match != nil)
+        {
+          NSRange dash = [match rangeOfString: @"-" options: NSBackwardsSearch];
+          NSString *version = dash.location == NSNotFound ? match : [match substringToIndex: dash.location];
+
+          [sources addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                              library, @"library", @"release", @"kind",
+                                              version, @"version", match, @"package_version", nil]];
+        }
+      else
+        {
+          [sources addObject: [NSDictionary dictionaryWithObjectsAndKeys: library, @"library", @"unknown", @"kind", nil]];
+        }
+    }
+  return sources;
+}
+
+- (NSDictionary *)gnustepSourcesCheckForStatePath:(NSString *)statePath interface:(NSString *)interface
+{
+  NSString *title = @"Report where the GNUstep libraries come from";
+  NSString *issue = @"https://github.com/danjboyd/gnustep-cli-new/issues/87";
+  NSArray *sources = nil;
+  NSMutableArray *descriptions = [NSMutableArray array];
+  NSEnumerator *enumerator = nil;
+  NSDictionary *source = nil;
+  BOOL known = NO;
+
+  if ([interface isEqualToString: @"bootstrap"])
+    {
+      return [self checkWithID: @"managed.toolchain.sources" title: title status: @"not_run" severity: @"warning"
+                       message: @"This check is available in the full CLI only." interface: @"full" executionTier: @"full_only"
+                       details: [NSDictionary dictionaryWithObject: [NSNumber numberWithBool: YES] forKey: @"unavailable_in_bootstrap"]];
+    }
+  if (statePath == nil || [[NSFileManager defaultManager] fileExistsAtPath: statePath] == NO)
+    {
+      return [self checkWithID: @"managed.toolchain.sources" title: title status: @"not_run" severity: @"warning"
+                       message: @"No managed install state was detected." interface: @"full" executionTier: @"full_only"
+                       details: [NSDictionary dictionaryWithObject: [NSNumber numberWithBool: NO] forKey: @"managed_install_detected"]];
+    }
+  sources = [self gnustepLibrarySourcesForInstallRoot: [[statePath stringByDeletingLastPathComponent] stringByDeletingLastPathComponent]];
+  enumerator = [sources objectEnumerator];
+  while ((source = [enumerator nextObject]) != nil)
+    {
+      NSString *kind = [source objectForKey: @"kind"];
+      NSString *library = [source objectForKey: @"library"];
+
+      if ([kind isEqualToString: @"revision"])
+        {
+          NSString *revision = [source objectForKey: @"revision"];
+          [descriptions addObject: [NSString stringWithFormat: @"%@ %@ (upstream git)", library,
+                                              [revision length] > 8 ? [revision substringToIndex: 8] : revision]];
+          known = YES;
+        }
+      else if ([kind isEqualToString: @"release"])
+        {
+          [descriptions addObject: [NSString stringWithFormat: @"%@ %@ release (MSYS2 package %@)", library,
+                                              [source objectForKey: @"version"], [source objectForKey: @"package_version"]]];
+          known = YES;
+        }
+      else
+        {
+          [descriptions addObject: [NSString stringWithFormat: @"%@ unknown", library]];
+        }
+    }
+  if (known == NO)
+    {
+      return [self checkWithID: @"managed.toolchain.sources" title: title status: @"not_run" severity: @"warning"
+                       message: @"The managed root records no source for the GNUstep libraries." interface: @"full" executionTier: @"full_only"
+                       details: [NSDictionary dictionaryWithObject: sources forKey: @"libraries"]];
+    }
+  return [self checkWithID: @"managed.toolchain.sources" title: title status: @"ok" severity: @"warning"
+                   message: [NSString stringWithFormat: @"GNUstep libraries: %@. The Windows toolchain uses release packages and the Linux toolchains build from newer git revisions, so some APIs exist on one platform only (%@).",
+                                      [descriptions componentsJoinedByString: @", "], issue]
+                 interface: @"full" executionTier: @"full_only"
+                   details: [NSDictionary dictionaryWithObjectsAndKeys: sources, @"libraries", issue, @"issue", nil]];
+}
+
 - (NSDictionary *)managedInstallIntegrityCheckForStatePath:(NSString *)statePath candidateStatePaths:(NSArray *)candidateStatePaths
 {
   NSFileManager *manager = [NSFileManager defaultManager];
@@ -5211,6 +5352,7 @@ static NSArray *GSCanonicalPathComponents(NSString *path)
   {
     id statePath = [[managedIntegrity objectForKey: @"details"] objectForKey: @"state_path"];
     [checks addObject: [self toolchainVariantCheckForStatePath: ([statePath isKindOfClass: [NSString class]] ? statePath : nil) interface: interface]];
+    [checks addObject: [self gnustepSourcesCheckForStatePath: ([statePath isKindOfClass: [NSString class]] ? statePath : nil) interface: interface]];
   }
   {
     BOOL windowsHost = NO;
