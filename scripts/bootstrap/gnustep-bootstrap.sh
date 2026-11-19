@@ -82,13 +82,13 @@ host_prerequisite_packages() {
   platform="$1"
   case "$platform" in
     debian|ubuntu)
-      printf '%s\n' "ca-certificates curl tar gzip xz-utils zstd git make cmake ninja-build pkg-config clang lld libxml2-dev libxslt1-dev libicu-dev libavahi-client-dev libcurl4-gnutls-dev libgnutls28-dev libffi-dev libjpeg-dev libtiff-dev libpng-dev libcairo2-dev libxft-dev libxt-dev libx11-dev libxext-dev"
+      printf '%s\n' "ca-certificates curl tar gzip xz-utils zstd git make cmake ninja-build pkg-config clang lld libxml2-dev libxslt1-dev libicu-dev libavahi-client-dev libcurl4-gnutls-dev libgnutls28-dev libffi-dev libjpeg-dev libtiff-dev libpng-dev libcairo2-dev libxft-dev libxt-dev libx11-dev libxext-dev libxfixes-dev"
       ;;
     fedora)
-      printf '%s\n' "ca-certificates curl tar gzip xz zstd git make cmake ninja-build pkgconf-pkg-config clang lld libxml2-devel libxslt-devel libicu-devel avahi-devel libcurl-devel gnutls-devel libffi-devel libjpeg-turbo-devel libtiff-devel libpng-devel cairo-devel libXft-devel libXt-devel libX11-devel libXext-devel"
+      printf '%s\n' "ca-certificates curl tar gzip xz zstd git make cmake ninja-build pkgconf-pkg-config clang lld libxml2-devel libxslt-devel libicu-devel avahi-devel libcurl-devel gnutls-devel libffi-devel libjpeg-turbo-devel libtiff-devel libpng-devel cairo-devel libXft-devel libXt-devel libX11-devel libXext-devel libXfixes-devel"
       ;;
     arch)
-      printf '%s\n' "ca-certificates curl tar gzip xz zstd git make cmake ninja pkgconf clang lld libxml2 libxslt icu avahi gnutls libffi libjpeg-turbo libtiff libpng cairo libxft libxt libx11 libxext"
+      printf '%s\n' "ca-certificates curl tar gzip xz zstd git make cmake ninja pkgconf clang lld libxml2 libxslt icu avahi gnutls libffi libjpeg-turbo libtiff libpng cairo libxft libxt libx11 libxext libxfixes"
       ;;
     openbsd)
       printf '%s\n' "curl git bash gmake cmake ninja libxml libxslt icu4c avahi gnutls libffi jpeg tiff png cairo gnustep-make gnustep-base gnustep-gui gnustep-back gnustep-libobjc2"
