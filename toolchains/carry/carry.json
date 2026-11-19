@@ -8,6 +8,9 @@
       "msys2_package": "mingw-w64-clang-x86_64-gnustep-base",
       "outputs": [
         "clang64/bin/gnustep-base-*.dll"
+      ],
+      "platforms": [
+        "windows-amd64-msys2-clang64"
       ]
     },
     "libs-gui/msys2-0.32.0": {
@@ -16,6 +19,9 @@
       "msys2_package": "mingw-w64-clang-x86_64-gnustep-gui",
       "outputs": [
         "clang64/bin/gnustep-gui-*.dll"
+      ],
+      "platforms": [
+        "windows-amd64-msys2-clang64"
       ]
     },
     "libs-back/msys2-0.32.0": {
@@ -25,6 +31,23 @@
       "outputs": [
         "clang64/lib/GNUstep/Bundles/libgnustep-back-*.bundle/*.dll",
         "clang64/bin/gpbs.exe"
+      ],
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ]
+    },
+    "libs-gui/linux-7892137b": {
+      "library": "libs-gui",
+      "stock": "the Linux managed toolchains' source-built libs-gui at the pin 7892137bdedd007eba8425f766e41481ddb4fda6 (toolchains/linux-*/source-lock.json)",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "outputs": [
+        "Local/Library/Libraries/libgnustep-gui.so.*"
       ]
     }
   },
@@ -468,6 +491,55 @@
       "owner": "markdown-viewer-windows",
       "verified_by": "ObjcMarkdown #94, shipped in its MSI",
       "applies_after": "the stock recipe's 11 patches (toolchains/windows-amd64-msys2-clang64/gnustep-base-package)"
+    },
+    {
+      "id": "gui-theme-live-switch-linux",
+      "library": "libs-gui",
+      "base": "linux-7892137b",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-gui/linux-7892137b/0001-GSTheme-capture-override-originals-at-activation.patch",
+      "sha256": "9dd374fb1f76db25774f1ca46ae470a27f91e83118f1bb29f7a535f5d859ac58",
+      "summary": "GSTheme: record a theme's override originals at activation, so a live switch between two themes no longer recurses until the stack overflows",
+      "source": "the same bytes as Windows carry gui-theme-live-switch (libs-gui/msys2-0.32.0/0004): Source/GSTheme.m is identical in 0.32.0 and the Linux pin 7892137b",
+      "upstream": "master fix proposed as libs-gui #100 (8c285f3), awaiting review, not posted; the 0.32 backport is local (gnustep's e6fd411ab gives the same GSTheme.m, blob 993eb03a)",
+      "defaults": [],
+      "abi": "none expected (GSTheme.m internals only)",
+      "requested_by": [
+        "WinUITheme",
+        "Adwaita"
+      ],
+      "owner": "gnustep",
+      "verified_by": "applies to 7892137b (git apply --check); its Tests/gui/GSTheme/liveSwitch.m runs on stock (expected to fail) and patched (expected to pass) in linux-carry-layer.yml"
+    },
+    {
+      "id": "gui-command-key-bindings-linux",
+      "library": "libs-gui",
+      "base": "linux-7892137b",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-gui/linux-7892137b/0002-NSInputManager-parse-and-match-the-Command-modifier.patch",
+      "sha256": "724ea8342f4027beb9c81781b18c94594cb4a9ea2b7f7cbb63efbc9b2a20c5e9",
+      "summary": "NSInputManager: parse \"Command\"/\"Cmd\" in key bindings and keep NSCommandKeyMask when matching, so gnustep-packager's Ctrl-to-Command word moves (CommandWordMoves.dict) fire",
+      "source": "danjboyd/libs-gui 543628d9 (tag gnustep-swift-2026-11-03b), git format-patch; the patch of the closed PR #33, moved to the layer on Dan's decision (ask #8718); Source/NSInputManager.m is identical in 0.32.0 and 7892137b",
+      "upstream": "not sent; gnustep/libs-gui master 1b4e125c (2026-11-15) has no equivalent",
+      "defaults": [],
+      "abi": "none expected (NSInputManager.m internals only)",
+      "requested_by": [
+        "gnustep-packager"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "applies to 7892137b after 0001 (git apply --check); its Tests/gui/NSInputManager/commandBindings.m runs on stock and patched in linux-carry-layer.yml"
     }
   ]
 }

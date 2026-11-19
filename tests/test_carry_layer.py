@@ -19,6 +19,7 @@ from gnustep_cli_shared.carry_layer import (
     layer_files,
     layer_manifest,
     load_carry,
+    parse_nm_exports,
     parse_objdump_exports,
     patches_for,
     write_layer,
@@ -101,8 +102,21 @@ class CarryJsonTests(unittest.TestCase):
         data = load_carry(ROOT / "toolchains" / "carry" / "carry.json")
         self.assertTrue(data["patches"])
         self.assertTrue(carry_layer.layer_outputs(data))
+        bases = data["bases"]
         for entry in data["patches"]:
-            self.assertIn("windows-amd64-msys2-clang64", entry["platforms"])
+            # A patch is built only for the platforms of its base.
+            base = bases[f"{entry['library']}/{entry['base']}"]
+            self.assertTrue(set(entry["platforms"]) <= set(base["platforms"]), entry["id"])
+        self.assertEqual(carry_layer.layer_outputs(data, "linux-amd64-clang"), ["Local/Library/Libraries/libgnustep-gui.so.*"])
+        self.assertNotIn("Local/Library/Libraries/libgnustep-gui.so.*", carry_layer.layer_outputs(data, "windows-amd64-msys2-clang64"))
+        linux = [p["id"] for p in data["patches"] if "linux-amd64-clang" in p["platforms"]]
+        self.assertEqual(linux, ["gui-theme-live-switch-linux", "gui-command-key-bindings-linux"])
+
+    def test_bases_without_platforms_count_for_every_target(self):
+        data = {"bases": {"a/x": {"outputs": ["a"]}, "b/y": {"platforms": ["linux-amd64-clang"], "outputs": ["b"]}}}
+        self.assertEqual(carry_layer.layer_outputs(data, "windows-amd64-msys2-clang64"), ["a"])
+        self.assertEqual(carry_layer.layer_outputs(data, "linux-amd64-clang"), ["a", "b"])
+        self.assertEqual(carry_layer.layer_outputs(data), ["a", "b"])
 
 
 class LayerFilesTests(unittest.TestCase):
@@ -169,6 +183,28 @@ class LayerFilesTests(unittest.TestCase):
 class AbiTests(unittest.TestCase):
     def test_export_table_names_are_read_from_objdump_output(self):
         self.assertEqual(parse_objdump_exports(OBJDUMP_EXPORTS), {"GSBackendClass", "_OBJC_CLASS_WIN32Server", "__objc_class_name_WIN32Server"})
+
+    def test_dynamic_symbols_are_read_from_nm_output(self):
+        text = """0000000000123a40 T GSBackendClass
+0000000000456b00 D _OBJC_CLASS_NSInputManager
+                 U objc_msgSend
+                 w __gmon_start__
+0000000000000000 A GNUSTEP_GUI_0.32
+0000000000789c00 T NSApplicationMain@@GNUSTEP_GUI_0.32
+"""
+        self.assertEqual(parse_nm_exports(text), {"GSBackendClass", "_OBJC_CLASS_NSInputManager", "GNUSTEP_GUI_0.32", "NSApplicationMain"})
+
+    def test_a_shared_object_needs_nm_and_a_dll_needs_objdump(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stock = Path(tmp)
+            so = {"path": "Local/Library/Libraries/libgnustep-gui.so.0.32.0", "stock_sha256": "x", "source": str(stock / "p.so")}
+            dll = {"path": "clang64/bin/gnustep-gui-0.dll", "stock_sha256": "x", "source": str(stock / "p.dll")}
+            with self.assertRaisesRegex(CarryError, "needs --nm"):
+                carry_layer.abi_report("llvm-objdump", stock, [so])
+            with self.assertRaisesRegex(CarryError, "needs --objdump"):
+                carry_layer.abi_report(None, stock, [dll], nm="nm")
+            # A new file (no stock) and a non-library are not compared.
+            self.assertEqual(carry_layer.abi_report(None, stock, [dict(so, stock_sha256=None), {"path": "a.txt", "stock_sha256": "x", "source": "a"}]), {})
 
     def test_a_removed_export_fails_and_an_added_one_is_reported(self):
         stock = {"a", "b"}
