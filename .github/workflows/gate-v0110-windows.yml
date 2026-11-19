@@ -1,12 +1,12 @@
-name: Gate v0.1.9 Windows update checks (temporary; never merged)
+name: Gate v0.1.10 Windows update checks (temporary; never merged)
 
-# v0.1.9 release checks (Dan's ask #8455: build, stage and test; no publishing), on fresh
-# GitHub runners as for v0.1.8. A (+A0, C2, C) and B+N run on separate runners, so neither
+# v0.1.10 release checks (Dan's ask #8942: build, stage and test; no publishing), on fresh
+# GitHub runners as for v0.1.9. A (+A0, C2, C) and B+N run on separate runners, so neither
 # runs short of disk. Runs only on pushes to this temporary branch.
 
 on:
   push:
-    branches: [gate-v019-windows]
+    branches: [gate-v0110-windows]
 
 permissions:
   contents: read
@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # A: a v0.1.8 install upgraded to the staged 0.1.9 by its own 0.1.8 CLI (v0.1.8 fixed
+        # A: a v0.1.9 install upgraded to the staged 0.1.10 by its own 0.1.9 CLI (v0.1.9 fixed
         # Windows upgrades, #77, so this is the path existing users take). BN: v0.1.5 to Latest.
         gate: [A, BN]
     name: update gates ${{ matrix.gate }}
@@ -108,7 +108,7 @@ jobs:
           }
           Get-ChildItem C:\gnustep-smoke\release-new | Format-Table Name, Length
 
-      - name: Manifests X (0.1.9, as staged plus the chosen CLI zip) and Y (same artifacts as 0.1.10)
+      - name: Manifests X (0.1.10, as staged plus the chosen CLI zip) and Y (same artifacts as 0.1.11)
         shell: bash
         run: |
           python - <<'PY2'
@@ -127,11 +127,11 @@ jobs:
                   rt["sha256"] = tc[rt["artifact_id"]]["sha256"]
           json.dump(m, open(os.path.join(d, "release-manifest.s-x.json"), "w"), indent=2)
           y = copy.deepcopy(m)
-          y["releases"][0]["version"] = "0.1.10"
+          y["releases"][0]["version"] = "0.1.11"
           for a in y["releases"][0]["artifacts"]:
-              a["version"] = "0.1.10"
+              a["version"] = "0.1.11"
               if isinstance(a.get("requires_toolchain"), dict):
-                  a["requires_toolchain"]["version"] = "0.1.10"
+                  a["requires_toolchain"]["version"] = "0.1.11"
           y["metadata_version"] = int(m.get("metadata_version") or 1) + 1
           # Keep X's generated_at: an earlier fixed date makes the CLI refuse Y as older.
           json.dump(y, open(os.path.join(d, "release-manifest.s-y.json"), "w"), indent=2)
@@ -167,7 +167,7 @@ jobs:
 
   variant:
     # The patch layer on the staged release: bootstrap --variant patched, stock <-> patched
-    # round trip (byte-identical stock tree), update to the same artifacts relabelled 0.1.10
+    # round trip (byte-identical stock tree), update to the same artifacts relabelled 0.1.11
     # keeps the variant. The same script as windows-carry-layer.yml's gate, on staged bytes.
     if: ${{ contains(github.event.head_commit.message, '[variant]') }}
     name: patch layer variant gate on the staged release
@@ -176,7 +176,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Staged release, manifests X (0.1.9 as staged) and Y (0.1.10), the stamped bootstrap
+      - name: Staged release, manifests X (0.1.10 as staged) and Y (0.1.11), the stamped bootstrap
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -193,11 +193,11 @@ jobs:
           m = json.load(open(os.path.join(d, "release-manifest.json")))
           json.dump(m, open(os.path.join(d, "release-manifest.x.json"), "w"), indent=2)
           y = copy.deepcopy(m)
-          y["releases"][0]["version"] = "0.1.10"
+          y["releases"][0]["version"] = "0.1.11"
           for a in y["releases"][0]["artifacts"]:
-              a["version"] = "0.1.10"
+              a["version"] = "0.1.11"
               if isinstance(a.get("requires_toolchain"), dict):
-                  a["requires_toolchain"]["version"] = "0.1.10"
+                  a["requires_toolchain"]["version"] = "0.1.11"
           y["metadata_version"] = int(m.get("metadata_version") or 1) + 1
           json.dump(y, open(os.path.join(d, "release-manifest.y.json"), "w"), indent=2)
           print([a["id"] for a in m["releases"][0]["artifacts"] if "windows" in a["id"]])
@@ -223,7 +223,7 @@ jobs:
 
   smoke-tier1:
     # The release's Windows smoke (tier1-core: install, new/build/run, Gorm, update
-    # scenarios) and the Arlen install/remove check, as on the v0.1.9 lease, run as a
+    # scenarios) and the Arlen install/remove check, as on the v0.1.10 lease, run as a
     # standard (non-admin) local user through a scheduled task, like the lease's S4U task.
     if: ${{ contains(github.event.head_commit.message, '[smoke]') }}
     name: tier1 smoke + Arlen check (non-admin user)
@@ -300,13 +300,13 @@ jobs:
           $probe = Run-AsUser 'gnustep-v018-probe' "whoami /groups > $g\probe.txt" 3 "$g\probe-exit.txt"
           if (-not (Test-Path "$g\probe.txt")) { throw "scheduled task as $user never ran (probe exit: $probe)" }
           Get-Content "$g\probe.txt" | Select-String -Pattern 'Mandatory Label|Administrators|Performance Log'
-          $smokeCmd = "& $g\windows-full-release-smoke.ps1 -ReleaseSource v0.1.9-stage-$STAGE_RUN_ID -SuiteId tier1-core -RunnerId github-windows-latest-${env:GITHUB_RUN_ID}-nonadmin *> $g\smoke-run.log"
+          $smokeCmd = "& $g\windows-full-release-smoke.ps1 -ReleaseSource v0.1.10-stage-$STAGE_RUN_ID -SuiteId tier1-core -RunnerId github-windows-latest-${env:GITHUB_RUN_ID}-nonadmin *> $g\smoke-run.log"
           $smoke = Run-AsUser 'gnustep-v018-smoke' $smokeCmd 180 "$g\smoke-exit.txt"
           $arlen = Run-AsUser 'gnustep-v018-arlen' "& $g\arlen\arlen-check.ps1" 60 "$g\arlen-exit.txt"
           $report = Get-Content "$g\windows-full-release-report.json" -Raw -Encoding utf8 | ConvertFrom-Json
           Write-Output "report overall_ok=$($report.overall_ok) status=$($report.status)"
           Get-Content "$g\arlen-check\arlen-check.txt"
-          # Same pass criteria as the v0.1.8/v0.1.9 lease runs (arlen --help exits 2 there); elevation is recorded, not required.
+          # Same pass criteria as the v0.1.9/v0.1.10 lease runs (arlen --help exits 2 there); elevation is recorded, not required.
           $arlenText = Get-Content "$g\arlen-check\arlen-check.txt" -Raw
           $arlenOk = ($arlenText -match 'tampered list exit=\d+ refused=True') -and ($arlenText -match 'install ok=True') -and ($arlenText -match 'arlen.cmd --help exit [02]\b') -and ($arlenText -match 'boomhauer.cmd --help exit 0') -and ($arlenText -match 'remove exit=0') -and ($arlenText -match 'leftovers: pkg=False arlen.cmd=False boomhauer.cmd=False')
           Write-Output "arlen check ok=$arlenOk"
@@ -326,7 +326,7 @@ jobs:
             C:\gnustep-smoke\*.txt
 
   toolchain-smoke:
-    # v0.1.8's windows-toolchain-smoke-check (post-checks.ps1 + smoke-toolchain.sh: gdnc,
+    # v0.1.9's windows-toolchain-smoke-check (post-checks.ps1 + smoke-toolchain.sh: gdnc,
     # TLS inside and outside the toolchain's bash) on a fresh install of the staged release,
     # as a standard local user.
     if: ${{ contains(github.event.head_commit.message, '[toolsmoke]') }}
@@ -411,7 +411,7 @@ jobs:
           Get-Content "$g\toolsmoke-install.txt" -Tail 5
           $ver = (Get-Content "$g\install-full-toolsmoke\state\cli-state.json" -Raw | ConvertFrom-Json).cli_version
           Write-Output "install exit $ic version $ver"
-          if ($ver -ne '0.1.9') { throw 'staged install failed' }
+          if ($ver -ne '0.1.10') { throw 'staged install failed' }
           $pc = Run-AsUser 'gnustep-v018-post' "& $g\post-checks.ps1" 60 "$g\post-exit.txt"
           Get-Content "$g\post\post-checks.txt"
           $t = Get-Content "$g\post\post-checks.txt" -Raw

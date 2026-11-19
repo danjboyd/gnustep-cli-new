@@ -1,6 +1,6 @@
 # Gate S: a managed Windows root updates ITSELF (`gnustep update` from its own bin), through the
-# root-moving (non-pointer-only) upgrade path. Manifest X (0.1.9) installs; manifest Y is the same
-# artifacts relabelled 0.1.10. Both are signed with a throwaway P-256 key trusted only for these
+# root-moving (non-pointer-only) upgrade path. Manifest X (0.1.10) installs; manifest Y is the same
+# artifacts relabelled 0.1.11. Both are signed with a throwaway P-256 key trusted only for these
 # commands. -Expect pass for the PR #77 CLI; -Expect fail for the unfixed control CLI.
 param(
   [string]$Dir = 'C:\gnustep-smoke\release-new',
@@ -52,7 +52,7 @@ $bsCode = $LASTEXITCODE
 Clear-Trust
 $results.install = [ordered]@{ exit = $bsCode; version = (State-Version $root) }
 Say "install X: exit $bsCode version $(State-Version $root); $(Free-GB) GB free"
-if ((State-Version $root) -ne '0.1.9') { Say 'STOP: install X did not produce 0.1.9'; $results.S = [ordered]@{ ok = $false; not_run = 'install failed' } }
+if ((State-Version $root) -ne '0.1.10') { Say 'STOP: install X did not produce 0.1.10'; $results.S = [ordered]@{ ok = $false; not_run = 'install failed' } }
 else {
   # The root's own CLI updates the root, with the root on PATH as after `. GNUstep.ps1`.
   $env:PATH = "$root\usr\bin;$root\bin;$root\clang64\bin;" + $basePath
@@ -80,10 +80,10 @@ else {
     $integrity = (@($doc.checks) | Where-Object { $_.id -eq 'managed.install.integrity' } | Select-Object -First 1).status
     $mroot = (@($doc.checks) | Where-Object { $_.id -eq 'native-toolchain.assess' } | Select-Object -First 1).details.managed_root
   } catch { Say "doctor parse error: $($_.Exception.Message)" }
-  $passed = ($sCode -eq 0 -and $verAfter -eq '0.1.10' -and $current -eq '0.1.10' -and (Test-Path "$root\releases\0.1.10\bin\gnustep.exe") -and $smokeOk -and $verCode -eq 0 -and $integrity -eq 'ok' -and $mroot -and (($mroot -replace '/', '\').TrimEnd('\') -ieq $root))
+  $passed = ($sCode -eq 0 -and $verAfter -eq '0.1.11' -and $current -eq '0.1.11' -and (Test-Path "$root\releases\0.1.11\bin\gnustep.exe") -and $smokeOk -and $verCode -eq 0 -and $integrity -eq 'ok' -and $mroot -and (($mroot -replace '/', '\').TrimEnd('\') -ieq $root))
   $results.S = [ordered]@{ exit = $sCode; version_after = $verAfter; current = $current; smoke_ok = $smokeOk; smoke_failed = $smokeFailed; launcher_version_exit = $verCode; launcher_version = $verOut; doctor_exit = $docCode; integrity = $integrity; managed_root = $mroot; passed = $passed }
-  Say "S: exit $sCode 0.1.9 -> $verAfter current=$current smoke_ok=$smokeOk smoke_failed=$smokeFailed launcher=$verCode/$verOut integrity=$integrity managed_root=$mroot passed=$passed"
-  $results.S.ok = $(if ($Expect -eq 'pass') { $passed } else { (-not $passed) -and $smokeFailed -and $verAfter -eq '0.1.9' })
+  Say "S: exit $sCode 0.1.10 -> $verAfter current=$current smoke_ok=$smokeOk smoke_failed=$smokeFailed launcher=$verCode/$verOut integrity=$integrity managed_root=$mroot passed=$passed"
+  $results.S.ok = $(if ($Expect -eq 'pass') { $passed } else { (-not $passed) -and $smokeFailed -and $verAfter -eq '0.1.10' })
 }
 $results | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $out 'gate-s.json') -Encoding utf8
 Say "expect=$Expect ok=$($results.S.ok)"

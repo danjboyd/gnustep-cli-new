@@ -1,8 +1,8 @@
-name: Gate v0.1.9 tools-xctest qualification (temporary; never merged)
+name: Gate v0.1.10 tools-xctest qualification (temporary; never merged)
 
-# Dan's ask #8455 (build, stage and test v0.1.9; no publishing). On each of the six targets,
-# with the STAGED v0.1.9 CLI and toolchain (stage-release run in .github/gate/config.env):
-# install tools-xctest 0.8.1 (the exact package bytes the v0.1.9 index will list) from a
+# Dan's ask #8942 (build, stage and test v0.1.10; no publishing). On each of the six targets,
+# with the STAGED v0.1.10 CLI and toolchain (stage-release run in .github/gate/config.env):
+# install tools-xctest 0.8.1 (the exact package bytes the v0.1.10 index will list) from a
 # throwaway-signed index, build and `make check` a sample XCTest bundle through the packaged
 # xctest.make, check a failing test fails, run xctest-bundle, then remove and check nothing
 # is left. Linux runs as an unprivileged user in the target's distro container; Windows as a
@@ -10,7 +10,7 @@ name: Gate v0.1.9 tools-xctest qualification (temporary; never merged)
 
 on:
   push:
-    branches: [gate-v019-windows]
+    branches: [gate-v0110-windows]
 
 permissions:
   contents: read
@@ -41,7 +41,7 @@ jobs:
         with:
           name: gnustep-staged-release
           path: /qual/stage
-          run-id: "44386009191"
+          run-id: "44632748996"
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: The tools-xctest package
         uses: actions/download-artifact@v4
@@ -54,7 +54,7 @@ jobs:
         run: |
           set -eu
           . ./.github/gate/config.env
-          test "$STAGE_RUN_ID" = 44386009191
+          test "$STAGE_RUN_ID" = 44632748996
           cd /qual/stage && sha256sum -c SHA256SUMS --ignore-missing
           mkdir -p /qual/cli /qual/xctest
           cp /qual/stage/gnustep-cli-${{ matrix.target }}-$VERSION.tar.gz /qual/stage/gnustep-toolchain-${{ matrix.target }}-$VERSION.tar.gz /qual/cli/
