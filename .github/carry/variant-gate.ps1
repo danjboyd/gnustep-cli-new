@@ -1,6 +1,6 @@
 # Windows gate for the patch layer's CLI side (docs/specs/patch-layer.md).
 # Runs under Windows PowerShell 5.1 on a GitHub runner, against a release staged by
-# windows-carry-layer.yml: X (0.1.9) and Y (0.1.10, the same artifacts relabelled), each with
+# windows-carry-layer.yml: X (0.1.10) and Y (0.1.11, the same artifacts relabelled), each with
 # cli, toolchain and carry-layer artifacts, signed with a throwaway key trusted only here.
 #   1. bootstrap `setup --variant patched` installs stock, then the CLI applies the layer;
 #   2. every layer file is patched, and doctor reports managed.toolchain.variant ok/patched;
@@ -133,7 +133,7 @@ else {
     -and $results.to_stock.exit -eq 0 -and $results.to_stock.files -eq 'stock' -and $results.to_stock.doctor -eq 'ok/stock' -and $results.record_removed `
     -and $results.to_patched.exit -eq 0 -and $results.to_patched.files -eq 'patched' -and $results.to_patched.doctor -eq 'ok/patched' `
     -and $results.to_stock_again.exit -eq 0 -and $results.stock_tree_identical -and $results.patched_tree_differs `
-    -and $results.update.exit -eq 0 -and $results.update.files -eq 'patched' -and $results.update.doctor -eq 'ok/patched' -and $results.update_version -eq '0.1.10')
+    -and $results.update.exit -eq 0 -and $results.update.files -eq 'patched' -and $results.update.doctor -eq 'ok/patched' -and $results.update_version -eq '0.1.12')
 }
 $results.ok = $ok
 $results | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $out 'variant-gate.json') -Encoding ASCII

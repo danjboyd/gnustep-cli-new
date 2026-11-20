@@ -1,0 +1,2 @@
+# Byte-exact fixtures: the manifest pins the index sha256 and signs the manifest bytes.
+* -text

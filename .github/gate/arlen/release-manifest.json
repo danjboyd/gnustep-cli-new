@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "channel": "stable",
+  "generated_at": "2026-01-01T00:00:00Z",
+  "releases": [
+    {
+      "version": "0.0.0-qualification",
+      "status": "active",
+      "artifacts": [
+        {
+          "id": "package-index-stable",
+          "kind": "package-index",
+          "format": "json",
+          "filename": "package-index.json",
+          "sha256": "dcdf2258eee5ebaac73b973e82eceb2ac0cde7be7f3440d8ff4317accb438546",
+          "size": 25410
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,308 @@
+param(
+  [string]$ReleaseSource = 'final-staged-0.1.0-25342971361',
+  [string]$SuiteId = 'release',
+  [string]$RunnerId = 'otvm-lease'
+)
+
+$ErrorActionPreference = 'Stop'
+# The smoke installs into a throwaway root; keep bootstrap from repointing the
+# host's persistent user PATH, GNUSTEP_MAKEFILES and GNUSTEP_CONFIG_FILE at it.
+$env:GNUSTEP_BOOTSTRAP_SKIP_PATH_UPDATE = '1'
+
+$runId = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+$root = "C:\gnustep-smoke\install-full-$runId"
+$work = "C:\gnustep-smoke\work-full-$runId"
+$oldManifest = 'C:\gnustep-smoke\release-old\release-manifest.json'
+$newManifest = 'C:\gnustep-smoke\release-new\release-manifest.json'
+$bootstrap = 'C:\gnustep-smoke\bootstrap\gnustep-bootstrap.ps1'
+$patch = 'C:\gnustep-smoke\fixtures\gorm-1_5_0-windows-private-ivar.patch'
+$reportPath = 'C:\gnustep-smoke\windows-full-release-report.json'
+$evidencePath = 'C:\gnustep-smoke\windows-full-release-evidence.json'
+$oldFixtureManifest = 'C:\gnustep-smoke\release-old-fixture\release-manifest.json'
+$newCliOnlyManifest = 'C:\gnustep-smoke\release-new-cli-only\release-manifest.json'
+$scenarioReports = @()
+$evidence = [ordered]@{}
+
+function Invoke-SmokeCommand {
+  param(
+    [Parameter(Mandatory=$true)][string]$Id,
+    [Parameter(Mandatory=$true)][scriptblock]$Block
+  )
+  try {
+    $result = & $Block
+    $script:evidence[$Id] = [ordered]@{ ok = $true; result = $result }
+    return $true
+  } catch {
+    $script:evidence[$Id] = [ordered]@{
+      ok = $false
+      error = $_.Exception.Message
+      category = $_.CategoryInfo.ToString()
+    }
+    return $false
+  }
+}
+
+function Add-Scenario {
+  param(
+    [Parameter(Mandatory=$true)][string]$Id,
+    [Parameter(Mandatory=$true)][bool]$Ok,
+    [Parameter(Mandatory=$true)][string[]]$Assertions,
+    [string]$Summary = ''
+  )
+  $script:scenarioReports += [ordered]@{
+    scenario_id = $Id
+    ok = $Ok
+    status = if ($Ok) { 'passed' } else { 'failed' }
+    summary = if ($Summary) { $Summary } elseif ($Ok) { "$Id passed." } else { "$Id failed." }
+    assertion_results = @($Assertions | ForEach-Object {
+      [ordered]@{
+        assertion_id = $_
+        ok = $Ok
+        message = if ($Ok) { "$_ passed." } else { "$_ was not proven." }
+      }
+    })
+    step_results = @()
+    command_transcripts = @()
+    evidence = @{}
+  }
+}
+
+New-Item -ItemType Directory -Force $work | Out-Null
+
+Remove-Item -Recurse -Force 'C:\gnustep-smoke\release-old-fixture' -ErrorAction SilentlyContinue
+Copy-Item -Recurse 'C:\gnustep-smoke\release-old' 'C:\gnustep-smoke\release-old-fixture'
+$oldFixture = Get-Content $oldFixtureManifest -Raw | ConvertFrom-Json
+$oldFixture.releases[0].version = '0.0.9-windows-update-fixture'
+foreach ($artifact in $oldFixture.releases[0].artifacts) {
+  $artifact.version = '0.0.9-windows-update-fixture'
+}
+# When old and new stage the same CLI zip there is nothing to update. Give the
+# fixture's CLI distinct bytes: the same zip plus one marker entry, so the
+# bootstrap/new/build/run/Gorm scenarios still exercise the release's own
+# gnustep.exe while update cli has a real CLI layer to download.
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$fixtureCliArtifact = @($oldFixture.releases[0].artifacts | Where-Object { $_.kind -eq 'cli' -and $_.os -eq 'windows' })[0]
+$fixtureCliSource = Join-Path 'C:\gnustep-smoke\release-old-fixture' ([System.IO.Path]::GetFileName($fixtureCliArtifact.url))
+$fixtureCliName = 'gnustep-cli-windows-amd64-msys2-clang64-0.0.9-windows-update-fixture.zip'
+$fixtureCliPath = Join-Path 'C:\gnustep-smoke\release-old-fixture' $fixtureCliName
+Copy-Item -Force $fixtureCliSource $fixtureCliPath
+$fixtureZip = [System.IO.Compression.ZipFile]::Open($fixtureCliPath, [System.IO.Compression.ZipArchiveMode]::Update)
+try {
+  $marker = New-Object System.IO.StreamWriter($fixtureZip.CreateEntry('bin/windows-update-fixture.txt').Open())
+  try { $marker.Write('0.0.9-windows-update-fixture') } finally { $marker.Dispose() }
+} finally {
+  $fixtureZip.Dispose()
+}
+$fixtureCliSha = (Get-FileHash -Algorithm SHA256 $fixtureCliPath).Hash.ToLowerInvariant()
+$fixtureCliArtifact.url = ($fixtureCliArtifact.url -replace '[^/]+$', $fixtureCliName)
+$fixtureCliArtifact.sha256 = $fixtureCliSha
+if ($fixtureCliArtifact.PSObject.Properties['integrity']) { $fixtureCliArtifact.integrity.sha256 = $fixtureCliSha }
+if ($fixtureCliArtifact.PSObject.Properties['size']) { $fixtureCliArtifact.size = (Get-Item $fixtureCliPath).Length }
+$oldFixture | ConvertTo-Json -Depth 12 | Out-File -Encoding utf8 $oldFixtureManifest
+
+Remove-Item -Recurse -Force 'C:\gnustep-smoke\release-new-cli-only' -ErrorAction SilentlyContinue
+Copy-Item -Recurse 'C:\gnustep-smoke\release-new' 'C:\gnustep-smoke\release-new-cli-only'
+$oldManifestPayload = Get-Content $oldFixtureManifest -Raw | ConvertFrom-Json
+$newCliOnly = Get-Content $newCliOnlyManifest -Raw | ConvertFrom-Json
+$oldToolchain = @($oldManifestPayload.releases[0].artifacts | Where-Object { $_.kind -eq 'toolchain' -and $_.os -eq 'windows' })[0]
+$newArtifacts = @()
+foreach ($artifact in $newCliOnly.releases[0].artifacts) {
+  if ($artifact.kind -eq 'cli' -and $artifact.os -eq 'windows') {
+    $newArtifacts += $artifact
+  } elseif ($artifact.kind -eq 'toolchain' -and $artifact.os -eq 'windows') {
+    $oldToolchain | Add-Member -NotePropertyName reused -NotePropertyValue $true -Force
+    $newArtifacts += $oldToolchain
+  }
+}
+$newCliOnly.releases[0].artifacts = @($newArtifacts)
+$newCliOnly | ConvertTo-Json -Depth 12 | Out-File -Encoding utf8 $newCliOnlyManifest
+
+# Bootstrap and update both verify the manifest signature, and the fixture
+# manifests are rewritten copies, so sign them with a throwaway P-256 key and
+# trust only that. .NET does the signing because the host has no openssl until
+# the managed root is installed; the signature is DER-encoded like openssl's.
+function ConvertTo-DerInteger {
+  param([byte[]]$Bytes)
+  $index = 0
+  while ($index -lt $Bytes.Length - 1 -and $Bytes[$index] -eq 0) { $index++ }
+  $value = [byte[]]($Bytes[$index..($Bytes.Length - 1)])
+  if ($value[0] -band 0x80) { $value = [byte[]](@([byte]0) + $value) }
+  return ,([byte[]](@([byte]0x02, [byte]$value.Length) + $value))
+}
+$fixtureSigner = [System.Security.Cryptography.ECDsa]::Create([System.Security.Cryptography.ECCurve+NamedCurves]::nistP256)
+$fixtureQ = $fixtureSigner.ExportParameters($false).Q
+$fixtureSpki = [byte[]](0x30,0x59,0x30,0x13,0x06,0x07,0x2A,0x86,0x48,0xCE,0x3D,0x02,0x01,0x06,0x08,0x2A,0x86,0x48,0xCE,0x3D,0x03,0x01,0x07,0x03,0x42,0x00,0x04) + $fixtureQ.X + $fixtureQ.Y
+$fixtureTrustRoot = Join-Path $work 'fixture-trust-root.pem'
+"-----BEGIN PUBLIC KEY-----`n" + [Convert]::ToBase64String([byte[]]$fixtureSpki, 'InsertLineBreaks') + "`n-----END PUBLIC KEY-----`n" | Set-Content -Encoding ASCII -NoNewline $fixtureTrustRoot
+function Write-FixtureSignature {
+  param([string]$Path)
+  $raw = $fixtureSigner.SignData([System.IO.File]::ReadAllBytes($Path), [System.Security.Cryptography.HashAlgorithmName]::SHA256)
+  $body = (ConvertTo-DerInteger ([byte[]]$raw[0..31])) + (ConvertTo-DerInteger ([byte[]]$raw[32..63]))
+  [System.IO.File]::WriteAllBytes("$Path.sig", [byte[]](@([byte]0x30, [byte]$body.Length) + $body))
+}
+foreach ($fixtureManifest in @($oldFixtureManifest, $newCliOnlyManifest)) { Write-FixtureSignature $fixtureManifest }
+$env:RELEASE_TRUST_ROOT = $fixtureTrustRoot
+
+$bootstrapOk = Invoke-SmokeCommand 'bootstrap-install' {
+  # A tampered manifest must be refused before anything is downloaded.
+  $tamperedDir = Join-Path $work 'tampered-manifest'
+  New-Item -ItemType Directory -Force $tamperedDir | Out-Null
+  $tamperedManifest = Join-Path $tamperedDir 'release-manifest.json'
+  (Get-Content $oldFixtureManifest -Raw).Replace('0.0.9-windows-update-fixture', '9.9.9-tampered') | Set-Content -Encoding UTF8 -NoNewline $tamperedManifest
+  Copy-Item -Force "$oldFixtureManifest.sig" "$tamperedManifest.sig"
+  $tampered = (& $bootstrap --json setup --root (Join-Path $work 'tampered-root') --manifest $tamperedManifest | Out-String) | ConvertFrom-Json
+  if ($tampered.ok -or $tampered.trust.verified -ne $false) { throw "bootstrap accepted a tampered release manifest: $($tampered.summary)" }
+  & $bootstrap --json setup --root $root --manifest $oldFixtureManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-setup.json'
+  $setup = Get-Content 'C:\gnustep-smoke\full-setup.json' -Raw | ConvertFrom-Json
+  if (-not $setup.ok) { throw "bootstrap setup failed: $($setup.summary)" }
+  $exe = Join-Path $root 'bin\gnustep.exe'
+  if (-not (Test-Path $exe)) { throw "gnustep.exe was not installed at $exe" }
+  & $exe --version | Out-File -Encoding utf8 'C:\gnustep-smoke\full-version-before.txt'
+  & $exe --help | Out-File -Encoding utf8 'C:\gnustep-smoke\full-help.txt'
+  & $exe --json doctor --manifest $oldFixtureManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-doctor.json'
+  $doctor = Get-Content 'C:\gnustep-smoke\full-doctor.json' -Raw | ConvertFrom-Json
+  if ($doctor.command -ne 'doctor') { throw 'doctor JSON command metadata was not doctor' }
+  if ($doctor.environment_classification -eq 'toolchain_incompatible') { throw "doctor misclassified the managed toolchain as incompatible: $($doctor.summary)" }
+  @{ version = (Get-Content 'C:\gnustep-smoke\full-version-before.txt' -Raw).Trim(); doctor_status = $doctor.status; doctor_classification = $doctor.environment_classification }
+}
+Add-Scenario 'bootstrap-install-usable-cli' $bootstrapOk @(
+  'bootstrap-command-succeeds',
+  'installed-gnustep-exists',
+  'gnustep-help-succeeds',
+  'gnustep-version-succeeds',
+  'doctor-json-command-metadata-is-doctor'
+)
+
+$exe = Join-Path $root 'bin\gnustep.exe'
+$newProjectOk = $false
+if ($bootstrapOk) {
+  $newProjectOk = Invoke-SmokeCommand 'new-cli-project-build-run' {
+    $project = Join-Path $work 'HelloSmoke'
+    & $exe --json new cli-tool $project --name HelloSmoke | Out-File -Encoding utf8 'C:\gnustep-smoke\full-new-cli-project.json'
+    $newPayload = Get-Content 'C:\gnustep-smoke\full-new-cli-project.json' -Raw | ConvertFrom-Json
+    if (-not $newPayload.ok) { throw "gnustep new failed: $($newPayload.summary)" }
+    Push-Location $project
+    try {
+      & $exe --json build | Out-File -Encoding utf8 'C:\gnustep-smoke\full-new-cli-build.json'
+      $buildPayload = Get-Content 'C:\gnustep-smoke\full-new-cli-build.json' -Raw | ConvertFrom-Json
+      if (-not $buildPayload.ok) { throw "gnustep build failed: $($buildPayload.summary)" }
+      & $exe run | Out-File -Encoding utf8 'C:\gnustep-smoke\full-new-cli-run.txt'
+      $runText = Get-Content 'C:\gnustep-smoke\full-new-cli-run.txt' -Raw
+      if ($runText -notmatch 'Hello from CLI tool') { throw "run output did not contain expected text: $runText" }
+    } finally {
+      Pop-Location
+    }
+    @{ project = $project; run_output = (Get-Content 'C:\gnustep-smoke\full-new-cli-run.txt' -Raw).Trim() }
+  }
+}
+Add-Scenario 'new-cli-project-build-run' $newProjectOk @(
+  'new-command-succeeds',
+  'build-command-succeeds',
+  'run-command-succeeds',
+  'sample-output-matches-expected-text'
+)
+
+$gormOk = $false
+if ($bootstrapOk) {
+  $gormOk = Invoke-SmokeCommand 'gorm-build-run' {
+    $gormRoot = Join-Path $work 'apps-gorm'
+    $gormArchive = Join-Path $work 'apps-gorm-1_5_0.tar.gz'
+    Invoke-WebRequest -Uri 'https://github.com/gnustep/apps-gorm/archive/refs/tags/gorm-1_5_0.tar.gz' -OutFile $gormArchive
+    tar -xzf $gormArchive -C $work
+    $expanded = Get-ChildItem -Path $work -Directory | Where-Object { $_.Name -like 'apps-gorm-*' } | Select-Object -First 1
+    if ($null -eq $expanded) { throw 'Gorm source directory was not expanded.' }
+    Move-Item -Path $expanded.FullName -Destination $gormRoot
+    Push-Location $gormRoot
+    try {
+      $editor = Join-Path $gormRoot 'GormCore\GormResourceEditor.m'
+      $text = Get-Content $editor -Raw
+      $text = [regex]::Replace($text, "(?m)^- \\(BOOL \\*\\*\\) _selectedCells;\\r?\\n", '')
+      $text = [regex]::Replace($text, "(?s)- \\(BOOL \\*\\*\\) _selectedCells\\r?\\n\\{\\r?\\n  return _selectedCells;\\r?\\n\\}\\r?\\n\\r?\\n", '')
+      $text = [regex]::Replace($text, "(?m)^  BOOL \\*\\*selectedCells = \\[self _selectedCells\\];\\r?\\n", '')
+      $text = [regex]::Replace($text, "(?m)^\\s*selectedCells\\[_selectedRow\\]\\[_selectedColumn\\] = NO;\\r?\\n", '')
+      $text = [regex]::Replace($text, "(?m)^\\s*selectedCells\\[row\\]\\[column\\] = YES;\\r?\\n", '')
+      Set-Content -Path $editor -Value $text -Encoding UTF8
+      & $exe --json build | Out-File -Encoding utf8 'C:\gnustep-smoke\full-gorm-build.json'
+      $buildPayload = Get-Content 'C:\gnustep-smoke\full-gorm-build.json' -Raw | ConvertFrom-Json
+      if (-not $buildPayload.ok) { throw "Gorm build failed: $($buildPayload.summary)" }
+      $process = Start-Process -FilePath $exe -ArgumentList @('run','--no-build') -PassThru -WindowStyle Hidden
+      Start-Sleep -Seconds 5
+      if ($process.HasExited) {
+        if ($process.ExitCode -ne 0) { throw "Gorm process exited early with code $($process.ExitCode)" }
+      } else {
+        Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+      }
+      # gnustep run leaves Gorm (under $work), gdnc and the MSYS2 shell (under $root) running.
+      Get-Process | Where-Object {
+        $_.Path -and ($_.Path.StartsWith($root, [StringComparison]::OrdinalIgnoreCase) -or
+                      $_.Path.StartsWith($work, [StringComparison]::OrdinalIgnoreCase))
+      } | Stop-Process -Force -ErrorAction SilentlyContinue
+    } finally {
+      Pop-Location
+    }
+    @{ gorm_root = $gormRoot; patch = $patch }
+  }
+}
+Add-Scenario 'gorm-build-run' $gormOk @(
+  'gorm-source-revision-is-pinned',
+  'gorm-build-succeeds',
+  'gorm-launch-succeeds',
+  'gorm-process-stays-alive-briefly'
+) 'gorm-build-run passed with pinned Windows fixture patch for private NSMatrix ivar access.'
+
+$updateOk = $false
+if ($bootstrapOk) {
+  $updateOk = Invoke-SmokeCommand 'self-update-cli-only' {
+    $shimDir = Join-Path $work 'shims'
+    New-Item -ItemType Directory -Force $shimDir | Out-Null
+    Set-Content -Path (Join-Path $shimDir 'unzip.cmd') -Encoding ASCII -Value @'
+@echo off
+setlocal
+if "%1"=="-q" shift
+set ARCHIVE=%1
+shift
+if "%1"=="-d" shift
+set DEST=%1
+powershell -NoProfile -Command "Expand-Archive -Force -LiteralPath '%ARCHIVE%' -DestinationPath '%DEST%'"
+'@
+    $env:PATH = "$shimDir;$root\usr\bin;$root\bin;$root\clang64\bin;" + $env:PATH
+    & $exe update cli --check --json --root $root --manifest $newCliOnlyManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-update-check.json'
+    $checkPayload = Get-Content 'C:\gnustep-smoke\full-update-check.json' -Raw | ConvertFrom-Json
+    if (-not $checkPayload.ok) { throw "update check failed: $($checkPayload.summary)" }
+    if (-not $checkPayload.plan.cli.update_available) { throw "update check did not detect the newer release: $($checkPayload.summary)" }
+    if ($checkPayload.plan.cli.layer_update_kind -ne 'cli_only') { throw "update plan is not CLI-only: $($checkPayload.plan.cli.layer_update_kind)" }
+    & $exe update cli --yes --json --root $root --manifest $newCliOnlyManifest | Out-File -Encoding utf8 'C:\gnustep-smoke\full-update-cli.json'
+    $updatePayload = Get-Content 'C:\gnustep-smoke\full-update-cli.json' -Raw | ConvertFrom-Json
+    if (-not $updatePayload.ok) { throw "update cli failed: $($updatePayload.summary)" }
+    if ($updatePayload.summary -notlike 'CLI update completed*') { throw "update summary does not describe a CLI-only update: $($updatePayload.summary)" }
+    & $exe --version | Out-File -Encoding utf8 'C:\gnustep-smoke\full-version-after.txt'
+    @{ update_summary = $updatePayload.summary; version = (Get-Content 'C:\gnustep-smoke\full-version-after.txt' -Raw).Trim() }
+  }
+}
+Add-Scenario 'self-update-cli-only' $updateOk @(
+  'update-check-detects-newer-release',
+  'update-plan-identifies-cli-only-layer',
+  'update-apply-succeeds',
+  'post-update-version-matches-target-release',
+  'post-update-build-run-smoke-succeeds'
+)
+
+$overallOk = -not (@($scenarioReports | Where-Object { -not $_.ok }).Count)
+$evidence | ConvertTo-Json -Depth 12 | Out-File -Encoding utf8 $evidencePath
+[ordered]@{
+  schema_version = 1
+  suite_id = $SuiteId
+  target_id = 'windows-amd64-msys2-clang64'
+  runner_id = $RunnerId
+  release_under_test = [ordered]@{
+    source = $ReleaseSource
+    old_manifest = $oldManifest
+    new_manifest = $newManifest
+  }
+  fixture_references = @('generated-cli-template-output', 'gorm-upstream-pinned', 'gorm-windows-private-ivar-patch', 'cli-only-update-channel')
+  overall_ok = $overallOk
+  scenario_reports = $scenarioReports
+  evidence = [ordered]@{ evidence_file = $evidencePath }
+} | ConvertTo-Json -Depth 12 | Out-File -Encoding utf8 $reportPath
+
+if (-not $overallOk) { exit 1 }
