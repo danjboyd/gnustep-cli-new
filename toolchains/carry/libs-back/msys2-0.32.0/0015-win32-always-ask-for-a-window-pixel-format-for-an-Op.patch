@@ -1,0 +1,40 @@
+From dee29d5d3dbc5e80fab7d9ccad272c0b106abf3e Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Fri, 20 Nov 2026 07:33:07 -0600
+Subject: [PATCH 15/15] win32: always ask for a window pixel format for an
+ OpenGL view
+
+The drawable is an NSOpenGLView's child window, but PFD_DRAW_TO_WINDOW was
+set only when the attributes included NSOpenGLPFAWindow.  Windows' generic
+OpenGL chose a format anyway; Mesa's opengl32 chooses none, and
+-_setDrawable: failed its assertion.  The flag is now always set.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AEr1tVPvzfTTffJFWFXGKi
+(cherry picked from commit 763ed092042cfde6a99b7cae68f5290f5fa22589)
+---
+ Source/win32/w32_GLformat.m | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/Source/win32/w32_GLformat.m b/Source/win32/w32_GLformat.m
+index a7bd51c..07d6368 100644
+--- a/Source/win32/w32_GLformat.m
++++ b/Source/win32/w32_GLformat.m
+@@ -251,10 +251,15 @@ static void attributesWGL2NS( LPPIXELFORMATDESCRIPTOR ppfd, NSOpenGLPixelFormatA
+ 
+ - (void) _setDrawable: (HDC) aDrawable
+ {
+-  // TODO : switch to wglChoosePixelFormatEXT 
++  // TODO : switch to wglChoosePixelFormatEXT
++
++  /* The drawable is always a window (an NSOpenGLView's child window), whether
++   * or not the attributes asked for NSOpenGLPFAWindow.  Some drivers (Mesa's
++   * opengl32) choose no format without PFD_DRAW_TO_WINDOW.  */
++  pfd.dwFlags |= PFD_DRAW_TO_WINDOW;
+ 
+   NSCAssert(
+-      wgl_pixelformat = ChoosePixelFormat(aDrawable, &pfd), 
++      wgl_pixelformat = ChoosePixelFormat(aDrawable, &pfd),
+       @"ChoosePixelFormat failed.");
+   NSCAssert(
+       SetPixelFormat(aDrawable, wgl_pixelformat, &pfd), 

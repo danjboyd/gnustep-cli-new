@@ -487,6 +487,26 @@
       "verified_by": "WinUITheme on Windows, stock 0.32.0 + this patch: live switch WinUITheme <-> Gumdrop passes 5/5 (stock: 4/5 crash 0xC00000FD)"
     },
     {
+      "id": "gui-command-key-bindings",
+      "library": "libs-gui",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-gui/msys2-0.32.0/0005-NSInputManager-parse-and-match-the-Command-modifier.patch",
+      "sha256": "724ea8342f4027beb9c81781b18c94594cb4a9ea2b7f7cbb63efbc9b2a20c5e9",
+      "summary": "NSInputManager: parse \"Command\"/\"Cmd\" in key bindings and keep NSCommandKeyMask when matching, so gnustep-packager's Ctrl-to-Command word moves (CommandWordMoves.dict) fire",
+      "source": "danjboyd/libs-gui 543628d9 (tag gnustep-swift-2026-11-03b), git format-patch; applies unchanged to 0.32.0 after 0001-0004. Moved here from the closed PR #33 on Dan's decision (ask #8718, 2026-11-19)",
+      "upstream": "not sent; gnustep/libs-gui master 1b4e125c (2026-11-15) has no equivalent",
+      "defaults": [],
+      "abi": "none expected (NSInputManager.m internals only)",
+      "requested_by": [
+        "gnustep-packager"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "not yet: git apply --check on gui-0_32_0 + 0001-0004; built, ABI-checked and smoked in the next Windows Patch Layer run"
+    },
+    {
       "id": "base-attributed-string-hash",
       "library": "libs-base",
       "base": "msys2-1.31.1",
@@ -969,6 +989,126 @@
       "why": "0010 needs the backend built with GLX, and a GLX build linked libGL, so every app of the layer, OpenGL or not, would need libGL.so.1 at run time where stock needs none. Dan chose to load libGL at run time instead (ask #9153, option b; relayed by gnustep-cli-new, mail #45951). A separate patch rather than folded into 0010: it is a packaging change independent of 0010's NSOpenGLView behaviour (it touches configure, the makefile and every GLX call site, not the subwindow code), it can go upstream or be dropped on its own, and 0010 keeps its topic commit and its verification.",
       "verified_by": "On Debian 13 with the gnustep-cli 0.1.9 Linux root (libs-gui 7892137b + 0001-0006, libs-back bf3b3ced + 0001-0011, built with GLX), Xvfb with Mesa llvmpipe: readelf -d on the bundle's libgnustep-back-032 no longer lists libGL.so.1 (before 0011 it did; no libGLX either, and no undefined gl* symbol); series 0001-0011 applies to a clean bf3b3ced with git apply -p1. With libGL: libs-back Tests/x11/openglLoad.m 7/7 (the backend starts without loading libGL, a pixel format loads it), openglSubwindow.m 29/29, libs-gui NSOpenGLView/visibility.m 6/6, NSView/hiddenNotifications.m 9/9, invalidateCoordinatesOverride.m 6/6, GSTheme/liveSwitch.m 14/14, NSInputManager/commandBindings.m 4/4, the X11 v7 series' Tests/x11 tests all passing (borderlessalpha 4, gdriverterm 1, motifhints 5, orderfocusroot 5, shadowdrawing 14, shadowmargin 23, windowterm 4, windowtype 5); CocoaTerminal COTGLCheck --only child 13/16 as with 0010 alone (it links libGL itself and shares the copy the backend loads), no X errors. Without libGL (the test run in a user and mount namespace whose /usr/lib/x86_64-linux-gnu has no libGL.so* or libGLX*.so*; a dlopen probe and LD_DEBUG=libs confirm neither loads): openglLoad.m 9/9 (OpenGL classes nil, NSOpenGLPixelFormat and NSOpenGLContext nil, an NSOpenGLView has no context and its window shows and closes; the backend's 'OpenGL is unavailable' line printed once), openglSubwindow.m and visibility.m skip cleanly, every other test above passes with the same counts, nothing crashes. The same change on the topic branch (df08f4f, upstream master + 0010) built and installed in the same root: openglLoad 7/7, openglSubwindow 29/29, visibility 6/6 with libGL; openglLoad 9/9, the other two skipping, hiddenNotifications 9/9 without. build-layer.sh now checks NEEDED and runs the tests a third time after removing libgl1, libglx0, libglx-mesa0 and libgl-dev; linux-carry-layer.yml not run.",
       "order": "last, after 0010 (x11-opengl-subwindow-linux): its XGGLContext.m hunks are on 0010's code"
+    },
+    {
+      "id": "win32-opengl-subwindow",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "path": "libs-back/msys2-0.32.0/0014-win32-hide-clip-and-destroy-an-OpenGL-view-s-child-w.patch",
+      "summary": "win32: an NSOpenGLView's child window hides with the view, clips to its visible rect (SetWindowRgn), is destroyed on detach rather than at an autorelease pool drain, and re-attaching no longer deletes the new HGLRC",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "glview-visibility",
+      "topic_commit": "d5cc8ccd2ff5700a9364ef887462635b71226d32",
+      "upstream": "not_sent (needs Dan's FSF assignment)",
+      "abi": "unchanged (one new static function)",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "defaults": [],
+      "requested_by": [
+        "CocoaTerminal"
+      ],
+      "owner": "cocoa-terminal",
+      "verified_by": "CocoaTerminal bench/COTGLCheck.mm (danjboyd/CocoaTerminal renderer-config b06eae3), --only child, on this layer's msys2-0.32.0 gui+back series plus 0014-0015/0006-0008 (and PR #94's 0005, gui-command-key-bindings), Windows' own OpenGL: 12/14 pass (stock: 8/14; the 2 left are inherent to a child window: a sibling view drawn over it, and in-window readback); 300 create/destroy cycles flat (GDI 51->51, handles 233->233). CocoaTerminal's 28 demo scenarios with COCOATERMINAL_RENDERER=gl pass 28/28, 27 drawing straight into the NSOpenGLView. Tests/gui/NSView/hiddenNotifications.m (from upstream ddef59c75) covers 0006. Regression tests, failing on stock 0.32 and passing with this series: libs-gui Tests/gui/NSView/invalidateCoordinatesOverride.m 6/6 (stock 1/6) and Tests/gui/NSOpenGLView/visibility.m 6/6 (stock 2/6), danjboyd/libs-gui glview-visibility a076517913c870a22ca93b041e8fc4a24c84c8bb; libs-back Tests/win32/openglSubwindow.m 15/15 (stock 10/15), danjboyd/libs-back glview-visibility 0d3c5eb48a039da27d7d63eca5a1ad875a821f99.",
+      "sha256": "89c5a0529b3acd15989990b25bcc89463718cb8ca093ed14e7f6c2eb11b43170",
+      "why": "CocoaTerminal draws its OpenGL renderer straight into an NSOpenGLView only when GNUstep hides and clips the view's child window; with stock 0.32 the child window stays on screen when hidden, removed or scrolled out (CocoaTerminal falls back to reading frames back and drawing an image).",
+      "order": "after 0013; 0014 before 0015"
+    },
+    {
+      "id": "win32-opengl-pixel-format",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "path": "libs-back/msys2-0.32.0/0015-win32-always-ask-for-a-window-pixel-format-for-an-Op.patch",
+      "summary": "win32: always set PFD_DRAW_TO_WINDOW for an NSOpenGLView's pixel format (it was set only with NSOpenGLPFAWindow, so Mesa's ChoosePixelFormat failed)",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "glview-visibility",
+      "topic_commit": "46b74761487137703eaa5096ad0f6146583e76a2",
+      "upstream": "not_sent (needs Dan's FSF assignment)",
+      "abi": "unchanged",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "defaults": [],
+      "requested_by": [
+        "CocoaTerminal"
+      ],
+      "owner": "cocoa-terminal",
+      "verified_by": "CocoaTerminal bench/COTGLCheck.mm (danjboyd/CocoaTerminal renderer-config b06eae3), --only child, on this layer's msys2-0.32.0 gui+back series plus 0014-0015/0006-0008 (and PR #94's 0005, gui-command-key-bindings), Windows' own OpenGL: 12/14 pass (stock: 8/14; the 2 left are inherent to a child window: a sibling view drawn over it, and in-window readback); 300 create/destroy cycles flat (GDI 51->51, handles 233->233). CocoaTerminal's 28 demo scenarios with COCOATERMINAL_RENDERER=gl pass 28/28, 27 drawing straight into the NSOpenGLView. Tests/gui/NSView/hiddenNotifications.m (from upstream ddef59c75) covers 0006. Regression tests, failing on stock 0.32 and passing with this series: libs-gui Tests/gui/NSView/invalidateCoordinatesOverride.m 6/6 (stock 1/6) and Tests/gui/NSOpenGLView/visibility.m 6/6 (stock 2/6), danjboyd/libs-gui glview-visibility a076517913c870a22ca93b041e8fc4a24c84c8bb; libs-back Tests/win32/openglSubwindow.m 15/15 (stock 10/15), danjboyd/libs-back glview-visibility 0d3c5eb48a039da27d7d63eca5a1ad875a821f99.",
+      "sha256": "e3917822b2c8e264a4115d1e96819b22411f67e4516a5d265a2e8b0abc158228",
+      "why": "CocoaTerminal draws its OpenGL renderer straight into an NSOpenGLView only when GNUstep hides and clips the view's child window; with stock 0.32 the child window stays on screen when hidden, removed or scrolled out (CocoaTerminal falls back to reading frames back and drawing an image).",
+      "order": "after 0013; 0014 before 0015"
+    },
+    {
+      "id": "gui-nsview-did-hide",
+      "library": "libs-gui",
+      "base": "msys2-0.32.0",
+      "path": "libs-gui/msys2-0.32.0/0006-Add-NSView-viewDidHide-and-viewDidUnhide.patch",
+      "summary": "NSView: send viewDidHide/viewDidUnhide to a view and the descendants whose effective visibility changes (backport of upstream ddef59c75, newer than 0.32.0); NSOpenGLView needs it to hide its child window",
+      "topic_repository": "gnustep/libs-gui",
+      "topic_branch": "master",
+      "topic_commit": "ddef59c754c2b8c1c45811743d18944d5b23d6bb",
+      "upstream": "merged ddef59c75 (after 0.32.0)",
+      "abi": "selectors added only (viewDidHide, viewDidUnhide, _sendViewDidUnhide:); no class, ivar or function export changes",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "defaults": [],
+      "requested_by": [
+        "CocoaTerminal"
+      ],
+      "owner": "cocoa-terminal",
+      "verified_by": "CocoaTerminal bench/COTGLCheck.mm (danjboyd/CocoaTerminal renderer-config b06eae3), --only child, on this layer's msys2-0.32.0 gui+back series plus 0014-0015/0006-0008 (and PR #94's 0005, gui-command-key-bindings), Windows' own OpenGL: 12/14 pass (stock: 8/14; the 2 left are inherent to a child window: a sibling view drawn over it, and in-window readback); 300 create/destroy cycles flat (GDI 51->51, handles 233->233). CocoaTerminal's 28 demo scenarios with COCOATERMINAL_RENDERER=gl pass 28/28, 27 drawing straight into the NSOpenGLView. Tests/gui/NSView/hiddenNotifications.m (from upstream ddef59c75) covers 0006. Regression tests, failing on stock 0.32 and passing with this series: libs-gui Tests/gui/NSView/invalidateCoordinatesOverride.m 6/6 (stock 1/6) and Tests/gui/NSOpenGLView/visibility.m 6/6 (stock 2/6), danjboyd/libs-gui glview-visibility a076517913c870a22ca93b041e8fc4a24c84c8bb; libs-back Tests/win32/openglSubwindow.m 15/15 (stock 10/15), danjboyd/libs-back glview-visibility 0d3c5eb48a039da27d7d63eca5a1ad875a821f99.",
+      "sha256": "0ba9254606f66c10805e46158150045a6cd00ad7214d643c8c5e472753ce6365",
+      "why": "CocoaTerminal draws its OpenGL renderer straight into an NSOpenGLView only when GNUstep hides and clips the view's child window; with stock 0.32 the child window stays on screen when hidden, removed or scrolled out (CocoaTerminal falls back to reading frames back and drawing an image).",
+      "order": "after the existing series for the base, including 0005 (gui-command-key-bindings); 0006 before 0007 (0007 overrides viewDidHide/viewDidUnhide)"
+    },
+    {
+      "id": "gui-nsopenglview-visibility",
+      "library": "libs-gui",
+      "base": "msys2-0.32.0",
+      "path": "libs-gui/msys2-0.32.0/0007-NSOpenGLView-update-the-context-when-the-view-is-hid.patch",
+      "summary": "NSOpenGLView: update its context (and so the backend's child window) when the view is hidden or unhidden or an ancestor moves or scrolls; NSView's _invalidateCoordinates recursion now reaches subclasses' overrides",
+      "topic_repository": "danjboyd/libs-gui",
+      "topic_branch": "glview-visibility",
+      "topic_commit": "a8dbfe24d4af9c9b2d6d44e3c82df1e17e1569fd",
+      "upstream": "not_sent (needs Dan's FSF assignment)",
+      "abi": "selectors added only (_updateDrawable, _setNeedsDrawableUpdate); no class, ivar or function export changes",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "defaults": [],
+      "requested_by": [
+        "CocoaTerminal"
+      ],
+      "owner": "cocoa-terminal",
+      "verified_by": "CocoaTerminal bench/COTGLCheck.mm (danjboyd/CocoaTerminal renderer-config b06eae3), --only child, on this layer's msys2-0.32.0 gui+back series plus 0014-0015/0006-0008 (and PR #94's 0005, gui-command-key-bindings), Windows' own OpenGL: 12/14 pass (stock: 8/14; the 2 left are inherent to a child window: a sibling view drawn over it, and in-window readback); 300 create/destroy cycles flat (GDI 51->51, handles 233->233). CocoaTerminal's 28 demo scenarios with COCOATERMINAL_RENDERER=gl pass 28/28, 27 drawing straight into the NSOpenGLView. Tests/gui/NSView/hiddenNotifications.m (from upstream ddef59c75) covers 0006. Regression tests, failing on stock 0.32 and passing with this series: libs-gui Tests/gui/NSView/invalidateCoordinatesOverride.m 6/6 (stock 1/6) and Tests/gui/NSOpenGLView/visibility.m 6/6 (stock 2/6), danjboyd/libs-gui glview-visibility a076517913c870a22ca93b041e8fc4a24c84c8bb; libs-back Tests/win32/openglSubwindow.m 15/15 (stock 10/15), danjboyd/libs-back glview-visibility 0d3c5eb48a039da27d7d63eca5a1ad875a821f99.",
+      "sha256": "a171bcc95eed63c7067e6257c15cd5d84dd0b7453102db0d25dec4011ff1e369",
+      "why": "CocoaTerminal draws its OpenGL renderer straight into an NSOpenGLView only when GNUstep hides and clips the view's child window; with stock 0.32 the child window stays on screen when hidden, removed or scrolled out (CocoaTerminal falls back to reading frames back and drawing an image).",
+      "order": "after the existing series for the base, including 0005 (gui-command-key-bindings); 0006 before 0007 (0007 overrides viewDidHide/viewDidUnhide)"
+    },
+    {
+      "id": "gui-nsopenglview-leave-window",
+      "library": "libs-gui",
+      "base": "msys2-0.32.0",
+      "path": "libs-gui/msys2-0.32.0/0008-NSOpenGLView-clear-the-drawable-when-the-view-leaves.patch",
+      "summary": "NSOpenGLView: clear the drawable when the view leaves its window (the check ran after super had set the new window, so it never did), and attach the context before making it current",
+      "topic_repository": "danjboyd/libs-gui",
+      "topic_branch": "glview-visibility",
+      "topic_commit": "9881631651b9a397383e20567370ed0ea32f0b5b",
+      "upstream": "not_sent (needs Dan's FSF assignment)",
+      "abi": "unchanged",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "defaults": [],
+      "requested_by": [
+        "CocoaTerminal"
+      ],
+      "owner": "cocoa-terminal",
+      "verified_by": "CocoaTerminal bench/COTGLCheck.mm (danjboyd/CocoaTerminal renderer-config b06eae3), --only child, on this layer's msys2-0.32.0 gui+back series plus 0014-0015/0006-0008 (and PR #94's 0005, gui-command-key-bindings), Windows' own OpenGL: 12/14 pass (stock: 8/14; the 2 left are inherent to a child window: a sibling view drawn over it, and in-window readback); 300 create/destroy cycles flat (GDI 51->51, handles 233->233). CocoaTerminal's 28 demo scenarios with COCOATERMINAL_RENDERER=gl pass 28/28, 27 drawing straight into the NSOpenGLView. Tests/gui/NSView/hiddenNotifications.m (from upstream ddef59c75) covers 0006. Regression tests, failing on stock 0.32 and passing with this series: libs-gui Tests/gui/NSView/invalidateCoordinatesOverride.m 6/6 (stock 1/6) and Tests/gui/NSOpenGLView/visibility.m 6/6 (stock 2/6), danjboyd/libs-gui glview-visibility a076517913c870a22ca93b041e8fc4a24c84c8bb; libs-back Tests/win32/openglSubwindow.m 15/15 (stock 10/15), danjboyd/libs-back glview-visibility 0d3c5eb48a039da27d7d63eca5a1ad875a821f99.",
+      "sha256": "33fd09d9961a477de0a006e6b45e6b0f32be83fc7532e89f2f799f8da07b17e6",
+      "why": "CocoaTerminal draws its OpenGL renderer straight into an NSOpenGLView only when GNUstep hides and clips the view's child window; with stock 0.32 the child window stays on screen when hidden, removed or scrolled out (CocoaTerminal falls back to reading frames back and drawing an image).",
+      "order": "after the existing series for the base, including 0005 (gui-command-key-bindings); 0006 before 0007 (0007 overrides viewDidHide/viewDidUnhide)"
     }
   ]
 }
