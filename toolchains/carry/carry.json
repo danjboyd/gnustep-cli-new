@@ -487,6 +487,26 @@
       "verified_by": "WinUITheme on Windows, stock 0.32.0 + this patch: live switch WinUITheme <-> Gumdrop passes 5/5 (stock: 4/5 crash 0xC00000FD)"
     },
     {
+      "id": "gui-command-key-bindings",
+      "library": "libs-gui",
+      "base": "msys2-0.32.0",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "path": "libs-gui/msys2-0.32.0/0005-NSInputManager-parse-and-match-the-Command-modifier.patch",
+      "sha256": "724ea8342f4027beb9c81781b18c94594cb4a9ea2b7f7cbb63efbc9b2a20c5e9",
+      "summary": "NSInputManager: parse \"Command\"/\"Cmd\" in key bindings and keep NSCommandKeyMask when matching, so gnustep-packager's Ctrl-to-Command word moves (CommandWordMoves.dict) fire",
+      "source": "danjboyd/libs-gui 543628d9 (tag gnustep-swift-2026-11-03b), git format-patch; applies unchanged to 0.32.0 after 0001-0004. Moved here from the closed PR #33 on Dan's decision (ask #8718, 2026-11-19)",
+      "upstream": "not sent; gnustep/libs-gui master 1b4e125c (2026-11-15) has no equivalent",
+      "defaults": [],
+      "abi": "none expected (NSInputManager.m internals only)",
+      "requested_by": [
+        "gnustep-packager"
+      ],
+      "owner": "gnustep-cli-new",
+      "verified_by": "not yet: git apply --check on gui-0_32_0 + 0001-0004; built, ABI-checked and smoked in the next Windows Patch Layer run"
+    },
+    {
       "id": "base-attributed-string-hash",
       "library": "libs-base",
       "base": "msys2-1.31.1",
