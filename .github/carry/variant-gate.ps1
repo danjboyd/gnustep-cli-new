@@ -133,7 +133,7 @@ else {
     -and $results.to_stock.exit -eq 0 -and $results.to_stock.files -eq 'stock' -and $results.to_stock.doctor -eq 'ok/stock' -and $results.record_removed `
     -and $results.to_patched.exit -eq 0 -and $results.to_patched.files -eq 'patched' -and $results.to_patched.doctor -eq 'ok/patched' `
     -and $results.to_stock_again.exit -eq 0 -and $results.stock_tree_identical -and $results.patched_tree_differs `
-    -and $results.update.exit -eq 0 -and $results.update.files -eq 'patched' -and $results.update.doctor -eq 'ok/patched' -and $results.update_version -eq '0.1.10')
+    -and $results.update.exit -eq 0 -and $results.update.files -eq 'patched' -and $results.update.doctor -eq 'ok/patched' -and $results.update_version -eq '0.1.11')
 }
 $results.ok = $ok
 $results | ConvertTo-Json -Depth 6 | Set-Content (Join-Path $out 'variant-gate.json') -Encoding ASCII
