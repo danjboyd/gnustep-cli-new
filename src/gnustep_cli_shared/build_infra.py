@@ -3090,12 +3090,25 @@ def _openssl_verify_file(input_path: Path, signature_path: Path, public_key_path
     return proc.returncode == 0
 
 
+def _refresh_checksum_line(checksums_path: Path, path: Path) -> None:
+    """Set path's line in SHA256SUMS (when that file exists) to path's current digest."""
+    if not checksums_path.exists() or not path.exists():
+        return
+    suffix = f"  {path.name}"
+    lines = [line for line in checksums_path.read_text().splitlines() if line.strip() and not line.endswith(suffix)]
+    lines.append(f"{_sha256(path)}{suffix}")
+    checksums_path.write_text("\n".join(lines) + "\n")
+
+
 def sign_release_metadata(release_dir: str | Path, private_key_path: str | Path, public_key_path: str | Path | None = None) -> dict[str, Any]:
     root = Path(release_dir).resolve()
     private_key = Path(private_key_path).resolve()
     if not private_key.exists():
         return {"schema_version": 1, "command": "sign-release-metadata", "ok": False, "status": "error", "summary": "Signing private key is missing.", "release_dir": str(root)}
     provenance_path = write_release_provenance(root, builder_identity=os.environ.get("GNUSTEP_CLI_BUILDER_ID", "local"))
+    # The provenance was just rewritten (it records the current manifest digest, which
+    # advertise-package-index changes after staging), so its SHA256SUMS line must follow.
+    _refresh_checksum_line(root / "SHA256SUMS", provenance_path)
     # Always bundle the signing public key next to the release so the release is
     # self-describing. When an explicit public key is supplied (CI passes the
     # GNUSTEP_CLI_RELEASE_SIGNING_PUBLIC_KEY secret), copy it in; otherwise derive
@@ -4379,6 +4392,16 @@ def verify_release_directory(release_dir: str | Path) -> dict[str, Any]:
 
     results: list[dict[str, Any]] = []
     ok = True
+    # Every line of SHA256SUMS must match its file, not only the artifacts' lines
+    # (release-provenance.json's went stale in v0.1.8-v0.1.10 when signing rewrote it).
+    artifact_files = {a.get("filename") for a in artifacts}
+    for filename, listed in sorted(checksum_map.items()):
+        if filename in artifact_files:
+            continue
+        path = root / filename
+        matches = path.is_file() and _sha256(path) == listed
+        results.append({"filename": filename, "checksum_line": True, "exists": path.is_file(), "sha256_matches": matches})
+        ok = ok and matches
     for artifact in artifacts:
         filename = artifact.get("filename")
         if artifact.get("reused") and not filename:

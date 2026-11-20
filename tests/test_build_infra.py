@@ -1186,8 +1186,18 @@ class BuildInfraTests(unittest.TestCase):
             key = temp / "release-signing-key.pem"
             import subprocess
             subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048", "-out", str(key)], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Change the manifest after staging, as advertise-package-index does: signing
+            # rewrites the provenance, and its SHA256SUMS line must follow.
+            manifest_file = release_dir / "release-manifest.json"
+            manifest_file.write_text(manifest_file.read_text().rstrip() + "\n\n")
             signed = sign_release_metadata(release_dir, key)
             self.assertTrue(signed["ok"])
+            sums = dict(reversed(line.split("  ", 1)) for line in (release_dir / "SHA256SUMS").read_text().splitlines() if line.strip())
+            self.assertEqual(sums["release-provenance.json"], hashlib.sha256((release_dir / "release-provenance.json").read_bytes()).hexdigest())
+            self.assertTrue(verify_release_directory(release_dir)["ok"])
+            (release_dir / "SHA256SUMS").write_text((release_dir / "SHA256SUMS").read_text().replace(sums["release-provenance.json"], "0" * 64))
+            self.assertFalse(verify_release_directory(release_dir)["ok"])
+            sign_release_metadata(release_dir, key)
             self.assertTrue((release_dir / "release-manifest.json.sig").exists())
             self.assertTrue((release_dir / "release-provenance.json.sig").exists())
             self.assertTrue(release_trust_gate(release_dir)["ok"])
