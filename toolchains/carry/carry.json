@@ -451,6 +451,30 @@
       "order": "after 0013; 0014 before 0015"
     },
     {
+      "id": "win32-dead-keys",
+      "library": "libs-back",
+      "base": "msys2-0.32.0",
+      "path": "libs-back/msys2-0.32.0/0016-win32-dead-keys-compose-with-the-next-key.patch",
+      "summary": "win32: dead keys compose with the next key (the message loop's TranslateMessage and a second ToUnicodeEx on key release used up the dead key state, so ' then e on US International typed ''e); TranslateMessage now skips plain WM_KEYDOWN (kept for VK_PROCESSKEY/IME and system keys) and only a key press's ToUnicodeEx may change the state (flag 4 otherwise)",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "win32-dead-keys",
+      "topic_commit": "e3e58fc7c11fb31a15213ba0e930c629e0371c3e",
+      "upstream": "not_sent (needs Dan's FSF assignment)",
+      "abi": "unchanged (one new static function)",
+      "platforms": [
+        "windows-amd64-msys2-clang64"
+      ],
+      "defaults": [],
+      "requested_by": [
+        "CocoaTerminal"
+      ],
+      "owner": "cocoa-terminal",
+      "verified_by": "libs-back Tests/win32/deadKeys.m (US International loaded on the test's thread, key messages posted to a window): 5/5 with this series (stock 0.32: 1/5, only the plain key). CocoaTerminal tests/COTKeyboardLayoutTests.mm (danjboyd/CocoaTerminal input-methods bc73bbd) with COT_REQUIRE_DEAD_KEYS=1 on this layer's msys2-0.32.0 gui+back series plus 0014-0016: ' e -> é, ' space -> ', ' x -> 'x, a -> a, AltGr+q -> ä (stock: ''e, '', ''x). libs-back Tests/win32/openglSubwindow.m still 15/15. GCC 16 -fsyntax-only -Wall: the same 102 pre-existing warnings in WIN32Server.m before and after, none new; deadKeys.m clean.",
+      "sha256": "6b652b12e57288c53e379194bdbb44ac554d72f813ca1b85778f946053b9cca0",
+      "why": "Typing with a European or US International layout on Windows: every dead key typed its accent twice and never composed, in any GNUstep app (CocoaTerminal, text fields). IME input is unaffected (VK_PROCESSKEY still goes through TranslateMessage).",
+      "order": "after 0015 (needs nothing from it; numbered after #99's 0014-0015)"
+    },
+    {
       "id": "gui-3f5efad1-scrollview-retile",
       "library": "libs-gui",
       "base": "msys2-0.32.0",

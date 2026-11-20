@@ -1,0 +1,260 @@
+From cf70f594f6175f3ebedbcd14d0348887111674e3 Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Fri, 20 Nov 2026 13:22:02 -0600
+Subject: [PATCH] win32: dead keys compose with the next key
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A key event's text comes from ToUnicodeEx in process_key_event. Windows
+keeps a dead key (an accent waiting for its letter) as keyboard state that
+the next key press uses up, but the back end used it up first: the message
+loop ran TranslateMessage on every key press before dispatching it, and
+process_key_event called ToUnicodeEx again for the key's release and with
+no modifiers, each of which can change that state. So on a US International
+keyboard "' then e" gave "''" and "e" rather than "é", and every dead key
+typed its accent twice.
+
+Now TranslateMessage isn't run on a plain WM_KEYDOWN (the IME still gets it
+for VK_PROCESSKEY, and system keys for their menu messages), and only a key
+press's ToUnicodeEx may change the state: the release and the unmodified
+lookup pass flag 4, which leaves it alone. A dead key's own press gives no
+text; the next key gives the composed character, or the accent and the
+character when they don't combine.
+
+Tests/win32/deadKeys.m loads US International on its thread and posts key
+messages to a window: 4 of its 5 checks fail on 0.32 and all pass with this.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AEr1tVPvzfTTffJFWFXGKi
+---
+ Source/win32/WIN32Server.m |  39 ++++++++---
+ Tests/win32/deadKeys.m     | 138 +++++++++++++++++++++++++++++++++++++
+ 2 files changed, 168 insertions(+), 9 deletions(-)
+ create mode 100644 Tests/win32/deadKeys.m
+
+diff --git a/Source/win32/WIN32Server.m b/Source/win32/WIN32Server.m
+index 8ce8fd3..7bcf223 100644
+--- a/Source/win32/WIN32Server.m
++++ b/Source/win32/WIN32Server.m
+@@ -185,6 +185,22 @@ BOOL CALLBACK LoadDisplayMonitorInfo(HMONITOR hMonitor,
+ }
+ 
+ 
++/* TranslateMessage, except for a plain key press. A key's text comes from
++   ToUnicodeEx in process_key_event, which is called for WM_KEYDOWN; if
++   TranslateMessage has already run on the same key, Windows has used up a
++   dead key's state (an accent waiting for its letter) and the letter comes
++   out on its own. The IME still needs TranslateMessage for VK_PROCESSKEY,
++   and system keys (Alt) for their menu messages.  */
++static void
++translate_message(const MSG *msg)
++{
++  if (msg->message == WM_KEYDOWN && msg->wParam != VK_PROCESSKEY)
++    {
++      return;
++    }
++  TranslateMessage(msg);
++}
++
+ @implementation WIN32Server
+ 
+ - (BOOL) handlesWindowDecorations
+@@ -438,10 +454,7 @@ hasShadowFrame(HWND hwnd)
+         }
+       else
+         {
+-          // Original author disregarded a translate message call here stating
+-          // that it would give extra character messages - BUT THIS KILLS IME
+-          // MESSAGE PROCESSING!!!!!
+-          TranslateMessage(&msg);
++          translate_message(&msg);
+           DispatchMessage(&msg);
+         } 
+     } 
+@@ -473,7 +486,7 @@ hasShadowFrame(HWND hwnd)
+         }
+       else
+         {
+-          TranslateMessage(m);
++          translate_message(m);
+           DispatchMessage(m); 
+         } 
+     } 
+@@ -3123,17 +3136,25 @@ process_key_event(WIN32Server *svr, HWND hwnd, WPARAM wParam, LPARAM lParam, NSE
+         blankKeyState[i] = 0;
+ 
+       scan = ((lParam >> 16) & 0xFF);
+-      result = ToUnicodeEx(wParam, scan, keyState, unicode, 5, 0, GetKeyboardLayout(0));
++      /* Only a key press may change the keyboard's dead key state (flag 4
++         leaves it as it is): a dead key waits for the next press, which
++         gives the composed character (or the accent and the character). A
++         dead key's own press gives no text; its release, the accent.  */
++      result = ToUnicodeEx(wParam, scan, keyState, unicode, 5,
++                           eventType == NSKeyDown ? 0 : 4, GetKeyboardLayout(0));
+       if (result == -1)
+         {
+-          // A non spacing accent key was found, we still try to use the result 
+-          result = 1;
++          result = (eventType == NSKeyDown) ? 0 : 1;
++        }
++      else if (result < 0)
++        {
++          result = 0;
+         }
+       keys = [NSString  stringWithCharacters: unicode length: result];
+ 
+       // Now get the characters with a blank keyboard state so that
+       // no modifiers are applied.
+-      result = ToUnicodeEx(wParam, scan, blankKeyState, unicode, 5, 0, GetKeyboardLayout(0));
++      result = ToUnicodeEx(wParam, scan, blankKeyState, unicode, 5, 4, GetKeyboardLayout(0));
+       //NSLog(@"To Unicode resulted in %d with %d", result, unicode[0]);
+       if (result == -1)
+         {
+diff --git a/Tests/win32/deadKeys.m b/Tests/win32/deadKeys.m
+new file mode 100644
+index 0000000..cee05e8
+--- /dev/null
++++ b/Tests/win32/deadKeys.m
+@@ -0,0 +1,138 @@
++/* Dead keys on win32 (Source/win32/WIN32Server.m): a key event's characters
++ * must be what the keyboard layout makes of the key presses.
++ *
++ * A dead key (an accent that waits for the next key) is kept by Windows as
++ * keyboard state, used up by the next key press. The back end makes a key
++ * event's text with ToUnicodeEx in its WM_KEYDOWN handler; it used to run
++ * TranslateMessage on the press first, which used the dead key up already,
++ * and to call ToUnicodeEx again on the key's release and with no modifiers,
++ * so "' then e" on a US International keyboard came out as "''" then "e"
++ * instead of "é". These check:
++ *  - a dead key then a letter it combines with gives the composed letter;
++ *  - a dead key then space gives the accent alone;
++ *  - a dead key then a letter it doesn't combine with gives both;
++ *  - a dead key's own press gives no text;
++ *  - a plain key is unchanged.
++ *
++ * It loads the US International layout for this thread and posts the key
++ * messages to a window, so the window needn't be in front; it reads the key
++ * events from the queue. It skips without that layout, or when the win32
++ * display server isn't built.
++ */
++#import <Foundation/Foundation.h>
++#import "Testing.h"
++#include "config.h"
++
++#if defined(BUILD_SERVER) && defined(SERVER_win32) \
++  && BUILD_SERVER == SERVER_win32
++
++#import <AppKit/AppKit.h>
++#include <windows.h>
++
++/* Posts a press and release of the key VK to WINDOW, then returns the
++   characters of the key-down events the back end made of them.  */
++static NSString *
++press(HWND window, HKL layout, UINT vk)
++{
++  NSMutableString *typed = [NSMutableString string];
++  UINT scan = MapVirtualKeyExW(vk, MAPVK_VK_TO_VSC, layout);
++  NSDate *until;
++  NSEvent *event;
++
++  PostMessageW(window, WM_KEYDOWN, vk, (LPARAM)(1 | (scan << 16)));
++  PostMessageW(window, WM_KEYUP, vk,
++    (LPARAM)(1 | (scan << 16) | (1u << 30) | (1u << 31)));
++  until = [NSDate dateWithTimeIntervalSinceNow: 0.2];
++  while ((event = [NSApp nextEventMatchingMask: NSKeyDownMask | NSKeyUpMask
++                                     untilDate: until
++                                        inMode: NSDefaultRunLoopMode
++                                       dequeue: YES]) != nil)
++    {
++      if ([event type] == NSKeyDown)
++	{
++	  [typed appendString: [event characters]];
++	}
++    }
++  return typed;
++}
++
++static NSString *
++type(HWND window, HKL layout, UINT first, UINT second)
++{
++  NSString *text = press(window, layout, first);
++
++  if (second != 0)
++    {
++      text = [text stringByAppendingString: press(window, layout, second)];
++    }
++  return text;
++}
++
++int
++main(int argc, char **argv)
++{
++  CREATE_AUTORELEASE_POOL(arp);
++  HKL layout;
++  NSWindow *window;
++  HWND hwnd;
++  NSString *eAcute = [NSString stringWithFormat: @"%C", (unichar)0x00e9];
++
++  START_SET("win32 dead keys")
++
++  layout = LoadKeyboardLayoutW(L"00020409", KLF_ACTIVATE);
++  if (layout == NULL || ActivateKeyboardLayout(layout, 0) == NULL)
++    {
++      SKIP("The US International keyboard layout can't be loaded")
++    }
++
++  NS_DURING
++    [NSApplication sharedApplication];
++  NS_HANDLER
++    if ([[localException name] isEqualToString: @"SkipSet"])
++      [localException raise];
++    else
++      {
++	SKIP("The GNUstep backend could not start")
++      }
++  NS_ENDHANDLER
++
++  window = AUTORELEASE([[NSWindow alloc]
++    initWithContentRect: NSMakeRect(100, 100, 200, 100)
++	      styleMask: NSTitledWindowMask
++		backing: NSBackingStoreBuffered
++		  defer: NO]);
++  [window setReleasedWhenClosed: NO];
++  [window orderFront: nil];
++  hwnd = (HWND)(intptr_t)[window windowNumber];
++
++  PASS_EQUAL(press(hwnd, layout, VK_OEM_7), @"",
++    "a dead key's press gives no text");
++  PASS_EQUAL(press(hwnd, layout, 'E'), eAcute,
++    "the next letter, one it combines with, gives the composed letter (é)");
++  PASS_EQUAL(type(hwnd, layout, VK_OEM_7, VK_SPACE), @"'",
++    "a dead key then space gives the accent alone");
++  PASS_EQUAL(type(hwnd, layout, VK_OEM_7, 'X'), @"'x",
++    "a dead key then a letter it doesn't combine with gives both");
++  PASS_EQUAL(type(hwnd, layout, 'A', 0), @"a",
++    "a plain key is unchanged");
++
++  [window close];
++
++  END_SET("win32 dead keys")
++
++  DESTROY(arp);
++  return 0;
++}
++
++#else
++
++int
++main(int argc, char **argv)
++{
++  START_SET("win32 dead keys")
++    SKIP("The win32 display server is not built")
++  END_SET("win32 dead keys")
++  return 0;
++}
++
++#endif
+-- 
+2.56.0.windows.4
+
