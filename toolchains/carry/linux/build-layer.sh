@@ -16,6 +16,10 @@
 #    against the same root with the layer applied. With the layer, every test must pass.
 #    On stock, each libs-gui carry's regression test must fail (it shows the bug); the
 #    libs-back X11 tests are only recorded there.
+# 5. The layer's backend loads libGL at run time (libs-back 0011) and must not link it
+#    (a NEEDED check after the build). After the tests with Mesa, libGL and GLX are
+#    removed from the container and the tests run again on the layer: OpenGL must
+#    report unavailable and everything else must pass.
 set -euo pipefail
 
 target=${1:?usage: build-layer.sh <target> <staging-prefix> <toolchain.tar.gz> <out-dir> <release>}
@@ -33,8 +37,9 @@ apt-get update -qq
 # libxfixes-dev: the X11 shadow series follows the compositing manager through XFixes
 # (without it the backend gives no window a shadow margin); stock was built without it.
 # libgl-dev: libs-back's GLX support (NSOpenGLContext, which x11-opengl-subwindow fixes);
-# stock is built without it, so its backend has no OpenGL. libgl1-mesa-dri and
-# libglx-mesa0: Mesa's llvmpipe, for GLX on Xvfb in the OpenGL tests.
+# stock is built without it, so its backend has no OpenGL. It is only a build
+# dependency: the layer's backend loads libGL at run time (x11-load-libgl-linux).
+# libgl1-mesa-dri and libglx-mesa0: Mesa's llvmpipe, for GLX on Xvfb in the OpenGL tests.
 apt-get install -y -qq --no-install-recommends binutils xvfb xauth libxfixes-dev \
   libgl-dev libgl1-mesa-dri libglx-mesa0 >/dev/null
 
@@ -106,6 +111,20 @@ while read -r library revision patches; do
   done
   package_args+=(--package-root "$work/pkg/$library$prefix")
 done < "$work/bases.txt"
+
+# The backend must load libGL at run time, not link it: an app that doesn't use OpenGL
+# has to start where no libGL is installed.
+if [ -d "$work/pkg/libs-back" ]; then
+  backs=("$work/pkg/libs-back$prefix"/Local/Library/Bundles/libgnustep-back-*.bundle/libgnustep-back-*)
+  test -f "${backs[0]}" || { echo "no backend bundle under $work/pkg/libs-back$prefix" >&2; exit 1; }
+  for back in "${backs[@]}"; do
+    readelf -d "$back" | grep NEEDED | tee "$out/needed-$(basename "$back").txt"
+    if readelf -d "$back" | grep -E 'NEEDED.*\[lib(GL|GLX|OpenGL)\.so'; then
+      echo "$back links libGL or libGLX; it must load them at run time" >&2
+      exit 1
+    fi
+  done
+fi
 
 layer="$out/gnustep-carry-$target-$release.zip"
 python3 -m gnustep_cli_shared.carry_layer build --carry-json "$carry_json" --stock-root "$work/stock" \
@@ -188,5 +207,52 @@ run_tests stock
 echo "== stock root with the layer applied: every test must pass"
 (cd "$prefix" && python3 -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1]); [z.extract(n) for n in z.namelist() if n != "carry-layer.json"]' "$layer")
 run_tests layer
+
+# Without libGL: remove libglvnd's libGL and libGLX and Mesa's GLX (dpkg, as xvfb and
+# libgl-dev depend on them; Xvfb itself links libGL, so one is started first and used for
+# every test). The OpenGL tests must skip cleanly, openglLoad.m must find OpenGL
+# unavailable and say so in one line, and every other test must pass as with libGL.
+if [ -d "$work/src/libs-back" ]; then
+  echo "== the layer without libGL: OpenGL reports unavailable, everything else passes"
+  exec 3> "$work/xvfb-display"
+  Xvfb -displayfd 3 -screen 0 1280x1024x24 -nolisten tcp > "$out/xvfb-nogl.txt" 2>&1 &
+  xvfb_pid=$!
+  exec 3>&-
+  for _ in $(seq 50); do test -s "$work/xvfb-display" && break; sleep 0.2; done
+  test -s "$work/xvfb-display" || { cat "$out/xvfb-nogl.txt"; exit 1; }
+  nogl_display=":$(cat "$work/xvfb-display")"
+  dpkg --remove --force-depends libgl1 libglx0 libglx-mesa0 libgl-dev > "$out/remove-libgl.txt" 2>&1 \
+    || { cat "$out/remove-libgl.txt"; exit 1; }
+  if python3 -c 'import ctypes, sys
+for n in ("libGL.so.1", "libGLX.so.0"):
+    try:
+        ctypes.CDLL(n); print(n, "still loads"); sys.exit(1)
+    except OSError as e:
+        print(e)'; then :; else echo "libGL is still installed" >&2; exit 1; fi
+  status=0
+  for entry in "${tests[@]}"; do
+    t=${entry%%|*}
+    name=$(basename "$t" .m)
+    log="$out/test-$name-nogl.txt"
+    set +e
+    (cd "$work/tests" && DISPLAY=$nogl_display timeout 180 "./$name") > "$log" 2>&1
+    code=$?
+    set -e
+    passed=$(grep -c '^Passed test' "$log" || true)
+    failed=$(grep -c -E '^(Failed test|Dashed hope)' "$log" || true)
+    skipped=$(grep -c '^Skipped set' "$log" || true)
+    other=$(grep -c -E '^Failed set|Uncaught' "$log" || true)
+    unavailable=$(grep -c 'OpenGL is unavailable' "$log" || true)
+    echo "$name (nogl): exit $code, passed $passed, failed $failed, skipped sets $skipped, other $other, 'OpenGL is unavailable' lines $unavailable"
+    case "$name" in
+      openglSubwindow|visibility) bad=$(( code != 0 || failed != 0 || other != 0 || skipped == 0 )) ;;
+      openglLoad) bad=$(( code != 0 || passed == 0 || failed != 0 || other != 0 || skipped != 0 || unavailable != 1 )) ;;
+      *) bad=$(( code != 0 || passed == 0 || failed != 0 || other != 0 )) ;;
+    esac
+    if [ "$bad" -ne 0 ]; then cat "$log"; status=1; fi
+  done
+  kill "$xvfb_pid" 2>/dev/null || true
+  test "$status" -eq 0
+fi
 sha256sum "$layer" | tee "$out/SHA256SUMS"
 echo "linux patch layer for $target: ok"

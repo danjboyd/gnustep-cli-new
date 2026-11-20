@@ -1,0 +1,592 @@
+From ca2d41aaad0fcdaad061e59c5232c28ced5ce673 Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Fri, 20 Nov 2026 14:15:20 -0600
+Subject: [PATCH] x11: load libGL at run time instead of linking it
+
+The backend bundle linked libGL whenever it was built with GLX, so every
+app, OpenGL or not, failed to start where no libGL is installed.  It now
+opens libGL.so.1, or glvnd's libGLX.so.0, the first time an app asks for
+an OpenGL pixel format or context, and looks up the GLX and GL functions
+it calls (Source/x11/XGGLLoader.m, Headers/x11/XGGLLoader.h): a table of
+pointers typed by the <GL/glx.h> prototypes, filled once under
+pthread_once, and macros that send the existing calls through it, so the
+call sites don't change.  With glvnd's libGLX the GL functions come from
+glXGetProcAddressARB.
+
+When neither library loads, or one lacks a function, the backend logs one
+line saying why, -glContextClass and -glPixelFormatClass return nil, and
+XGGLPixelFormat and XGGLContext refuse to initialise, so
+NSOpenGLPixelFormat and NSOpenGLContext give nil and an NSOpenGLView has
+no context; everything else works as before.
+
+configure still checks for libGL and <GL/glx.h> (the headers are needed
+to build) but no longer adds -lGL; it adds -ldl only where dlopen isn't
+in libc.
+
+Tests/x11/openglLoad.m checks that starting the backend doesn't load
+libGL, that asking for a pixel format does, and, run where libGL.so.1
+and libGLX.so.0 can't be found, that OpenGL reports unavailable while a
+window with an NSOpenGLView shows and closes.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Ugm29zQymfPxERSSTrHhey
+---
+ Headers/x11/XGGLLoader.h |  90 ++++++++++++++++++++
+ Headers/x11/XGOpenGL.h   |   1 +
+ Source/x11/GNUmakefile   |   3 +-
+ Source/x11/XGGLContext.m |  15 ++++
+ Source/x11/XGGLFormat.m  |   5 ++
+ Source/x11/XGGLLoader.m  | 114 +++++++++++++++++++++++++
+ Source/x11/XGServer.m    |   4 +-
+ Tests/x11/openglLoad.m   | 179 +++++++++++++++++++++++++++++++++++++++
+ configure                |  12 ++-
+ configure.ac             |   5 +-
+ 10 files changed, 423 insertions(+), 5 deletions(-)
+ create mode 100644 Headers/x11/XGGLLoader.h
+ create mode 100644 Source/x11/XGGLLoader.m
+ create mode 100644 Tests/x11/openglLoad.m
+
+diff --git a/Headers/x11/XGGLLoader.h b/Headers/x11/XGGLLoader.h
+new file mode 100644
+index 0000000..419ee54
+--- /dev/null
++++ b/Headers/x11/XGGLLoader.h
+@@ -0,0 +1,90 @@
++/* 	-*-ObjC-*- */
++/* XGGLLoader - the GLX and GL functions of the x11 backend, loaded from
++   libGL at run time
++
++   Copyright (C) 2026 Free Software Foundation, Inc.
++
++   This file is part of the GNUstep GUI Library.
++
++   This library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2 of the License, or (at your option) any later version.
++
++   This library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with this library; see the file COPYING.LIB.
++   If not, see <http://www.gnu.org/licenses/> or write to the
++   Free Software Foundation, 51 Franklin Street, Fifth Floor,
++   Boston, MA 02110-1301, USA.
++*/
++
++#ifndef _GNUstep_H_XGGLLoader_
++#define _GNUstep_H_XGGLLoader_
++
++/* The backend doesn't link libGL: it opens libGL.so.1 (or glvnd's
++   libGLX.so.0) the first time an app asks for an OpenGL pixel format or
++   context, so an app that never uses OpenGL starts where no libGL is
++   installed.  Include this after <GL/glx.h>; the calls below then go
++   through XGGLFunctionTable, which XGGLLoad() fills.  */
++
++/* Every GLX and GL function the x11 backend calls.  */
++#define XG_GL_FUNCTIONS(F) \
++  F(glXChooseFBConfig) \
++  F(glXChooseVisual) \
++  F(glXCopyContext) \
++  F(glXCreateContext) \
++  F(glXCreateNewContext) \
++  F(glXCreateWindow) \
++  F(glXDestroyContext) \
++  F(glXDestroyWindow) \
++  F(glXGetClientString) \
++  F(glXGetConfig) \
++  F(glXGetFBConfigAttrib) \
++  F(glXGetVisualFromFBConfig) \
++  F(glXMakeContextCurrent) \
++  F(glXMakeCurrent) \
++  F(glXQueryServerString) \
++  F(glXSwapBuffers) \
++  F(glGetError) \
++  F(glGetString)
++
++/* A pointer per function, typed by its <GL/glx.h> prototype.  */
++#define XG_GL_POINTER(name) __typeof__(&name) p_##name;
++typedef struct
++{
++  XG_GL_FUNCTIONS(XG_GL_POINTER)
++} XGGLFunctions;
++#undef XG_GL_POINTER
++
++extern XGGLFunctions XGGLFunctionTable;
++
++/* Loads libGL and every function above, once and thread safely.  Returns
++   NO, and has logged one line saying why, when libGL or one of the
++   functions isn't there; OpenGL is then unavailable.  */
++extern BOOL XGGLLoad(void);
++
++#define glXChooseFBConfig (XGGLFunctionTable.p_glXChooseFBConfig)
++#define glXChooseVisual (XGGLFunctionTable.p_glXChooseVisual)
++#define glXCopyContext (XGGLFunctionTable.p_glXCopyContext)
++#define glXCreateContext (XGGLFunctionTable.p_glXCreateContext)
++#define glXCreateNewContext (XGGLFunctionTable.p_glXCreateNewContext)
++#define glXCreateWindow (XGGLFunctionTable.p_glXCreateWindow)
++#define glXDestroyContext (XGGLFunctionTable.p_glXDestroyContext)
++#define glXDestroyWindow (XGGLFunctionTable.p_glXDestroyWindow)
++#define glXGetClientString (XGGLFunctionTable.p_glXGetClientString)
++#define glXGetConfig (XGGLFunctionTable.p_glXGetConfig)
++#define glXGetFBConfigAttrib (XGGLFunctionTable.p_glXGetFBConfigAttrib)
++#define glXGetVisualFromFBConfig (XGGLFunctionTable.p_glXGetVisualFromFBConfig)
++#define glXMakeContextCurrent (XGGLFunctionTable.p_glXMakeContextCurrent)
++#define glXMakeCurrent (XGGLFunctionTable.p_glXMakeCurrent)
++#define glXQueryServerString (XGGLFunctionTable.p_glXQueryServerString)
++#define glXSwapBuffers (XGGLFunctionTable.p_glXSwapBuffers)
++#define glGetError (XGGLFunctionTable.p_glGetError)
++#define glGetString (XGGLFunctionTable.p_glGetString)
++
++#endif
+diff --git a/Headers/x11/XGOpenGL.h b/Headers/x11/XGOpenGL.h
+index 3ec933e..5852755 100644
+--- a/Headers/x11/XGOpenGL.h
++++ b/Headers/x11/XGOpenGL.h
+@@ -35,6 +35,7 @@
+ #include <GL/glx.h>
+ #undef id
+ #undef BOOL
++#include "x11/XGGLLoader.h"
+ 
+ @class NSView;
+ @class XGXSubWindow;
+diff --git a/Source/x11/GNUmakefile b/Source/x11/GNUmakefile
+index fa08eb5..fab85e8 100644
+--- a/Source/x11/GNUmakefile
++++ b/Source/x11/GNUmakefile
+@@ -61,7 +61,8 @@ XGDragView.m \
+ XIMInputServer.m \
+ XWindowBuffer.m\
+ XGGLFormat.m\
+-XGGLContext.m
++XGGLContext.m\
++XGGLLoader.m
+ 
+ -include GNUmakefile.preamble
+ 
+diff --git a/Source/x11/XGGLContext.m b/Source/x11/XGGLContext.m
+index f306bb1..c9c44e4 100644
+--- a/Source/x11/XGGLContext.m
++++ b/Source/x11/XGGLContext.m
+@@ -405,6 +405,11 @@ static XGGLContext *currentGLContext;
+ {
+   MAKE_DISPLAY(dpy);
+ 
++  if (!XGGLLoad())
++    {
++      return;
++    }
++
+   if ([XGGLPixelFormat glxMinorVersion] >= 3)
+     {
+       if (!glXMakeContextCurrent(dpy, None, None, NULL))
+@@ -570,6 +575,11 @@ static XGGLContext *currentGLContext;
+     {
+       return nil;
+     }
++  if (!XGGLLoad())
++    {
++      RELEASE(self);
++      return nil;
++    }
+ 
+   // FIXME: Need to set the pixelFormat ivar
+   glx_context = context;
+@@ -585,6 +595,11 @@ static XGGLContext *currentGLContext;
+     {
+       return nil;
+     }
++  if (!XGGLLoad())
++    {
++      RELEASE(self);
++      return nil;
++    }
+ 
+   glx_context = None;
+   
+diff --git a/Source/x11/XGGLFormat.m b/Source/x11/XGGLFormat.m
+index 8b86bd3..558af85 100644
+--- a/Source/x11/XGGLFormat.m
++++ b/Source/x11/XGGLFormat.m
+@@ -335,6 +335,11 @@ do \
+     {
+       return nil;
+     }
++  if (!XGGLLoad())
++    {
++      RELEASE(self);
++      return nil;
++    }
+ 
+   fbconfig = NULL;
+   visualinfo = NULL;
+diff --git a/Source/x11/XGGLLoader.m b/Source/x11/XGGLLoader.m
+new file mode 100644
+index 0000000..371e82c
+--- /dev/null
++++ b/Source/x11/XGGLLoader.m
+@@ -0,0 +1,114 @@
++/* -*- mode:ObjC -*-
++   XGGLLoader - load libGL at run time for the x11 backend's OpenGL support
++
++   Copyright (C) 2026 Free Software Foundation, Inc.
++
++   This file is part of the GNU Objective C User Interface Library.
++
++   This library is free software; you can redistribute it and/or
++   modify it under the terms of the GNU Lesser General Public
++   License as published by the Free Software Foundation; either
++   version 2 of the License, or (at your option) any later version.
++
++   This library is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the GNU
++   Lesser General Public License for more details.
++
++   You should have received a copy of the GNU Lesser General Public
++   License along with this library; see the file COPYING.LIB.
++   If not, see <http://www.gnu.org/licenses/> or write to the
++   Free Software Foundation, 51 Franklin Street, Fifth Floor,
++   Boston, MA 02110-1301, USA.
++*/
++
++#include "config.h"
++
++#ifdef HAVE_GLX
++
++#include <Foundation/NSString.h>
++#include <dlfcn.h>
++#include <pthread.h>
++#include <stdio.h>
++#include <string.h>
++#include "x11/XGOpenGL.h"
++
++XGGLFunctions XGGLFunctionTable;
++
++static pthread_once_t loadOnce = PTHREAD_ONCE_INIT;
++static BOOL loaded = NO;
++
++typedef void (*(*GetProcAddressFn)(const GLubyte *))(void);
++
++/* Loads every function from one library; returns the name of the first
++   one missing, or NULL.  glvnd's libGLX.so.0 has the GLX functions only,
++   so the GL ones are asked of glXGetProcAddressARB when the library
++   doesn't export them.  */
++static const char *
++loadFunctions(void *library)
++{
++  GetProcAddressFn getProcAddress
++    = (GetProcAddressFn)dlsym(library, "glXGetProcAddressARB");
++  void *f;
++
++#define XG_GL_LOAD(name) \
++  f = dlsym(library, #name); \
++  if (f == NULL && getProcAddress != NULL && strncmp(#name, "glX", 3) != 0) \
++    { \
++      f = (void *)getProcAddress((const GLubyte *)#name); \
++    } \
++  if (f == NULL) \
++    { \
++      return #name; \
++    } \
++  XGGLFunctionTable.p_##name = (__typeof__(XGGLFunctionTable.p_##name))f;
++
++  XG_GL_FUNCTIONS(XG_GL_LOAD)
++#undef XG_GL_LOAD
++  return NULL;
++}
++
++static void
++loadGL(void)
++{
++  static const char *libraries[] = { "libGL.so.1", "libGLX.so.0" };
++  char reason[512] = "";
++  unsigned i;
++
++  for (i = 0; i < sizeof(libraries) / sizeof(libraries[0]); i++)
++    {
++      /* Never closed: libGL can't be unloaded safely, and an app that
++         links libGL itself gets the same copy back.  */
++      void *library = dlopen(libraries[i], RTLD_NOW | RTLD_LOCAL);
++      const char *error;
++      size_t used = strlen(reason);
++
++      if (library == NULL)
++        {
++          error = dlerror();
++        }
++      else if ((error = loadFunctions(library)) == NULL)
++        {
++          loaded = YES;
++          return;
++        }
++      else
++        {
++          memset(&XGGLFunctionTable, 0, sizeof(XGGLFunctionTable));
++        }
++      snprintf(reason + used, sizeof(reason) - used, "%s%s%s%s",
++               used ? "; " : "", library ? libraries[i] : "",
++               library ? " has no " : "", error ? error : libraries[i]);
++    }
++  NSLog(@"OpenGL is unavailable, NSOpenGLPixelFormat and NSOpenGLContext"
++        @" give nil: %s", reason);
++}
++
++BOOL
++XGGLLoad(void)
++{
++  pthread_once(&loadOnce, loadGL);
++  return loaded;
++}
++
++#endif /* HAVE_GLX */
+diff --git a/Source/x11/XGServer.m b/Source/x11/XGServer.m
+index 5e88720..7adec32 100644
+--- a/Source/x11/XGServer.m
++++ b/Source/x11/XGServer.m
+@@ -794,7 +794,7 @@ static int byte_order(void)
+ - glContextClass
+ {
+ #ifdef HAVE_GLX
+-  return [XGGLContext class];
++  return XGGLLoad() ? [XGGLContext class] : nil;
+ #else
+   return nil;
+ #endif
+@@ -803,7 +803,7 @@ static int byte_order(void)
+ - glPixelFormatClass
+ {
+ #ifdef HAVE_GLX
+-  return [XGGLPixelFormat class];
++  return XGGLLoad() ? [XGGLPixelFormat class] : nil;
+ #else
+   return nil;
+ #endif
+diff --git a/Tests/x11/openglLoad.m b/Tests/x11/openglLoad.m
+new file mode 100644
+index 0000000..506343b
+--- /dev/null
++++ b/Tests/x11/openglLoad.m
+@@ -0,0 +1,179 @@
++/* Tests that the x11 backend loads libGL at run time, when an app first
++ * asks for OpenGL (Source/x11/XGGLLoader.m), and doesn't link it:
++ *  - starting the backend doesn't load libGL;
++ *  - with libGL installed, asking for a pixel format loads it, and on a
++ *    display with GLX gives a pixel format and an NSOpenGLView a context;
++ *  - without libGL.so.1 and libGLX.so.0, OpenGL is unavailable and nothing
++ *    else is: the backend reports no OpenGL classes, NSOpenGLPixelFormat and
++ *    NSOpenGLContext give nil, an NSOpenGLView has no context, and its
++ *    window shows, draws and closes.
++ * Run it once with libGL installed and once without.
++ */
++#import <Foundation/Foundation.h>
++#import "Testing.h"
++#include "config.h"
++
++#if defined(BUILD_SERVER) && defined(SERVER_x11) \
++  && BUILD_SERVER == SERVER_x11 && defined(HAVE_GLX)
++
++#import <AppKit/AppKit.h>
++#import <GNUstepGUI/GSDisplayServer.h>
++#include <X11/Xlib.h>
++#include <dlfcn.h>
++
++static void
++spin(void)
++{
++  [[NSRunLoop currentRunLoop]
++    runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.2]];
++}
++
++/* Whether a libGL is in the process already (RTLD_NOLOAD loads nothing).  */
++static BOOL
++libGLLoaded(void)
++{
++  return dlopen("libGL.so.1", RTLD_LAZY | RTLD_NOLOAD) != NULL
++    || dlopen("libGLX.so.0", RTLD_LAZY | RTLD_NOLOAD) != NULL;
++}
++
++/* Whether the libraries the backend loads can be loaded.  */
++static BOOL
++libGLInstalled(void)
++{
++  return dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL) != NULL
++    || dlopen("libGLX.so.0", RTLD_LAZY | RTLD_LOCAL) != NULL;
++}
++
++static BOOL
++displayHasGLX(void)
++{
++  int opcode, event, error;
++
++  return XQueryExtension((Display *)[GSCurrentServer() serverDevice], "GLX",
++    &opcode, &event, &error);
++}
++
++static void
++checkLoad(void)
++{
++  NSOpenGLPixelFormat *format;
++  NSOpenGLView *view;
++  NSWindow *window;
++  BOOL loaded;
++  BOOL installed;
++
++  PASS(!libGLLoaded(), "starting the backend doesn't load libGL");
++
++  format = [NSOpenGLView defaultPixelFormat];
++  loaded = libGLLoaded();
++  installed = libGLInstalled();
++
++  if (installed)
++    {
++      PASS(loaded, "asking for a pixel format loads libGL");
++      if (displayHasGLX())
++	{
++	  PASS(format != nil, "with libGL and GLX there is a pixel format");
++	  PASS([GSCurrentServer() glContextClass] != Nil
++	    && [GSCurrentServer() glPixelFormatClass] != Nil,
++	    "with libGL the backend has OpenGL classes");
++	}
++    }
++  else
++    {
++      NSOpenGLPixelFormatAttribute attributes[] = {
++	NSOpenGLPFADoubleBuffer, NSOpenGLPFAColorSize, 24, 0
++      };
++
++      PASS(!loaded, "without libGL nothing loads one");
++      PASS(format == nil, "without libGL there is no default pixel format");
++      PASS([[NSOpenGLPixelFormat alloc] initWithAttributes: attributes] == nil,
++	"without libGL NSOpenGLPixelFormat gives nil");
++      PASS([GSCurrentServer() glContextClass] == Nil
++	&& [GSCurrentServer() glPixelFormatClass] == Nil,
++	"without libGL the backend reports no OpenGL classes");
++      PASS([[NSOpenGLContext alloc] initWithFormat: format shareContext: nil]
++	== nil, "without libGL NSOpenGLContext gives nil");
++    }
++
++  window = AUTORELEASE([[NSWindow alloc]
++    initWithContentRect: NSMakeRect(100, 100, 200, 160)
++	      styleMask: NSTitledWindowMask
++		backing: NSBackingStoreBuffered
++		  defer: NO]);
++  [window setReleasedWhenClosed: NO];
++  view = AUTORELEASE([[NSOpenGLView alloc]
++    initWithFrame: NSMakeRect(10, 10, 100, 80)]);
++  [[window contentView] addSubview: view];
++  [window orderFront: nil];
++  [window display];
++  spin();
++  PASS([window isVisible], "a window with an NSOpenGLView shows");
++  if (format == nil)
++    {
++      PASS([view openGLContext] == nil,
++	"without a pixel format the NSOpenGLView has no context");
++    }
++  else
++    {
++      PASS([view openGLContext] != nil, "the NSOpenGLView has a context");
++    }
++  [window close];
++  spin();
++  PASS(![window isVisible], "the window closes");
++}
++
++int
++main(int argc, char **argv)
++{
++  CREATE_AUTORELEASE_POOL(arp);
++
++  START_SET("x11 libGL loaded at run time")
++
++  if (getenv("DISPLAY") == NULL || *getenv("DISPLAY") == '\0')
++    {
++      SKIP("no window server available")
++    }
++
++  NS_DURING
++    [NSApplication sharedApplication];
++  NS_HANDLER
++    if ([[localException name] isEqualToString: @"SkipSet"])
++      [localException raise];
++    else
++      {
++	SKIP("The GNUstep backend could not start")
++      }
++  NS_ENDHANDLER
++
++  NS_DURING
++    checkLoad();
++  NS_HANDLER
++    if ([[localException name] isEqualToString: @"SkipSet"])
++      [localException raise];
++    else
++      {
++	PASS(NO, "the checks raise no exception, but %s was raised: %s",
++	  [[localException name] UTF8String],
++	  [[localException reason] UTF8String]);
++      }
++  NS_ENDHANDLER
++
++  END_SET("x11 libGL loaded at run time")
++
++  DESTROY(arp);
++  return 0;
++}
++
++#else
++
++int
++main(int argc, char **argv)
++{
++  START_SET("x11 libGL loaded at run time")
++    SKIP("back is not built with the x11 server and GLX")
++  END_SET("x11 libGL loaded at run time")
++  return 0;
++}
++
++#endif
+diff --git a/configure b/configure
+index c9a4e81..1914bf0 100755
+--- a/configure
++++ b/configure
+@@ -6228,7 +6228,17 @@ rm -rf conftest*
+    { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $have_glx_rgba" >&5
+ printf "%s\n" "$have_glx_rgba" >&6; }
+    if test "$have_glx" = yes -a "$ac_cv_header_GL_glx_h" = yes -a "$have_glx_rgba" = yes; then
+-     GLX_LIBS="-lGL"
++     # libGL isn't linked: the backend loads it when an app first asks for
++     # OpenGL (Source/x11/XGGLLoader.m), so apps start without it.
++     GLX_LIBS=""
++     ac_fn_c_check_func "$LINENO" "dlopen" "ac_cv_func_dlopen"
++if test "x$ac_cv_func_dlopen" = xyes
++then :
++
++else $as_nop
++  GLX_LIBS="-ldl"
++fi
++
+      GLX_FLAGS=""
+      WITH_GLX=yes
+ 
+diff --git a/configure.ac b/configure.ac
+index 586f7a6..ba62312 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -350,7 +350,10 @@ if test "x$enable_glx" = "xyes"; then
+       ], have_glx_rgba=yes, have_glx_rgba=no)
+    AC_MSG_RESULT([$have_glx_rgba])
+    if test "$have_glx" = yes -a "$ac_cv_header_GL_glx_h" = yes -a "$have_glx_rgba" = yes; then
+-     GLX_LIBS="-lGL"
++     # libGL isn't linked: the backend loads it when an app first asks for
++     # OpenGL (Source/x11/XGGLLoader.m), so apps start without it.
++     GLX_LIBS=""
++     AC_CHECK_FUNC(dlopen, , GLX_LIBS="-ldl")
+      GLX_FLAGS=""
+      WITH_GLX=yes
+      AC_DEFINE(HAVE_GLX,1,[Define if you have the glx library])
