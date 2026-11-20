@@ -1,0 +1,131 @@
+# Linux patch layer 0.1.10 (run 44624956105): each target rebuilds the carries against its stock v0.1.9 toolchain, builds and verifies the layer, then runs the carried patches' own tests on Xvfb (stock, then stock + layer).
+
+## linux-ubuntu2404-arm64-clang
+stock toolchain gnustep-toolchain-linux-ubuntu2404-arm64-clang-0.1.9.tar.gz sha256 93f454133b762b489fb33e012b8c680ed3fd65d4965e407b50207ed28f045950
+layer <out>/gnustep-carry-linux-ubuntu2404-arm64-clang-0.1.10.zip sha256 1a0e4a3753431dc7b01bf7dfa985a8f23e1373cc3f493d3d946a7d7a1f320c5b: 4 files, 11 patches
+layer matches the stock toolchain archive
+liveSwitch (stock): exit 0, passed 4, failed 10, skipped sets 0, other 0
+commandBindings (stock): exit 0, passed 2, failed 2, skipped sets 0, other 0
+borderlessalpha (stock): exit 0, passed 1, failed 3, skipped sets 0, other 0
+gdriverterm (stock): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (stock): exit 0, passed 2, failed 3, skipped sets 0, other 0
+orderfocusroot (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+shadowdrawing (stock): exit 0, passed 0, failed 2, skipped sets 0, other 0
+shadowmargin (stock): exit 0, passed 7, failed 16, skipped sets 0, other 0
+windowterm (stock): exit 0, passed 3, failed 1, skipped sets 0, other 0
+windowtype (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+liveSwitch (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+commandBindings (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+borderlessalpha (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+gdriverterm (layer): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+orderfocusroot (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+shadowdrawing (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+shadowmargin (layer): exit 0, passed 23, failed 0, skipped sets 0, other 0
+windowterm (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+windowtype (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+linux patch layer for linux-ubuntu2404-arm64-clang: ok
+
+## linux-ubuntu2604-amd64-clang
+stock toolchain gnustep-toolchain-linux-ubuntu2604-amd64-clang-0.1.9.tar.gz sha256 99ed2d212f308830079db9c5d3df91531d0cbcd94fefe97984aaea00088f5e89
+layer <out>/gnustep-carry-linux-ubuntu2604-amd64-clang-0.1.10.zip sha256 ae92940000589284c687dea6797274fe92896895cbc5e0fc02d04939c86b4504: 4 files, 11 patches
+layer matches the stock toolchain archive
+liveSwitch (stock): exit 0, passed 4, failed 10, skipped sets 0, other 0
+commandBindings (stock): exit 0, passed 2, failed 2, skipped sets 0, other 0
+borderlessalpha (stock): exit 0, passed 1, failed 3, skipped sets 0, other 0
+gdriverterm (stock): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (stock): exit 0, passed 2, failed 3, skipped sets 0, other 0
+orderfocusroot (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+shadowdrawing (stock): exit 0, passed 0, failed 2, skipped sets 0, other 0
+shadowmargin (stock): exit 0, passed 7, failed 16, skipped sets 0, other 0
+windowterm (stock): exit 0, passed 3, failed 1, skipped sets 0, other 0
+windowtype (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+liveSwitch (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+commandBindings (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+borderlessalpha (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+gdriverterm (layer): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+orderfocusroot (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+shadowdrawing (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+shadowmargin (layer): exit 0, passed 23, failed 0, skipped sets 0, other 0
+windowterm (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+windowtype (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+linux patch layer for linux-ubuntu2604-amd64-clang: ok
+
+## linux-arm64-clang
+stock toolchain gnustep-toolchain-linux-arm64-clang-0.1.9.tar.gz sha256 548e08bad3031c105d8fc2b308cac8c5c48de10b3e4934fc4c62a59cdf25ce8d
+layer <out>/gnustep-carry-linux-arm64-clang-0.1.10.zip sha256 72bdc6e919430adc8b6323bd88b54c034ee2b5732c43a31cd33b67fe3a213239: 4 files, 11 patches
+layer matches the stock toolchain archive
+liveSwitch (stock): exit 0, passed 4, failed 10, skipped sets 0, other 0
+commandBindings (stock): exit 0, passed 2, failed 2, skipped sets 0, other 0
+borderlessalpha (stock): exit 0, passed 1, failed 3, skipped sets 0, other 0
+gdriverterm (stock): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (stock): exit 0, passed 2, failed 3, skipped sets 0, other 0
+orderfocusroot (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+shadowdrawing (stock): exit 0, passed 0, failed 2, skipped sets 0, other 0
+shadowmargin (stock): exit 0, passed 7, failed 16, skipped sets 0, other 0
+windowterm (stock): exit 0, passed 3, failed 1, skipped sets 0, other 0
+windowtype (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+liveSwitch (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+commandBindings (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+borderlessalpha (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+gdriverterm (layer): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+orderfocusroot (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+shadowdrawing (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+shadowmargin (layer): exit 0, passed 23, failed 0, skipped sets 0, other 0
+windowterm (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+windowtype (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+linux patch layer for linux-arm64-clang: ok
+
+## linux-amd64-clang
+stock toolchain gnustep-toolchain-linux-amd64-clang-0.1.9.tar.gz sha256 2188143b1c2ab730d112c1fa577c278a9e5e463c8ede336da16046c4bb58be6f
+layer <out>/gnustep-carry-linux-amd64-clang-0.1.10.zip sha256 69fd96b2de182bc3cfd7f1bc0bb9a1fb5a2a11d81008acfbc0c841c3ce89afee: 4 files, 11 patches
+layer matches the stock toolchain archive
+liveSwitch (stock): exit 0, passed 4, failed 10, skipped sets 0, other 0
+commandBindings (stock): exit 0, passed 2, failed 2, skipped sets 0, other 0
+borderlessalpha (stock): exit 0, passed 1, failed 3, skipped sets 0, other 0
+gdriverterm (stock): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (stock): exit 0, passed 2, failed 3, skipped sets 0, other 0
+orderfocusroot (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+shadowdrawing (stock): exit 0, passed 0, failed 2, skipped sets 0, other 0
+shadowmargin (stock): exit 0, passed 7, failed 16, skipped sets 0, other 0
+windowterm (stock): exit 0, passed 3, failed 1, skipped sets 0, other 0
+windowtype (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+liveSwitch (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+commandBindings (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+borderlessalpha (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+gdriverterm (layer): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+orderfocusroot (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+shadowdrawing (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+shadowmargin (layer): exit 0, passed 23, failed 0, skipped sets 0, other 0
+windowterm (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+windowtype (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+linux patch layer for linux-amd64-clang: ok
+
+## linux-ubuntu2404-amd64-clang
+stock toolchain gnustep-toolchain-linux-ubuntu2404-amd64-clang-0.1.9.tar.gz sha256 a6eb7a56cefcb04a74d6d464370ea893b57466a1c5c323a9b80df0af2352046d
+layer <out>/gnustep-carry-linux-ubuntu2404-amd64-clang-0.1.10.zip sha256 08e50471336d72c1863ab124d55a6416554687b527d8331270218557c69ebeb0: 4 files, 11 patches
+layer matches the stock toolchain archive
+liveSwitch (stock): exit 0, passed 4, failed 10, skipped sets 0, other 0
+commandBindings (stock): exit 0, passed 2, failed 2, skipped sets 0, other 0
+borderlessalpha (stock): exit 0, passed 1, failed 3, skipped sets 0, other 0
+gdriverterm (stock): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (stock): exit 0, passed 2, failed 3, skipped sets 0, other 0
+orderfocusroot (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+shadowdrawing (stock): exit 0, passed 0, failed 2, skipped sets 0, other 0
+shadowmargin (stock): exit 0, passed 7, failed 16, skipped sets 0, other 0
+windowterm (stock): exit 0, passed 3, failed 1, skipped sets 0, other 0
+windowtype (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+liveSwitch (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+commandBindings (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+borderlessalpha (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+gdriverterm (layer): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+orderfocusroot (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+shadowdrawing (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+shadowmargin (layer): exit 0, passed 23, failed 0, skipped sets 0, other 0
+windowterm (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+windowtype (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+linux patch layer for linux-ubuntu2404-amd64-clang: ok
