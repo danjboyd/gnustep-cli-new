@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "suite_id": "tier1-core",
+  "target_id": "openbsd-amd64-clang",
+  "runner_id": "otvm-lease",
+  "release_under_test": {
+    "source": "native-packaged-openbsd-otvm-20260504"
+  },
+  "fixture_references": [
+    "generated-cli-template-output",
+    "gorm-upstream-pinned",
+    "cli-only-update-channel"
+  ],
+  "overall_ok": true,
+  "scenario_reports": [
+    {
+      "scenario_id": "bootstrap-install-usable-cli",
+      "ok": true,
+      "summary": "Scenario passed with supplied live evidence.",
+      "fixture_ids": [],
+      "steps": [
+        {
+          "id": "evidence-import",
+          "summary": "Imported externally collected live smoke evidence.",
+          "ok": true,
+          "assertions": [],
+          "commands": [],
+          "evidence": {
+            "evidence_files": [
+              {
+                "path": ".artifacts/final-staged-0.1.0-25342971361/openbsd-full-release-evidence.json",
+                "ok": true,
+                "summary": "OpenBSD native-packaged full release smoke passed on OTVM.",
+                "payload_command": "openbsd-full-release-evidence"
+              }
+            ],
+            "imported_at": "2026-05-05T16:06:11.576069Z"
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "new-cli-project-build-run",
+      "ok": true,
+      "summary": "Scenario passed with supplied live evidence.",
+      "fixture_ids": [
+        "generated-cli-template-output"
+      ],
+      "steps": [
+        {
+          "id": "evidence-import",
+          "summary": "Imported externally collected live smoke evidence.",
+          "ok": true,
+          "assertions": [],
+          "commands": [],
+          "evidence": {
+            "evidence_files": [
+              {
+                "path": ".artifacts/final-staged-0.1.0-25342971361/openbsd-full-release-evidence.json",
+                "ok": true,
+                "summary": "OpenBSD native-packaged full release smoke passed on OTVM.",
+                "payload_command": "openbsd-full-release-evidence"
+              }
+            ],
+            "imported_at": "2026-05-05T16:06:11.576096Z"
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "gorm-build-run",
+      "ok": true,
+      "summary": "Scenario passed with supplied live evidence.",
+      "fixture_ids": [
+        "gorm-upstream-pinned"
+      ],
+      "steps": [
+        {
+          "id": "evidence-import",
+          "summary": "Imported externally collected live smoke evidence.",
+          "ok": true,
+          "assertions": [],
+          "commands": [],
+          "evidence": {
+            "evidence_files": [
+              {
+                "path": ".artifacts/final-staged-0.1.0-25342971361/openbsd-full-release-evidence.json",
+                "ok": true,
+                "summary": "OpenBSD native-packaged full release smoke passed on OTVM.",
+                "payload_command": "openbsd-full-release-evidence"
+              }
+            ],
+            "imported_at": "2026-05-05T16:06:11.576103Z"
+          }
+        }
+      ]
+    },
+    {
+      "scenario_id": "self-update-cli-only",
+      "ok": true,
+      "summary": "Scenario passed with supplied live evidence.",
+      "fixture_ids": [
+        "cli-only-update-channel"
+      ],
+      "steps": [
+        {
+          "id": "evidence-import",
+          "summary": "Imported externally collected live smoke evidence.",
+          "ok": true,
+          "assertions": [],
+          "commands": [],
+          "evidence": {
+            "evidence_files": [
+              {
+                "path": ".artifacts/final-staged-0.1.0-25342971361/openbsd-full-release-evidence.json",
+                "ok": true,
+                "summary": "OpenBSD native-packaged full release smoke passed on OTVM.",
+                "payload_command": "openbsd-full-release-evidence"
+              }
+            ],
+            "imported_at": "2026-05-05T16:06:11.576106Z"
+          }
+        }
+      ]
+    }
+  ],
+  "evidence": {
+    "summary": "Smoke report imported from live evidence.",
+    "target_profile": {
+      "id": "openbsd-amd64-clang",
+      "os": "openbsd",
+      "arch": "amd64",
+      "compiler_family": "clang",
+      "toolchain_flavor": "clang",
+      "bootstrap_kind": "posix-sh",
+      "shell_kind": "sh",
+      "path_style": "posix",
+      "gui_available": true,
+      "managed_root_style": "user-home-local",
+      "runner_profile": "otvm-lease",
+      "tags": [
+        "tier1",
+        "native-packaged",
+        "gui",
+        "dogfood"
+      ],
+      "metadata": {
+        "bootstrap_script": "scripts/bootstrap/gnustep-bootstrap.sh",
+        "expected_objc_runtime": "libobjc2",
+        "expected_install_root_hint": "$HOME/.local/share/gnustep-cli",
+        "path_separator": ":",
+        "gui_launch_contract": "launch-and-stay-alive-briefly",
+        "otvm_profile": "openbsd-7.8-fvwm",
+        "toolchain_source_policy": "native-packaged-preferred",
+        "managed_artifacts_required": false,
+        "native_package_prerequisites": [
+          "gmake",
+          "gnustep-make",
+          "gnustep-base",
+          "gnustep-gui",
+          "gnustep-back"
+        ],
+        "release_artifact_policy": "build-full-cli-against-native-packaged-toolchain"
+      }
+    },
+    "evidence_files": [
+      {
+        "path": ".artifacts/final-staged-0.1.0-25342971361/openbsd-full-release-evidence.json",
+        "ok": true,
+        "summary": "OpenBSD native-packaged full release smoke passed on OTVM.",
+        "payload_command": "openbsd-full-release-evidence"
+      }
+    ]
+  }
+}

@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "summary": "gnustep update all --yes passed on a production-like managed install.",
+  "production_like": true,
+  "command": "gnustep update all --yes",
+  "target": "linux-amd64-clang",
+  "started_at": "2026-04-27T20:36:04Z",
+  "completed_at": "2026-04-27T20:36:10Z",
+  "scopes": {
+    "cli": true,
+    "toolchain": true,
+    "packages": true
+  },
+  "release_transition": {
+    "from_version": "0.1.0-dev-phase13.1",
+    "to_version": "0.1.0-dev-phase13.2"
+  },
+  "package_updates": [
+    {
+      "id": "org.gnustep.tools-xctest",
+      "from_version": null,
+      "to_version": null,
+      "ok": true
+    }
+  ],
+  "result": {
+    "ok": true,
+    "exit_code": 0
+  },
+  "artifacts": {
+    "setup": "setup-old.json",
+    "check": "update-check.json",
+    "stdout": "update-all.json",
+    "stderr": "update-all.stderr",
+    "doctor": "doctor.json",
+    "state_before": "cli-state-before.json",
+    "state_after": "cli-state-after.json",
+    "packages_before": "installed-packages-before.json",
+    "packages_after": "installed-packages-after.json",
+    "version": "version.txt"
+  },
+  "raw_update_check": {
+    "summary": "Updates are available.",
+    "status": "ok",
+    "command": "update",
+    "plan": {
+      "packages": [
+        {
+          "id": "org.gnustep.tools-xctest",
+          "available_version": "0.1.0",
+          "action": "upgrade",
+          "index_path": "/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/packages/package-index-new.json",
+          "update_available": true,
+          "selected_artifact": "tools-xctest-linux-amd64-clang-new",
+          "current_version": "0.0.1"
+        }
+      ],
+      "cli": {
+        "planned_download_size": 347851,
+        "selected_artifacts": [
+          "cli-linux-amd64-clang",
+          "toolchain-linux-amd64-clang"
+        ],
+        "layers": [
+          {
+            "size": 347418,
+            "artifact_id": "cli-linux-amd64-clang",
+            "download_required": true,
+            "name": "cli",
+            "current_sha256": "89458b750a41ec9b77f1aab6bf9591549de6d2f2a6123e77c6ce4898bcc63896",
+            "sha256": "cbd71d12c2fefc6b3a0316f09a2d2cfcfd085e8e5ac90f504923436aab810d5a",
+            "action": "update"
+          },
+          {
+            "size": 433,
+            "artifact_id": "toolchain-linux-amd64-clang",
+            "download_required": true,
+            "name": "toolchain",
+            "current_sha256": "ac93cff0cffe0b96499c22dc8c174dfc739b61435fb04e9e9e1eb70c8dbc3ad0",
+            "sha256": "c9d234da30943295ad7542e0c5ae056be076a98ebb0e8942f2cf31781995b896",
+            "reused_manifest_reference": false,
+            "action": "update"
+          }
+        ],
+        "selection_errors": [],
+        "update_available": true,
+        "layer_update_kind": "toolchain_required",
+        "downgrade_detected": false,
+        "installed_version": "0.1.0-dev-phase13.1",
+        "latest_compatible_version": "0.1.0-dev-phase13.2"
+      }
+    },
+    "ok": true,
+    "schema_version": 1,
+    "update_available": true,
+    "mode": "check",
+    "scope": "all"
+  },
+  "raw_update_result": {
+    "summary": "All updates completed.",
+    "cli": {
+      "doctor": {
+        "status": "error",
+        "os": "linux",
+        "summary": "A GNUstep toolchain was detected, but it is incompatible with the selected managed artifacts.",
+        "environment_classification": "toolchain_incompatible"
+      },
+      "cli_version": "0.1.0-dev",
+      "ok": true,
+      "operation": "update_cli",
+      "scope": "cli",
+      "schema_version": 1,
+      "status": "ok",
+      "plan": {
+        "selected_artifacts": [
+          "cli-linux-amd64-clang",
+          "toolchain-linux-amd64-clang"
+        ],
+        "native_toolchain_assessment": "interoperability_only",
+        "manifest_validation_errors": [],
+        "manifest_path": "/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/new/dogfood/0.1.0-dev-phase13.2/release-manifest.json",
+        "install_root": "/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install",
+        "selection_errors": [],
+        "disposition": "install_managed",
+        "scope": "user",
+        "system_privileges_ok": true,
+        "selected_release": "0.1.0-dev-phase13.2",
+        "channel": "stable",
+        "install_mode": "managed"
+      },
+      "actions": [
+        {
+          "priority": 1,
+          "kind": "add_path",
+          "message": "Add /home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install/bin, /home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install/Tools, and /home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install/System/Tools to PATH for future shells; the gnustep launcher sets managed runtime library paths automatically."
+        },
+        {
+          "priority": 2,
+          "kind": "delete_bootstrap",
+          "message": "The bootstrap script is no longer required and may be deleted."
+        }
+      ],
+      "command": "update",
+      "summary": "CLI and toolchain update completed.",
+      "install": {
+        "install_root": "/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install",
+        "path_hint": "export PATH=\"/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install/bin:/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install/Tools:/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install/System/Tools:$PATH\"",
+        "active_release_path": "/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install/releases/0.1.0-dev-phase13.2",
+        "previous_release_path": "/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/.install.setup-backup-E99F12A2-B5E4-5909-636B-E8120F028E09",
+        "installed_artifacts": [
+          {
+            "paths": [
+              "/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install"
+            ],
+            "artifact_id": "cli-linux-amd64-clang"
+          },
+          {
+            "paths": [
+              "/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install"
+            ],
+            "artifact_id": "toolchain-linux-amd64-clang"
+          }
+        ]
+      },
+      "mode": "apply"
+    },
+    "status": "ok",
+    "command": "update",
+    "ok": true,
+    "schema_version": 1,
+    "mode": "apply",
+    "scope": "all",
+    "packages": {
+      "summary": "Package updates completed.",
+      "status": "ok",
+      "command": "update",
+      "package_updates": [
+        {
+          "id": "org.gnustep.tools-xctest",
+          "ok": true,
+          "selected_artifact": "tools-xctest-linux-amd64-clang-new",
+          "summary": "Package installed."
+        }
+      ],
+      "managed_root": "/home/danboyd/gnustep-cli-new/.artifacts/phase13-local-production-like/install",
+      "ok": true,
+      "schema_version": 1,
+      "mode": "apply",
+      "scope": "packages"
+    }
+  }
+}
