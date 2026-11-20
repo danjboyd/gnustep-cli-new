@@ -1,0 +1,55 @@
+# v0.1.10 Linux release-path and update rehearsal (local, private HOME, nothing published)
+## release path (release.yml's commands, throwaway keys)
+stage: exit=0 ok=True Release assets staged.
+verify_staged: exit=0 ok=True Release directory verified.
+index_generate: exit=0 ok=True None
+index_sign: exit=0 ok=True Package index metadata signed.
+index_gate: exit=0 ok=True Package index trust gate passed.
+publication_gate: exit=0 ok=True Package artifact publication gate passed.
+signed_artifact_check: matched filtered index
+advertise: exit=0 ok=True Package index advertised in the release manifest.
+verify_release: exit=0 ok=True Release directory verified.
+evidence_prelim: exit=1 ok=False Release evidence bundle is missing required evidence.
+key_rotation_drill: exit=0 ok=True Release key rotation drill passed.
+sign_release: exit=0 ok=True Release metadata signed.
+controlled_gate: exit=0 ok=True Controlled release gate passed.
+claim_consistency: exit=1 ok=False Release claims are missing artifact or evidence support.
+immediate_rc: exit=1 ok=False Immediate RC blockers still have missing proof.
+verify_final: exit=0 ok=True Release directory verified.
+artifact count 19 targets ['cli-linux-amd64-clang', 'cli-linux-arm64-clang', 'cli-linux-ubuntu2404-amd64-clang', 'cli-linux-ubuntu2404-arm64-clang', 'cli-linux-ubuntu2604-amd64-clang', 'cli-windows-amd64-msys2-clang64']
+
+## updates
+staged manifest served: http://127.0.0.1:18473/download/v0.1.10/release-manifest.json
+== R1 (0.1.9 install, its own CLI, explicit --manifest = staged 0.1.10)
+bootstrap 0.1.9 -> <scratch>/v0110/upd/r1-019: exit 0 version 0.1.9
+R1 exit 0 : 0.1.9 -> 0.1.10
+update: All updates completed.
+update: scope=all mode=apply
+== R3 (0.1.10 install, --check against the staged manifest)
+R3 exit 0
+update: scope=all mode=check
+update: available=no
+0.1.10
+bootstrap 0.1.5 -> <scratch>/v0110/upd/r2-015: exit 0 version 0.1.5
+== R2 (staged 0.1.10 CLI, default discovery, production Latest, no --manifest, no trust override)
+R2 check exit 0
+update: scope=all mode=check
+update: available=yes
+R2 exit 0 : 0.1.5 -> 0.1.9
+update: All updates completed.
+update: scope=all mode=apply
+== D (doctor on the 0.1.10 install from R1: must recognise the managed install, #53 + #62)
+D integrity=ok managed_root=<scratch>/v0110/upd/r1-019 actions=['use_managed_toolchain'] ok=True
+D message: The detected toolchain is the managed install at <scratch>/v0110/upd/r1-019.
+== K (#81: after R1's upgrade, exactly one backup of the root)
+boot-0.1.9-r1-019.log r1-019 .r1-019.setup-backup-35FB2728-73D0-3505-5F75-BC36D7F1CA69 
+== P (patched variant on R1's 0.1.10 install, from the staged manifest; then back to stock)
+P patched exit 0
+P layer linux-amd64-clang release 0.1.10: 4 files patched=True; patches=['gui-theme-live-switch-linux', 'gui-command-key-bindings-linux', 'x11-xlibimage-layer-linux', 'x11-enable-wraster-option-linux', 'x11-no-wraster-by-default-linux', 'x11-keep-wm-functions-linux', 'x11-window-types-linux', 'x11-borderless-alpha-linux', 'x11-orderwindow-focus-root-linux', 'x11-window-shadows-linux', 'x11-popover-shadows-linux']
+P doctor variant: ok patched
+P doctor sources: ok GNUstep libraries: libs-base d898f703 (upstream git), libs-gui 7892137b (upstream git), libs-back bf3b3ced (upstream git). The Windows toolchain uses release pa
+P back to stock exit 0 ; carry-layer.json present: no
+== RB (#85: setup --rollback on R1's install returns to 0.1.9, then the CLI works)
+RB exit 0 : now 0.1.9
+0.1.9
+real ~/GNUstep unchanged
