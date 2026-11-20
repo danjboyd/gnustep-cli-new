@@ -1,0 +1,195 @@
+From 8f97ec9bdd2727b20426fe18dc5f826a952bc914 Mon Sep 17 00:00:00 2001
+From: Todd White <todd.white@thalion.global>
+Date: Fri, 24 Jul 2026 16:58:22 -0400
+Subject: [PATCH 3/6] Add NSView viewDidHide and viewDidUnhide
+
+setHidden: now sends viewDidHide or viewDidUnhide to the view and to
+its descendants whose effective visibility changes.  A descendant that
+is itself hidden, or any view below an already-hidden ancestor, is not
+notified since its effective visibility does not change.
+
+(cherry picked from commit ddef59c754c2b8c1c45811743d18944d5b23d6bb)
+(cherry picked from commit 6e598dcf35da11f64e641674377848633474562a)
+---
+ Headers/AppKit/NSView.h                |  2 +
+ Source/NSView.m                        | 37 ++++++++++
+ Tests/gui/NSView/hiddenNotifications.m | 95 ++++++++++++++++++++++++++
+ 3 files changed, 134 insertions(+)
+ create mode 100644 Tests/gui/NSView/hiddenNotifications.m
+
+diff --git a/Headers/AppKit/NSView.h b/Headers/AppKit/NSView.h
+index e1445ca68..7c349e128 100644
+--- a/Headers/AppKit/NSView.h
++++ b/Headers/AppKit/NSView.h
+@@ -374,6 +374,8 @@ PACKAGE_SCOPE
+ - (void) setHidden: (BOOL)flag;
+ - (BOOL) isHidden;
+ - (BOOL) isHiddenOrHasHiddenAncestor;
++- (void) viewDidHide;
++- (void) viewDidUnhide;
+ #endif
+ 
+ - (void) drawRect: (NSRect)rect;
+diff --git a/Source/NSView.m b/Source/NSView.m
+index e55a7add4..e1d83c4d8 100644
+--- a/Source/NSView.m
++++ b/Source/NSView.m
+@@ -2939,13 +2939,37 @@ in the main thread.
+ /*
+  * Hidding Views
+  */
++- (void) _sendViewDidUnhide: (BOOL)unhide
++{
++  NSUInteger i, count;
++
++  if (unhide)
++    [self viewDidUnhide];
++  else
++    [self viewDidHide];
++
++  count = [_sub_views count];
++  for (i = 0; i < count; i++)
++    {
++      NSView *sub = [_sub_views objectAtIndex: i];
++
++      if (![sub isHidden])
++        [sub _sendViewDidUnhide: unhide];
++    }
++}
++
+ - (void) setHidden: (BOOL)flag
+ {
+   id view;
++  BOOL notify;
+ 
+   if (_is_hidden == flag)
+       return;
+ 
++  /* The view and its unhidden descendants only change effective visibility
++     when no ancestor is already hidden. */
++  notify = (_super_view == nil) || ![_super_view isHiddenOrHasHiddenAncestor];
++
+   _is_hidden = flag;
+ 
+   if (_is_hidden)
+@@ -2996,6 +3020,19 @@ in the main thread.
+         }
+       [self setNeedsDisplay: YES];
+     }
++
++  if (notify)
++    {
++      [self _sendViewDidUnhide: (flag == NO)];
++    }
++}
++
++- (void) viewDidHide
++{
++}
++
++- (void) viewDidUnhide
++{
+ }
+ 
+ - (BOOL) isHidden
+diff --git a/Tests/gui/NSView/hiddenNotifications.m b/Tests/gui/NSView/hiddenNotifications.m
+new file mode 100644
+index 000000000..3aeb51b38
+--- /dev/null
++++ b/Tests/gui/NSView/hiddenNotifications.m
+@@ -0,0 +1,95 @@
++#import "Testing.h"
++#import <Foundation/NSAutoreleasePool.h>
++#import <Foundation/NSGeometry.h>
++#import <AppKit/NSApplication.h>
++#import <AppKit/NSView.h>
++
++@interface HideRecorder : NSView
++{
++@public
++  int hideCount;
++  int unhideCount;
++}
++@end
++
++@implementation HideRecorder
++- (void) viewDidHide { hideCount++; }
++- (void) viewDidUnhide { unhideCount++; }
++@end
++
++int
++main(int argc, char **argv)
++{
++  CREATE_AUTORELEASE_POOL(arp);
++  HideRecorder *parent, *visibleChild, *hiddenChild;
++
++  START_SET("NSView hidden notifications")
++
++  NS_DURING
++    {
++      [NSApplication sharedApplication];
++    }
++  NS_HANDLER
++    {
++      if ([[localException name] isEqualToString: NSInternalInconsistencyException])
++        SKIP("It looks like GNUstep backend is not yet installed")
++    }
++  NS_ENDHANDLER
++
++  parent = AUTORELEASE([[HideRecorder alloc]
++    initWithFrame: NSMakeRect(0, 0, 100, 100)]);
++  visibleChild = AUTORELEASE([[HideRecorder alloc]
++    initWithFrame: NSMakeRect(0, 0, 50, 50)]);
++  hiddenChild = AUTORELEASE([[HideRecorder alloc]
++    initWithFrame: NSMakeRect(0, 0, 50, 50)]);
++  [parent addSubview: visibleChild];
++  [parent addSubview: hiddenChild];
++
++  /* Directly hiding a view whose ancestors are visible sends viewDidHide to
++     it.  Checked against AppKit. */
++  [hiddenChild setHidden: YES];
++  PASS(hiddenChild->hideCount == 1,
++    "setHidden: YES sends viewDidHide to the view");
++
++  parent->hideCount = 0;
++  visibleChild->hideCount = 0;
++  hiddenChild->hideCount = 0;
++
++  /* Hiding a view sends viewDidHide to the view and to its unhidden
++     descendants, but not to descendants that are already hidden. */
++  [parent setHidden: YES];
++  PASS(parent->hideCount == 1,
++    "viewDidHide is sent to the hidden view");
++  PASS(visibleChild->hideCount == 1,
++    "viewDidHide is sent to an unhidden descendant");
++  PASS(hiddenChild->hideCount == 0,
++    "viewDidHide is not sent to an already-hidden descendant");
++
++  /* Changing the hidden state of a view below a hidden ancestor does not
++     change effective visibility, so no notification is sent. */
++  hiddenChild->hideCount = 0;
++  hiddenChild->unhideCount = 0;
++  [hiddenChild setHidden: NO];
++  PASS(hiddenChild->unhideCount == 0,
++    "no viewDidUnhide is sent below a hidden ancestor");
++  [hiddenChild setHidden: YES];
++  PASS(hiddenChild->hideCount == 0,
++    "no viewDidHide is sent below a hidden ancestor");
++
++  /* Unhiding sends viewDidUnhide to the view and its unhidden descendants. */
++  parent->unhideCount = 0;
++  visibleChild->unhideCount = 0;
++  hiddenChild->unhideCount = 0;
++  [parent setHidden: NO];
++  PASS(parent->unhideCount == 1,
++    "viewDidUnhide is sent to the unhidden view");
++  PASS(visibleChild->unhideCount == 1,
++    "viewDidUnhide is sent to an unhidden descendant");
++  PASS(hiddenChild->unhideCount == 0,
++    "viewDidUnhide is not sent to a still-hidden descendant");
++
++  END_SET("NSView hidden notifications")
++
++  DESTROY(arp);
++  return 0;
++}

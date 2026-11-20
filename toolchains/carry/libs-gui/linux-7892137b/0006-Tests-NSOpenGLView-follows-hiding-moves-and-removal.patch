@@ -1,0 +1,332 @@
+From 56a373a46337641a0991a6abc52778a32f211492 Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Fri, 20 Nov 2026 10:04:58 -0600
+Subject: [PATCH 6/6] Tests: NSOpenGLView follows hiding, moves and removal
+
+NSView/invalidateCoordinatesOverride.m: a subclass overriding
+-_invalidateCoordinates is sent it when an ancestor moves, resizes or
+scrolls (bounds origin), and its converted coordinates stay right.  Needs no
+display.
+
+NSOpenGLView/visibility.m: an NSOpenGLView's -update runs when an ancestor
+is hidden or unhidden, once per batch of ancestor moves, and the context
+lets go of the view when it leaves its window and takes it back when drawn
+again.  Skips without OpenGL.
+
+On gui 0.32.0 + the two NSOpenGLView commits (win32, Windows' own OpenGL):
+all pass.  On stock 0.32.0: 5 of 6 and 4 of 6 fail.  Both compile with
+GCC 16 (-fsyntax-only, -Wall), as do the changed NSView.m and
+NSOpenGLView.m.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AEr1tVPvzfTTffJFWFXGKi
+---
+ Tests/gui/NSOpenGLView/visibility.m           | 165 ++++++++++++++++++
+ .../NSView/invalidateCoordinatesOverride.m    | 126 +++++++++++++
+ 2 files changed, 291 insertions(+)
+ create mode 100644 Tests/gui/NSOpenGLView/visibility.m
+ create mode 100644 Tests/gui/NSView/invalidateCoordinatesOverride.m
+
+diff --git a/Tests/gui/NSOpenGLView/visibility.m b/Tests/gui/NSOpenGLView/visibility.m
+new file mode 100644
+index 000000000..8f7d4eb0a
+--- /dev/null
++++ b/Tests/gui/NSOpenGLView/visibility.m
+@@ -0,0 +1,165 @@
++/* An NSOpenGLView's drawable must follow the view.
++ *
++ * The backends draw an OpenGL view into a native child window placed over
++ * the view; the context's -update places it (shows, hides, moves and clips
++ * it).  These check that the view asks for that whenever it should:
++ *  - when an ancestor is hidden or unhidden (viewDidHide/viewDidUnhide);
++ *  - when an ancestor moves, once per batch of changes;
++ *  - when the view leaves its window, the context lets go of its drawable
++ *    (-_viewWillMoveToWindow: used to compare the window after super had
++ *    already set it, so -clearDrawable never ran and the child window
++ *    stayed on screen);
++ *  - and when the view comes back, drawing attaches the context again.
++ *
++ * Needs a display with OpenGL; the set skips cleanly without one.
++ */
++#import "Testing.h"
++#import <Foundation/NSAutoreleasePool.h>
++#import <Foundation/NSDate.h>
++#import <Foundation/NSException.h>
++#import <Foundation/NSRunLoop.h>
++#import <AppKit/NSApplication.h>
++#import <AppKit/NSOpenGL.h>
++#import <AppKit/NSOpenGLView.h>
++#import <AppKit/NSView.h>
++#import <AppKit/NSWindow.h>
++
++@interface UpdateRecorder : NSOpenGLView
++{
++@public
++  int updates;
++}
++@end
++
++@implementation UpdateRecorder
++- (void) update
++{
++  updates++;
++  [super update];
++}
++@end
++
++/* Lets the run loop deliver the view's coalesced update request.  */
++static void
++spin(void)
++{
++  [[NSRunLoop currentRunLoop]
++    runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 0.2]];
++}
++
++static void
++checkVisibility(void)
++{
++  NSWindow *window;
++  NSView *container;
++  UpdateRecorder *view;
++
++  window = AUTORELEASE([[NSWindow alloc]
++    initWithContentRect: NSMakeRect(100, 100, 300, 300)
++              styleMask: NSTitledWindowMask
++                backing: NSBackingStoreBuffered
++                  defer: NO]);
++  [window setReleasedWhenClosed: NO];
++  container = AUTORELEASE([[NSView alloc]
++    initWithFrame: NSMakeRect(20, 20, 200, 200)]);
++  view = AUTORELEASE([[UpdateRecorder alloc]
++    initWithFrame: NSMakeRect(10, 10, 100, 100)]);
++  [[window contentView] addSubview: container];
++  [container addSubview: view];
++  [window orderFront: nil];
++  [window display];
++  spin();
++
++  PASS([[view openGLContext] view] == view,
++    "drawing the view attaches its context to it");
++
++  view->updates = 0;
++  [container setHidden: YES];
++  PASS(view->updates > 0, "hiding an ancestor updates the context");
++
++  view->updates = 0;
++  [container setHidden: NO];
++  PASS(view->updates > 0, "unhiding the ancestor updates the context");
++
++  spin();
++  view->updates = 0;
++  [container setFrameOrigin: NSMakePoint(30, 25)];
++  [container setFrameOrigin: NSMakePoint(40, 30)];
++  [[window contentView] setBoundsOrigin: NSMakePoint(0, 5)];
++  spin();
++  PASS(view->updates == 1,
++    "moving ancestors updates the context once per batch of changes "
++    "(got %d)", view->updates);
++
++  RETAIN(view);
++  [view removeFromSuperview];
++  PASS([[view openGLContext] view] == nil,
++    "removing the view from its window detaches its context");
++
++  /* Hiding, moving and running the loop with no drawable must be safe.  */
++  [view setHidden: YES];
++  [view setHidden: NO];
++  spin();
++
++  [container addSubview: view];
++  RELEASE(view);
++  [window display];
++  spin();
++  PASS([[view openGLContext] view] == view,
++    "drawing the view again in a window reattaches its context");
++
++  [window close];
++}
++
++int
++main(int argc, char **argv)
++{
++  CREATE_AUTORELEASE_POOL(arp);
++
++  START_SET("NSOpenGLView visibility")
++
++  NS_DURING
++    [NSApplication sharedApplication];
++  NS_HANDLER
++    if ([[localException name] isEqualToString: @"SkipSet"])
++      [localException raise];
++    else if ([[localException name] isEqualToString: NSInternalInconsistencyException]
++      || [[localException name] isEqualToString: @"NSWindowServerCommunicationException"])
++      {
++        SKIP("It looks like GNUstep backend is not yet installed")
++      }
++    else
++      {
++        PASS(NO, "the application starts without an unexpected exception, "
++          "but %s was raised", [[localException name] UTF8String]);
++      }
++  NS_ENDHANDLER
++
++  NS_DURING
++    {
++      if ([NSOpenGLView defaultPixelFormat] == nil)
++        {
++          SKIP("No OpenGL pixel format available on this display")
++        }
++      checkVisibility();
++    }
++  NS_HANDLER
++    if ([[localException name] isEqualToString: @"SkipSet"])
++      [localException raise];
++    else if ([[localException name] isEqualToString: NSInternalInconsistencyException]
++      || [[localException name] isEqualToString: @"NSWindowServerCommunicationException"])
++      {
++        SKIP("No display available")
++      }
++    else
++      {
++        PASS(NO, "showing an OpenGL view raises no unexpected exception, "
++          "but %s was raised", [[localException name] UTF8String]);
++      }
++  NS_ENDHANDLER
++
++  END_SET("NSOpenGLView visibility")
++
++  DESTROY(arp);
++  return 0;
++}
+diff --git a/Tests/gui/NSView/invalidateCoordinatesOverride.m b/Tests/gui/NSView/invalidateCoordinatesOverride.m
+new file mode 100644
+index 000000000..af53b1290
+--- /dev/null
++++ b/Tests/gui/NSView/invalidateCoordinatesOverride.m
+@@ -0,0 +1,126 @@
++/* A subclass that overrides -_invalidateCoordinates must learn when an
++ * ancestor moves, resizes or scrolls.
++ *
++ * NSView invalidates a view's cached coordinates, and those of its
++ * descendants, when its frame or bounds change.  The recursion into the
++ * descendants used to call NSView's own implementation through a cached
++ * IMP, so a subclass override ran only when the view itself changed, never
++ * when an ancestor did.  NSOpenGLView overrides it to move its native child
++ * window; without the message it stays behind when a parent moves or a
++ * scroll view scrolls.  This guards the recursion sending the message.
++ *
++ * Needs no window or display: coordinates are computed and invalidated
++ * without one.
++ */
++#import "Testing.h"
++#import <Foundation/NSAutoreleasePool.h>
++#import <Foundation/NSException.h>
++#import <Foundation/NSGeometry.h>
++#import <AppKit/NSApplication.h>
++#import <AppKit/NSView.h>
++
++@interface NSView (InvalidateCoordinatesOverride)
++- (void) _invalidateCoordinates;
++@end
++
++@interface InvalidationRecorder : NSView
++{
++@public
++  int invalidations;
++}
++@end
++
++@implementation InvalidationRecorder
++- (void) _invalidateCoordinates
++{
++  invalidations++;
++  [super _invalidateCoordinates];
++}
++@end
++
++/* Converting a point computes the view's cached coordinates (and its
++   ancestors'), which is what the invalidation has to clear.  */
++static void
++validate(NSView *view)
++{
++  (void)[view convertPoint: NSMakePoint(1, 1) toView: nil];
++}
++
++int
++main(int argc, char **argv)
++{
++  CREATE_AUTORELEASE_POOL(arp);
++  NSView *grandparent, *parent;
++  InvalidationRecorder *child, *grandchild;
++
++  START_SET("NSView -_invalidateCoordinates reaches subclass overrides")
++
++  NS_DURING
++    {
++      [NSApplication sharedApplication];
++    }
++  NS_HANDLER
++    {
++      if ([[localException name] isEqualToString: NSInternalInconsistencyException])
++        SKIP("It looks like GNUstep backend is not yet installed")
++    }
++  NS_ENDHANDLER
++
++  grandparent = AUTORELEASE([[NSView alloc]
++    initWithFrame: NSMakeRect(0, 0, 400, 400)]);
++  parent = AUTORELEASE([[NSView alloc]
++    initWithFrame: NSMakeRect(10, 10, 300, 300)]);
++  child = AUTORELEASE([[InvalidationRecorder alloc]
++    initWithFrame: NSMakeRect(20, 20, 100, 100)]);
++  grandchild = AUTORELEASE([[InvalidationRecorder alloc]
++    initWithFrame: NSMakeRect(5, 5, 50, 50)]);
++  [grandparent addSubview: parent];
++  [parent addSubview: child];
++  [child addSubview: grandchild];
++
++  validate(grandchild);
++  child->invalidations = 0;
++  grandchild->invalidations = 0;
++  [parent setFrameOrigin: NSMakePoint(30, 40)];
++  PASS(child->invalidations > 0,
++    "moving the parent sends -_invalidateCoordinates to the subclass child");
++  PASS(grandchild->invalidations > 0,
++    "and to the subclass grandchild");
++
++  validate(grandchild);
++  child->invalidations = 0;
++  grandchild->invalidations = 0;
++  [grandparent setFrameOrigin: NSMakePoint(7, 9)];
++  PASS(child->invalidations > 0 && grandchild->invalidations > 0,
++    "moving a more distant ancestor reaches them too");
++
++  validate(grandchild);
++  child->invalidations = 0;
++  [parent setFrameSize: NSMakeSize(250, 260)];
++  PASS(child->invalidations > 0,
++    "resizing the parent reaches the subclass child");
++
++  /* What a scroll view's clip view does when it scrolls.  */
++  validate(grandchild);
++  child->invalidations = 0;
++  grandchild->invalidations = 0;
++  [parent setBoundsOrigin: NSMakePoint(0, 25)];
++  PASS(child->invalidations > 0 && grandchild->invalidations > 0,
++    "changing the parent's bounds origin (scrolling) reaches them");
++
++  /* The cached coordinates are still right after the move: the override
++     must not stop the invalidation itself.  */
++  validate(grandchild);
++  [parent setFrameOrigin: NSMakePoint(0, 0)];
++  [parent setBoundsOrigin: NSMakePoint(0, 0)];
++  [grandparent setFrameOrigin: NSMakePoint(0, 0)];
++  PASS(NSEqualPoints([grandchild convertPoint: NSMakePoint(0, 0)
++                                       toView: grandparent],
++                     NSMakePoint(25, 25)),
++    "the subclass's converted coordinates follow its ancestors");
++
++  END_SET("NSView -_invalidateCoordinates reaches subclass overrides")
++
++  DESTROY(arp);
++  return 0;
++}

@@ -1,0 +1,121 @@
+From e8f2b7081e618d085633408f2d8032f8f3e6253e Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Fri, 20 Nov 2026 07:21:36 -0600
+Subject: [PATCH 4/6] NSOpenGLView: update the context when the view is hidden
+ or an ancestor moves
+
+The context's drawable is a native child window placed over the view, so
+the backend must hide it, move it and clip it as the view's visibility and
+position change.  NSOpenGLView only asked for an update when its own frame
+changed.  Now it also asks when the view or an ancestor is hidden or shown
+(-viewDidHide, -viewDidUnhide) and when its coordinates are invalidated
+because an ancestor moved, resized or scrolled; the latter is coalesced
+into one update per run loop pass.
+
+NSView sent -_invalidateCoordinates to subviews through NSView's own
+implementation, so a subclass never saw an ancestor's change; it now sends
+the message.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01AEr1tVPvzfTTffJFWFXGKi
+(cherry picked from commit 9b4a75333b7e51c77839d432fd9f0a138711a24f)
+---
+ Source/NSOpenGLView.m | 53 +++++++++++++++++++++++++++++++++++++++++++
+ Source/NSView.m       |  6 ++++-
+ 2 files changed, 58 insertions(+), 1 deletion(-)
+
+diff --git a/Source/NSOpenGLView.m b/Source/NSOpenGLView.m
+index 13c9afc97..00cb1fcb6 100644
+--- a/Source/NSOpenGLView.m
++++ b/Source/NSOpenGLView.m
+@@ -29,6 +29,9 @@
+ #import <Foundation/NSDebug.h>
+ #import <Foundation/NSException.h>
+ #import <Foundation/NSNotification.h>
++#import <Foundation/NSArray.h>
++#import <Foundation/NSRunLoop.h>
++#import "AppKit/NSApplication.h"
+ #import "AppKit/NSOpenGL.h"
+ #import "AppKit/NSOpenGLView.h"
+ 
+@@ -36,6 +39,7 @@
+ @interface NSView (Private)
+ - (void) _lockFocusInContext: (NSGraphicsContext *)ctxt inRect: (NSRect)rect;
+ - (void) _viewWillMoveToWindow: (NSWindow*)newWindow;
++- (void) _invalidateCoordinates;
+ @end
+ 
+ /**
+@@ -210,6 +214,55 @@ static NSOpenGLPixelFormatAttribute attrs[] =
+   return YES;
+ }
+ 
++/* The context's drawable is a native child window that the backend places
++ * over the view.  It has to follow the view: hidden while the view or an
++ * ancestor is hidden, moved when an ancestor moves or scrolls, and clipped
++ * to the visible rectangle.  The context's -update does that; these make
++ * sure it is called.  Several changes in one event coalesce into one update.
++ */
++- (void) _updateDrawable
++{
++  if (glcontext != nil && [glcontext view] == self)
++    {
++      [self update];
++    }
++}
++
++- (void) _setNeedsDrawableUpdate
++{
++  if (glcontext == nil)
++    {
++      return;
++    }
++  [NSObject cancelPreviousPerformRequestsWithTarget: self
++                                           selector: @selector(_updateDrawable)
++                                             object: nil];
++  [self performSelector: @selector(_updateDrawable)
++             withObject: nil
++             afterDelay: 0.0
++                inModes: [NSArray arrayWithObjects: NSDefaultRunLoopMode,
++                                  NSModalPanelRunLoopMode,
++                                  NSEventTrackingRunLoopMode, nil]];
++}
++
++- (void) _invalidateCoordinates
++{
++  [super _invalidateCoordinates];
++  [self _setNeedsDrawableUpdate];
++}
++
++- (void) viewDidHide
++{
++  [super viewDidHide];
++  [self _updateDrawable];
++}
++
++- (void) viewDidUnhide
++{
++  [super viewDidUnhide];
++  [self _updateDrawable];
++}
++
+ - (void) _frameChanged: (NSNotification *) aNot
+ {
+   if (prepared)
+diff --git a/Source/NSView.m b/Source/NSView.m
+index e1d83c4d8..847b87dcb 100644
+--- a/Source/NSView.m
++++ b/Source/NSView.m
+@@ -244,7 +244,11 @@ GSSetDragTypes(NSView* obj, NSArray *types)
+                   
+                   if (sub->_coordinates_valid == YES)
+                     {
+-                      (*invalidateImp)(sub, invalidateSel);
++                      /* Sent, not called through invalidateImp, so that a
++                       * subclass overriding it (NSOpenGLView, which must move
++                       * its native child window) learns that an ancestor
++                       * moved, resized or scrolled.  */
++                      [sub _invalidateCoordinates];
+                     }
+                 }
+             }

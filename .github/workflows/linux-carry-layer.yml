@@ -25,7 +25,7 @@ on:
         default: 0.1.10-dev
   # Builds from the branch that adds the layer; dispatch needs the file on master.
   push:
-    branches: [linux-patch-layer]
+    branches: [linux-patch-layer, carry-x11-glview]
     paths:
       - toolchains/carry/**
       - src/gnustep_cli_shared/carry_layer.py

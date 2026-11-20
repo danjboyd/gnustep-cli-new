@@ -557,6 +557,122 @@
       "verified_by": "applies to 7892137b after 0001 (git apply --check); its Tests/gui/NSInputManager/commandBindings.m runs on stock and patched in linux-carry-layer.yml"
     },
     {
+      "id": "gui-nsview-did-hide-linux",
+      "library": "libs-gui",
+      "base": "linux-7892137b",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-gui/linux-7892137b/0003-Add-NSView-viewDidHide-and-viewDidUnhide.patch",
+      "sha256": "818b7088716b2f67043879ede3b3807823481aa1300a64a97167dde3304c4a41",
+      "summary": "NSView: send viewDidHide/viewDidUnhide to a view and the descendants whose effective visibility changes (backport of upstream ddef59c75, newer than the pin); NSOpenGLView needs it to hide its X window",
+      "source": "gnustep/libs-gui ddef59c75, as PR #99's msys2-0.32.0 0006 (gui-nsview-did-hide); git am'd onto 7892137b + 0001-0002, the same code (only hunk offsets differ); NSView.m differs between 0.32.0 and 7892137b only outside these hunks",
+      "topic_repository": "gnustep/libs-gui",
+      "topic_branch": "master",
+      "topic_commit": "ddef59c754c2b8c1c45811743d18944d5b23d6bb",
+      "upstream": "merged ddef59c75 (newer than the pin)",
+      "defaults": [],
+      "abi": "selectors added only (viewDidHide, viewDidUnhide, _sendViewDidUnhide:); no class, ivar or function export changes",
+      "requested_by": [
+        "CocoaTerminal"
+      ],
+      "owner": "CocoaTerminal",
+      "why": "CocoaTerminal draws its OpenGL renderer straight into an NSOpenGLView only when GNUstep hides and clips the view's X window; with stock the X window stays on screen when the view is hidden, removed or scrolled out, and is only destroyed when an autorelease pool lets go of it (CocoaTerminal falls back to reading frames back and drawing an image). Assigned by cocoa-terminal (item 2, mail #45764); X11 counterpart of PR #99's Windows series.",
+      "verified_by": "On Debian 13 with the gnustep-cli 0.1.9 Linux root (libs-gui 7892137b + 0001-0006, libs-back bf3b3ced + 0001-0010, built with GLX), Xvfb with Mesa llvmpipe, build-layer.sh's test phase run locally (tests compiled against the stock headers, run on the stock root and then on the patched root): libs-back Tests/x11/openglSubwindow.m 29/29 (stock root: skips, its backend has no GLX; the same series built with GLX but without 0010: 13 of 29 fail), also 29/29 with GSX11HandlesWindowDecorations NO and with the stock libs-gui; libs-gui Tests/gui/NSView/hiddenNotifications.m 9/9 (stock 4/9), Tests/gui/NSView/invalidateCoordinatesOverride.m 6/6 (stock 1/6), Tests/gui/NSOpenGLView/visibility.m 6/6 (stock: skips, no GLX; with the GLX backend and stock libs-gui 2/6); the X11 v7 series' Tests/x11 tests unchanged (borderlessalpha 4, gdriverterm 1, motifhints 5, orderfocusroot 5, shadowdrawing 14, shadowmargin 23, windowterm 4, windowtype 5, all passing). CocoaTerminal bench/COTGLCheck.mm --only child, ported to X11 (work/x11-glview/patches CocoaTerminal patch on 68b5495), on Xvfb with llvmpipe: 13/16 pass (the same stack without 0010: 8/16; the 3 left: a sibling view drawn over the GL view, in-window readback, both inherent to a child window as on Windows, and a GL child window that was covered shows black when uncovered until the view draws again, without a compositor); 300 create/destroy cycles flat (X resources 93->93, windows 13->13; without 0010 one colormap leaks per view, 90->390); no X errors (without 0010: BadWindow/GLXBadWindow when a window with a GL view closes). linux-carry-layer.yml not run.",
+      "order": "after 0002 (gui-command-key-bindings-linux); 0003 before 0004 (0004 overrides viewDidHide/viewDidUnhide), 0005 after 0004, 0006 (tests) last"
+    },
+    {
+      "id": "gui-nsopenglview-visibility-linux",
+      "library": "libs-gui",
+      "base": "linux-7892137b",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-gui/linux-7892137b/0004-NSOpenGLView-update-the-context-when-the-view-is-hid.patch",
+      "sha256": "0586fdb003c031a729e7289f29842b3e931f39d82687ecf63860e4dd674e942c",
+      "summary": "NSOpenGLView: update its context (and so the backend's X window) when the view is hidden or unhidden or an ancestor moves or scrolls; NSView's _invalidateCoordinates recursion now reaches subclasses' overrides",
+      "source": "danjboyd/libs-gui glview-visibility a8dbfe24d, as PR #99's msys2-0.32.0 0007 (gui-nsopenglview-visibility), identical code; Source/NSOpenGLView.m is identical in 0.32.0 and 7892137b",
+      "topic_repository": "danjboyd/libs-gui",
+      "topic_branch": "glview-visibility",
+      "topic_commit": "a8dbfe24d4af9c9b2d6d44e3c82df1e17e1569fd",
+      "upstream": "not_sent (needs Dan's FSF assignment)",
+      "defaults": [],
+      "abi": "selectors added only (_updateDrawable, _setNeedsDrawableUpdate); no class, ivar or function export changes",
+      "requested_by": [
+        "CocoaTerminal"
+      ],
+      "owner": "CocoaTerminal",
+      "why": "CocoaTerminal draws its OpenGL renderer straight into an NSOpenGLView only when GNUstep hides and clips the view's X window; with stock the X window stays on screen when the view is hidden, removed or scrolled out, and is only destroyed when an autorelease pool lets go of it (CocoaTerminal falls back to reading frames back and drawing an image). Assigned by cocoa-terminal (item 2, mail #45764); X11 counterpart of PR #99's Windows series.",
+      "verified_by": "On Debian 13 with the gnustep-cli 0.1.9 Linux root (libs-gui 7892137b + 0001-0006, libs-back bf3b3ced + 0001-0010, built with GLX), Xvfb with Mesa llvmpipe, build-layer.sh's test phase run locally (tests compiled against the stock headers, run on the stock root and then on the patched root): libs-back Tests/x11/openglSubwindow.m 29/29 (stock root: skips, its backend has no GLX; the same series built with GLX but without 0010: 13 of 29 fail), also 29/29 with GSX11HandlesWindowDecorations NO and with the stock libs-gui; libs-gui Tests/gui/NSView/hiddenNotifications.m 9/9 (stock 4/9), Tests/gui/NSView/invalidateCoordinatesOverride.m 6/6 (stock 1/6), Tests/gui/NSOpenGLView/visibility.m 6/6 (stock: skips, no GLX; with the GLX backend and stock libs-gui 2/6); the X11 v7 series' Tests/x11 tests unchanged (borderlessalpha 4, gdriverterm 1, motifhints 5, orderfocusroot 5, shadowdrawing 14, shadowmargin 23, windowterm 4, windowtype 5, all passing). CocoaTerminal bench/COTGLCheck.mm --only child, ported to X11 (work/x11-glview/patches CocoaTerminal patch on 68b5495), on Xvfb with llvmpipe: 13/16 pass (the same stack without 0010: 8/16; the 3 left: a sibling view drawn over the GL view, in-window readback, both inherent to a child window as on Windows, and a GL child window that was covered shows black when uncovered until the view draws again, without a compositor); 300 create/destroy cycles flat (X resources 93->93, windows 13->13; without 0010 one colormap leaks per view, 90->390); no X errors (without 0010: BadWindow/GLXBadWindow when a window with a GL view closes). linux-carry-layer.yml not run.",
+      "order": "after 0002 (gui-command-key-bindings-linux); 0003 before 0004 (0004 overrides viewDidHide/viewDidUnhide), 0005 after 0004, 0006 (tests) last"
+    },
+    {
+      "id": "gui-nsopenglview-leave-window-linux",
+      "library": "libs-gui",
+      "base": "linux-7892137b",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-gui/linux-7892137b/0005-NSOpenGLView-clear-the-drawable-when-the-view-leaves.patch",
+      "sha256": "940c3d2f0aa4133c50baaaf9e19d09b3a24058a0201068da0889b24b11eebfb9",
+      "summary": "NSOpenGLView: clear the drawable when the view leaves its window (the check ran after super had set the new window, so it never did), and attach the context before making it current",
+      "source": "danjboyd/libs-gui glview-visibility 9881631651, as PR #99's msys2-0.32.0 0008 (gui-nsopenglview-leave-window), identical code",
+      "topic_repository": "danjboyd/libs-gui",
+      "topic_branch": "glview-visibility",
+      "topic_commit": "9881631651b9a397383e20567370ed0ea32f0b5b",
+      "upstream": "not_sent (needs Dan's FSF assignment)",
+      "defaults": [],
+      "abi": "unchanged",
+      "requested_by": [
+        "CocoaTerminal"
+      ],
+      "owner": "CocoaTerminal",
+      "why": "CocoaTerminal draws its OpenGL renderer straight into an NSOpenGLView only when GNUstep hides and clips the view's X window; with stock the X window stays on screen when the view is hidden, removed or scrolled out, and is only destroyed when an autorelease pool lets go of it (CocoaTerminal falls back to reading frames back and drawing an image). Assigned by cocoa-terminal (item 2, mail #45764); X11 counterpart of PR #99's Windows series.",
+      "verified_by": "On Debian 13 with the gnustep-cli 0.1.9 Linux root (libs-gui 7892137b + 0001-0006, libs-back bf3b3ced + 0001-0010, built with GLX), Xvfb with Mesa llvmpipe, build-layer.sh's test phase run locally (tests compiled against the stock headers, run on the stock root and then on the patched root): libs-back Tests/x11/openglSubwindow.m 29/29 (stock root: skips, its backend has no GLX; the same series built with GLX but without 0010: 13 of 29 fail), also 29/29 with GSX11HandlesWindowDecorations NO and with the stock libs-gui; libs-gui Tests/gui/NSView/hiddenNotifications.m 9/9 (stock 4/9), Tests/gui/NSView/invalidateCoordinatesOverride.m 6/6 (stock 1/6), Tests/gui/NSOpenGLView/visibility.m 6/6 (stock: skips, no GLX; with the GLX backend and stock libs-gui 2/6); the X11 v7 series' Tests/x11 tests unchanged (borderlessalpha 4, gdriverterm 1, motifhints 5, orderfocusroot 5, shadowdrawing 14, shadowmargin 23, windowterm 4, windowtype 5, all passing). CocoaTerminal bench/COTGLCheck.mm --only child, ported to X11 (work/x11-glview/patches CocoaTerminal patch on 68b5495), on Xvfb with llvmpipe: 13/16 pass (the same stack without 0010: 8/16; the 3 left: a sibling view drawn over the GL view, in-window readback, both inherent to a child window as on Windows, and a GL child window that was covered shows black when uncovered until the view draws again, without a compositor); 300 create/destroy cycles flat (X resources 93->93, windows 13->13; without 0010 one colormap leaks per view, 90->390); no X errors (without 0010: BadWindow/GLXBadWindow when a window with a GL view closes). linux-carry-layer.yml not run.",
+      "order": "after 0002 (gui-command-key-bindings-linux); 0003 before 0004 (0004 overrides viewDidHide/viewDidUnhide), 0005 after 0004, 0006 (tests) last"
+    },
+    {
+      "id": "gui-nsopenglview-tests-linux",
+      "library": "libs-gui",
+      "base": "linux-7892137b",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-gui/linux-7892137b/0006-Tests-NSOpenGLView-follows-hiding-moves-and-removal.patch",
+      "sha256": "669afce54e161bf88a2d8fc915cef204c4a8c020bd5912cc49a3cad3d969f4f2",
+      "summary": "Tests only: NSView/invalidateCoordinatesOverride.m and NSOpenGLView/visibility.m, so build-layer.sh runs them (the Windows layer doesn't carry them)",
+      "source": "danjboyd/libs-gui glview-visibility a07651791, git format-patch; adds two test files, no library change",
+      "topic_repository": "danjboyd/libs-gui",
+      "topic_branch": "glview-visibility",
+      "topic_commit": "a076517913c870a22ca93b041e8fc4a24c84c8bb",
+      "upstream": "not_sent (with 0004-0005)",
+      "defaults": [],
+      "abi": "unchanged (tests only)",
+      "requested_by": [
+        "CocoaTerminal"
+      ],
+      "owner": "CocoaTerminal",
+      "why": "CocoaTerminal draws its OpenGL renderer straight into an NSOpenGLView only when GNUstep hides and clips the view's X window; with stock the X window stays on screen when the view is hidden, removed or scrolled out, and is only destroyed when an autorelease pool lets go of it (CocoaTerminal falls back to reading frames back and drawing an image). Assigned by cocoa-terminal (item 2, mail #45764); X11 counterpart of PR #99's Windows series.",
+      "verified_by": "On Debian 13 with the gnustep-cli 0.1.9 Linux root (libs-gui 7892137b + 0001-0006, libs-back bf3b3ced + 0001-0010, built with GLX), Xvfb with Mesa llvmpipe, build-layer.sh's test phase run locally (tests compiled against the stock headers, run on the stock root and then on the patched root): libs-back Tests/x11/openglSubwindow.m 29/29 (stock root: skips, its backend has no GLX; the same series built with GLX but without 0010: 13 of 29 fail), also 29/29 with GSX11HandlesWindowDecorations NO and with the stock libs-gui; libs-gui Tests/gui/NSView/hiddenNotifications.m 9/9 (stock 4/9), Tests/gui/NSView/invalidateCoordinatesOverride.m 6/6 (stock 1/6), Tests/gui/NSOpenGLView/visibility.m 6/6 (stock: skips, no GLX; with the GLX backend and stock libs-gui 2/6); the X11 v7 series' Tests/x11 tests unchanged (borderlessalpha 4, gdriverterm 1, motifhints 5, orderfocusroot 5, shadowdrawing 14, shadowmargin 23, windowterm 4, windowtype 5, all passing). CocoaTerminal bench/COTGLCheck.mm --only child, ported to X11 (work/x11-glview/patches CocoaTerminal patch on 68b5495), on Xvfb with llvmpipe: 13/16 pass (the same stack without 0010: 8/16; the 3 left: a sibling view drawn over the GL view, in-window readback, both inherent to a child window as on Windows, and a GL child window that was covered shows black when uncovered until the view draws again, without a compositor); 300 create/destroy cycles flat (X resources 93->93, windows 13->13; without 0010 one colormap leaks per view, 90->390); no X errors (without 0010: BadWindow/GLXBadWindow when a window with a GL view closes). linux-carry-layer.yml not run.",
+      "order": "after 0002 (gui-command-key-bindings-linux); 0003 before 0004 (0004 overrides viewDidHide/viewDidUnhide), 0005 after 0004, 0006 (tests) last"
+    },
+    {
       "id": "x11-xlibimage-layer-linux",
       "library": "libs-back",
       "base": "linux-bf3b3ced",
@@ -795,6 +911,35 @@
       ],
       "owner": "gnustep-cli-new",
       "verified_by": "its Tests/x11 test passes on the patched root in linux-carry-layer.yml (Xvfb)"
+    },
+    {
+      "id": "x11-opengl-subwindow-linux",
+      "library": "libs-back",
+      "base": "linux-bf3b3ced",
+      "platforms": [
+        "linux-amd64-clang",
+        "linux-arm64-clang",
+        "linux-ubuntu2404-amd64-clang",
+        "linux-ubuntu2404-arm64-clang",
+        "linux-ubuntu2604-amd64-clang"
+      ],
+      "path": "libs-back/linux-bf3b3ced/0010-x11-hide-clip-and-destroy-an-OpenGL-view-s-X-window-.patch",
+      "sha256": "07c52854b6d41807449be16aac31143a3c8f6034759e48cd350640463b1922ee",
+      "summary": "x11: an NSOpenGLView's X window unmaps with the view or an ancestor, when none of the view is visible or the view left its window, clips to its visible rect (XShape bounding shape), is destroyed on detach rather than at an autorelease pool drain, and re-attaching destroys the old GLX window and keeps the GLX context; closing the window no longer double-destroys the dead X/GLX windows (BadWindow, GLXBadWindow), and showing it again attaches again; adds Tests/x11/openglSubwindow.m",
+      "source": "danjboyd/libs-back glview-visibility-x11 (local, not pushed; on glview-visibility 0d3c5eb, upstream master), backported to bf3b3ced + 0001-0009: the placement keeps 0008's shadow-margin offsets and the pin's rotated-or-scaled check (master places scaled windows since a9274a6); no ChangeLog entry",
+      "topic_repository": "danjboyd/libs-back",
+      "topic_branch": "glview-visibility-x11",
+      "topic_commit": "048ecf6ebec0b8a1bc1899e1cd7298f68c42bb85",
+      "upstream": "not_sent (needs Dan's FSF assignment)",
+      "defaults": [],
+      "abi": "unchanged for the gui; in the bundle, XGXSubWindow (private to XGGLContext.m) gains ivars, two static functions; nothing is exported to or imported by other libraries. Needs the bundle built with GLX (HAVE_GLX), which build-layer.sh now installs libgl-dev for",
+      "requested_by": [
+        "CocoaTerminal"
+      ],
+      "owner": "CocoaTerminal",
+      "why": "CocoaTerminal draws its OpenGL renderer straight into an NSOpenGLView only when GNUstep hides and clips the view's X window; with stock the X window stays on screen when the view is hidden, removed or scrolled out, and is only destroyed when an autorelease pool lets go of it (CocoaTerminal falls back to reading frames back and drawing an image). Assigned by cocoa-terminal (item 2, mail #45764); X11 counterpart of PR #99's Windows series.",
+      "verified_by": "On Debian 13 with the gnustep-cli 0.1.9 Linux root (libs-gui 7892137b + 0001-0006, libs-back bf3b3ced + 0001-0010, built with GLX), Xvfb with Mesa llvmpipe, build-layer.sh's test phase run locally (tests compiled against the stock headers, run on the stock root and then on the patched root): libs-back Tests/x11/openglSubwindow.m 29/29 (stock root: skips, its backend has no GLX; the same series built with GLX but without 0010: 13 of 29 fail), also 29/29 with GSX11HandlesWindowDecorations NO and with the stock libs-gui; libs-gui Tests/gui/NSView/hiddenNotifications.m 9/9 (stock 4/9), Tests/gui/NSView/invalidateCoordinatesOverride.m 6/6 (stock 1/6), Tests/gui/NSOpenGLView/visibility.m 6/6 (stock: skips, no GLX; with the GLX backend and stock libs-gui 2/6); the X11 v7 series' Tests/x11 tests unchanged (borderlessalpha 4, gdriverterm 1, motifhints 5, orderfocusroot 5, shadowdrawing 14, shadowmargin 23, windowterm 4, windowtype 5, all passing). CocoaTerminal bench/COTGLCheck.mm --only child, ported to X11 (work/x11-glview/patches CocoaTerminal patch on 68b5495), on Xvfb with llvmpipe: 13/16 pass (the same stack without 0010: 8/16; the 3 left: a sibling view drawn over the GL view, in-window readback, both inherent to a child window as on Windows, and a GL child window that was covered shows black when uncovered until the view draws again, without a compositor); 300 create/destroy cycles flat (X resources 93->93, windows 13->13; without 0010 one colormap leaks per view, 90->390); no X errors (without 0010: BadWindow/GLXBadWindow when a window with a GL view closes). linux-carry-layer.yml not run.",
+      "order": "after 0009 (x11-popover-shadows-linux): the placement code it shares uses 0008's _offsets::::for: shadow-margin offsets"
     }
   ]
 }

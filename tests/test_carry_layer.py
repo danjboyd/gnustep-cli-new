@@ -110,8 +110,8 @@ class CarryJsonTests(unittest.TestCase):
         self.assertEqual(carry_layer.layer_outputs(data, "linux-amd64-clang"), ["Local/Library/Bundles/libgnustep-back-*.bundle/libgnustep-back-*", "Local/Library/Libraries/libgnustep-gui.so", "Local/Library/Libraries/libgnustep-gui.so.*"])
         self.assertNotIn("Local/Library/Libraries/libgnustep-gui.so.*", carry_layer.layer_outputs(data, "windows-amd64-msys2-clang64"))
         linux = [p["id"] for p in data["patches"] if "linux-amd64-clang" in p["platforms"]]
-        self.assertEqual(linux[:2], ["gui-theme-live-switch-linux", "gui-command-key-bindings-linux"])
-        self.assertEqual([p.split("-linux")[0] for p in linux[2:]], ["x11-xlibimage-layer", "x11-enable-wraster-option", "x11-no-wraster-by-default", "x11-keep-wm-functions", "x11-window-types", "x11-borderless-alpha", "x11-orderwindow-focus-root", "x11-window-shadows", "x11-popover-shadows"])
+        self.assertEqual(linux[:6], ["gui-theme-live-switch-linux", "gui-command-key-bindings-linux", "gui-nsview-did-hide-linux", "gui-nsopenglview-visibility-linux", "gui-nsopenglview-leave-window-linux", "gui-nsopenglview-tests-linux"])
+        self.assertEqual([p.split("-linux")[0] for p in linux[6:]], ["x11-xlibimage-layer", "x11-enable-wraster-option", "x11-no-wraster-by-default", "x11-keep-wm-functions", "x11-window-types", "x11-borderless-alpha", "x11-orderwindow-focus-root", "x11-window-shadows", "x11-popover-shadows", "x11-opengl-subwindow"])
 
     def test_bases_without_platforms_count_for_every_target(self):
         data = {"bases": {"a/x": {"outputs": ["a"]}, "b/y": {"platforms": ["linux-amd64-clang"], "outputs": ["b"]}}}

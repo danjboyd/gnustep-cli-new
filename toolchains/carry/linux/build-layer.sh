@@ -32,7 +32,11 @@ export PYTHONPATH="$repo/src"
 apt-get update -qq
 # libxfixes-dev: the X11 shadow series follows the compositing manager through XFixes
 # (without it the backend gives no window a shadow margin); stock was built without it.
-apt-get install -y -qq --no-install-recommends binutils xvfb xauth libxfixes-dev >/dev/null
+# libgl-dev: libs-back's GLX support (NSOpenGLContext, which x11-opengl-subwindow fixes);
+# stock is built without it, so its backend has no OpenGL. libgl1-mesa-dri and
+# libglx-mesa0: Mesa's llvmpipe, for GLX on Xvfb in the OpenGL tests.
+apt-get install -y -qq --no-install-recommends binutils xvfb xauth libxfixes-dev \
+  libgl-dev libgl1-mesa-dri libglx-mesa0 >/dev/null
 
 rm -rf "$work" "$prefix"
 mkdir -p "$work/stock" "$work/pkg" "$work/home" "$prefix" "$out"
@@ -122,10 +126,15 @@ test -n "$testing_h" || { echo "no TestFramework/Testing.h under $GNUSTEP_MAKEFI
 # Each entry: <source path>|<stock expectation>. "fail": the test shows the bug on the
 # stock root (a libs-gui carry's own regression test). "record": the stock result is only
 # reported (the libs-back X11 tests cover new behaviour; some parts may pass on stock).
+# "full": only reported on stock, where it may skip (NSOpenGLView/visibility.m: the stock
+# backend has no GLX), but with the layer it must run in full, like "fail".
 # Every test must pass with the layer applied.
 tests=()
 if [ -d "$work/src/libs-gui" ]; then
   tests+=("libs-gui/Tests/gui/GSTheme/liveSwitch.m|fail" "libs-gui/Tests/gui/NSInputManager/commandBindings.m|fail")
+  tests+=("libs-gui/Tests/gui/NSView/hiddenNotifications.m|fail"
+    "libs-gui/Tests/gui/NSView/invalidateCoordinatesOverride.m|fail"
+    "libs-gui/Tests/gui/NSOpenGLView/visibility.m|full")
 fi
 if [ -d "$work/src/libs-back" ]; then
   for t in "$work"/src/libs-back/Tests/x11/*.m; do
@@ -164,7 +173,7 @@ run_tests() { # <stock|layer>
       # A libs-back set that needs a real desktop (GNOME Shell) may skip on Xvfb; a
       # libs-gui carry's test must run in full.
       if [ "$code" -ne 0 ] || [ "$passed" -eq 0 ] || [ "$failed" -ne 0 ] || [ "$other" -ne 0 ] \
-         || { [ "$stock_expect" = fail ] && [ "$skipped" -ne 0 ]; }; then
+         || { [ "$stock_expect" != record ] && [ "$skipped" -ne 0 ]; }; then
         cat "$log"; status=1
       fi
     elif [ "$stock_expect" = fail ] && [ "$failed" -eq 0 ] && [ "$code" -eq 0 ]; then
