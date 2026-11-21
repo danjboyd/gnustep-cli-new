@@ -1,0 +1,266 @@
+# Linux patch layer 0.1.11 (run 44826215228): each target rebuilds the carries against its stock v0.1.10 toolchain, builds and verifies the layer (no libGL in NEEDED), then runs the carried patches' tests on Xvfb: stock, stock + layer, and stock + layer with libGL removed.
+
+## linux-ubuntu2604-amd64-clang
+stock toolchain gnustep-toolchain-linux-ubuntu2604-amd64-clang-0.1.10.tar.gz sha256 99ed2d212f308830079db9c5d3df91531d0cbcd94fefe97984aaea00088f5e89
+layer <out>/gnustep-carry-linux-ubuntu2604-amd64-clang-0.1.11.zip sha256 e76cf28fe0b920651bf2e42361cc86d9a1e3c1c36aa8bde65650968d451ebbd0: 4 files, 17 patches
+layer matches the stock toolchain archive
+liveSwitch (stock): exit 0, passed 4, failed 10, skipped sets 0, other 0
+commandBindings (stock): exit 0, passed 2, failed 2, skipped sets 0, other 0
+hiddenNotifications (stock): exit 0, passed 4, failed 5, skipped sets 0, other 0
+invalidateCoordinatesOverride (stock): exit 0, passed 1, failed 5, skipped sets 0, other 0
+visibility (stock): exit 0, passed 0, failed 0, skipped sets 1, other 0
+borderlessalpha (stock): exit 0, passed 1, failed 3, skipped sets 0, other 0
+gdriverterm (stock): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (stock): exit 0, passed 2, failed 3, skipped sets 0, other 0
+openglLoad (stock): exit 0, passed 4, failed 3, skipped sets 0, other 0
+openglSubwindow (stock): exit 0, passed 0, failed 0, skipped sets 1, other 0
+orderfocusroot (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+shadowdrawing (stock): exit 0, passed 0, failed 2, skipped sets 0, other 0
+shadowmargin (stock): exit 0, passed 7, failed 16, skipped sets 0, other 0
+windowterm (stock): exit 0, passed 3, failed 1, skipped sets 0, other 0
+windowtype (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+liveSwitch (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+commandBindings (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+hiddenNotifications (layer): exit 0, passed 9, failed 0, skipped sets 0, other 0
+invalidateCoordinatesOverride (layer): exit 0, passed 6, failed 0, skipped sets 0, other 0
+visibility (layer): exit 0, passed 6, failed 0, skipped sets 0, other 0
+borderlessalpha (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+gdriverterm (layer): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+openglLoad (layer): exit 0, passed 7, failed 0, skipped sets 0, other 0
+openglSubwindow (layer): exit 0, passed 29, failed 0, skipped sets 0, other 0
+orderfocusroot (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+shadowdrawing (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+shadowmargin (layer): exit 0, passed 23, failed 0, skipped sets 0, other 0
+windowterm (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+windowtype (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+libGL.so.1: cannot open shared object file: No such file or directory
+libGLX.so.0: cannot open shared object file: No such file or directory
+liveSwitch (nogl): exit 0, passed 14, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+commandBindings (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+hiddenNotifications (nogl): exit 0, passed 9, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+invalidateCoordinatesOverride (nogl): exit 0, passed 6, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+visibility (nogl): exit 0, passed 0, failed 0, skipped sets 1, other 0, 'OpenGL is unavailable' lines 1
+borderlessalpha (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+gdriverterm (nogl): exit 0, passed 1, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+motifhints (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+openglLoad (nogl): exit 0, passed 9, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 1
+openglSubwindow (nogl): exit 0, passed 0, failed 0, skipped sets 1, other 0, 'OpenGL is unavailable' lines 1
+orderfocusroot (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+shadowdrawing (nogl): exit 0, passed 14, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+shadowmargin (nogl): exit 0, passed 23, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+windowterm (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+windowtype (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+linux patch layer for linux-ubuntu2604-amd64-clang: ok
+
+## linux-ubuntu2404-arm64-clang
+stock toolchain gnustep-toolchain-linux-ubuntu2404-arm64-clang-0.1.10.tar.gz sha256 93f454133b762b489fb33e012b8c680ed3fd65d4965e407b50207ed28f045950
+layer <out>/gnustep-carry-linux-ubuntu2404-arm64-clang-0.1.11.zip sha256 87d3e979f84da96e1a987062b5279a4b2ad42e39d5583265ad3582aaf02cf635: 4 files, 17 patches
+layer matches the stock toolchain archive
+liveSwitch (stock): exit 0, passed 4, failed 10, skipped sets 0, other 0
+commandBindings (stock): exit 0, passed 2, failed 2, skipped sets 0, other 0
+hiddenNotifications (stock): exit 0, passed 4, failed 5, skipped sets 0, other 0
+invalidateCoordinatesOverride (stock): exit 0, passed 1, failed 5, skipped sets 0, other 0
+visibility (stock): exit 0, passed 0, failed 0, skipped sets 1, other 0
+borderlessalpha (stock): exit 0, passed 1, failed 3, skipped sets 0, other 0
+gdriverterm (stock): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (stock): exit 0, passed 2, failed 3, skipped sets 0, other 0
+openglLoad (stock): exit 0, passed 4, failed 3, skipped sets 0, other 0
+openglSubwindow (stock): exit 0, passed 0, failed 0, skipped sets 1, other 0
+orderfocusroot (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+shadowdrawing (stock): exit 0, passed 0, failed 2, skipped sets 0, other 0
+shadowmargin (stock): exit 0, passed 7, failed 16, skipped sets 0, other 0
+windowterm (stock): exit 0, passed 3, failed 1, skipped sets 0, other 0
+windowtype (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+liveSwitch (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+commandBindings (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+hiddenNotifications (layer): exit 0, passed 9, failed 0, skipped sets 0, other 0
+invalidateCoordinatesOverride (layer): exit 0, passed 6, failed 0, skipped sets 0, other 0
+visibility (layer): exit 0, passed 6, failed 0, skipped sets 0, other 0
+borderlessalpha (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+gdriverterm (layer): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+openglLoad (layer): exit 0, passed 7, failed 0, skipped sets 0, other 0
+openglSubwindow (layer): exit 0, passed 29, failed 0, skipped sets 0, other 0
+orderfocusroot (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+shadowdrawing (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+shadowmargin (layer): exit 0, passed 23, failed 0, skipped sets 0, other 0
+windowterm (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+windowtype (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+libGL.so.1: cannot open shared object file: No such file or directory
+libGLX.so.0: cannot open shared object file: No such file or directory
+liveSwitch (nogl): exit 0, passed 14, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+commandBindings (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+hiddenNotifications (nogl): exit 0, passed 9, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+invalidateCoordinatesOverride (nogl): exit 0, passed 6, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+visibility (nogl): exit 0, passed 0, failed 0, skipped sets 1, other 0, 'OpenGL is unavailable' lines 1
+borderlessalpha (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+gdriverterm (nogl): exit 0, passed 1, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+motifhints (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+openglLoad (nogl): exit 0, passed 9, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 1
+openglSubwindow (nogl): exit 0, passed 0, failed 0, skipped sets 1, other 0, 'OpenGL is unavailable' lines 1
+orderfocusroot (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+shadowdrawing (nogl): exit 0, passed 14, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+shadowmargin (nogl): exit 0, passed 23, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+windowterm (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+windowtype (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+linux patch layer for linux-ubuntu2404-arm64-clang: ok
+
+## linux-arm64-clang
+stock toolchain gnustep-toolchain-linux-arm64-clang-0.1.10.tar.gz sha256 548e08bad3031c105d8fc2b308cac8c5c48de10b3e4934fc4c62a59cdf25ce8d
+layer <out>/gnustep-carry-linux-arm64-clang-0.1.11.zip sha256 f7a268c4d828546392e5839ef6fe4a1c7c71acebcee963863bc56bda831f5aa0: 4 files, 17 patches
+layer matches the stock toolchain archive
+liveSwitch (stock): exit 0, passed 4, failed 10, skipped sets 0, other 0
+commandBindings (stock): exit 0, passed 2, failed 2, skipped sets 0, other 0
+hiddenNotifications (stock): exit 0, passed 4, failed 5, skipped sets 0, other 0
+invalidateCoordinatesOverride (stock): exit 0, passed 1, failed 5, skipped sets 0, other 0
+visibility (stock): exit 0, passed 0, failed 0, skipped sets 1, other 0
+borderlessalpha (stock): exit 0, passed 1, failed 3, skipped sets 0, other 0
+gdriverterm (stock): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (stock): exit 0, passed 2, failed 3, skipped sets 0, other 0
+openglLoad (stock): exit 0, passed 4, failed 3, skipped sets 0, other 0
+openglSubwindow (stock): exit 0, passed 0, failed 0, skipped sets 1, other 0
+orderfocusroot (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+shadowdrawing (stock): exit 0, passed 0, failed 2, skipped sets 0, other 0
+shadowmargin (stock): exit 0, passed 7, failed 16, skipped sets 0, other 0
+windowterm (stock): exit 0, passed 3, failed 1, skipped sets 0, other 0
+windowtype (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+liveSwitch (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+commandBindings (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+hiddenNotifications (layer): exit 0, passed 9, failed 0, skipped sets 0, other 0
+invalidateCoordinatesOverride (layer): exit 0, passed 6, failed 0, skipped sets 0, other 0
+visibility (layer): exit 0, passed 6, failed 0, skipped sets 0, other 0
+borderlessalpha (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+gdriverterm (layer): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+openglLoad (layer): exit 0, passed 7, failed 0, skipped sets 0, other 0
+openglSubwindow (layer): exit 0, passed 29, failed 0, skipped sets 0, other 0
+orderfocusroot (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+shadowdrawing (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+shadowmargin (layer): exit 0, passed 23, failed 0, skipped sets 0, other 0
+windowterm (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+windowtype (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+libGL.so.1: cannot open shared object file: No such file or directory
+libGLX.so.0: cannot open shared object file: No such file or directory
+liveSwitch (nogl): exit 0, passed 14, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+commandBindings (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+hiddenNotifications (nogl): exit 0, passed 9, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+invalidateCoordinatesOverride (nogl): exit 0, passed 6, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+visibility (nogl): exit 0, passed 0, failed 0, skipped sets 1, other 0, 'OpenGL is unavailable' lines 1
+borderlessalpha (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+gdriverterm (nogl): exit 0, passed 1, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+motifhints (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+openglLoad (nogl): exit 0, passed 9, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 1
+openglSubwindow (nogl): exit 0, passed 0, failed 0, skipped sets 1, other 0, 'OpenGL is unavailable' lines 1
+orderfocusroot (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+shadowdrawing (nogl): exit 0, passed 14, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+shadowmargin (nogl): exit 0, passed 23, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+windowterm (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+windowtype (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+linux patch layer for linux-arm64-clang: ok
+
+## linux-ubuntu2404-amd64-clang
+stock toolchain gnustep-toolchain-linux-ubuntu2404-amd64-clang-0.1.10.tar.gz sha256 a6eb7a56cefcb04a74d6d464370ea893b57466a1c5c323a9b80df0af2352046d
+layer <out>/gnustep-carry-linux-ubuntu2404-amd64-clang-0.1.11.zip sha256 e39bf53a73d57a571c1cc5c10aec8bbeaf0358e47632e94ef49ab00fbda9f2de: 4 files, 17 patches
+layer matches the stock toolchain archive
+liveSwitch (stock): exit 0, passed 4, failed 10, skipped sets 0, other 0
+commandBindings (stock): exit 0, passed 2, failed 2, skipped sets 0, other 0
+hiddenNotifications (stock): exit 0, passed 4, failed 5, skipped sets 0, other 0
+invalidateCoordinatesOverride (stock): exit 0, passed 1, failed 5, skipped sets 0, other 0
+visibility (stock): exit 0, passed 0, failed 0, skipped sets 1, other 0
+borderlessalpha (stock): exit 0, passed 1, failed 3, skipped sets 0, other 0
+gdriverterm (stock): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (stock): exit 0, passed 2, failed 3, skipped sets 0, other 0
+openglLoad (stock): exit 0, passed 4, failed 3, skipped sets 0, other 0
+openglSubwindow (stock): exit 0, passed 0, failed 0, skipped sets 1, other 0
+orderfocusroot (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+shadowdrawing (stock): exit 0, passed 0, failed 2, skipped sets 0, other 0
+shadowmargin (stock): exit 0, passed 7, failed 16, skipped sets 0, other 0
+windowterm (stock): exit 0, passed 3, failed 1, skipped sets 0, other 0
+windowtype (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+liveSwitch (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+commandBindings (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+hiddenNotifications (layer): exit 0, passed 9, failed 0, skipped sets 0, other 0
+invalidateCoordinatesOverride (layer): exit 0, passed 6, failed 0, skipped sets 0, other 0
+visibility (layer): exit 0, passed 6, failed 0, skipped sets 0, other 0
+borderlessalpha (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+gdriverterm (layer): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+openglLoad (layer): exit 0, passed 7, failed 0, skipped sets 0, other 0
+openglSubwindow (layer): exit 0, passed 29, failed 0, skipped sets 0, other 0
+orderfocusroot (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+shadowdrawing (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+shadowmargin (layer): exit 0, passed 23, failed 0, skipped sets 0, other 0
+windowterm (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+windowtype (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+libGL.so.1: cannot open shared object file: No such file or directory
+libGLX.so.0: cannot open shared object file: No such file or directory
+liveSwitch (nogl): exit 0, passed 14, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+commandBindings (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+hiddenNotifications (nogl): exit 0, passed 9, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+invalidateCoordinatesOverride (nogl): exit 0, passed 6, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+visibility (nogl): exit 0, passed 0, failed 0, skipped sets 1, other 0, 'OpenGL is unavailable' lines 1
+borderlessalpha (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+gdriverterm (nogl): exit 0, passed 1, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+motifhints (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+openglLoad (nogl): exit 0, passed 9, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 1
+openglSubwindow (nogl): exit 0, passed 0, failed 0, skipped sets 1, other 0, 'OpenGL is unavailable' lines 1
+orderfocusroot (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+shadowdrawing (nogl): exit 0, passed 14, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+shadowmargin (nogl): exit 0, passed 23, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+windowterm (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+windowtype (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+linux patch layer for linux-ubuntu2404-amd64-clang: ok
+
+## linux-amd64-clang
+stock toolchain gnustep-toolchain-linux-amd64-clang-0.1.10.tar.gz sha256 2188143b1c2ab730d112c1fa577c278a9e5e463c8ede336da16046c4bb58be6f
+layer <out>/gnustep-carry-linux-amd64-clang-0.1.11.zip sha256 764d72f225ba5f97cc0310c26546ad4bea2caaf8319844173575ea0654177118: 4 files, 17 patches
+layer matches the stock toolchain archive
+liveSwitch (stock): exit 0, passed 4, failed 10, skipped sets 0, other 0
+commandBindings (stock): exit 0, passed 2, failed 2, skipped sets 0, other 0
+hiddenNotifications (stock): exit 0, passed 4, failed 5, skipped sets 0, other 0
+invalidateCoordinatesOverride (stock): exit 0, passed 1, failed 5, skipped sets 0, other 0
+visibility (stock): exit 0, passed 0, failed 0, skipped sets 1, other 0
+borderlessalpha (stock): exit 0, passed 1, failed 3, skipped sets 0, other 0
+gdriverterm (stock): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (stock): exit 0, passed 2, failed 3, skipped sets 0, other 0
+openglLoad (stock): exit 0, passed 4, failed 3, skipped sets 0, other 0
+openglSubwindow (stock): exit 0, passed 0, failed 0, skipped sets 1, other 0
+orderfocusroot (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+shadowdrawing (stock): exit 0, passed 0, failed 2, skipped sets 0, other 0
+shadowmargin (stock): exit 0, passed 7, failed 16, skipped sets 0, other 0
+windowterm (stock): exit 0, passed 3, failed 1, skipped sets 0, other 0
+windowtype (stock): exit 0, passed 1, failed 4, skipped sets 0, other 0
+liveSwitch (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+commandBindings (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+hiddenNotifications (layer): exit 0, passed 9, failed 0, skipped sets 0, other 0
+invalidateCoordinatesOverride (layer): exit 0, passed 6, failed 0, skipped sets 0, other 0
+visibility (layer): exit 0, passed 6, failed 0, skipped sets 0, other 0
+borderlessalpha (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+gdriverterm (layer): exit 0, passed 1, failed 0, skipped sets 0, other 0
+motifhints (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+openglLoad (layer): exit 0, passed 7, failed 0, skipped sets 0, other 0
+openglSubwindow (layer): exit 0, passed 29, failed 0, skipped sets 0, other 0
+orderfocusroot (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+shadowdrawing (layer): exit 0, passed 14, failed 0, skipped sets 0, other 0
+shadowmargin (layer): exit 0, passed 23, failed 0, skipped sets 0, other 0
+windowterm (layer): exit 0, passed 4, failed 0, skipped sets 0, other 0
+windowtype (layer): exit 0, passed 5, failed 0, skipped sets 0, other 0
+libGL.so.1: cannot open shared object file: No such file or directory
+libGLX.so.0: cannot open shared object file: No such file or directory
+liveSwitch (nogl): exit 0, passed 14, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+commandBindings (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+hiddenNotifications (nogl): exit 0, passed 9, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+invalidateCoordinatesOverride (nogl): exit 0, passed 6, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+visibility (nogl): exit 0, passed 0, failed 0, skipped sets 1, other 0, 'OpenGL is unavailable' lines 1
+borderlessalpha (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+gdriverterm (nogl): exit 0, passed 1, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+motifhints (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+openglLoad (nogl): exit 0, passed 9, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 1
+openglSubwindow (nogl): exit 0, passed 0, failed 0, skipped sets 1, other 0, 'OpenGL is unavailable' lines 1
+orderfocusroot (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+shadowdrawing (nogl): exit 0, passed 14, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+shadowmargin (nogl): exit 0, passed 23, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+windowterm (nogl): exit 0, passed 4, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+windowtype (nogl): exit 0, passed 5, failed 0, skipped sets 0, other 0, 'OpenGL is unavailable' lines 0
+linux patch layer for linux-amd64-clang: ok

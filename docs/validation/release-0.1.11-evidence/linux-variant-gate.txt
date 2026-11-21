@@ -1,0 +1,9 @@
+bootstrap --variant patched: exit 0; json toolchain_variant=patched; files patched; doctor ok/patched
+to-stock: exit 0; files stock; state toolchain_variant=stock; doctor ok/stock
+to-patched: exit 0; files patched; state toolchain_variant=patched; doctor ok/patched
+to-stock-again: exit 0; files stock; state toolchain_variant=stock; doctor ok/stock
+stock tree identical after a round trip=yes; patched tree differs=yes; carry-layer.json removed on stock=yes
+before-update: exit 0; files patched; state toolchain_variant=patched; doctor ok/patched
+update: exit 0; files patched; state toolchain_variant=patched; doctor ok/patched
+after update: cli_version=0.1.10
+ok=yes

@@ -1,0 +1,3 @@
+install X: exit 0 version 0.1.11; 19.8 GB free
+S: exit 0 0.1.11 -> 0.1.12 current=0.1.12 smoke_ok=True smoke_failed=False launcher=0/0.1.11 integrity=ok managed_root=C:\gnustep-smoke/gate-s-root passed=True
+expect=pass ok=True
