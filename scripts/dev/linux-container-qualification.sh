@@ -107,6 +107,67 @@ clang -fobjc-arc -fblocks $(gnustep-config --objc-flags) probe.m -o probe $(gnus
 LD_LIBRARY_PATH="$R/lib:${LD_LIBRARY_PATH:-}" ./probe
 LD_LIBRARY_PATH="$R/lib:${LD_LIBRARY_PATH:-}" ldd ./probe
 PROBE
+# One blocks runtime (#104): exactly one toolchain library may define _Block_copy,
+# and copied blocks, built without ARC and linked with the toolchain's own link
+# flags, must keep what they capture alive, on their own and nested in a
+# dispatch_async block.
+cat > "$work/blocks.m" <<'OBJC'
+/* Built without ARC, like CocoaTerminal. With two blocks runtimes (#104) the
+   block copy helpers' _Block_object_assign binds to libdispatch's
+   libBlocksRuntime, which (unless libobjc2 registered with _Block_use_RR2)
+   doesn't retain what a block captures:
+   1. a copied block holding the only reference to an object (no libdispatch);
+   2. a copied block captured by a dispatch_async block, then released. */
+#import <Foundation/Foundation.h>
+#include <dispatch/dispatch.h>
+static int deallocs;
+@interface BlocksProbe : NSObject
+@end
+@implementation BlocksProbe
+- (void) dealloc { deallocs++; [super dealloc]; }
+@end
+int main(void) {
+  NSAutoreleasePool *pool = [NSAutoreleasePool new];
+  __block int ran = 0;
+  for (int i = 0; i < 1000; i++) {
+    BlocksProbe *p = [BlocksProbe new];
+    NSString *s = [[NSString alloc] initWithFormat: @"probe %d", i];
+    void (^b)(void) = [^{ if ([p class] == [BlocksProbe class] && [s length] > 6) ran++; } copy];
+    [p release];
+    [s release];
+    b();
+    [b release];
+  }
+  int plain = ran, plainDeallocs = deallocs;
+  dispatch_queue_t q = dispatch_queue_create("blocks-probe", DISPATCH_QUEUE_SERIAL);
+  dispatch_semaphore_t done = dispatch_semaphore_create(0);
+  for (int i = 0; i < 1000; i++) {
+    BlocksProbe *p = [BlocksProbe new];
+    void (^inner)(void) = [^{ if ([p class] == [BlocksProbe class]) ran++; } copy];
+    [p release];
+    dispatch_async(q, ^{ inner(); });
+    [inner release];
+  }
+  dispatch_async(q, ^{ dispatch_semaphore_signal(done); });
+  dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
+  printf("blocks: plain ran=%d deallocs=%d; dispatch ran=%d deallocs=%d\n", plain, plainDeallocs, ran - plain, deallocs - plainDeallocs);
+  [pool release];
+  return (ran == 2000 && deallocs == 2000) ? 0 : 1;
+}
+OBJC
+
+cat > "$work/blocks.sh" <<'BLOCKS'
+set -eu
+set +u
+. "$R/System/Library/Makefiles/GNUstep.sh"
+set -u
+# Distinct sonames: the packaged toolchain ships .so, .so.N and .so.N.M as copies.
+exporters=$(for f in "$R"/lib/*.so* "$R"/lib64/*.so*; do [ -f "$f" ] && nm -D --defined-only "$f" 2>/dev/null | grep -q ' _Block_copy$' && readelf -d "$f" | sed -n 's/.*(SONAME).*\[\(.*\)\]/\1/p'; done | sort -u)
+echo "block runtimes:" $exporters
+[ "$(printf '%s\n' $exporters | grep -c .)" -eq 1 ]
+clang -fblocks $(gnustep-config --objc-flags) blocks.m -o blocks $(gnustep-config --base-libs) -L"$R/lib" -ldispatch
+for i in 1 2 3; do LD_LIBRARY_PATH="$R/lib:${LD_LIBRARY_PATH:-}" MALLOC_PERTURB_=165 ./blocks; done
+BLOCKS
 cat > "$work/tls.m" <<'OBJC'
 #import <Foundation/Foundation.h>
 int main(int argc, char **argv) {
@@ -233,6 +294,7 @@ step build gnustep build --json
 step run gnustep run --json
 cd "$WORK"
 step probe sh "$WORK/probe.sh"
+step blocks_runtime sh "$WORK/blocks.sh"
 step package_smoke sh "$WORK/package-smoke.sh"
 step tls sh "$WORK/tls.sh"
 STEPS
@@ -280,6 +342,7 @@ results = {
     "new_build_run": "passed" if all(steps.get(s) == "0" for s in ("new", "build", "run")) and "Hello from CLI tool" in run.get("stdout", "") else "failed",
     "foundation_probe": "passed" if steps.get("probe") == "0" and "SUM=42" in probe else "failed",
     "tls_verification": "passed" if steps.get("tls") == "0" else "failed",
+    "single_blocks_runtime": "passed" if steps.get("blocks_runtime") == "0" and "plain ran=1000 deallocs=1000; dispatch ran=1000 deallocs=1000" in read("blocks_runtime.out") else "failed",
     "package_install_remove": "passed" if steps.get("package_smoke") == "0" and last_json(read("package-install.json")).get("ok") and last_json(read("package-remove.json")).get("ok") else "failed",
 }
 probe_icu = [line.strip() for line in probe.splitlines() if "libicu" in line or "libc.so.6" in line]
