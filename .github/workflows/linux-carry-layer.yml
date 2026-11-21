@@ -19,6 +19,10 @@ on:
         description: Version in those archives' names
         required: true
         default: 0.1.9
+      stock_runs:
+        description: "Optional: build runs to take the stock archives from instead of stock_tag, as space-separated target=run_id pairs (e.g. an unreleased toolchain rebuild); stock_version is then those archives' version"
+        required: false
+        default: ""
       release:
         description: Release label recorded in carry-layer.json
         required: true
@@ -73,9 +77,18 @@ jobs:
           tag='${{ inputs.stock_tag }}'; tag=${tag:-v0.1.9}
           version='${{ inputs.stock_version }}'; version=${version:-0.1.9}
           mkdir -p "$RUNNER_TEMP/stock" "$RUNNER_TEMP/layer"
-          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/stock" \
-            --pattern "gnustep-toolchain-${{ matrix.target }}-$version.tar.gz"
+          run=$(printf '%s\n' ${{ inputs.stock_runs }} | sed -n 's/^${{ matrix.target }}=//p')
+          if [ -n "$run" ]; then
+            gh run download "$run" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/stock" \
+              --name "gnustep-linux-managed-${{ matrix.target }}-$version"
+          elif [ -n '${{ inputs.stock_runs }}' ]; then
+            echo "stock_runs has no run for ${{ matrix.target }}" >&2; exit 1
+          else
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/stock" \
+              --pattern "gnustep-toolchain-${{ matrix.target }}-$version.tar.gz"
+          fi
           ls -l "$RUNNER_TEMP/stock"
+          test -f "$RUNNER_TEMP/stock/gnustep-toolchain-${{ matrix.target }}-$version.tar.gz"
 
       - name: Build and test the layer in the target's build image
         run: |
@@ -125,9 +138,16 @@ jobs:
           tag='${{ inputs.stock_tag }}'; tag=${tag:-v0.1.9}
           version='${{ inputs.stock_version }}'; version=${version:-0.1.9}
           mkdir -p "$RUNNER_TEMP/stock"
-          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/stock" \
-            --pattern "gnustep-toolchain-$TARGET-$version.tar.gz" --pattern "gnustep-cli-$TARGET-$version.tar.gz"
+          run=$(printf '%s\n' ${{ inputs.stock_runs }} | sed -n "s/^$TARGET=//p")
+          if [ -n "$run" ]; then
+            gh run download "$run" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/stock" \
+              --name "gnustep-linux-managed-$TARGET-$version"
+          else
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$RUNNER_TEMP/stock" \
+              --pattern "gnustep-toolchain-$TARGET-$version.tar.gz" --pattern "gnustep-cli-$TARGET-$version.tar.gz"
+          fi
           ls -l "$RUNNER_TEMP/stock" "$RUNNER_TEMP/layer"
+          test -f "$RUNNER_TEMP/stock/gnustep-cli-$TARGET-$version.tar.gz"
 
       - name: The gate
         run: |
