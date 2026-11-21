@@ -117,9 +117,15 @@ cat > "$work/blocks.m" <<'OBJC'
    libBlocksRuntime, which (unless libobjc2 registered with _Block_use_RR2)
    doesn't retain what a block captures:
    1. a copied block holding the only reference to an object (no libdispatch);
-   2. a copied block captured by a dispatch_async block, then released. */
+   2. a copied block captured by a dispatch_async block, then released.
+   3. a block-backed method (imp_implementationWithBlock, public runtime API
+      that libobjc2 drops with an external blocks runtime unless patched).
+      200 rounds: libobjc2 (b67709a and master) never maps a second trampoline
+      page, so more than 256 live block IMPs crash on x86_64 in every release. */
 #import <Foundation/Foundation.h>
 #include <dispatch/dispatch.h>
+#include <objc/runtime.h>
+#include <objc/message.h>
 static int deallocs;
 @interface BlocksProbe : NSObject
 @end
@@ -150,9 +156,26 @@ int main(void) {
   }
   dispatch_async(q, ^{ dispatch_semaphore_signal(done); });
   dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);
-  printf("blocks: plain ran=%d deallocs=%d; dispatch ran=%d deallocs=%d\n", plain, plainDeallocs, ran - plain, deallocs - plainDeallocs);
+  int queued = ran - plain, queuedDeallocs = deallocs - plainDeallocs;
+  __block int impRan = 0;
+  BlocksProbe *target = [BlocksProbe new];
+  int impOK = 1;
+  for (int i = 0; i < 200; i++) {
+    NSString *s = [[NSString alloc] initWithFormat: @"imp %d", i];
+    IMP imp = imp_implementationWithBlock(^int (id self, int x) { return [s length] > 3 ? x + 1 : -1; });
+    [s release];
+    SEL sel = sel_registerName([[NSString stringWithFormat: @"probeImp%d:", i] UTF8String]);
+    class_addMethod([BlocksProbe class], sel, imp, "i@:i");
+    if (((int (*)(id, SEL, int))objc_msgSend)(target, sel, i) == i + 1) impRan++;
+    if (imp_getBlock(imp) == nil) impOK = 0;
+  }
+  IMP spare = imp_implementationWithBlock(^int (id self) { return 7; });
+  /* Only the return value: after removal b67709a's imp_getBlock returns the free-list link. */
+  if (imp_getBlock(spare) == nil || !imp_removeBlock(spare)) impOK = 0;
+  [target release];
+  printf("blocks: plain ran=%d deallocs=%d; dispatch ran=%d deallocs=%d; imp ran=%d ok=%d\n", plain, plainDeallocs, queued, queuedDeallocs, impRan, impOK);
   [pool release];
-  return (ran == 2000 && deallocs == 2000) ? 0 : 1;
+  return (ran == 2000 && deallocs == 2001 && impRan == 200 && impOK) ? 0 : 1;
 }
 OBJC
 
@@ -342,7 +365,7 @@ results = {
     "new_build_run": "passed" if all(steps.get(s) == "0" for s in ("new", "build", "run")) and "Hello from CLI tool" in run.get("stdout", "") else "failed",
     "foundation_probe": "passed" if steps.get("probe") == "0" and "SUM=42" in probe else "failed",
     "tls_verification": "passed" if steps.get("tls") == "0" else "failed",
-    "single_blocks_runtime": "passed" if steps.get("blocks_runtime") == "0" and "plain ran=1000 deallocs=1000; dispatch ran=1000 deallocs=1000" in read("blocks_runtime.out") else "failed",
+    "single_blocks_runtime": "passed" if steps.get("blocks_runtime") == "0" and "plain ran=1000 deallocs=1000; dispatch ran=1000 deallocs=1000; imp ran=200 ok=1" in read("blocks_runtime.out") else "failed",
     "package_install_remove": "passed" if steps.get("package_smoke") == "0" and last_json(read("package-install.json")).get("ok") and last_json(read("package-remove.json")).get("ok") else "failed",
 }
 probe_icu = [line.strip() for line in probe.splitlines() if "libicu" in line or "libc.so.6" in line]

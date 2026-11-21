@@ -80,6 +80,17 @@ TOOLS_MAKE_BASE_ARGS = [
     "--with-library-combo=ng-gnu-gnu",
 ]
 
+# With an external blocks runtime, upstream libobjc2 (since a6a4f7c, #355) leaves
+# out block_to_imp.c and the block trampolines, so imp_implementationWithBlock,
+# imp_getBlock and imp_removeBlock vanish. The official recipes carry this patch
+# (source-lock.json libobjc2 patches); the builder applies it to any libobjc2
+# revision that still leaves them out after the lock's own patches.
+LIBOBJC2_TRAMPOLINES_PATCH = (
+    Path(__file__).resolve().parents[2]
+    / "toolchains" / "patches" / "libobjc2" / "0001-Build-block-trampolines-with-an-external-blocks-runtime.patch"
+)
+_GATED_TRAMPOLINES_RE = re.compile(r"if\s*\(\s*EMBEDDED_BLOCKS_RUNTIME[^)]*\)\s*list\(\s*APPEND\s+libobjc_ASM_SRCS\s+block_trampolines\.S")
+
 _REVISION_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -343,7 +354,29 @@ def fetch_component_source(component: dict[str, Any], sources_dir: Path, lock_di
         if _run(git + ["apply", "--whitespace=nowarn", str(patch_file)], destination, env, log) != 0:
             return {"ok": False, "name": name, "message": f"patch {patch['path']} does not apply to {name}@{revision}"}
         applied.append({"path": patch["path"], "sha256": digest})
+    if name == "libobjc2" and libobjc2_omits_block_trampolines(destination):
+        patch_file = LIBOBJC2_TRAMPOLINES_PATCH
+        if not patch_file.is_file():
+            return {"ok": False, "name": name, "message": f"built-in libobjc2 patch is missing: {patch_file}"}
+        if _run(git + ["apply", "--whitespace=nowarn", str(patch_file)], destination, env, log) != 0:
+            return {
+                "ok": False,
+                "name": name,
+                "message": (
+                    f"libobjc2@{revision} builds the block trampolines (imp_implementationWithBlock) only with its "
+                    "embedded blocks runtime, and the built-in patch does not apply; add a lock patch that builds them"
+                ),
+            }
+        applied.append({"path": f"builtin:{patch_file.name}", "sha256": _sha256_file(patch_file), "builtin": True})
     return {"ok": True, "name": name, "source_dir": str(destination), "resolved_commit": head, "applied_patches": applied}
+
+
+def libobjc2_omits_block_trampolines(source: Path) -> bool:
+    """True when libobjc2's CMakeLists builds the block trampolines only with the embedded runtime."""
+    try:
+        return bool(_GATED_TRAMPOLINES_RE.search((source / "CMakeLists.txt").read_text(encoding="utf-8")))
+    except OSError:
+        return False
 
 
 def _command_output(command: list[str]) -> str | None:
@@ -475,11 +508,15 @@ def build_custom_toolchain(
     lock_copy = prefix_dir / LOCK_COPY_DIRNAME
     lock_copy.mkdir()
     shutil.copy2(lock_file, lock_copy / lock_file.name)
-    for component in lock["components"]:
+    for component, source in zip(lock["components"], fetched):
         for patch in component.get("patches", []):
             destination = lock_copy / "patches" / component["name"] / Path(patch["path"]).name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2((lock_file.parent / patch["path"]).resolve(), destination)
+        if any(patch.get("builtin") for patch in source["applied_patches"]):
+            destination = lock_copy / "patches" / component["name"] / LIBOBJC2_TRAMPOLINES_PATCH.name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(LIBOBJC2_TRAMPOLINES_PATCH, destination)
 
     provenance = {
         "schema_version": 1,

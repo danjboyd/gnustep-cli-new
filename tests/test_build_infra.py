@@ -481,6 +481,41 @@ class BuildInfraTests(unittest.TestCase):
             self.assertIn("-DEMBEDDED_BLOCKS_RUNTIME=OFF", script, target)
             self.assertNotIn("-DEMBEDDED_BLOCKS_RUNTIME=ON", script, target)
 
+    LIBOBJC2_PATCH = "toolchains/patches/libobjc2/0001-Build-block-trampolines-with-an-external-blocks-runtime.patch"
+    LINUX_TARGETS = ("linux-amd64-clang", "linux-arm64-clang", "linux-ubuntu2404-amd64-clang",
+                     "linux-ubuntu2404-arm64-clang", "linux-ubuntu2604-amd64-clang")
+
+    def test_linux_locks_carry_the_libobjc2_trampoline_patch(self):
+        # With libdispatch's blocks runtime, upstream libobjc2 drops imp_implementationWithBlock;
+        # every Linux lock carries the patch that keeps it, pinned to its libobjc2 revision.
+        repo = Path(__file__).resolve().parents[1]
+        digest = hashlib.sha256((repo / self.LIBOBJC2_PATCH).read_bytes()).hexdigest()
+        for target in self.LINUX_TARGETS:
+            lock = json.loads((repo / "toolchains" / target / "source-lock.json").read_text())
+            objc = next(c for c in lock["components"] if c["name"] == "libobjc2")
+            self.assertEqual([p["path"] for p in objc["patches"]], [self.LIBOBJC2_PATCH], target)
+            self.assertEqual(objc["patches"][0]["sha256"], digest, target)
+            self.assertEqual(objc["patches"][0]["applies_to_revision"], objc["revision"], target)
+            script = (repo / "toolchains" / target / "build-toolchain.sh").read_text()
+            checkout = script.index(f'git -C "$SOURCES_DIR/libobjc2" checkout --detach "{objc["revision"]}"')
+            self.assertLess(script.index('git -C "$SOURCES_DIR/libobjc2" reset -q --hard'), checkout, target)
+            self.assertIn(digest, script, target)
+            apply = script.index('git -C "$SOURCES_DIR/libobjc2" apply -p1 "$libobjc2_patch_file"')
+            self.assertLess(checkout, apply, target)
+            self.assertLess(apply, script.index('cd "$SOURCES_DIR/libobjc2"'), target)
+
+    def test_generated_linux_build_script_inlines_lock_patches(self):
+        repo = Path(__file__).resolve().parents[1]
+        script = linux_build_script("linux-amd64-clang", "/tmp/install", "/tmp/sources", "/tmp/build")
+        patch_text = (repo / self.LIBOBJC2_PATCH).read_text().rstrip("\n")
+        checkout = script.index('git -C "$SOURCES_DIR/libobjc2" checkout --detach')
+        self.assertLess(script.index('git -C "$SOURCES_DIR/libobjc2" reset -q --hard'), checkout)
+        apply = script.index("git -C \"$SOURCES_DIR/libobjc2\" apply -p1 <<'GNUSTEP_CLI_PATCH_EOF'\n" + patch_text + "\nGNUSTEP_CLI_PATCH_EOF\n")
+        self.assertLess(checkout, apply)
+        self.assertLess(apply, script.index('cd "$SOURCES_DIR/libobjc2"'))
+        # The libs-base TLS series is inlined too, in lock order.
+        self.assertEqual(script.count('git -C "$SOURCES_DIR/libs-base" apply -p1 <<'), 8)
+
     def test_openbsd_build_script_contains_openbsd_specific_settings(self):
         script = openbsd_build_script(
             "openbsd-amd64-clang",

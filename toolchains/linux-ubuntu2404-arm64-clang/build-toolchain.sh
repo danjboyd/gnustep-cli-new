@@ -14,7 +14,21 @@ if [ ! -d "$SOURCES_DIR/libobjc2/.git" ]; then
   git clone "https://github.com/gnustep/libobjc2.git" "$SOURCES_DIR/libobjc2"
 fi
 git -C "$SOURCES_DIR/libobjc2" fetch --tags origin
+git -C "$SOURCES_DIR/libobjc2" reset -q --hard
 git -C "$SOURCES_DIR/libobjc2" checkout --detach "b67709ad7851973fde127022d8ac6a710c82b1d5"
+# Carried libobjc2 patch (source-lock.json libobjc2 patches): build the block
+# trampolines (imp_implementationWithBlock) with libdispatch's blocks runtime.
+libobjc2_patch_file="$RECIPE_DIR/../patches/libobjc2/0001-Build-block-trampolines-with-an-external-blocks-runtime.patch"
+if command -v sha256sum >/dev/null 2>&1; then
+  libobjc2_patch_sha=$(sha256sum "$libobjc2_patch_file" | awk '{print $1}')
+else
+  libobjc2_patch_sha=$(sha256 -q "$libobjc2_patch_file")
+fi
+if [ "$libobjc2_patch_sha" != "a572d628ef80b647a325cb05907069d1809df42dce5f9a680e316930734d9df3" ]; then
+  echo "libobjc2 patch digest mismatch: 0001-Build-block-trampolines-with-an-external-blocks-runtime.patch $libobjc2_patch_sha" >&2
+  exit 1
+fi
+git -C "$SOURCES_DIR/libobjc2" apply -p1 "$libobjc2_patch_file"
 
 if [ ! -d "$SOURCES_DIR/libdispatch/.git" ]; then
   git clone "https://github.com/swiftlang/swift-corelibs-libdispatch.git" "$SOURCES_DIR/libdispatch"

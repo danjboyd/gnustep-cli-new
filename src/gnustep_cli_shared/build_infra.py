@@ -1133,6 +1133,31 @@ def write_toolchain_metadata(output_root: str | Path, target_id: str, toolchain_
     }
 
 
+def _inline_patch_steps(component: dict[str, Any], repo_root: Path | None = None) -> list[str]:
+    """Shell lines applying a component's lock patches, inlined so the script stands alone.
+
+    Each patch is checked against its lock digest when the script is generated.
+    """
+    patches = component.get("patches") or []
+    if not patches:
+        return []
+    root = repo_root or Path(__file__).resolve().parents[2]
+    name = component["name"]
+    marker = "GNUSTEP_CLI_PATCH_EOF"
+    steps = [f"# Carried {name} patches (source-lock.json {name} patches), applied in order."]
+    for patch in patches:
+        content = (root / patch["path"]).read_bytes()
+        if hashlib.sha256(content).hexdigest() != patch["sha256"]:
+            raise ValueError(f"patch digest mismatch for {patch['path']}")
+        text = content.decode("utf-8")
+        if marker in text:
+            raise ValueError(f"patch {patch['path']} contains the heredoc marker {marker}")
+        steps.append(f'git -C "$SOURCES_DIR/{name}" apply -p{patch.get("strip", 1)} <<\'{marker}\'')
+        steps.extend(text.rstrip("\n").split("\n"))
+        steps.append(marker)
+    return steps
+
+
 def _unix_source_build_script(target_id: str, prefix: str, sources_dir: str, build_root: str, *, host_os: str) -> str:
     target = target_by_id(target_id)
     if target["strategy"] != "source-build":
@@ -1159,10 +1184,14 @@ def _unix_source_build_script(target_id: str, prefix: str, sources_dir: str, bui
                 f'  git clone "{component["url"]}" "$SOURCES_DIR/{component["name"]}"',
                 "fi",
                 f'git -C "$SOURCES_DIR/{component["name"]}" fetch --tags origin',
-                f'git -C "$SOURCES_DIR/{component["name"]}" checkout --detach "{component["revision"]}"',
-                "",
             ]
         )
+        if component.get("patches"):
+            # A rerun on the same sources must start from a clean tree to apply them again.
+            lines.append(f'git -C "$SOURCES_DIR/{component["name"]}" reset -q --hard')
+        lines.append(f'git -C "$SOURCES_DIR/{component["name"]}" checkout --detach "{component["revision"]}"')
+        lines.extend(_inline_patch_steps(component))
+        lines.append("")
     lines.extend(
         [
             'case "$HOST_OS" in',

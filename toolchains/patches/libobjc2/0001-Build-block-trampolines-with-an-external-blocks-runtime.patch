@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Daniel Boyd <danieljboyd@icloud.com>
+Date: Sat, 21 Nov 2026 08:50:49 -0600
+Subject: [PATCH] Build the block trampolines with an external blocks runtime
+
+imp_implementationWithBlock, imp_getBlock and imp_removeBlock are public
+runtime API (objc/runtime.h), but since a6a4f7c (#355) block_to_imp.c and
+block_trampolines.S are only built with the embedded blocks runtime. They
+only need the Block ABI and _Block_copy, which libBlocksRuntime provides, so
+build them (and run init_trampolines and BlockImpTest) in both configurations.
+---
+ CMakeLists.txt      | 6 ++----
+ Test/CMakeLists.txt | 4 +---
+ loader.c            | 2 --
+ 3 files changed, 3 insertions(+), 9 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 1d915d1..01494ea 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -156,10 +156,8 @@ add_compile_definitions($<$<BOOL:${STRICT_APPLE_COMPATIBILITY}>:STRICT_APPLE_COM
+ configure_file(objc/objc-config.h.in objc/objc-config.h @ONLY)
+ include_directories("${PROJECT_BINARY_DIR}/objc/")
+ 
+-if (EMBEDDED_BLOCKS_RUNTIME)
+-	list(APPEND libobjc_ASM_SRCS block_trampolines.S)
+-	list(APPEND libobjc_C_SRCS block_to_imp.c)
+-endif()
++list(APPEND libobjc_ASM_SRCS block_trampolines.S)
++list(APPEND libobjc_C_SRCS block_to_imp.c)
+ 
+ if (OLDABI_COMPAT)
+ 	list(APPEND libobjc_C_SRCS legacy.c abi_version.c statics_loader.c)
+diff --git a/Test/CMakeLists.txt b/Test/CMakeLists.txt
+index 1f66e32..c0725e0 100644
+--- a/Test/CMakeLists.txt
++++ b/Test/CMakeLists.txt
+@@ -54,9 +54,7 @@ set(TESTS
+ 	UnexpectedException.m
+ )
+ 
+-if (EMBEDDED_BLOCKS_RUNTIME)
+-	list(APPEND TESTS BlockImpTest.m)
+-endif()
++list(APPEND TESTS BlockImpTest.m)
+ 
+ set(ENABLE_ALL_OBJC_ARC_TESTS On)
+ 
+diff --git a/loader.c b/loader.c
+index f4df047..449d7a7 100644
+--- a/loader.c
++++ b/loader.c
+@@ -59,9 +59,7 @@ static void init_runtime(void)
+ 		init_alias_table();
+ 		init_early_blocks();
+ 		init_arc();
+-#if defined(EMBEDDED_BLOCKS_RUNTIME)
+ 		init_trampolines();
+-#endif
+ 		init_builtin_classes();
+ 		first_run = NO;
+ 		if (getenv("LIBOBJC_MEMORY_PROFILE"))
