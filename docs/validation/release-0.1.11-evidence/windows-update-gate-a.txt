@@ -1,0 +1,12 @@
+staged 0.1.11 bootstrap exit 0; root C:\gnustep-smoke\gate6-staged-018; version 0.1.11
+A0: exit 0 output=0.1.11 ok=True
+disk before A: 22.6 GB free
+A bootstrap 0.1.10 exit 0; version 0.1.10
+A-update-explicit-manifest exit 0 (C:\gnustep-smoke\gate6-a-017\bin\gnustep.exe update --yes --root C:\gnustep-smoke\gate6-a-017 --manifest C:\gnustep-smoke\release-new\release-manifest.gate6-a.json)
+A: 0.1.10 -> 0.1.11 ok=True
+C2-doctor-upgraded exit 0 (C:\gnustep-smoke\gate6-a-017\bin\gnustep.exe doctor --json)
+C2: integrity=ok managed_root=C:\gnustep-smoke/gate6-a-017 ok=True
+removed gate6-a-017 (and its backups); 24.9 GB free
+C-doctor exit 0 (C:\gnustep-smoke\gate6-staged-018\bin\gnustep.exe doctor --json)
+C: managed_root=C:\gnustep-smoke/gate6-staged-018 action=use_managed_toolchain ok=True
+done; failed: 

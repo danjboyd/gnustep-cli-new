@@ -1,0 +1,239 @@
+bash.exe : [1;32mMSYS2 is starting for the first time. Executing the initial setup.[1;0m
+At C:\gnustep-smoke\post-checks.ps1:19 char:1
++ & $bash -lc "bash '$script' '$rootu'" *> (Join-Path $out 'smoke-toolc ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([1;32mMSYS2 is...al setup.[1;0m:String) [], Remote 
+   Exception
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Copying skeleton files.
+These files are for the users to personalise their msys2 experience.
+
+They will never be overwritten nor automatically updated.
+
+'./.bashrc' -> '/home/gssmoke/.bashrc'
+'./.bash_profile' -> '/home/gssmoke/.bash_profile'
+'./.profile' -> '/home/gssmoke/.profile'
+gpg: /etc/pacman.d/gnupg/trustdb.gpg: trustdb created
+gpg: no ultimately trusted keys found
+gpg: starting migration from earlier GnuPG versions
+gpg: porting secret keys from '/etc/pacman.d/gnupg/secring.gpg' to gpg-agent
+gpg: migration succeeded
+==> Generating pacman master key. This may take some time.
+gpg: Generating pacman keyring master key...
+gpg: directory '/etc/pacman.d/gnupg/openpgp-revocs.d' created
+gpg: revocation certificate stored as 
+'/etc/pacman.d/gnupg/openpgp-revocs.d/A780FC3CBBC05C1CD52859BC0D13E9F75E489D77.rev'
+gpg: Done
+==> Updating trust database...
+gpg: marginals needed: 3  completes needed: 1  trust model: pgp
+gpg: depth: 0  valid:   1  signed:   0  trust: 0-, 0q, 0n, 0m, 0f, 1u
+==> Appending keys from msys2.gpg...
+==> Locally signing trusted keys in keyring...
+  -> Locally signed 5 keys.
+==> Importing owner trust values...
+gpg: setting ownertrust to 4
+gpg: setting ownertrust to 4
+gpg: setting ownertrust to 4
+gpg: setting ownertrust to 4
+gpg: setting ownertrust to 4
+==> Disabling revoked keys in keyring...
+  -> Disabled 4 keys.
+==> Updating trust database...
+gpg: marginals needed: 3  completes needed: 1  trust model: pgp
+gpg: depth: 0  valid:   1  signed:   5  trust: 0-, 0q, 0n, 0m, 0f, 1u
+gpg: depth: 1  valid:   5  signed:   7  trust: 0-, 0q, 0n, 5m, 0f, 0u
+gpg: depth: 2  valid:   4  signed:   2  trust: 4-, 0q, 0n, 0m, 0f, 0u
+gpg: next trustdb check due at 2027-02-10
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key F40D263ECA25678A: "Alexey Pavlov (Alexpux) <alexey.pawlow@gmail.com>" not changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key 790AE56A1D3CFDDC: "David Macek (MSYS2 master key) <david.macek.0@gmail.com>" not changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key DA7EF2ABAEEA755C: "Martell Malone (martell) <martellmalone@gmail.com>" not changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key 755B8182ACD22879: "Christoph Reiter (MSYS2 master key) <reiter.christoph@gmail.com>" not 
+changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key 9F418C233E652008: "Ignacio Casal Quinteiro <icquinteiro@gmail.com>" not changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key BBE514E53E0D0813: "Ray Donnelly (MSYS2 Developer - master key) 
+<mingw.android@gmail.com>" not changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key 5F92EFC1A47D45A1: "Alexey Pavlov (Alexpux) <alexpux@gmail.com>" not changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key 974C8BE49078F532: "David Macek <david.macek.0@gmail.com>" not changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key FA11531AA0AA7F57: "Christoph Reiter (MSYS2 development key) 
+<reiter.christoph@gmail.com>" not changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key 794DCF97F93FC717: "Martell Malone (martell) <me@martellmalone.com>" not changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key D595C9AB2C51581E: "Martell Malone (MSYS2 Developer) <martellmalone@gmail.com>" not 
+changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+gpg: refreshing 1 key from hkps://keyserver.ubuntu.com
+gpg: key 4DF3B7664CA56930: "Ray Donnelly (MSYS2 Developer) <mingw.android@gmail.com>" not changed
+gpg: Total number processed: 1
+gpg:              unchanged: 1
+[1;32mInitial setup complete. MSYS2 is now ready to use.[1;0m
+ok: Foundation hello-world (blocks) with gnustep-config flags
+ok: <pthread.h> together with Foundation
+ok: python pyexpat / xml.etree
+ok: curl with SSL and AsynchDNS (curl 8.23.0 (Windows) libcurl/8.23.0 OpenSSL/3.6.5 zlib/1.3.2 brotli/1.2.0 zstd/1.5.7 libidn2/2.3.8 libpsl/0.21.5 libssh2/1.11.1 nghttp2/1.70.0 ngtcp2/1.25.0 nghttp3/1.18.0 WinLDAP)
+ok: perl v5.42.3
+ok: NSLog formatting
+2026-11-20 23:33:04.492 tls[8224:5816] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1997 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Root Authority.
+2026-11-20 23:33:04.499 tls[8224:5816] There was a non-CA certificate in the trusted list: 
+CN=pkrvmul7jqgigtp.
+2026-11-20 23:33:04.502 tls[8224:5816] There was a non-CA certificate in the trusted list: 
+C=US,O=MSFT,CN=Microsoft Authenticode(tm) Root Authority.
+2026-11-20 23:33:04.506 tls[8224:5816] There was a non-CA certificate in the trusted list: 
+CN=runnervmbpeip.
+2026-11-20 23:33:04.536 tls[8224:5816] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1999 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Test Root Authority.
+2026-11-20 23:33:04.537 tls[8224:5816] There was a non-CA certificate in the trusted list: 
+CN=Root Agency.
+https://github.com fetched
+2026-11-20 23:33:05.060 tls[6424:4884] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1997 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Root Authority.
+2026-11-20 23:33:05.066 tls[6424:4884] There was a non-CA certificate in the trusted list: 
+CN=pkrvmul7jqgigtp.
+2026-11-20 23:33:05.070 tls[6424:4884] There was a non-CA certificate in the trusted list: 
+C=US,O=MSFT,CN=Microsoft Authenticode(tm) Root Authority.
+2026-11-20 23:33:05.074 tls[6424:4884] There was a non-CA certificate in the trusted list: 
+CN=runnervmbpeip.
+2026-11-20 23:33:05.103 tls[6424:4884] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1999 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Test Root Authority.
+2026-11-20 23:33:05.103 tls[6424:4884] There was a non-CA certificate in the trusted list: 
+CN=Root Agency.
+https://expired.badssl.com refused
+2026-11-20 23:33:05.535 tls[212:7856] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1997 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Root Authority.
+2026-11-20 23:33:05.539 tls[212:7856] There was a non-CA certificate in the trusted list: 
+CN=pkrvmul7jqgigtp.
+2026-11-20 23:33:05.543 tls[212:7856] There was a non-CA certificate in the trusted list: 
+C=US,O=MSFT,CN=Microsoft Authenticode(tm) Root Authority.
+2026-11-20 23:33:05.549 tls[212:7856] There was a non-CA certificate in the trusted list: 
+CN=runnervmbpeip.
+2026-11-20 23:33:05.576 tls[212:7856] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1999 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Test Root Authority.
+2026-11-20 23:33:05.578 tls[212:7856] There was a non-CA certificate in the trusted list: CN=Root 
+Agency.
+https://wrong.host.badssl.com refused
+2026-11-20 23:33:06.029 tls[1992:704] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1997 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Root Authority.
+2026-11-20 23:33:06.035 tls[1992:704] There was a non-CA certificate in the trusted list: 
+CN=pkrvmul7jqgigtp.
+2026-11-20 23:33:06.039 tls[1992:704] There was a non-CA certificate in the trusted list: 
+C=US,O=MSFT,CN=Microsoft Authenticode(tm) Root Authority.
+2026-11-20 23:33:06.045 tls[1992:704] There was a non-CA certificate in the trusted list: 
+CN=runnervmbpeip.
+2026-11-20 23:33:06.074 tls[1992:704] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1999 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Test Root Authority.
+2026-11-20 23:33:06.074 tls[1992:704] There was a non-CA certificate in the trusted list: CN=Root 
+Agency.
+https://self-signed.badssl.com refused
+2026-11-20 23:33:06.506 tls[8960:4064] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1997 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Root Authority.
+2026-11-20 23:33:06.512 tls[8960:4064] There was a non-CA certificate in the trusted list: 
+CN=pkrvmul7jqgigtp.
+2026-11-20 23:33:06.515 tls[8960:4064] There was a non-CA certificate in the trusted list: 
+C=US,O=MSFT,CN=Microsoft Authenticode(tm) Root Authority.
+2026-11-20 23:33:06.519 tls[8960:4064] There was a non-CA certificate in the trusted list: 
+CN=runnervmbpeip.
+2026-11-20 23:33:06.549 tls[8960:4064] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1999 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Test Root Authority.
+2026-11-20 23:33:06.551 tls[8960:4064] There was a non-CA certificate in the trusted list: 
+CN=Root Agency.
+https://untrusted-root.badssl.com refused
+2026-11-20 23:33:07.045 tls[604:2152] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1997 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Root Authority.
+2026-11-20 23:33:07.051 tls[604:2152] There was a non-CA certificate in the trusted list: 
+CN=pkrvmul7jqgigtp.
+2026-11-20 23:33:07.055 tls[604:2152] There was a non-CA certificate in the trusted list: 
+C=US,O=MSFT,CN=Microsoft Authenticode(tm) Root Authority.
+2026-11-20 23:33:07.061 tls[604:2152] There was a non-CA certificate in the trusted list: 
+CN=runnervmbpeip.
+2026-11-20 23:33:07.089 tls[604:2152] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1999 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Test Root Authority.
+2026-11-20 23:33:07.091 tls[604:2152] There was a non-CA certificate in the trusted list: CN=Root 
+Agency.
+https://self-signed.badssl.com fetched
+2026-11-20 23:33:34.574 tls[6640:7596] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1997 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Root Authority.
+2026-11-20 23:33:34.581 tls[6640:7596] There was a non-CA certificate in the trusted list: 
+CN=pkrvmul7jqgigtp.
+2026-11-20 23:33:34.585 tls[6640:7596] There was a non-CA certificate in the trusted list: 
+C=US,O=MSFT,CN=Microsoft Authenticode(tm) Root Authority.
+2026-11-20 23:33:34.590 tls[6640:7596] There was a non-CA certificate in the trusted list: 
+CN=runnervmbpeip.
+2026-11-20 23:33:34.618 tls[6640:7596] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1999 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Test Root Authority.
+2026-11-20 23:33:34.620 tls[6640:7596] There was a non-CA certificate in the trusted list: 
+CN=Root Agency.
+https://1.1.1.1 fetched
+2026-11-20 23:34:04.680 tls[8880:1620] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1997 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Root Authority.
+2026-11-20 23:34:04.685 tls[8880:1620] There was a non-CA certificate in the trusted list: 
+CN=pkrvmul7jqgigtp.
+2026-11-20 23:34:04.689 tls[8880:1620] There was a non-CA certificate in the trusted list: 
+C=US,O=MSFT,CN=Microsoft Authenticode(tm) Root Authority.
+2026-11-20 23:34:04.693 tls[8880:1620] There was a non-CA certificate in the trusted list: 
+CN=runnervmbpeip.
+2026-11-20 23:34:04.724 tls[8880:1620] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1999 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Test Root Authority.
+2026-11-20 23:34:04.725 tls[8880:1620] There was a non-CA certificate in the trusted list: 
+CN=Root Agency.
+https://140.82.114.3 refused
+ok: TLS host verification (github.com loads; expired, wrong-host, self-signed, untrusted-root refused; GS_TLS_VERIFY_S=NO overrides; address URLs checked against the certificate)
+2026-11-20 23:34:05.880 tls[9028:9000] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1997 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Root Authority.
+2026-11-20 23:34:05.885 tls[9028:9000] There was a non-CA certificate in the trusted list: 
+CN=pkrvmul7jqgigtp.
+2026-11-20 23:34:05.888 tls[9028:9000] There was a non-CA certificate in the trusted list: 
+C=US,O=MSFT,CN=Microsoft Authenticode(tm) Root Authority.
+2026-11-20 23:34:05.892 tls[9028:9000] There was a non-CA certificate in the trusted list: 
+CN=runnervmbpeip.
+2026-11-20 23:34:05.922 tls[9028:9000] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1999 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Test Root Authority.
+2026-11-20 23:34:05.924 tls[9028:9000] There was a non-CA certificate in the trusted list: 
+CN=Root Agency.
+https://127.0.0.1:18443/ refused
+2026-11-20 23:34:06.088 tls[4352:2024] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1997 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Root Authority.
+2026-11-20 23:34:06.094 tls[4352:2024] There was a non-CA certificate in the trusted list: 
+CN=pkrvmul7jqgigtp.
+2026-11-20 23:34:06.097 tls[4352:2024] There was a non-CA certificate in the trusted list: 
+C=US,O=MSFT,CN=Microsoft Authenticode(tm) Root Authority.
+2026-11-20 23:34:06.102 tls[4352:2024] There was a non-CA certificate in the trusted list: 
+CN=runnervmbpeip.
+2026-11-20 23:34:06.132 tls[4352:2024] There was a non-CA certificate in the trusted list: 
+OU=Copyright (c) 1999 Microsoft Corp.,OU=Microsoft Corporation,CN=Microsoft Test Root Authority.
+2026-11-20 23:34:06.132 tls[4352:2024] There was a non-CA certificate in the trusted list: 
+CN=Root Agency.
+https://127.0.0.1:18443/ fetched
+ok: trust on a store missing the root (a root only in the bundled authorities loads)
+ok: bundled authorities from mingw-w64-clang-x86_64-ca-certificates 20260816-1, 96 days old
