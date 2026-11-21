@@ -177,6 +177,47 @@ class CustomToolchainBuildTests(unittest.TestCase):
             self.assertIn("patched", (Path(base["source_dir"]) / "README").read_text())
             self.assertFalse((root / "prefix").exists())
 
+    def test_build_runs_libdispatch_before_libobjc2_with_one_blocks_runtime(self):
+        # #104: libobjc2 must use libdispatch's libBlocksRuntime, so libdispatch is
+        # built first and libobjc2 without its embedded runtime, while specs keep
+        # listing libobjc2 first.
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"HOME": tmp}):
+            root = Path(tmp)
+            components = []
+            for name in ["libobjc2", "libdispatch", "tools-make", "libs-base"]:
+                url, revision = _repo(root, name)
+                components.append({"name": name, "url": url, "revision": revision, "configure_args": [], "patches": []})
+            lock_path = root / "lock" / "lock.json"
+            lock_path.parent.mkdir(parents=True)
+            lock_path.write_text(json.dumps(_lock(components)))
+            calls = []
+
+            def fake_run(step, cwd, env, log):
+                calls.append((Path(log).stem, list(step)))
+                return 0
+
+            def fake_fetch(component, sources_dir, lock_dir, log):
+                source = Path(sources_dir) / component["name"]
+                source.mkdir(parents=True, exist_ok=True)
+                return {"ok": True, "name": component["name"], "source_dir": str(source),
+                        "resolved_commit": component["revision"], "applied_patches": []}
+
+            with patch("gnustep_cli_shared.custom_toolchain.fetch_component_source", side_effect=fake_fetch), \
+                    patch("gnustep_cli_shared.custom_toolchain._run", side_effect=fake_run), \
+                    patch("gnustep_cli_shared.custom_toolchain.add_runtime_library_path"):
+                build_custom_toolchain(lock_path, root / "prefix")
+            order = []
+            for name, _ in calls:
+                if name not in order:
+                    order.append(name)
+            self.assertEqual(order[:2], ["libdispatch", "libobjc2"])
+            configure = {name: step for name, step in calls if step[:2] == ["cmake", "-S"]}
+            self.assertIn("-DINSTALL_PRIVATE_HEADERS=ON", configure["libdispatch"])
+            self.assertIn("-DEMBEDDED_BLOCKS_RUNTIME=OFF", configure["libobjc2"])
+            self.assertNotIn("-DEMBEDDED_BLOCKS_RUNTIME=ON", configure["libobjc2"])
+            prefix = str((root / "prefix").resolve())
+            self.assertIn(f"-DBlocksRuntime_LIBRARIES={prefix}/lib/libBlocksRuntime.so", configure["libobjc2"])
+
     def test_build_refuses_unknown_revision(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"HOME": tmp}):
             root = Path(tmp)

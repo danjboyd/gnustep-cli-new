@@ -465,6 +465,21 @@ class BuildInfraTests(unittest.TestCase):
         self.assertIn('ln -sfn "$PREFIX/include/objc"', script)
         self.assertIn('export CC=clang', script)
         self.assertIn('"${MAKE:-make}" install', script)
+        # #104: one blocks runtime; libdispatch first, libobjc2 built against it.
+        self.assertLess(script.index('cd "$SOURCES_DIR/libdispatch"'), script.index('cd "$SOURCES_DIR/libobjc2"'))
+        self.assertIn("-DINSTALL_PRIVATE_HEADERS=ON", script)
+        self.assertIn("-DEMBEDDED_BLOCKS_RUNTIME=OFF", script)
+        self.assertNotIn("-DEMBEDDED_BLOCKS_RUNTIME=ON", script)
+
+    def test_committed_linux_build_scripts_use_one_blocks_runtime(self):
+        root = Path(__file__).resolve().parents[1] / "toolchains"
+        for target in ("linux-amd64-clang", "linux-arm64-clang", "linux-ubuntu2404-amd64-clang",
+                       "linux-ubuntu2404-arm64-clang", "linux-ubuntu2604-amd64-clang"):
+            script = (root / target / "build-toolchain.sh").read_text()
+            self.assertLess(script.index('cd "$SOURCES_DIR/libdispatch"'), script.index('cd "$SOURCES_DIR/libobjc2"'), target)
+            self.assertIn("-DINSTALL_PRIVATE_HEADERS=ON", script, target)
+            self.assertIn("-DEMBEDDED_BLOCKS_RUNTIME=OFF", script, target)
+            self.assertNotIn("-DEMBEDDED_BLOCKS_RUNTIME=ON", script, target)
 
     def test_openbsd_build_script_contains_openbsd_specific_settings(self):
         script = openbsd_build_script(

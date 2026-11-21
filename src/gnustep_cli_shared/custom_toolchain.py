@@ -44,6 +44,9 @@ COMPONENT_ORDER = [
     "libs-gui",
     "libs-back",
 ]
+# Specs list components in COMPONENT_ORDER; they are built in this order, with
+# libdispatch first so libobjc2 can use its blocks runtime (#104).
+BUILD_ORDER = ["libdispatch", "libobjc2", *COMPONENT_ORDER[2:]]
 REQUIRED_COMPONENTS = ["libobjc2", "libdispatch", "tools-make", "libs-base"]
 GNUSTEP_LIBRARIES = {"libs-base", "libs-corebase", "libs-gui", "libs-back"}
 # GNUstep domains the libraries may install into. LOCAL is GNUstep Make's
@@ -57,7 +60,9 @@ LIBOBJC2_BASE_ARGS = [
     "-DCMAKE_OBJC_COMPILER=clang",
     "-DCMAKE_OBJCXX_COMPILER=clang++",
     "-DGNUSTEP_INSTALL_TYPE=NONE",
-    "-DEMBEDDED_BLOCKS_RUNTIME=ON",
+    # One blocks runtime (#104): libobjc2 uses the libBlocksRuntime that
+    # libdispatch installs, so libdispatch is built first (BUILD_ORDER).
+    "-DEMBEDDED_BLOCKS_RUNTIME=OFF",
 ]
 LIBDISPATCH_BASE_ARGS = [
     "-G",
@@ -65,6 +70,7 @@ LIBDISPATCH_BASE_ARGS = [
     "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
     "-DCMAKE_C_COMPILER=clang",
     "-DCMAKE_CXX_COMPILER=clang++",
+    "-DINSTALL_PRIVATE_HEADERS=ON",
     "-DBUILD_TESTING=OFF",
 ]
 TOOLS_MAKE_BASE_ARGS = [
@@ -225,7 +231,13 @@ def _component_steps(name: str, source: Path, prefix: Path, jobs: int, extra_arg
     if name == "libobjc2":
         return [
             ["rm", "-rf", "build"],
-            ["cmake", "-S", ".", "-B", "build", *LIBOBJC2_BASE_ARGS, f"-DCMAKE_INSTALL_PREFIX={prefix}", *extra_args],
+            [
+                "cmake", "-S", ".", "-B", "build", *LIBOBJC2_BASE_ARGS,
+                f"-DBlocksRuntime_INCLUDE_DIR={prefix / 'include'}",
+                f"-DBlocksRuntime_LIBRARIES={prefix / 'lib' / 'libBlocksRuntime.so'}",
+                f"-DCMAKE_INSTALL_PREFIX={prefix}",
+                *extra_args,
+            ],
             ["cmake", "--build", "build", f"-j{jobs}"],
             ["cmake", "--install", "build"],
         ]
@@ -434,7 +446,8 @@ def build_custom_toolchain(
     prefix_dir.mkdir(parents=True)
     env = build_environment(prefix_dir)
     install_domain = lock.get("install_domain", "LOCAL")
-    for component, source in zip(lock["components"], fetched):
+    ordered = sorted(zip(lock["components"], fetched), key=lambda pair: BUILD_ORDER.index(pair[0]["name"]))
+    for component, source in ordered:
         name = component["name"]
         log = logs_dir / f"{name}.log"
         step_env = env
