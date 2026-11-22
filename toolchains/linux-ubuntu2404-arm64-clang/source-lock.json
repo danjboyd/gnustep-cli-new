@@ -21,7 +21,17 @@
       "revision_type": "commit",
       "archive_sha256": null,
       "configure_args": [],
-      "patches": []
+      "patches": [
+        {
+          "id": "block-trampolines-external-blocks-runtime",
+          "path": "toolchains/patches/libobjc2/0001-Build-block-trampolines-with-an-external-blocks-runtime.patch",
+          "sha256": "a572d628ef80b647a325cb05907069d1809df42dce5f9a680e316930734d9df3",
+          "strip": 1,
+          "applies_to_revision": "b67709ad7851973fde127022d8ac6a710c82b1d5",
+          "rationale": "Keep imp_implementationWithBlock, imp_getBlock and imp_removeBlock (public objc/runtime.h API) when libobjc2 uses libdispatch's libBlocksRuntime (#104): upstream builds the block trampolines only with the embedded blocks runtime.",
+          "upstream_status": "local; upstream libobjc2 (a6a4f7c, #355) omits the trampolines with an external blocks runtime"
+        }
+      ]
     },
     {
       "name": "libdispatch",

@@ -21,6 +21,7 @@ from gnustep_cli_shared.custom_toolchain import (  # noqa: E402
     check_custom_prefix,
     custom_toolchain_lock_from_source_lock,
     elf_files,
+    libobjc2_omits_block_trampolines,
     parse_build_id,
     validate_custom_toolchain_lock,
 )
@@ -176,6 +177,117 @@ class CustomToolchainBuildTests(unittest.TestCase):
             self.assertEqual(base["applied_patches"][0]["path"], "patches/base.patch")
             self.assertIn("patched", (Path(base["source_dir"]) / "README").read_text())
             self.assertFalse((root / "prefix").exists())
+
+    def test_build_runs_libdispatch_before_libobjc2_with_one_blocks_runtime(self):
+        # #104: libobjc2 must use libdispatch's libBlocksRuntime, so libdispatch is
+        # built first and libobjc2 without its embedded runtime, while specs keep
+        # listing libobjc2 first.
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"HOME": tmp}):
+            root = Path(tmp)
+            components = []
+            for name in ["libobjc2", "libdispatch", "tools-make", "libs-base"]:
+                url, revision = _repo(root, name)
+                components.append({"name": name, "url": url, "revision": revision, "configure_args": [], "patches": []})
+            lock_path = root / "lock" / "lock.json"
+            lock_path.parent.mkdir(parents=True)
+            lock_path.write_text(json.dumps(_lock(components)))
+            calls = []
+
+            def fake_run(step, cwd, env, log):
+                calls.append((Path(log).stem, list(step)))
+                return 0
+
+            def fake_fetch(component, sources_dir, lock_dir, log):
+                source = Path(sources_dir) / component["name"]
+                source.mkdir(parents=True, exist_ok=True)
+                return {"ok": True, "name": component["name"], "source_dir": str(source),
+                        "resolved_commit": component["revision"], "applied_patches": []}
+
+            with patch("gnustep_cli_shared.custom_toolchain.fetch_component_source", side_effect=fake_fetch), \
+                    patch("gnustep_cli_shared.custom_toolchain._run", side_effect=fake_run), \
+                    patch("gnustep_cli_shared.custom_toolchain.add_runtime_library_path"):
+                build_custom_toolchain(lock_path, root / "prefix")
+            order = []
+            for name, _ in calls:
+                if name not in order:
+                    order.append(name)
+            self.assertEqual(order[:2], ["libdispatch", "libobjc2"])
+            configure = {name: step for name, step in calls if step[:2] == ["cmake", "-S"]}
+            self.assertIn("-DINSTALL_PRIVATE_HEADERS=ON", configure["libdispatch"])
+            self.assertIn("-DEMBEDDED_BLOCKS_RUNTIME=OFF", configure["libobjc2"])
+            self.assertNotIn("-DEMBEDDED_BLOCKS_RUNTIME=ON", configure["libobjc2"])
+            prefix = str((root / "prefix").resolve())
+            self.assertIn(f"-DBlocksRuntime_LIBRARIES={prefix}/lib/libBlocksRuntime.so", configure["libobjc2"])
+
+    def _libobjc2_lock(self, root: Path, cmake: str) -> Path:
+        components = []
+        for name in ["libobjc2", "libdispatch", "tools-make", "libs-base"]:
+            url, revision = _repo(root, name)
+            components.append({"name": name, "url": url, "revision": revision, "configure_args": [], "patches": []})
+        repo = root / "upstream" / "libobjc2"
+        (repo / "CMakeLists.txt").write_text(cmake)
+        _git(repo, "add", "CMakeLists.txt")
+        _git(repo, "commit", "-q", "-m", "cmake")
+        components[0]["revision"] = _git(repo, "rev-parse", "HEAD")
+        lock_path = root / "lock" / "lock.json"
+        lock_path.parent.mkdir(parents=True)
+        lock_path.write_text(json.dumps(_lock(components)))
+        return lock_path
+
+    GATED = "project(x)\nif (EMBEDDED_BLOCKS_RUNTIME)\n\tlist(APPEND libobjc_ASM_SRCS block_trampolines.S)\n\tlist(APPEND libobjc_C_SRCS block_to_imp.c)\nendif()\n"
+    UNGATED = "project(x)\nlist(APPEND libobjc_ASM_SRCS block_trampolines.S)\nlist(APPEND libobjc_C_SRCS block_to_imp.c)\n"
+
+    def test_libobjc2_trampoline_gate_detection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp)
+            for text, gated in [
+                (self.GATED, True),
+                (self.UNGATED, False),
+                # Upstream master spells the condition differently.
+                (self.GATED.replace("(EMBEDDED_BLOCKS_RUNTIME)", "(EMBEDDED_BLOCKS_RUNTIME AND NOT WASM)"), True),
+            ]:
+                (source / "CMakeLists.txt").write_text(text)
+                self.assertEqual(libobjc2_omits_block_trampolines(source), gated, text)
+            (source / "CMakeLists.txt").unlink()
+            self.assertFalse(libobjc2_omits_block_trampolines(source))
+
+    def test_builtin_trampoline_patch_is_applied_to_gated_libobjc2(self):
+        # With an external blocks runtime upstream libobjc2 drops imp_implementationWithBlock;
+        # the builder carries the official recipes' patch and records it as built in.
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"HOME": tmp}):
+            root = Path(tmp)
+            lock_path = self._libobjc2_lock(root, self.GATED)
+            builtin = root / "builtin.patch"
+            builtin.write_text(
+                "--- a/CMakeLists.txt\n+++ b/CMakeLists.txt\n@@ -1,5 +1,3 @@\n project(x)\n"
+                "-if (EMBEDDED_BLOCKS_RUNTIME)\n-\tlist(APPEND libobjc_ASM_SRCS block_trampolines.S)\n"
+                "-\tlist(APPEND libobjc_C_SRCS block_to_imp.c)\n-endif()\n"
+                "+list(APPEND libobjc_ASM_SRCS block_trampolines.S)\n+list(APPEND libobjc_C_SRCS block_to_imp.c)\n"
+            )
+            with patch("gnustep_cli_shared.custom_toolchain.LIBOBJC2_TRAMPOLINES_PATCH", builtin):
+                result = build_custom_toolchain(lock_path, root / "prefix", sources_only=True)
+            self.assertTrue(result["ok"], result)
+            objc = next(c for c in result["components"] if c["name"] == "libobjc2")
+            self.assertEqual(objc["applied_patches"], [{"path": "builtin:builtin.patch", "sha256": hashlib.sha256(builtin.read_bytes()).hexdigest(), "builtin": True}])
+            self.assertFalse(libobjc2_omits_block_trampolines(Path(objc["source_dir"])))
+
+    def test_builtin_trampoline_patch_that_does_not_apply_fails_clearly(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"HOME": tmp}):
+            root = Path(tmp)
+            # The real patch targets b67709a's CMakeLists.txt, not this one.
+            lock_path = self._libobjc2_lock(root, self.GATED)
+            result = build_custom_toolchain(lock_path, root / "prefix", sources_only=True)
+            self.assertFalse(result["ok"])
+            self.assertIn("imp_implementationWithBlock", result["summary"])
+
+    def test_ungated_libobjc2_gets_no_builtin_patch(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"HOME": tmp}):
+            root = Path(tmp)
+            lock_path = self._libobjc2_lock(root, self.UNGATED)
+            result = build_custom_toolchain(lock_path, root / "prefix", sources_only=True)
+            self.assertTrue(result["ok"], result)
+            objc = next(c for c in result["components"] if c["name"] == "libobjc2")
+            self.assertEqual(objc["applied_patches"], [])
 
     def test_build_refuses_unknown_revision(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, {"HOME": tmp}):

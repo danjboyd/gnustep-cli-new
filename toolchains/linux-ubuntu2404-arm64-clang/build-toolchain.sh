@@ -14,7 +14,21 @@ if [ ! -d "$SOURCES_DIR/libobjc2/.git" ]; then
   git clone "https://github.com/gnustep/libobjc2.git" "$SOURCES_DIR/libobjc2"
 fi
 git -C "$SOURCES_DIR/libobjc2" fetch --tags origin
+git -C "$SOURCES_DIR/libobjc2" reset -q --hard
 git -C "$SOURCES_DIR/libobjc2" checkout --detach "b67709ad7851973fde127022d8ac6a710c82b1d5"
+# Carried libobjc2 patch (source-lock.json libobjc2 patches): build the block
+# trampolines (imp_implementationWithBlock) with libdispatch's blocks runtime.
+libobjc2_patch_file="$RECIPE_DIR/../patches/libobjc2/0001-Build-block-trampolines-with-an-external-blocks-runtime.patch"
+if command -v sha256sum >/dev/null 2>&1; then
+  libobjc2_patch_sha=$(sha256sum "$libobjc2_patch_file" | awk '{print $1}')
+else
+  libobjc2_patch_sha=$(sha256 -q "$libobjc2_patch_file")
+fi
+if [ "$libobjc2_patch_sha" != "a572d628ef80b647a325cb05907069d1809df42dce5f9a680e316930734d9df3" ]; then
+  echo "libobjc2 patch digest mismatch: 0001-Build-block-trampolines-with-an-external-blocks-runtime.patch $libobjc2_patch_sha" >&2
+  exit 1
+fi
+git -C "$SOURCES_DIR/libobjc2" apply -p1 "$libobjc2_patch_file"
 
 if [ ! -d "$SOURCES_DIR/libdispatch/.git" ]; then
   git clone "https://github.com/swiftlang/swift-corelibs-libdispatch.git" "$SOURCES_DIR/libdispatch"
@@ -90,6 +104,27 @@ case "$HOST_OS" in
     ;;
 esac
 
+# One blocks runtime (#104). libdispatch always builds and installs its own
+# libBlocksRuntime on Linux, so libobjc2 must use that one, not an embedded copy:
+# two runtimes in one process let blocks copied by one be copied again by the
+# other, which doesn't retain captured objects or blocks (use-after-free).
+# libdispatch is built first with its private headers, and libobjc2 is built
+# against it (EMBEDDED_BLOCKS_RUNTIME=OFF), registering ObjC retain/release with
+# _Block_use_RR2 and making the block classes ObjC classes. This is the
+# configuration libobjc2's own CI tests.
+cd "$SOURCES_DIR/libdispatch"
+rm -rf build
+cmake -S . -B build -G Ninja \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+  -DCMAKE_C_COMPILER=clang \
+  -DCMAKE_CXX_COMPILER=clang++ \
+  -DCMAKE_PREFIX_PATH="$PREFIX" \
+  -DINSTALL_PRIVATE_HEADERS=ON \
+  -DBUILD_TESTING=OFF
+cmake --build build -j"$JOBS"
+cmake --install build
+
 cd "$SOURCES_DIR/libobjc2"
 rm -rf build
 cmake -S . -B build \
@@ -100,19 +135,9 @@ cmake -S . -B build \
   -DCMAKE_OBJC_COMPILER=clang \
   -DCMAKE_OBJCXX_COMPILER=clang++ \
   -DGNUSTEP_INSTALL_TYPE=NONE \
-  -DEMBEDDED_BLOCKS_RUNTIME=ON
-cmake --build build -j"$JOBS"
-cmake --install build
-
-cd "$SOURCES_DIR/libdispatch"
-rm -rf build
-cmake -S . -B build -G Ninja \
-  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-  -DCMAKE_C_COMPILER=clang \
-  -DCMAKE_CXX_COMPILER=clang++ \
-  -DCMAKE_PREFIX_PATH="$PREFIX" \
-  -DBUILD_TESTING=OFF
+  -DEMBEDDED_BLOCKS_RUNTIME=OFF \
+  -DBlocksRuntime_INCLUDE_DIR="$PREFIX/include" \
+  -DBlocksRuntime_LIBRARIES="$PREFIX/lib/libBlocksRuntime.so"
 cmake --build build -j"$JOBS"
 cmake --install build
 
