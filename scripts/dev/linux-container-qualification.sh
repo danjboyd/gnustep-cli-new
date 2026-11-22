@@ -120,8 +120,9 @@ cat > "$work/blocks.m" <<'OBJC'
    2. a copied block captured by a dispatch_async block, then released.
    3. a block-backed method (imp_implementationWithBlock, public runtime API
       that libobjc2 drops with an external blocks runtime unless patched).
-      200 rounds: libobjc2 (b67709a and master) never maps a second trampoline
-      page, so more than 256 live block IMPs crash on x86_64 in every release. */
+      100 rounds: libobjc2 (b67709a and master) never maps a second trampoline
+      page, so more live block IMPs than one page holds crash in every release
+      (256 on x86_64, 128 on aarch64, whose trampoline slots are 32 bytes). */
 #import <Foundation/Foundation.h>
 #include <dispatch/dispatch.h>
 #include <objc/runtime.h>
@@ -160,7 +161,7 @@ int main(void) {
   __block int impRan = 0;
   BlocksProbe *target = [BlocksProbe new];
   int impOK = 1;
-  for (int i = 0; i < 200; i++) {
+  for (int i = 0; i < 100; i++) {
     NSString *s = [[NSString alloc] initWithFormat: @"imp %d", i];
     IMP imp = imp_implementationWithBlock(^int (id self, int x) { return [s length] > 3 ? x + 1 : -1; });
     [s release];
@@ -175,7 +176,7 @@ int main(void) {
   [target release];
   printf("blocks: plain ran=%d deallocs=%d; dispatch ran=%d deallocs=%d; imp ran=%d ok=%d\n", plain, plainDeallocs, queued, queuedDeallocs, impRan, impOK);
   [pool release];
-  return (ran == 2000 && deallocs == 2001 && impRan == 200 && impOK) ? 0 : 1;
+  return (ran == 2000 && deallocs == 2001 && impRan == 100 && impOK) ? 0 : 1;
 }
 OBJC
 
@@ -365,7 +366,7 @@ results = {
     "new_build_run": "passed" if all(steps.get(s) == "0" for s in ("new", "build", "run")) and "Hello from CLI tool" in run.get("stdout", "") else "failed",
     "foundation_probe": "passed" if steps.get("probe") == "0" and "SUM=42" in probe else "failed",
     "tls_verification": "passed" if steps.get("tls") == "0" else "failed",
-    "single_blocks_runtime": "passed" if steps.get("blocks_runtime") == "0" and "plain ran=1000 deallocs=1000; dispatch ran=1000 deallocs=1000; imp ran=200 ok=1" in read("blocks_runtime.out") else "failed",
+    "single_blocks_runtime": "passed" if steps.get("blocks_runtime") == "0" and "plain ran=1000 deallocs=1000; dispatch ran=1000 deallocs=1000; imp ran=100 ok=1" in read("blocks_runtime.out") else "failed",
     "package_install_remove": "passed" if steps.get("package_smoke") == "0" and last_json(read("package-install.json")).get("ok") and last_json(read("package-remove.json")).get("ok") else "failed",
 }
 probe_icu = [line.strip() for line in probe.splitlines() if "libicu" in line or "libc.so.6" in line]
