@@ -52,7 +52,11 @@ jobs:
           assert len(components) == 7, sorted(components)
           for c in components.values():
               assert c["resolved_commit"] == c["revision"], c["name"]
-          assert len(components["libobjc2"]["applied_patches"]) == 1
+          # The CI lock's own libobjc2 patch, then the built-in trampoline patch (#104):
+          # with libdispatch's blocks runtime, upstream libobjc2 drops imp_implementationWithBlock.
+          objc_patches = components["libobjc2"]["applied_patches"]
+          assert [bool(x.get("builtin")) for x in objc_patches] == [False, True], objc_patches
+          assert objc_patches[1]["path"] == "builtin:0001-Build-block-trampolines-with-an-external-blocks-runtime.patch", objc_patches
           assert "--disable-cups" in components["libs-gui"]["configure_args"]
           assert p["build_host"]["container"] is True
           assert p["install_domain"] == "SYSTEM"
@@ -78,6 +82,7 @@ jobs:
               set -eu
               grep -q "gnustep-cli: runtime library path" "$PREFIX/System/Library/Makefiles/GNUstep.sh"
               grep -q "gnustep-cli: runtime library path" "$PREFIX/System/Library/Makefiles/GNUstep.csh"
+              nm -D --defined-only "$PREFIX/lib/libobjc.so" | grep -q " imp_implementationWithBlock$"
               # No manual LD_LIBRARY_PATH: GNUstep.sh must put $PREFIX/lib on it.
               set +u; . "$PREFIX/System/Library/Makefiles/GNUstep.sh"; set -u
               cd /tmp
