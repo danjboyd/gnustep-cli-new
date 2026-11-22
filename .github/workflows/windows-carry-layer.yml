@@ -16,6 +16,10 @@ on:
         description: Release label recorded in carry-layer.json
         required: true
         default: 0.1.9-dev
+      themeswitch:
+        description: Also run WinUITheme's ThemeSwitch harness on the stock and patched roots
+        type: boolean
+        default: false
   # Builds from the branch that adds the layer; dispatch needs the file on master.
   push:
     branches: [carried-patches-protocol]
@@ -286,3 +290,91 @@ jobs:
         with:
           name: gnustep-windows-carry-variant-gate
           path: C:\carry-gate\out
+
+  themeswitch:
+    name: ThemeSwitch harness with real themes (stock vs patched root)
+    needs: layer
+    if: ${{ inputs.themeswitch }}
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      HAS_FUNTHEMES: ${{ secrets.FUNTHEMES_TOKEN != '' }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: WinUITheme (danjboyd/plugins-themes-winuitheme 971902e)
+        uses: actions/checkout@v4
+        with:
+          repository: danjboyd/plugins-themes-winuitheme
+          ref: 971902ebca743b650856397b6d269a256ef1d335
+          path: themes/winuitheme
+
+      - name: Adwaita (danjboyd/plugins-themes-Adwaita 121c5cd)
+        uses: actions/checkout@v4
+        with:
+          repository: danjboyd/plugins-themes-Adwaita
+          ref: 121c5cd30a9d59defb40f56eed866b530d4bee39
+          path: themes/adwaita
+
+      # gnustep-funthemes is private: Gumdrop is built only when a read-only token for it
+      # is configured. Without it the harness runs WinUITheme/Adwaita substitutes.
+      - name: Gumdrop (danjboyd/gnustep-funthemes 8ba6f69, Themes/Gumdrop)
+        if: ${{ env.HAS_FUNTHEMES == 'true' }}
+        uses: actions/checkout@v4
+        with:
+          repository: danjboyd/gnustep-funthemes
+          ref: 8ba6f69ba7637267a506643d6c1b6c33256ab9d1
+          path: themes/funthemes
+          token: ${{ secrets.FUNTHEMES_TOKEN }}
+
+      - name: The stock toolchain and this run's layer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $run = '${{ inputs.windows_run }}'; if (-not $run) { $run = $env:DEFAULT_WINDOWS_RUN }
+          foreach ($try in 1..3) {
+            gh run download $run --repo $env:GITHUB_REPOSITORY -n gnustep-windows-current-source-artifacts -D "$env:RUNNER_TEMP\stock-dl"
+            if ($LASTEXITCODE -eq 0) { break }
+            Remove-Item -Recurse -Force "$env:RUNNER_TEMP\stock-dl" -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 20
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'stock download failed' }
+          gh run download $env:GITHUB_RUN_ID --repo $env:GITHUB_REPOSITORY -n gnustep-windows-carry-layer -D "$env:RUNNER_TEMP\layer-dl"
+          if ($LASTEXITCODE -ne 0) { throw 'layer download failed' }
+          $zip = Get-ChildItem -Recurse "$env:RUNNER_TEMP\stock-dl" -Filter "gnustep-toolchain-$env:TARGET-*.zip" | Select-Object -First 1
+          $layer = Get-ChildItem -Recurse "$env:RUNNER_TEMP\layer-dl" -Filter "gnustep-carry-$env:TARGET-*.zip" | Select-Object -First 1
+          if (-not $zip -or -not $layer) { throw 'missing toolchain or layer zip' }
+          Expand-Archive -Path $zip.FullName -DestinationPath "$env:RUNNER_TEMP\stock" -Force
+          Copy-Item -Recurse "$env:RUNNER_TEMP\stock" "$env:RUNNER_TEMP\patched"
+          Expand-Archive -Path $layer.FullName -DestinationPath "$env:RUNNER_TEMP\patched" -Force
+          Remove-Item "$env:RUNNER_TEMP\patched\carry-layer.json"
+          "STOCK_ROOT=$env:RUNNER_TEMP\stock" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PATCHED_ROOT=$env:RUNNER_TEMP\patched" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "stock $($zip.Name), layer $($layer.Name)"
+
+      - name: Patched root, every case must pass
+        shell: pwsh
+        run: |
+          $env:CHERE_INVOKING = '1'
+          $bash = Join-Path $env:PATCHED_ROOT 'usr\bin\bash.exe'
+          & $bash -lc "bash `"`$(cygpath -u '$env:GITHUB_WORKSPACE')/toolchains/carry/windows/check-themeswitch.sh`" `"`$(cygpath -u '$env:PATCHED_ROOT')`" pass `"`$(cygpath -u '$env:RUNNER_TEMP')/themeswitch/patched`" `"`$(cygpath -u '$env:GITHUB_WORKSPACE')/themes`""
+          if ($LASTEXITCODE -ne 0) { throw 'ThemeSwitch failed on the patched root' }
+
+      - name: Stock root, W-G must crash (the bug carry 0004 fixes)
+        if: ${{ always() }}
+        shell: pwsh
+        run: |
+          $env:CHERE_INVOKING = '1'
+          $bash = Join-Path $env:STOCK_ROOT 'usr\bin\bash.exe'
+          & $bash -lc "bash `"`$(cygpath -u '$env:GITHUB_WORKSPACE')/toolchains/carry/windows/check-themeswitch.sh`" `"`$(cygpath -u '$env:STOCK_ROOT')`" fail `"`$(cygpath -u '$env:RUNNER_TEMP')/themeswitch/stock`" `"`$(cygpath -u '$env:GITHUB_WORKSPACE')/themes`""
+          if ($LASTEXITCODE -ne 0) { throw 'ThemeSwitch on the stock root did not show the expected crash' }
+
+      - name: Upload ThemeSwitch results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnustep-windows-themeswitch
+          path: ${{ runner.temp }}\themeswitch
